@@ -344,3 +344,59 @@ it("explains a stopped publication and offers the existing reconnect path to Sta
   expect(message).toContain("Start again clears this unfinished setup so you can enter it again.");
   expect(stopped.querySelector("[data-test=reconnect-first]")).not.toBeNull();
 });
+
+it.each([
+  [
+    "en-GB",
+    "This certificate is for tax ID A87654321, not the venue's B12345674. Choose the certificate for B12345674, or, if the venue's tax ID is wrong, select Back to enter the setup details again.",
+  ],
+  [
+    "es-ES",
+    "Este certificado es del NIF A87654321, no del B12345674 del local. Elige el certificado del B12345674 o, si el NIF del local es incorrecto, selecciona Volver para introducir de nuevo los datos.",
+  ],
+])(
+  "names both tax IDs when the certificate belongs to another taxpayer (%s)",
+  async (locale, sentence) => {
+    const fixture = wizardApi({
+      offering: false,
+      intercept(path) {
+        if (path.endsWith("/fiscal-test"))
+          return Response.json(
+            {
+              error: {
+                code: "setup.certificate_refused",
+                params: {
+                  field: "pfxBase64",
+                  reason: "other_taxpayer",
+                  certificateTaxId: "A87654321",
+                  taxId: venue.taxId,
+                },
+              },
+            },
+            { status: 422 },
+          );
+      },
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    applyTokens(host);
+    mounted.push(host);
+    const app = new SetupApp();
+    app.api = fixture.api;
+    app.browserLanguages = [locale];
+    host.append(app);
+    await screen(app, "mode");
+    emit(app, "setup-patch", {
+      patch: {
+        mode: "live",
+        venue,
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+      },
+    });
+    emit(app, "setup-goto", { screen: "fiscal-test" });
+    const readiness = await screen(app, "fiscal-test");
+    await userEvent.click(readiness.shadowRoot!.querySelector<HTMLElement>("[data-test=run]")!);
+    const refused = await screen(app, "cert");
+    expect(pfxError(refused.shadowRoot!)?.textContent?.trim()).toBe(sentence);
+  },
+);

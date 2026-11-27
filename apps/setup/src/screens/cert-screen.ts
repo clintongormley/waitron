@@ -34,6 +34,8 @@ const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: Strin
 export interface CertificateRefusal {
   field: "pfxBase64" | "passphrase" | "body";
   reason: string;
+  certificateTaxId?: string;
+  taxId?: string;
 }
 
 const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
@@ -45,6 +47,7 @@ const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
   no_private_key: "cert.refusal.no_private_key",
   expired: "cert.refusal.expired",
   not_yet_valid: "cert.refusal.not_yet_valid",
+  other_taxpayer: "cert.refusal.other_taxpayer",
 };
 
 interface CertificateForm {
@@ -266,7 +269,10 @@ export class SetupCertScreen extends LitElement {
           : this.refusal.field === "passphrase"
             ? "passphrase"
             : "pfx";
-      errors[field] ??= t(REFUSAL_MESSAGES[this.refusal.reason] ?? "cert.refusal.unreadable");
+      errors[field] ??= format(REFUSAL_MESSAGES[this.refusal.reason] ?? "cert.refusal.unreadable", {
+        certificateTaxId: this.refusal.certificateTaxId ?? "",
+        taxId: this.refusal.taxId ?? "",
+      });
     }
     return errors;
   }

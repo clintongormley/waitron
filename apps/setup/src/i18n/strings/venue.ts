@@ -237,6 +237,8 @@ export const venueEn = {
   "cert.refusal.expired": "This certificate has expired. Choose its replacement.",
   "cert.refusal.not_yet_valid":
     "This certificate is not valid yet. Check the date or choose another file.",
+  "cert.refusal.other_taxpayer":
+    "This certificate is for tax ID {certificateTaxId}, not the venue's {taxId}. Choose the certificate for {taxId}, or, if the venue's tax ID is wrong, select Back to enter the setup details again.",
   "cert.guide": "Certificate help",
   "cert.back": "Back",
   "cert.next": "Next",
@@ -512,6 +514,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.expired": "Este certificado ha caducado. Elige su sustituto.",
   "cert.refusal.not_yet_valid":
     "Este certificado aún no es válido. Revisa la fecha o elige otro archivo.",
+  "cert.refusal.other_taxpayer":
+    "Este certificado es del NIF {certificateTaxId}, no del {taxId} del local. Elige el certificado del {taxId} o, si el NIF del local es incorrecto, selecciona Volver para introducir de nuevo los datos.",
   "cert.guide": "Ayuda con el certificado",
   "cert.file_unreadable":
     "No hemos podido leer ese archivo. Vuelve a elegir el archivo del certificado.",
