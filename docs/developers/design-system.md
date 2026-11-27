@@ -6446,8 +6446,8 @@ phone…**. Elsewhere, open ☰ and find **Zones on this device** in Settings. T
 restarts. A display choice grants no permission. On a narrow till, the floor's zone chooser lists
 the selected counter zones by name beneath the table zones. A counter row opens Counter. The
 Parked and Waiting shortcuts stay above the floor. The till header outside the narrow floor gives
-Counter one tab for one counter zone or a checked list for several. At phone width, the Counter
-picker and Floor share a row above the scrolling shortcuts. The shortcut row fades at an edge
+Counter one tab for one counter zone or a checked list for several. At phone width, Counter and
+Floor share a row above the scrolling shortcuts. The shortcut row fades at an edge
 with more buttons to scroll to. Long picker labels end in an ellipsis.
 The till's floor map and table list show the selected table zones. A handheld's Floor contains
 every selected zone, counter zones included. A handheld opens on its

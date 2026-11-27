@@ -606,6 +606,37 @@ it("aligns Counter choices with table zones and opens Shop once from the keyboar
   }
 });
 
+it("keeps both queue labels at full width when a narrow Floor scrolls", async () => {
+  setLocale("es-ES");
+  const { innerWidth: width, innerHeight: height } = window;
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "floor",
+      showCounter: true,
+      parkedCount: 123,
+      waitingCount: 456,
+    });
+    el.append(document.createElement("till-floor-screen"));
+    const strip = () => el.shadowRoot!.querySelector<HTMLElement>(".head .till-strip");
+    const widths = (row: HTMLElement) => {
+      const buttons = [...row.querySelectorAll("[data-counter-orders]")];
+      expect(buttons).toHaveLength(2);
+      return buttons.map((button) => button.getBoundingClientRect().width);
+    };
+    await vi.waitFor(() => expect(strip()).not.toBeNull());
+    const fullWidths = widths(strip()!);
+
+    await page.viewport(320, 844);
+    await vi.waitFor(() => expect(strip()).not.toBeNull());
+    expect(widths(strip()!)).toEqual(fullWidths);
+    expect(strip()!.scrollWidth).toBeGreaterThan(strip()!.clientWidth);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("walks from the last floor zone to the kitchen action with the arrow key", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);

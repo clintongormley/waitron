@@ -13,6 +13,7 @@ export const counterHeaderStyles = css`
   }
 
   .till-strip > .tabs,
+  .till-strip > .bar-action,
   .counter-shortcuts > * {
     flex: none;
   }
