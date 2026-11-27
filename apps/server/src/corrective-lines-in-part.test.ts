@@ -17,7 +17,7 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { BAR_SOL, fullInvoice } from "./testing/bill-invoice-fixture.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
-import { giveBackCash } from "./testing/give-back-cash.js";
+import { giveBackCash } from "./testing/invoice-correction.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   cashContribution,
@@ -39,8 +39,6 @@ import {
 } from "./testing/set-menu-spec-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
-// Plan section 6: a filed corrective row is given back in part when minus its line_gross differs
-// from the line_gross of the line it corrects.
 let spec: SpecVenue;
 let venue: PartyVenue;
 let lunch: SpecLunch;
@@ -52,6 +50,9 @@ useVenueDb({
   setup: async (db) => {
     spec = await setupSetMenuSpecVenue(db);
     venue = spec.venue;
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
   },
 });
 
@@ -96,8 +97,8 @@ async function filedOf(tabId: string) {
   return { saleId: brandSaleId(sale!.id), rows };
 }
 
-const giveBack = (saleId: SaleId, gross: string, lineId: string) =>
-  giveBackCash(venue, saleId, gross, [lineId]);
+const giveBack = async (saleId: SaleId, gross: string, lineIds?: string[]) =>
+  (await giveBackCash(venue, saleId, gross, lineIds)).correction.correctiveSaleId!;
 
 /**
  * The corrective's rows given back in part, by name: as the function answers them, and as the
@@ -131,7 +132,7 @@ describe("a corrective row given back", () => {
       [{ menuItemId: venue.item("Paella"), quantity: "1" }],
       "20.00",
     );
-    expect(await inPart(await giveBack(saleId, "6.82", rows[0]!.id))).toEqual(both(["Paella"]));
+    expect(await inPart(await giveBack(saleId, "6.82", [rows[0]!.id]))).toEqual(both(["Paella"]));
   });
 
   it("as one burger's money of a row of three is in part", async () => {
@@ -140,7 +141,7 @@ describe("a corrective row given back", () => {
       "36.00",
     );
     expect(rows[0]).toMatchObject({ quantity: 3000, lineGross: 3600 });
-    expect(await inPart(await giveBack(saleId, "12.00", rows[0]!.id))).toEqual(both(["Burger"]));
+    expect(await inPart(await giveBack(saleId, "12.00", [rows[0]!.id]))).toEqual(both(["Burger"]));
   });
 
   it("as two halves of one paella is in part, each time", async () => {
@@ -148,8 +149,8 @@ describe("a corrective row given back", () => {
       [{ menuItemId: venue.item("Paella"), quantity: "1" }],
       "20.00",
     );
-    const first = await giveBack(saleId, "10.00", rows[0]!.id);
-    const second = await giveBack(saleId, "10.00", rows[0]!.id);
+    const first = await giveBack(saleId, "10.00", [rows[0]!.id]);
+    const second = await giveBack(saleId, "10.00", [rows[0]!.id]);
     expect(await inPart(first)).toEqual(both(["Paella"]));
     expect(await inPart(second)).toEqual(both(["Paella"]));
   });
@@ -160,7 +161,7 @@ describe("a corrective row given back", () => {
       "1.82",
     );
     expect(rows[0]).toMatchObject({ quantity: 350, lineGross: 182 });
-    expect(await inPart(await giveBack(saleId, "1.82", rows[0]!.id))).toEqual(both([]));
+    expect(await inPart(await giveBack(saleId, "1.82", [rows[0]!.id]))).toEqual(both([]));
   });
 
   // The lemonade's filed gross, 1.92, is all its set menu's part; giving back all of it negates
@@ -171,7 +172,7 @@ describe("a corrective row given back", () => {
     const { saleId, rows } = await filedOf(bill.tabId);
     const lemonade = rows.find((row) => row.name === "Lemonade")!;
     expect(lemonade).toMatchObject({ lineGross: 192, setMenuPart: 192 });
-    const correctiveId = await giveBack(saleId, "1.92", lemonade.id);
+    const correctiveId = await giveBack(saleId, "1.92", [lemonade.id]);
     const [row] = await venue.db
       .select({ lineGross: saleLines.lineGross, correctsLineId: saleLines.correctsLineId })
       .from(saleLines)
@@ -181,9 +182,6 @@ describe("a corrective row given back", () => {
   });
 
   it("as 10.00 of a 37.00 full invoice is in part, on every line", async () => {
-    await inTx(venue, (tx) =>
-      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
-    );
     const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
     await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, bill.tabId, [
@@ -195,7 +193,7 @@ describe("a corrective row given back", () => {
     await fullInvoice(venue, bill.tabId, BAR_SOL);
     await cashContribution(venue, bill.tabId, "37.00");
     const { saleId } = await filedOf(bill.tabId);
-    const correctiveId = await giveBackCash(venue, saleId, "10.00");
+    const correctiveId = await giveBack(saleId, "10.00");
     const [corrective] = await venue.db
       .select({ seriesPurpose: invoiceSeries.purpose, customer: sales.counterpartyTaxId })
       .from(sales)
@@ -281,7 +279,7 @@ describe("no row is given back in part", () => {
     const [row] = await venue.db
       .select()
       .from(saleLines)
-      .where(eq(saleLines.saleId, await giveBack(saleId, "6.82", rows[0]!.id)));
+      .where(eq(saleLines.saleId, await giveBack(saleId, "6.82", [rows[0]!.id])));
     const unstored = { ...row!, lineGross: null };
     expect(await inTx(venue, (tx) => correctiveLinesInPart(tx, [unstored]))).toEqual(new Set());
   });

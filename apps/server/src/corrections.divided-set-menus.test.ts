@@ -35,7 +35,7 @@ import { enqueueReceiptCopy } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { previewInvoiceCorrection } from "./invoice-corrections.js";
-import { giveBackCash } from "./testing/give-back-cash.js";
+import { giveBackCash } from "./testing/invoice-correction.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import {
@@ -204,8 +204,8 @@ describe("a goodwill amount", () => {
     );
   }
 
-  const giveBack = (saleId: SaleId, gross: string, lineIds: string[]) =>
-    giveBackCash(venue, saleId, gross, lineIds);
+  const giveBack = async (saleId: SaleId, gross: string, lineIds: string[]) =>
+    (await giveBackCash(venue, saleId, gross, lineIds)).correction.correctiveSaleId!;
 
   it("on the lemonade row comes off at 21%, off its part", async () => {
     const { saleId, lines } = await paidLunch();
