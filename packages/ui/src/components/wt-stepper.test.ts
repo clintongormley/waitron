@@ -1,14 +1,8 @@
 import { afterEach, expect, test } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
-import { registerIcons } from "./wt-icon.js";
 import "./wt-stepper.js";
 
 afterEach(cleanup);
-
-registerIcons({
-  minus: "M2.5 7.25H13.5V8.75H2.5Z",
-  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
-});
 
 type Stepper = HTMLElementTagNameMap["wt-stepper"];
 
@@ -172,6 +166,7 @@ test("paints its box, buttons and number from the tokens", async () => {
   el.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
   el.style.setProperty("--wt-space-6", "61px");
   el.style.setProperty("--wt-font-size-lg", "21px");
+  el.style.setProperty("--wt-space-1", "8px");
   const { group, minus, plus, count } = parts(el);
   const box = getComputedStyle(group);
   expect(group.getBoundingClientRect().height).toBe(50);
@@ -182,12 +177,25 @@ test("paints its box, buttons and number from the tokens", async () => {
   expect(minus.getBoundingClientRect().width).toBe(50);
   expect(plus.getBoundingClientRect().width).toBe(50);
   expect(minus.getBoundingClientRect().height).toBe(50);
-  expect(getComputedStyle(minus.querySelector("wt-icon")!).color).toBe("rgb(7, 8, 9)");
-  expect(getComputedStyle(plus.querySelector("wt-icon")!).color).toBe("rgb(10, 11, 12)");
-  for (const button of [minus, plus]) {
-    const icon = button.querySelector("wt-icon")!.getBoundingClientRect();
-    expect([icon.width, icon.height]).toEqual([21, 21]);
-  }
+  expect(getComputedStyle(minus.querySelector("[data-mark]")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(plus.querySelector("[data-mark]")!).color).toBe("rgb(10, 11, 12)");
+  // Each bar is 2.5 spaces long and 0.625 of a space thick (10 by 2.5 at the usual 4px space),
+  // centred in its button and painted in the button's colour.
+  const bars = (button: HTMLElement) =>
+    [...button.querySelectorAll("[data-mark] rect")].map((bar) => {
+      const { width, height, left, top } = bar.getBoundingClientRect();
+      const { left: x, top: y } = button.getBoundingClientRect();
+      return {
+        size: [width, height],
+        centre: [left + width / 2 - x, top + height / 2 - y],
+        fill: getComputedStyle(bar).fill,
+      };
+    });
+  expect(bars(minus)).toEqual([{ size: [20, 5], centre: [25, 25], fill: "rgb(7, 8, 9)" }]);
+  expect(bars(plus)).toEqual([
+    { size: [20, 5], centre: [25, 25], fill: "rgb(10, 11, 12)" },
+    { size: [5, 20], centre: [25, 25], fill: "rgb(10, 11, 12)" },
+  ]);
   const number = getComputedStyle(count);
   expect(count.getBoundingClientRect().width).toBeGreaterThanOrEqual(61);
   expect(number.fontSize).toBe("21px");
@@ -195,10 +203,10 @@ test("paints its box, buttons and number from the tokens", async () => {
   expect(number.fontVariantNumeric).toBe("tabular-nums");
 });
 
-test("a disabled button fades its icon", async () => {
+test("a disabled button fades its mark", async () => {
   const el = await mount('<wt-stepper label="Burger" value="0"></wt-stepper>');
   el.style.setProperty("--wt-opacity-disabled", "0.3");
   const { minus, plus } = parts(el);
-  expect(getComputedStyle(minus.querySelector("wt-icon")!).opacity).toBe("0.3");
-  expect(getComputedStyle(plus.querySelector("wt-icon")!).opacity).toBe("1");
+  expect(getComputedStyle(minus.querySelector("[data-mark]")!).opacity).toBe("0.3");
+  expect(getComputedStyle(plus.querySelector("[data-mark]")!).opacity).toBe("1");
 });

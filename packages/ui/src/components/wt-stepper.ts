@@ -1,13 +1,16 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange } from "../interactive.js";
-import "./wt-icon.js";
 
-/**
- * A count with − and + buttons and nothing to type. The buttons draw the `minus` and `plus` icons,
- * which the consuming app registers.
- */
+/** In a 10-unit square: bars 10 long and 2.5 thick, crossed for +. */
+const mark = (plus: boolean) =>
+  html`<svg class="mark" data-mark viewBox="0 0 10 10" aria-hidden="true" focusable="false">
+    <rect x="0" y="3.75" width="10" height="2.5"></rect>
+    ${plus ? svg`<rect x="3.75" y="0" width="2.5" height="10"></rect>` : nothing}
+  </svg>`;
+
+/** A count with − and + buttons and nothing to type. */
 @customElement("wt-stepper")
 export class WtStepper extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -49,12 +52,18 @@ export class WtStepper extends LitElement {
         cursor: pointer;
       }
 
-      /* wt-icon's own styles set its colour, so the button's colour would not reach it. */
-      button[data-step="-1"] wt-icon {
+      /* Drawn here rather than with wt-icon, whose shapes are thinner than the till's bold − and +. */
+      .mark {
+        width: calc(var(--wt-space-1) * 2.5);
+        height: calc(var(--wt-space-1) * 2.5);
+        fill: currentColor;
+      }
+
+      button[data-step="-1"] .mark {
         color: var(--wt-color-text);
       }
 
-      button[data-step="1"] wt-icon {
+      button[data-step="1"] .mark {
         color: var(--wt-color-primary);
       }
 
@@ -62,7 +71,7 @@ export class WtStepper extends LitElement {
         cursor: not-allowed;
       }
 
-      button:disabled wt-icon {
+      button:disabled .mark {
         opacity: var(--wt-opacity-disabled);
       }
 
@@ -121,7 +130,7 @@ export class WtStepper extends LitElement {
           ?disabled=${this.disabled || atMin}
           @click=${(event: Event) => this.step(-1, event)}
         >
-          <wt-icon name="minus" size="lg"></wt-icon>
+          ${mark(false)}
         </button>
         <span class="count" aria-live="polite">${this.value}</span>
         <button
@@ -131,7 +140,7 @@ export class WtStepper extends LitElement {
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >
-          <wt-icon name="plus" size="lg"></wt-icon>
+          ${mark(true)}
         </button>
       </div>
     `;
