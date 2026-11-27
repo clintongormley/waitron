@@ -131,6 +131,7 @@ import {
   partyTablesLabel,
   seatedRead,
   tablesLabel,
+  tableChoice,
   tableTarget,
   tableTargetStyles,
   type SeatedRead,
@@ -6190,15 +6191,12 @@ export class TillTableOrderScreen extends LitElement {
       return row === undefined
         ? []
         : [
-            {
-              id,
-              name: tableShownName(row),
-              pick: () => {
-                this.splitTableId = id;
-                this.#openSplitPick(id);
-                this.#actionScope?.changed();
-              },
-            },
+            tableChoice(row, t("table.this_party"), (event) => {
+              if (!this.#actionControlCurrent(event)) return;
+              this.splitTableId = id;
+              this.#openSplitPick(id);
+              this.#actionScope?.changed();
+            }),
           ];
     });
     const context = this.#partyScope(party);
@@ -6209,21 +6207,7 @@ export class TillTableOrderScreen extends LitElement {
         subtitle: context,
         label: fill(t("table.split_table_heading"), { party: context }),
       },
-      html`<div class="action-options">
-        ${targets.map(
-          (target) =>
-            html`<wt-button
-              class="target"
-              data-target=${target.id}
-              variant="secondary"
-              @click=${(event: Event) => {
-                if (this.#actionControlCurrent(event)) target.pick();
-              }}
-            >
-              ${target.name}
-            </wt-button>`,
-        )}
-      </div>`,
+      html`<div class="action-options">${targets}</div>`,
       this.busy,
     );
   }
@@ -7236,7 +7220,12 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing
             }
             ${targets.map((table) =>
-              tableTarget(table, this.party?.id, (picked) => this.#pickTable(picked)),
+              tableTarget(
+                table,
+                this.party?.id,
+                (picked) => this.#pickTable(picked),
+                this.actionVerb !== "move-bill",
+              ),
             )}
           </div>`
     }`;

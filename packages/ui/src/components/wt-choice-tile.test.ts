@@ -74,3 +74,14 @@ test("supports native activation and disables it when asked", async () => {
   await userEvent.click(tile, { force: true });
   expect(pressed).toHaveBeenCalledTimes(2);
 });
+
+test("an immediate choice names the action without announcing a toggle state", async () => {
+  const tile = await mount(
+    '<wt-choice-tile label="Table 9" hint="Free" check-position="none"></wt-choice-tile>',
+  );
+  const action = tile.shadowRoot!.querySelector("button")!;
+  expect(action.hasAttribute("aria-pressed")).toBe(false);
+  const hint = tile.shadowRoot!.querySelector("[part=hint]")!;
+  const inset = action.getBoundingClientRect().right - hint.getBoundingClientRect().right;
+  expect(inset).toBeLessThanOrEqual(16);
+});

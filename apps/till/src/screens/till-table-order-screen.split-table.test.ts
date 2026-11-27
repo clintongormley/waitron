@@ -390,8 +390,20 @@ describe("Split a table's panel", () => {
     expect(
       q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-table]")!.bodyLabel,
     ).toBe("Split a table off García (T7, T8):");
-    expect(q(el, '[data-target="t7"]')!.textContent!.trim()).toBe("T7");
-    expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("T8");
+    for (const [id, name] of [
+      ["t7", "T7"],
+      ["t8", "T8"],
+    ]) {
+      const tile = q(el, `wt-choice-tile[data-target="${id}"]`);
+      expect(tile).not.toBeNull();
+      await expect
+        .element(
+          page.elementLocator(tile!).getByRole("button", {
+            name: `${name} These guests`,
+          }),
+        )
+        .toBeVisible();
+    }
   });
 
   it("the list step names a table renamed for today by its name, in its choice and its heading", async () => {
@@ -401,7 +413,13 @@ describe("Split a table's panel", () => {
     await click(el, "[data-move-split]");
     await click(el, '[data-action="split-table"]');
 
-    expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("Window");
+    await expect
+      .element(
+        page
+          .elementLocator(q(el, '[data-target="t8"]')!)
+          .getByRole("button", { name: "Window These guests" }),
+      )
+      .toBeVisible();
     expect(
       q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-table]")!.bodyLabel,
     ).toBe("Split a table off García (T7, Window):");

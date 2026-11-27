@@ -24,6 +24,7 @@ import type { FinishCancellation, UnservedDish } from "../api/finish-table-types
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { quantityText } from "./dish-format.js";
+import { tickStyles } from "./portion-picker.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Choice = { lineId: string; preparationStarted: boolean | null; refund: boolean };
@@ -36,6 +37,7 @@ export interface FinishTableChoice {
 export class TillFinishTableDialog extends LitElement {
   static override styles = [
     baseStyles,
+    tickStyles,
     css`
       .body,
       .dish {
@@ -70,7 +72,7 @@ export class TillFinishTableDialog extends LitElement {
         gap: var(--wt-space-2);
         min-height: var(--wt-tap-min);
       }
-      input {
+      input[type="radio"] {
         accent-color: var(--wt-color-primary);
         flex: none;
       }

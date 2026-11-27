@@ -4103,11 +4103,18 @@ describe("till-table-order-screen", () => {
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4)"),
       );
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
-      expect(target(el, "t9")!.textContent).toContain("Table 9");
-      expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
-      expect(target(el, "t7")!.textContent).toContain(
-        t("table.held_by").replace("{party}", "Luis"),
-      );
+      const freeTile = el.shadowRoot!.querySelector('wt-choice-tile[data-target="t9"]');
+      expect(freeTile).not.toBeNull();
+      const free = page.elementLocator(freeTile!).getByRole("button", { name: "Table 9 Free" });
+      await expect.element(free).toBeVisible();
+      expect(free.element().getBoundingClientRect().height).toBe(56);
+      await expect
+        .element(
+          page.elementLocator(target(el, "t7")!).getByRole("button", {
+            name: "Table 7 Seated: Luis",
+          }),
+        )
+        .toBeVisible();
       expect(target(el, "t6")!.disabled).toBe(true);
       expect(el.shadowRoot!.querySelector('[data-target-reason="t6"]')!.textContent!.trim()).toBe(
         codeMessage("table.needs_clearing"),
@@ -4136,7 +4143,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(target(el, "t7")!.textContent).toContain(
+      expect(target(el, "t7")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toBe(
         t("table.held_by").replace("{party}", "Table 7"),
       );
     });
@@ -4194,7 +4201,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(targetHeading(el)).toBe(t("table.join_heading").replace("{party}", "Ana (Table 4)"));
 
-      click(el, '[data-target="t9"]');
+      const free = el.shadowRoot!.querySelector('wt-choice-tile[data-target="t9"]');
+      expect(free).not.toBeNull();
+      await userEvent.click(
+        page.elementLocator(free!).getByRole("button", { name: "Table 9 Free" }),
+      );
       await el.updateComplete;
       click(el, "[data-move-split]");
       await el.updateComplete;
@@ -4222,7 +4233,9 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t4", "t5", "t6", "t7", "t9"]);
-      expect(target(el, "t5")!.textContent).toContain(t("table.this_party"));
+      expect(target(el, "t5")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toBe(
+        t("table.this_party"),
+      );
       const moved = heard(el, "move-guests");
       click(el, '[data-target="t5"]');
       await el.updateComplete;
@@ -4556,13 +4569,13 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
         expect(targetIds(el)).toContain("t6");
         expect(targetIds(el)).toContain("t5");
-        const listed = (id: string) =>
-          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-            `[data-target="${id}"]`,
-          )!;
-        expect(listed("t5").textContent).toContain(t("floor.needs_moving"));
-        expect(listed("t5").disabled).toBe(true);
-        expect(listed("t6").disabled).toBe(false);
+        const needsMoving = page
+          .elementLocator(target(el, "t5")!)
+          .getByRole("button", { name: `Table 5 ${t("floor.needs_moving")}` });
+        await expect.element(needsMoving).toBeDisabled();
+        await expect
+          .element(page.elementLocator(target(el, "t6")!).getByRole("button"))
+          .toBeEnabled();
         expect(el.shadowRoot!.querySelector('[data-target-reason="t5"]')!.textContent!.trim()).toBe(
           codeMessage("table.needs_moving"),
         );
@@ -4639,7 +4652,9 @@ describe("till-table-order-screen", () => {
       expect(targetHeading(el)).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4, Terrace)"),
       );
-      expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
+      expect(target(el, "t9")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+        "Window",
+      );
     });
 
     it("Move guests lists its tables in the order of the names they show for today", async () => {
@@ -4658,7 +4673,10 @@ describe("till-table-order-screen", () => {
 
       expect(
         [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target-picker] [data-target]")].map(
-          (row) => [row.dataset.target, row.querySelector(".target-label")!.textContent!.trim()],
+          (row) => [
+            row.dataset.target,
+            row.shadowRoot!.querySelector("[part=label]")!.textContent!.trim(),
+          ],
         ),
       ).toEqual([
         ["t9", "Arch"],
@@ -4681,7 +4699,9 @@ describe("till-table-order-screen", () => {
       expect(targetHeading(el)).toBe(
         t("table.move_guests_heading").replace("{party}", "García birthday"),
       );
-      expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Table 5");
+      expect(target(el, "t5")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+        "Table 5",
+      );
     });
 
     it("Name the party shows an unnamed party at a group named for today by the group's name once, as the field's placeholder", async () => {

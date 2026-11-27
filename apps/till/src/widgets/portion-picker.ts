@@ -19,7 +19,7 @@ import { trimQuantity } from "./dish-format.js";
 
 /** The picker's ticks: the bill header beside a row of them draws the same box. */
 export const tickStyles = css`
-  input {
+  input[type="checkbox"] {
     flex: none;
     inline-size: var(--wt-space-5);
     block-size: var(--wt-space-5);
@@ -27,18 +27,18 @@ export const tickStyles = css`
     accent-color: var(--wt-color-primary);
   }
   /* The browser's own disabled box is too faint to see on the light page. */
-  input:disabled {
+  input[type="checkbox"]:disabled {
     appearance: none;
     border: 1px solid var(--wt-color-text-muted);
     border-radius: var(--wt-radius-sm);
     background: var(--wt-color-track);
   }
-  input:disabled:checked {
+  input[type="checkbox"]:disabled:checked {
     display: grid;
     place-content: center;
     background: var(--wt-color-text-muted);
   }
-  input:disabled:checked::after {
+  input[type="checkbox"]:disabled:checked::after {
     content: "✓";
     color: var(--wt-color-bg);
     font-size: var(--wt-font-size-sm);

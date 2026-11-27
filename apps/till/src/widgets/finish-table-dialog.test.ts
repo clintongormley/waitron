@@ -116,9 +116,9 @@ it("lists the entire unserved set with known preparation and waits for a reason"
   expect(rows).toHaveLength(2);
   expect(rows[0]!.textContent).toContain("No");
   expect(rows[1]!.textContent).toContain("Yes");
-  expect(
-    root(el).querySelector<HTMLInputElement>('[data-dish="flan"] input[name=refund]')!.checked,
-  ).toBe(true);
+  const refund = rows[0]!.querySelector<HTMLInputElement>("input[name=refund]")!;
+  expect(refund.checked).toBe(true);
+  expect(refund.getBoundingClientRect().width).toBe(24);
   expect(
     root(el).querySelector<HTMLInputElement>('[data-dish="croquetas"] input[name=refund]')!.checked,
   ).toBe(false);

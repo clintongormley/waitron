@@ -80,7 +80,8 @@ export class WtChoiceTile extends LitElement {
   @property() hint = "";
   @property({ type: Boolean }) selected = false;
   @property({ type: Boolean }) disabled = false;
-  @property({ attribute: "check-position", reflect: true }) checkPosition: "start" | "end" = "end";
+  @property({ attribute: "check-position", reflect: true }) checkPosition:
+    "start" | "end" | "none" = "end";
 
   override render() {
     const check = html`<span part="check" aria-hidden="true"
@@ -89,12 +90,12 @@ export class WtChoiceTile extends LitElement {
     return html`<button
       type="button"
       ?disabled=${this.disabled}
-      aria-pressed=${String(this.selected)}
+      aria-pressed=${this.checkPosition === "none" ? nothing : String(this.selected)}
     >
       ${this.checkPosition === "start" ? check : nothing}
       <span part="label">${this.label}</span>
       ${this.hint === "" ? nothing : html`<span part="hint">${this.hint}</span>`}
-      ${this.checkPosition === "start" ? nothing : check}
+      ${this.checkPosition === "end" ? check : nothing}
     </button>`;
   }
 }
