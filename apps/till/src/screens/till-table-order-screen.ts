@@ -260,6 +260,7 @@ import {
   type SplitGuestsDetail,
 } from "../widgets/guest-count.js";
 import { billActions, billControlStyles, billSwitcher } from "./table-bill-controls.js";
+import { barSize, dockSize } from "./table-order-footer-size.js";
 import { tablePartyMenu, tablePartyMenuStyles, type TablePartyAction } from "./table-party-menu.js";
 import {
   beingPaidNotice,
@@ -473,14 +474,6 @@ function fallbackPortionKeys({
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
-}
-
-function barSize(bar: HTMLElement, height: number): void {
-  bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
-}
-
-function dockSize(dock: HTMLElement, height: number): void {
-  dock.parentElement!.style.setProperty("--order-dock-size", `${Math.ceil(height)}px`);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
