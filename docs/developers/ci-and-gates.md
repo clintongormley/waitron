@@ -3649,6 +3649,13 @@ update and the install run again together), because apt's own read timeout did n
 mirror sending a byte every 5 s. A workflow's `playwright install --with-deps` runs apt itself,
 where no `-o` option on our command line reaches it, so it must run under `timeout <n>` too.
 
+`deploy/waitron.sh`'s `apt_get` gives apt-get `/dev/null` as its input. GNU `timeout` runs its
+command outside the terminal's foreground group, and Linux stops a process there that changes the
+terminal's settings, which apt-get does to a terminal input once dpkg finishes; nothing resumes it,
+so the attempt waits out its whole limit. On the test box (Debian 13, as root under `script`,
+2026-11-27), `timeout 90 apt-get install --reinstall -y nano >&2` exited 124 after installing, and
+the same command with `</dev/null` exited 0.
+
 An `apt-get update` that could not connect, or timed out waiting, warned "Failed to fetch" and
 exited 0 (apt 2.8.3 and 3.0.3), so a retry loop never saw it fail. The Dockerfile and the bench image
 therefore also set `APT::Update::Error-Mode "any"`, which makes that update exit 100 and be retried.

@@ -37,7 +37,8 @@ usage() {
 waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh update [ref]      same as install
-  waitron.sh status            show each running Waitron image and its build time
+  waitron.sh status            show any upgrade waiting for restore or keep, then each running
+                               Waitron image and its build time
   waitron.sh check-upgrade-offer  check which signed release is offered to this box
   waitron.sh install-offered-upgrade  apply the signed offer during the quiet window
   waitron.sh restore           restore the intact copy from a held manual upgrade
@@ -68,13 +69,14 @@ as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 # docs/developers/ci-and-gates.md, "Every apt wait is bounded". An install gets longer than an update
 # because Docker's packages are large enough that a slow box link can take more than 300 s to fetch.
 # apt's output goes to standard error, so a caller that captures a function's value never captures it.
+# Its input is /dev/null, or, run from a terminal, Linux stops it after dpkg: same section.
 apt_get() {
   local limit seconds=1800 attempt
   limit="$(command -v gtimeout || command -v timeout)" || die "need timeout (GNU coreutils) to bound apt-get — install coreutils and re-run"
   [ "${1:-}" = update ] && seconds=300
   for attempt in 1 2 3; do
     as_root "$limit" "$seconds" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 \
-      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" >&2 && return 0
+      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" </dev/null >&2 && return 0
     echo "waitron.sh: attempt $attempt of 3 failed or stalled: apt-get $*" >&2
   done
   die "apt-get $* failed or stalled on all three attempts — check the network and re-run this command"
@@ -780,10 +782,18 @@ print_image_versions() {
 cmd_status() {
   local result=0
   if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
-    upgrade_cli status || { echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2; result=1; }
+    local held
+    if held="$(upgrade_cli status)"; then
+      if [ "$held" = null ]; then echo "upgrade: none waiting"; else printf '%s\n' "$held"; fi
+    else
+      echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2
+      result=1
+    fi
   elif upgrade_pending; then
     echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
     result=1
+  else
+    echo "upgrade: none waiting"
   fi
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   cd "$WAITRON_DIR"
@@ -1007,13 +1017,16 @@ delete_previous_images() {
   done <<<"$before"
 }
 
-# With --reset, the production check and the confirmation run before the box's files are fetched or
-# any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
-# the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
-# have replaced this script itself. The wipe waits until the new images are in place.
+# One empty attempt folder is an upgrade stopped before its first record: there is nothing to restore
+# or keep. The upgrade tool removes it at the next boot, or when it next applies an upgrade or runs
+# restore or keep. A folder find cannot read counts as held. scripts/box/upgrades/bootstrap.sh keeps
+# a copy of this function, which bootstrap.test.mjs holds identical.
 upgrade_pending() {
+  local attempts
   [ -d "${WAITRON_DIR}.upgrades" ] || return 1
-  [ -n "$(find "${WAITRON_DIR}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]
+  attempts="$(find "${WAITRON_DIR}.upgrades" -mindepth 1 -maxdepth 2 -print)" || return 0
+  [ -n "$attempts" ] || return 1
+  [[ "$attempts" == *$'\n'* || ! -d "$attempts" || -L "$attempts" ]]
 }
 
 refuse_pending_upgrade() {
@@ -1022,11 +1035,12 @@ refuse_pending_upgrade() {
   fi
 }
 
-lock_managed_box() {
-  [ -f "$BOX_UNIT_DIR/waitron-app.service" ] || return 0
-  exec 9>"${WAITRON_DIR}.upgrade.lock"
+lock_host() {
+  command -v flock >/dev/null || die "need flock (util-linux) to take the host lock"
+  exec 9>"${WAITRON_DIR}.upgrade.lock" \
+    || die "cannot open ${WAITRON_DIR}.upgrade.lock — run as root, or set WAITRON_DIR to a writable path"
   # Docker requires this service, which takes the same lock: started under our lock, it would fail.
-  if ! as_root systemctl start waitron-upgrade-recovery.service; then
+  if [ -f "$BOX_UNIT_DIR/waitron-app.service" ] && ! as_root systemctl start waitron-upgrade-recovery.service; then
     flock -n 9 || die "another host operation is running"
     die "the upgrade recovery service did not start, so nothing was refreshed or reset — run 'systemctl status waitron-upgrade-recovery.service' to see why"
   fi
@@ -1336,6 +1350,10 @@ box_started() {
   [ -n "$state_volumes" ]
 }
 
+# With --reset, the production check and the confirmation run before the box's files are fetched or
+# any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
+# the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
+# have replaced this script itself. The wipe waits until the new images are in place.
 cmd_install() (
   local mode="$1"
   shift
@@ -1369,7 +1387,7 @@ cmd_install() (
       return
     fi
   fi
-  lock_managed_box
+  lock_host
   if [ -z "$signed_sha" ]; then refresh_self "$ref"; fi
   [ "$docker_ready" -eq 1 ] || ensure_docker
   box_started || fresh=1
@@ -1494,7 +1512,7 @@ cmd_reset() {
   refuse_pending_upgrade
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   box_started || die "$WAITRON_DIR has a compose.yml but Docker has no $STATE_VOLUME volume, so nothing was reset — run 'waitron.sh install'"
-  lock_managed_box
+  lock_host
   confirm_reset
   cd "$WAITRON_DIR"
   select_practice_inbox on

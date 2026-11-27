@@ -7,9 +7,16 @@ host_dir="$1" box_dir="$2"
 [ "$(uname -s)" = Linux ] || refuse "Linux host required"
 exec 9>"${box_dir}.upgrade.lock"
 flock -n 9 || refuse "another host operation is running"
-if [ -d "${box_dir}.upgrades" ] && [ -n "$(find "${box_dir}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-  refuse "resolve the upgrade attempt before refreshing the host runtime"
-fi
+# One empty attempt folder holds nothing to resolve; deploy/waitron.sh's upgrade_pending applies the
+# same rule, and a folder find cannot read counts as held.
+upgrade_pending() {
+  local attempts
+  [ -d "${box_dir}.upgrades" ] || return 1
+  attempts="$(find "${box_dir}.upgrades" -mindepth 1 -maxdepth 2 -print)" || return 0
+  [ -n "$attempts" ] || return 1
+  [[ "$attempts" == *$'\n'* || ! -d "$attempts" || -L "$attempts" ]]
+}
+if upgrade_pending; then refuse "resolve the upgrade attempt before refreshing the host runtime"; fi
 case "$(uname -m)" in
   x86_64) arch=x64; checksum=982aa24dd8be4c889c6a8ab337ddff3b0896645b20f4239356e80552c16277ee ;;
   aarch64 | arm64) arch=arm64; checksum=afc7a004018485092ac8985b817b0d5684472bd9472e0b57d2ab88737e50090d ;;

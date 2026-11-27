@@ -366,7 +366,8 @@ stub(
 );
 // `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
 // file beside the case's log, and for every call whose last argument is WT_APT_INSTALL_FAIL, and
-// prints WT_APT_STDOUT on standard output when a case sets it.
+// prints WT_APT_STDOUT on standard output when a case sets it. It writes `null` to a file beside
+// the case's log when its standard input is /dev/null, and `other` when it is anything else.
 // `timeout` and `gtimeout` drop the limit and run the rest. `dpkg-query` answers `installed`, so no
 // case reaches a real one on a Linux machine, and `not-installed` with status 1 for libatomic1 when
 // WT_LIBATOMIC_MISSING=1 and for bluez when WT_BLUEZ_MISSING=1. An unknown firmware-realtek
@@ -374,6 +375,7 @@ stub(
 stub(
   "apt-get",
   `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
+if [ /dev/stdin -ef /dev/null ]; then echo null; else echo other; fi > "\${WT_LOG}.apt-stdin"
 [ -n "\${WT_APT_STDOUT}" ] && printf '%s\\n' "\${WT_APT_STDOUT}"
 [ "$n" -le "\${WT_APT_FAIL:-0}" ] && exit 100
 [ -n "\${WT_APT_INSTALL_FAIL}" ] && [ "\${@: -1}" = "\${WT_APT_INSTALL_FAIL}" ] && exit 100
@@ -509,7 +511,7 @@ case "$2" in
 esac
 if [ "\${WT_UPGRADE_HELD:-0}" = 1 ]; then
   mkdir -p "\${WAITRON_DIR}.upgrades/attempt"
-  printf '{"phase":"awaiting-choice"}\\n'
+  printf '{"phase":"awaiting-choice"}\\n' | tee "\${WAITRON_DIR}.upgrades/attempt/attempt.json"
 else
   printf '{"phase":"committed"}\\n'
 fi
@@ -798,6 +800,86 @@ describe("waitron.sh pending manual upgrade", () => {
       );
     },
   );
+
+  it.each([
+    [["install", "my-branch"]],
+    [["--reset", "--yes", "install", "my-branch"]],
+    [["reset", "--yes"]],
+  ])("goes on with %j past an empty attempt folder", (args) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    const result = run(sb, args, { WAITRON_SH_REFRESHED: "1" });
+    expect(result.stderr).not.toContain("restore or keep");
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    [["interrupted"], ["partial"]],
+    [["interrupted"], [".partial"]],
+    [["one", "two"], []],
+    [["interrupted", ".stray"], []],
+  ])("still refuses install when the attempts are %j holding %j", (attempts, files) => {
+    const sb = sandbox();
+    installedBox(sb);
+    for (const attempt of attempts)
+      mkdirSync(`${sb.boxDir}.upgrades/${attempt}`, { recursive: true });
+    for (const file of files) writeFileSync(`${sb.boxDir}.upgrades/${attempts[0]}/${file}`, "");
+    const result = run(sb, ["install", "my-branch"], { WAITRON_SH_REFRESHED: "1" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("restore or keep");
+  });
+
+  it
+    .skipIf(process.getuid?.() === 0)
+    .each([
+      [["install", "my-branch"]],
+      [["--reset", "--yes", "install", "my-branch"]],
+      [["reset", "--yes"]],
+    ])("refuses %j when it cannot read the one attempt folder", (args) => {
+    const sb = sandbox();
+    installedBox(sb);
+    const attempt = `${sb.boxDir}.upgrades/interrupted`;
+    mkdirSync(attempt, { recursive: true });
+    writeFileSync(join(attempt, "attempt.json"), "{}");
+    writeFileSync(sb.log, "");
+    chmodSync(attempt, 0o000);
+    let result;
+    try {
+      result = run(sb, args, { WAITRON_SH_REFRESHED: "1" });
+    } finally {
+      chmodSync(attempt, 0o700);
+    }
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("restore or keep");
+    expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+  });
+
+  it.each([[false], [true]])(
+    "says no upgrade is waiting without the retained runtime (empty attempt folder: %s)",
+    (empty) => {
+      const sb = sandbox();
+      writeFileSync(join(sb.boxDir, "compose.yml"), "services: {}\n");
+      if (empty) mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+      const result = run(sb, ["status"]);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.split("\n")[0]).toBe("upgrade: none waiting");
+    },
+  );
+
+  it("says in words that no upgrade is waiting, instead of printing null", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "services: {}\n");
+    const host = join(sb.root, "host");
+    mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+    writeFileSync(join(host, "node-v26.7.0/bin/node"), "#!/bin/bash\nprintf 'null\\n'\n", {
+      mode: 0o700,
+    });
+    const result = run(sb, ["status"], { WAITRON_HOST_DIR: host });
+    expect(result.status).toBe(0);
+    expect(result.stdout.split("\n")[0]).toBe("upgrade: none waiting");
+    expect(result.stdout).not.toMatch(/^null$/m);
+  });
 
   it.each(["status", "restore", "keep"])(
     "dispatches %s through the retained runtime without downloads",
@@ -1676,6 +1758,23 @@ describe("waitron.sh install of a release", () => {
       }
     },
   );
+
+  it("applies an offered upgrade past an empty attempt folder", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    const result = run(sb, ["install-offered-upgrade"], {
+      ...release,
+      WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      WT_SELF_SCRIPT: SCRIPT,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(loggedCalls(sb)).toContainEqual(
+      expect.stringContaining(`cli.mjs apply-offered-upgrade ${sb.boxDir} 1.2.2 1.2.3`),
+    );
+    expect(result.stdout).toBe('{"status":"upgraded"}\n');
+  });
 
   it("installs a signed release whose driver predates the upgrade timer", () => {
     const sb = sandbox({ systemd: true });
@@ -4296,6 +4395,9 @@ describe("the apt_get wrapper inside waitron.sh", () => {
       ...result,
       limits: calls.filter((c) => /^g?timeout /.test(c)),
       apts: calls.filter((c) => c.startsWith("apt-get ")),
+      aptStdin: existsSync(`${log}.apt-stdin`)
+        ? readFileSync(`${log}.apt-stdin`, "utf8").trim()
+        : "",
     };
   }
 
@@ -4325,6 +4427,13 @@ describe("the apt_get wrapper inside waitron.sh", () => {
     expect(r.status).toBe(0);
     expect(r.limits).toHaveLength(1);
     expect(r.limits[0]).toMatch(/^g?timeout 1800 env DEBIAN_FRONTEND=noninteractive apt-get /);
+  });
+
+  // Receipt: docs/developers/ci-and-gates.md, "Every apt wait is bounded".
+  it("gives apt-get /dev/null as its input", () => {
+    const r = aptGet(["install", "-y", "firmware-realtek"]);
+    expect(r.status).toBe(0);
+    expect(r.aptStdin).toBe("null");
   });
 
   it("tries a call that fails twice a third time, says so twice, and succeeds", () => {
@@ -4403,7 +4512,7 @@ it.each([
   expect(recovery).toBeLessThan(calls.indexOf("flock -n 9"));
 });
 
-describe("waitron.sh --reset install on a managed box, with a real host lock", () => {
+describe("waitron.sh --reset install and reset, with a real host lock", () => {
   const managedBox = (scripts) => {
     const sb = sandbox({ systemd: true, ...scripts });
     installedBox(sb);
@@ -4437,9 +4546,18 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
     expect(calls.filter((line) => line === "flock -n 9")).toHaveLength(2);
   });
 
-  const lockCases = [[args], [["check-upgrade-window"]]];
-  it.each(lockCases)("refuses %j while the lock is held", async (command) => {
-    const sb = managedBox();
+  const lockCases = [
+    [args, true],
+    [["check-upgrade-window"], true],
+    [args, false],
+    [["reset", "--yes"], false],
+  ];
+  it.each(lockCases)("refuses %j while the lock is held (app unit: %s)", async (command, unit) => {
+    const sb = unit ? managedBox() : sandbox({ systemd: true });
+    if (!unit) {
+      installedBox(sb);
+      mkdirSync(`${sb.boxDir}.upgrades/preparing`, { recursive: true });
+    }
     const checkingWindow = command[0] === "check-upgrade-window";
     if (checkingWindow) {
       const runtime = join(sb.root, "host/node-v26.7.0/bin");
@@ -4481,6 +4599,22 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
       await exited;
     }
   });
+});
+
+it.each([
+  ["reset", "--yes"],
+  ["--reset", "--yes", "install", "my-branch"],
+])("names the host lock when %j cannot open it", (...args) => {
+  const sb = sandbox();
+  installedBox(sb);
+  mkdirSync(`${sb.boxDir}.upgrade.lock`);
+  writeFileSync(sb.log, "");
+  const result = run(sb, args, { WAITRON_SH_REFRESHED: "1" });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(
+    `cannot open ${sb.boxDir}.upgrade.lock — run as root, or set WAITRON_DIR to a writable path`,
+  );
+  expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
 });
 
 it.each([
@@ -4708,6 +4842,20 @@ ${check}
     expect(loggedCalls(sb)).not.toContain("flock -n 9");
   });
 
+  it("asks the retained CLI past an empty attempt folder", () => {
+    const sb = sandbox();
+    const host = installOfferRuntime(sb, `printf '{"status":"offered","version":"1.2.3"}\n'`);
+    mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    const result = run(sb, cmd, { WT_INSTALLED_RELEASE_REF: "v1.2.2" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe('{"status":"offered","version":"1.2.3"}\n');
+    expect(loggedCalls(sb)).toContainEqual(
+      expect.stringContaining(
+        `host:${host}/box/upgrades/cli.mjs check-upgrade-offer ${sb.boxDir} `,
+      ),
+    );
+  });
+
   it.each([
     ["upgrade-busy", true, false, "v1.2.3"],
     ["upgrade-pending", false, true, "v1.2.3"],
@@ -4715,7 +4863,13 @@ ${check}
   ])("defers for %s", (reason, busy, pending, ref) => {
     const sb = sandbox();
     installOfferRuntime(sb);
-    if (pending) mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    if (pending) {
+      mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+      writeFileSync(
+        `${sb.boxDir}.upgrades/interrupted/attempt.json`,
+        '{"phase":"awaiting-choice"}',
+      );
+    }
     const result = run(sb, cmd, {
       WT_INSTALLED_RELEASE_REF: ref,
       WT_UPGRADE_BUSY: busy ? "1" : "",
