@@ -1,19 +1,14 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
-import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { requireSession } from "./till-session.js";
-import * as tillSession from "./till-session.js";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { beforeEach, expect, it } from "vitest";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createExtraList,
   createOptionList,
   createProduct,
-  getOptionList,
   setProductVariants,
-  updateOptionList,
   writeProductModifiers,
 } from "@waitron/menu";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
@@ -107,25 +102,14 @@ beforeEach(async () => {
     () => {},
   );
 });
-it("lets staff stop and restore a dish across menus without restoring its sold-out variant", async () => {
-  for (const available of [false, true]) {
-    expect(await send(app, cookie, "PUT", path(), { available })).toEqual({
-      status: 200,
-      json: { available },
-    });
-    for (const zoneId of [v.counter.zoneId, v.tables.zoneId]) {
-      const { offers } = await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listZoneOffers(tx, zoneId),
-      );
-      const offer = offers.find((o) => o.productId === productId)!;
-      expect(offer.available).toBe(available);
-      expect(offer.variants.find((v) => v.id === variantId)!.available).toBe(false);
-    }
-  }
-  expect(
-    await send(app, cookie, "PUT", path().replace(productId, variantId), { available: true }),
-  ).toEqual({ status: 200, json: { available: true } });
+it.each([
+  ["dishes", path],
+  ["option choices", optionPath],
+] as const)("offers no till route to change availability for %s", async (_kind, route) => {
+  const answer = await send(app, cookie, "PUT", route(), { available: false });
+  expect(answer.status).toBe(404);
 });
+
 it("applies dashboard product availability immediately to both published till zones", async () => {
   const manager = await withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: "Menu Manager", role: "manager" });
@@ -133,7 +117,11 @@ it("applies dashboard product availability immediately to both published till zo
   });
   mountMenuApi(app, { db: suite.db, venueLocale: "es-ES" }, () => {});
 
-  async function expectOffers(productAvailable: boolean, variantAvailable: boolean) {
+  async function expectOffers(
+    productAvailable: boolean,
+    variantAvailable: boolean,
+    extraAvailable: boolean,
+  ) {
     for (const zoneId of [v.counter.zoneId, v.tables.zoneId]) {
       const { offers } = await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.listZoneOffers(tx, zoneId),
@@ -144,16 +132,21 @@ it("applies dashboard product availability immediately to both published till zo
         unitPrice: "8.00",
         available: variantAvailable,
       });
+      expect(offers.some((entry) => entry.productId === extraId)).toBe(false);
+      const extras = offer?.offeredModifiers.find((modifier) => modifier.kind === "extras");
+      expect(extras?.items.find((item) => item.productId === extraId)?.available).toBe(
+        extraAvailable,
+      );
     }
   }
 
-  await expectOffers(true, false);
+  await expectOffers(true, false, true);
   const changes = [
-    { productIds: [variantId], available: true, expected: [true, true] },
-    { productIds: [productId], available: false, expected: [false, true] },
-    { productIds: [productId], available: true, expected: [true, true] },
-    { productIds: [productId, variantId], available: false, expected: [false, false] },
-    { productIds: [variantId], available: true, expected: [false, true] },
+    { productIds: [variantId], available: true, expected: [true, true, true] },
+    { productIds: [productId, extraId], available: false, expected: [false, true, false] },
+    { productIds: [productId], available: true, expected: [true, true, false] },
+    { productIds: [productId, variantId], available: false, expected: [false, false, false] },
+    { productIds: [variantId, extraId], available: true, expected: [false, true, true] },
   ] as const;
   for (const [index, { productIds, available, expected }] of changes.entries()) {
     const response = await app.request("/management-api/products/availability", {
@@ -170,150 +163,7 @@ it("applies dashboard product availability immediately to both published till zo
       epoch: expect.any(String),
       sequence: index + 1,
     });
-    const [productAvailable, variantAvailable] = expected;
-    await expectOffers(productAvailable, variantAvailable);
+    const [productAvailable, variantAvailable, extraAvailable] = expected;
+    await expectOffers(productAvailable, variantAvailable, extraAvailable);
   }
-});
-it("stops and restores a published extra that is not itself a dish", async () => {
-  for (const available of [false, true]) {
-    expect(
-      await send(app, cookie, "PUT", path().replace(productId, extraId), { available }),
-    ).toEqual({ status: 200, json: { available } });
-    for (const zoneId of [v.counter.zoneId, v.tables.zoneId]) {
-      const { offers } = await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listZoneOffers(tx, zoneId),
-      );
-      expect(offers.some((offer) => offer.productId === extraId)).toBe(false);
-      const extras = offers
-        .find((offer) => offer.productId === productId)!
-        .offeredModifiers.find((modifier) => modifier.kind === "extras")!;
-      expect(extras.items.find((item) => item.productId === extraId)!.available).toBe(available);
-    }
-  }
-});
-it("stops and restores a published choice from either zone without replacing its stored default", async () => {
-  for (const [zoneId, available] of [
-    [v.counter.zoneId, false],
-    [v.tables.zoneId, true],
-  ] as const) {
-    expect(await send(app, cookie, "PUT", optionPath(zoneId), { available })).toEqual({
-      status: 200,
-      json: { available },
-    });
-    for (const readZone of [v.counter.zoneId, v.tables.zoneId]) {
-      const { offers } = await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listZoneOffers(tx, readZone),
-      );
-      const options = offers
-        .find((offer) => offer.productId === productId)!
-        .offeredModifiers.find((modifier) => modifier.kind === "options")!;
-      expect(options.labels.find((label) => label.id === labelId)!.available).toBe(available);
-    }
-    expect(
-      (await withTransaction(suite.db, (tx) => getOptionList(tx, listId))).defaultLabelId,
-    ).toBe(labelId);
-  }
-});
-it("refuses an option availability body without an explicit boolean", async () => {
-  expect(await send(app, cookie, "PUT", optionPath(), { available: null })).toMatchObject({
-    status: 400,
-    json: { code: "options.invalid", params: { field: "available" } },
-  });
-});
-it("refuses a stored option list not published in the requested zone", async () => {
-  const outside = await withTransaction(suite.db, (tx) =>
-    createOptionList(tx, { name: "Unused", labels: [{ name: "Plain" }] }, "es"),
-  );
-  const answer = await send(
-    app,
-    cookie,
-    "PUT",
-    optionPath().replace(listId, outside.id).replace(labelId, outside.labels[0]!.id),
-    { available: false },
-  );
-  expect(answer).toMatchObject({ status: 404, json: { code: "options.not_found" } });
-  expect(await withTransaction(suite.db, (tx) => getOptionList(tx, outside.id))).toEqual(outside);
-});
-it.each([{}, { available: null }, { available: "true" }])(
-  "refuses a body without an explicit boolean: %j",
-  async (body) => {
-    const answer = await send(app, cookie, "PUT", path(), body);
-    expect(answer.status).toBe(400);
-    expect(answer.json.code).toBe("product.invalid");
-  },
-);
-it("requires a signed-in person", async () => {
-  const answer = await send(app, "", "PUT", path(), { available: false });
-  expect(answer.json.code).toBe("session.required");
-});
-it("refuses an existing product outside the zone's published offer", async () => {
-  const outsider = await withTransaction(suite.db, (tx) =>
-    createProduct(tx, {
-      name: "Unpublished soup",
-      categoryId: null,
-      pricingUnit: "each",
-      unitPrice: "5.00",
-      vatClass: "reduced",
-    }),
-  );
-  const answer = await send(app, cookie, "PUT", path().replace(productId, outsider.id), {
-    available: false,
-  });
-  expect(answer.status).toBe(404);
-  expect(answer.json.code).toBe("product.not_found");
-});
-
-it("rechecks take-orders after the signed-in device's profile changes", async () => {
-  const original = requireSession;
-  const spy = vi.spyOn(tillSession, "requireSession").mockImplementation(async (...args) => {
-    const session = await original(...args);
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .update(deviceProfiles)
-        .set({ capabilities: [] })
-        .where(eq(deviceProfiles.id, session.device.deviceProfileId)),
-    );
-    return session;
-  });
-  onTestFinished(() => spy.mockRestore());
-  const answer = await send(app, cookie, "PUT", path(), { available: false });
-  expect(answer.status).toBe(403);
-  expect(answer.json.code).toBe("device.forbidden_action");
-});
-
-it("refuses a choice added to the stored list after the menu was published", async () => {
-  const stored = await withTransaction(suite.db, async (tx) => {
-    const { id, ...current } = await getOptionList(tx, listId);
-    return updateOptionList(
-      tx,
-      id,
-      { ...current, labels: [...current.labels, { name: "New choice" }] },
-      "es",
-    );
-  });
-  const unpublished = stored.labels.at(-1)!;
-  const answer = await send(app, cookie, "PUT", optionPath().replace(labelId, unpublished.id), {
-    available: false,
-  });
-  expect(answer).toMatchObject({ status: 404, json: { code: "options.not_found" } });
-  expect(await withTransaction(suite.db, (tx) => getOptionList(tx, listId))).toEqual(stored);
-});
-
-it("refuses the last published choice after its stored list is disabled", async () => {
-  const stored = await withTransaction(suite.db, async (tx) => {
-    const { id, ...current } = await getOptionList(tx, listId);
-    return updateOptionList(tx, id, { ...current, active: false }, "es");
-  });
-  expect((await send(app, cookie, "PUT", optionPath(), { available: false })).status).toBe(200);
-  const answer = await send(
-    app,
-    cookie,
-    "PUT",
-    optionPath().replace(labelId, stored.labels[1]!.id),
-    { available: false },
-  );
-  expect(answer).toMatchObject({
-    status: 400,
-    json: { code: "options.invalid", params: { field: "labels" } },
-  });
 });

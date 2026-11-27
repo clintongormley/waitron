@@ -92,7 +92,7 @@ export interface TillProduct {
    * as "offers nothing" rather than "not loaded yet".
    */
   offeredModifiers?: OfferedModifier[];
-  /** Includes sold-out rows so dish information can put them back on sale. */
+  /** Includes sold-out extras so held picks can still refresh their allergen declarations. */
   modifierAvailability?: TillMenuOffer["offeredModifiers"];
   diet?: DietProfile | null;
 
@@ -242,25 +242,6 @@ export class MenuApi {
       "GET",
       undefined,
       options.signal,
-    );
-  }
-  setAvailability(zoneId: string, productId: string, available: boolean): Promise<void> {
-    return this.#request<void>(
-      `/api/service-zones/${encodeURIComponent(zoneId)}/products/${encodeURIComponent(productId)}/availability`,
-      "PUT",
-      { available },
-    );
-  }
-  setOptionAvailability(
-    zoneId: string,
-    listId: string,
-    labelId: string,
-    available: boolean,
-  ): Promise<void> {
-    return this.#request<void>(
-      `/api/service-zones/${encodeURIComponent(zoneId)}/options/${encodeURIComponent(listId)}/labels/${encodeURIComponent(labelId)}/availability`,
-      "PUT",
-      { available },
     );
   }
   menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuStateAnswer> {

@@ -122,25 +122,6 @@ export async function getOptionList(tx: Transaction, optionListId: string): Prom
   return list;
 }
 
-export async function setOptionLabelAvailability(
-  tx: Transaction,
-  optionListId: string,
-  labelId: string,
-  available: boolean,
-): Promise<void> {
-  const list = await getOptionList(tx, optionListId);
-  if (!list.labels.some((label) => label.id === labelId)) {
-    throw new AppError("options.not_found", { optionListId });
-  }
-  if (!available && !list.labels.some((label) => label.id !== labelId && label.available)) {
-    throw new AppError("options.invalid", { field: "labels" });
-  }
-  await tx
-    .update(optionLabels)
-    .set({ available })
-    .where(and(eq(optionLabels.listId, optionListId), eq(optionLabels.id, labelId)));
-}
-
 async function assertOptionList(tx: Transaction, optionListId: string): Promise<void> {
   const [list] = await tx
     .select({ id: optionLists.id })

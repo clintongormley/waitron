@@ -9,7 +9,6 @@ import {
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import "../widgets/set-menu-counts.js";
 import "../widgets/set-menu-summary.js";
-import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import {
   allergyGuestId,
@@ -624,8 +623,6 @@ function stationAllowsChange(row: TabLine): boolean {
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
-  @property({ attribute: false }) changeAvailability?: ChangeAvailability;
-  @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
   @property({ attribute: false }) allergyView: PartyAllergyRead | null = null;
 
   #allergy(): PartyAllergyRead | null {
@@ -3044,8 +3041,6 @@ export class TillTableOrderScreen extends LitElement {
     const hasMenuPicker = this.menus.filter((each) => each.orderable).length > 1;
     if (menu === undefined && this.setMenuCopies.length === 0 && !hasMenuPicker) return html``;
     return html`<till-menu-browser
-      .changeAvailability=${this.changeAvailability}
-      .changeOptionAvailability=${this.changeOptionAvailability}
       .hasMenuPicker=${hasMenuPicker}
       .locked=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}

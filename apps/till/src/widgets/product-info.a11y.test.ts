@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { TillProduct } from "../api/menu-api.js";
-import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
 import { TillProductInfo } from "./product-info.js";
@@ -23,81 +22,6 @@ const base: TillProduct = {
   category: null,
   allergens: null,
 };
-
-it.each(["light", "dark"] as Theme[])(
-  "can restore an option and explains the last-choice refusal in %s",
-  async (theme) => {
-    setLocale(theme === "dark" ? "es-ES" : "en-GB");
-    let reject!: (error: unknown) => void;
-    const change = vi.fn(
-      () =>
-        new Promise<void>((_yes, no) => {
-          reject = no;
-        }),
-    );
-    const product: TillProduct = {
-      ...base,
-      productId: "soup",
-      modifierAvailability: [
-        {
-          kind: "options",
-          id: "cooked",
-          name: "Cooking",
-          customerName: { en: "Guest cooking" },
-          kitchenName: "COOK KDS",
-          defaultLabelId: "rare",
-          publishedDefaultLabelId: "rare",
-          labels: [
-            {
-              id: "rare",
-              name: "Rare",
-              customerName: { en: "Guest red" },
-              kitchenName: "RED KDS",
-              available: true,
-            },
-            {
-              id: "medium",
-              name: "Medium",
-              customerName: { en: "Guest pink" },
-              kitchenName: "PINK KDS",
-              available: false,
-            },
-          ],
-        },
-      ],
-    };
-    const { el, host } = await mountWidget<TillProductInfo>(
-      "till-product-info",
-      { product, changeAvailability: vi.fn(), changeOptionAvailability: change },
-      theme,
-    );
-    const restore = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="medium"]')!;
-    expect(restore).not.toBeNull();
-    expect(restore.textContent).toBe(t("product_info.restore"));
-    expect(
-      el
-        .shadowRoot!.querySelector('[data-availability="rare"]')!
-        .parentElement!.querySelector("span")!.textContent,
-    ).toBe("Rare");
-    await expectNoA11yViolations(host);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-availability="rare"]')!);
-    expect(change).toHaveBeenCalledExactlyOnceWith("cooked", "rare", false);
-    reject({ code: "options.invalid", field: "labels" });
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
-    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
-      theme === "dark"
-        ? t("product_info.last_choice")
-        : "Put another choice back on sale before marking this one sold out.",
-    );
-    await expectNoA11yViolations(host);
-    const closed: string[] = [];
-    el.addEventListener("close-info", () => closed.push("close"));
-    change.mockResolvedValueOnce(undefined);
-    await userEvent.click(restore);
-    expect(change).toHaveBeenLastCalledWith("cooked", "medium", true);
-    await vi.waitFor(() => expect(closed).toEqual(["close"]));
-  },
-);
 
 describe.each(["light", "dark"] as Theme[])("product information in %s", (theme) => {
   it.each([
@@ -169,62 +93,3 @@ describe.each(["light", "dark"] as Theme[])("product information in %s", (theme)
     },
   );
 });
-
-it.each([
-  [
-    "light",
-    "product.not_found",
-    "This dish or size is no longer offered here. Close this window and choose another dish or size.",
-  ],
-  ["dark", "product.not_found", codeMessage("product.not_found", "es-ES")],
-  [
-    "light",
-    "product.deleted",
-    "This dish or size has been deleted. Close this window and choose another dish or size.",
-  ],
-  ["dark", "product.deleted", codeMessage("product.deleted", "es-ES")],
-] as const)(
-  "availability controls, sending and refusal are accessible in %s for %s",
-  async (theme, code, expected) => {
-    setLocale(theme === "dark" ? "es-ES" : "en-GB");
-    let reject!: (error: unknown) => void;
-    const change = vi.fn(
-      () =>
-        new Promise<void>((_resolve, no) => {
-          reject = no;
-        }),
-    );
-    const product = {
-      ...base,
-      productId: "soup",
-      available: false,
-      variants: [
-        {
-          ...base,
-          id: "cup",
-          name: "Cup",
-          unitPrice: "2.00",
-          available: false,
-        },
-      ],
-    };
-    const { el, host } = await mountWidget<TillProductInfo>(
-      "till-product-info",
-      { product, changeAvailability: change },
-      theme,
-    );
-    const dish = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="soup"]')!;
-    expect(dish).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-availability="cup"]')).not.toBeNull();
-    await expectNoA11yViolations(host);
-    await userEvent.click(dish);
-    expect(change).toHaveBeenCalledExactlyOnceWith("soup", true);
-    expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
-    reject({ code });
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
-    const message = el.shadowRoot!.querySelector('[role="alert"]')!.textContent;
-    expect(message).toBe(expected);
-    expect(message).not.toBe(codeMessage("unknown.code"));
-    await expectNoA11yViolations(host);
-  },
-);

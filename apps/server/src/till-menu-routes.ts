@@ -1,5 +1,4 @@
 import { withTransaction, workingOrders, workingOrderLines, ticketItems, newId } from "@waitron/db";
-import { updateProduct, setOptionLabelAvailability } from "@waitron/menu";
 import { requireUuidParam, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
@@ -7,7 +6,6 @@ import type { Hono } from "hono";
 import { invalid } from "./bill-allocation.js";
 import type { CounterPaymentBasket } from "./bill-payments.js";
 import { findDeadEnds, availableStations } from "./dead-ends.js";
-import { assertProfileAction } from "./device-session.js";
 import { currentZoneDevice } from "./device-zones.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requestCfg } from "./request-config.js";
@@ -15,7 +13,7 @@ import { requireDining } from "./order-dining.js";
 import { SET_MENU_DRAFT_LINE } from "./set-menu-bill.js";
 import { parseSetMenuWireLines } from "./set-menu-wire-lines.js";
 import { named, newOrderZoneIn } from "./till-order-zones.js";
-import { run, runAvailability, runBodyCourse } from "./till-api-errors.js";
+import { run, runBodyCourse } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
 import { readTillSetup, setupRevisionOf, completeTillSetup } from "./till-setup.js";
@@ -86,77 +84,6 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
         };
       });
       return c.json(result);
-    }),
-  );
-
-  app.put("/api/service-zones/:zoneId/products/:productId/availability", (c) =>
-    runAvailability(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      const productId = requireUuidParam(c.req.param("productId"), "ProductId");
-      const body = await readJsonBody<{ available: unknown }>(c);
-      if (typeof body.available !== "boolean")
-        throw new AppError("product.invalid", { field: "available" });
-      const available = body.available;
-      await withTransaction(deps.db, async (tx) => {
-        const device = await currentZoneDevice(tx, session);
-        assertProfileAction(device, "take-orders");
-        await checkZones(tx, { device }, [{ zoneId }]);
-        const { offers, setMenus } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
-          withDefault: false,
-        });
-        const listed = [...offers, ...setMenus.flatMap((menu) => menu.offers)];
-        if (
-          !listed.some(
-            (offer) =>
-              offer.productId === productId ||
-              offer.variants.some((variant) => variant.id === productId) ||
-              offer.offeredModifiers.some(
-                (modifier) =>
-                  modifier.kind === "extras" &&
-                  modifier.items.some((item) => item.productId === productId),
-              ),
-          )
-        )
-          throw new AppError("product.not_found", { productId });
-        await updateProduct(tx, productId, { available });
-      });
-      return c.json({ available });
-    }),
-  );
-
-  app.put("/api/service-zones/:zoneId/options/:listId/labels/:labelId/availability", (c) =>
-    runAvailability(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      const optionListId = requireUuidParam(c.req.param("listId"), "OptionListId");
-      const labelId = requireUuidParam(c.req.param("labelId"), "OptionLabelId");
-      const body = await readJsonBody<{ available: unknown }>(c);
-      if (typeof body.available !== "boolean")
-        throw new AppError("options.invalid", { field: "available" });
-      const available = body.available;
-      await withTransaction(deps.db, async (tx) => {
-        const device = await currentZoneDevice(tx, session);
-        assertProfileAction(device, "take-orders");
-        await checkZones(tx, { device }, [{ zoneId }]);
-        const { offers, setMenus } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
-          withDefault: false,
-        });
-        const listed = [...offers, ...setMenus.flatMap((menu) => menu.offers)];
-        if (
-          !listed.some((offer) =>
-            offer.offeredModifiers.some(
-              (modifier) =>
-                modifier.kind === "options" &&
-                modifier.id === optionListId &&
-                modifier.labels.some((label) => label.id === labelId),
-            ),
-          )
-        )
-          throw new AppError("options.not_found", { optionListId });
-        await setOptionLabelAvailability(tx, optionListId, labelId, available);
-      });
-      return c.json({ available });
     }),
   );
 

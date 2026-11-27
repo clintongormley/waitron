@@ -272,10 +272,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 
 export const run = createErrorBoundary(STATUS, "till.failed");
 
-export const runAvailability = createErrorBoundary(
-  { ...STATUS, "product.not_found": 404, "options.not_found": 404 },
-  "till.failed",
-);
 /** `run`, for a route whose address holds none of these codes' ids: they answer 400
  * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
 export const runBodyIds = (...codes: string[]): Run =>

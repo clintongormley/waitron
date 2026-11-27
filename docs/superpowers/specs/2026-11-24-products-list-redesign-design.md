@@ -27,7 +27,7 @@ Shown two layouts (A: the same tree, tighter; B: a flat list with a switch to th
 ## Not in this work
 
 Prices edited in the row; the till's sold-out window and whether the till and the dashboard use one
-word ([A1569](../../backlog/till.md#a1569-the-tills-sold-out-window-needs-a-design-with-the-owner));
+word ([A1569](../../backlog/till.md#a1569-dish-information-and-sold-out-wording-on-the-till));
 the dashed frame on an inherited colour (it goes in
 [A1570](2026-11-24-inherited-values-design.md): the owner, later on 2026-11-24, reversed A423); the rest of the product editor; Archive
 becoming Delete ([its own spec](2026-11-24-delete-menus-and-products-design.md), which lands first:

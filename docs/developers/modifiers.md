@@ -75,16 +75,13 @@ and an extras maximum below one; the database also refuses blank names and a max
 On dashboard update, `OptionListSaveBody` omits availability flags unchanged from the
 opening draft, matched by choice id. The server fills omitted existing flags from its stored
 labels and defaults new choices to available; explicit booleans still apply and null is refused.
-The form retains full values for saved and discarded drafts. An older open form can still show
-a choice as available after the till marks it sold out: saving preserves the stored flag, and
-the server can refuse a list that the older form still considers answerable.
+The form retains full values for saved and discarded drafts. When another dashboard save changes
+availability while a form is open, an unrelated save preserves the choice's stored flag.
+You can save an inactive list with every choice unavailable.
 
-Till dish information keeps every published modifier row in `modifierAvailability`; the ordering
-picker uses the filtered `offeredModifiers`. Its availability routes admit published extras and
-choices, including unavailable rows, and apply the change across menus. The option setter changes
-only availability, keeps the preferred default and refuses the stored list's last choice even if
-the list was disabled after publication. Ordinary inactive-list management can still withdraw every choice.
-Older published versions may contain fewer choices; this is not a published-version guarantee.
+The till keeps every published modifier row in `modifierAvailability` so a held line can refresh
+its extras' allergen information even after an extra sells out. The ordering picker uses the
+filtered `offeredModifiers`.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
 it required, and `maxPicks` null leaves it uncapped. A maximum must be at least 1. Each item bounds

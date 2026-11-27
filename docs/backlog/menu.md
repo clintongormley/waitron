@@ -368,12 +368,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   2026-11-25: for held dishes and the kitchen, "live" is now the published menu (Published
   declarations, above).
 
-- **Till sold-out choices (A1516, owner 2026-11-11, “All four as recommended”).** Anyone signed in
-  on a take-orders device can stop and restore availability, with no new permission. Restoration
-  is manual, never a next-day reset. A running-down quantity (“only 5 left”) stays parked.
-  [Delivery 2](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1516-modifier-availability.md) keeps stored defaults
-  and the till setter's last-choice refusal, including disabled lists still published; older published
-  versions may contain fewer choices.
+- **Sold-out choices (A1516 and A1622).** The owner moved availability changes to the dashboard on
+  2026-11-27. Restoration is manual. A running-down quantity ("only 5 left") stays parked.
   A save naming the effective fallback retains the stored preference, so making that fallback the
   new preference requires separate saves.
 

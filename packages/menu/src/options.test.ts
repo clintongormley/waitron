@@ -15,7 +15,6 @@ import {
   listOptionLists,
   optionListDependants,
   readOptionListsByIds,
-  setOptionLabelAvailability,
   updateOptionList,
 } from "./options.js";
 
@@ -51,15 +50,27 @@ const cookedList = () => ({
 });
 
 describe("option label availability", () => {
-  it("keeps till-marked sold-out choices and the preferred default on an unrelated stale save", async () => {
-    const opened = await run((tx) => createOptionList(tx, cookedList(), "en"));
+  it("keeps sold-out choices and the preferred default on an unrelated stale save", async () => {
+    const { id, ...opened } = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const preferred = opened.defaultLabelId!;
-    await run((tx) => setOptionLabelAvailability(tx, opened.id, preferred, false));
+    await run((tx) =>
+      updateOptionList(
+        tx,
+        id,
+        {
+          ...opened,
+          labels: opened.labels.map((label) =>
+            label.id === preferred ? { ...label, available: false } : label,
+          ),
+        },
+        "en",
+      ),
+    );
 
     const saved = await run((tx) =>
       updateOptionList(
         tx,
-        opened.id,
+        id,
         {
           name: "Dinner cooking",
           customerName: opened.customerName,
@@ -84,53 +95,6 @@ describe("option label availability", () => {
       { id: opened.labels[1]!.id, available: true },
       { id: opened.labels[0]!.id, available: false },
     ]);
-  });
-
-  it("stops and restores only the named label while keeping the preferred default", async () => {
-    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
-    const labelId = created.defaultLabelId!;
-    await run((tx) => setOptionLabelAvailability(tx, created.id, labelId, false));
-    expect(await run((tx) => getOptionList(tx, created.id))).toEqual({
-      ...created,
-      labels: created.labels.map((label) =>
-        label.id === labelId ? { ...label, available: false } : label,
-      ),
-    });
-    await run((tx) => setOptionLabelAvailability(tx, created.id, labelId, true));
-    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
-  });
-
-  it("refuses to stop the last available choice of an active list without changing it", async () => {
-    const created = await run((tx) =>
-      createOptionList(tx, { name: "Cooking", labels: [{ name: "Medium" }] }, "en"),
-    );
-    const error = await refusal((tx) =>
-      setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false),
-    );
-    expect(error).toMatchObject({ code: "options.invalid", params: { field: "labels" } });
-    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
-  });
-
-  it("refuses the last till choice even when its stored list is inactive", async () => {
-    const created = await run((tx) =>
-      createOptionList(tx, { name: "Cooking", active: false, labels: [{ name: "Medium" }] }, "en"),
-    );
-    const error = await refusal((tx) =>
-      setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false),
-    );
-    expect(error).toMatchObject({ code: "options.invalid", params: { field: "labels" } });
-    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
-  });
-
-  it("refuses a label belonging to another list without changing either list", async () => {
-    const first = await run((tx) => createOptionList(tx, cookedList(), "en"));
-    const second = await run((tx) => createOptionList(tx, cookedList(), "en"));
-    const error = await refusal((tx) =>
-      setOptionLabelAvailability(tx, first.id, second.labels[0]!.id, false),
-    );
-    expect(error).toMatchObject({ code: "options.not_found", params: { optionListId: first.id } });
-    expect(await run((tx) => getOptionList(tx, first.id))).toEqual(first);
-    expect(await run((tx) => getOptionList(tx, second.id))).toEqual(second);
   });
 });
 
@@ -271,7 +235,7 @@ describe("option list CRUD", () => {
   });
 
   it("keeps the preferred default when a save also withdraws the current fallback", async () => {
-    const created = await run((tx) =>
+    const { id: listId, ...created } = await run((tx) =>
       createOptionList(
         tx,
         { name: "Cooking", labels: [{ name: "Preferred" }, { name: "First" }, { name: "Second" }] },
@@ -279,8 +243,20 @@ describe("option list CRUD", () => {
       ),
     );
     const preferred = created.labels[0]!.id;
-    await run((tx) => setOptionLabelAvailability(tx, created.id, preferred, false));
-    const { id, ...opened } = await run((tx) => getOptionList(tx, created.id));
+    await run((tx) =>
+      updateOptionList(
+        tx,
+        listId,
+        {
+          ...created,
+          labels: created.labels.map((label) =>
+            label.id === preferred ? { ...label, available: false } : label,
+          ),
+        },
+        "en",
+      ),
+    );
+    const { id, ...opened } = await run((tx) => getOptionList(tx, listId));
     const saved = await run((tx) =>
       updateOptionList(
         tx,
