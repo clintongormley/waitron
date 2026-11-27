@@ -189,8 +189,10 @@ export async function checkCorrectionLeg(
 /**
  * Refuses as `previewCorrectionAmounts` refuses the correction's corrective for `moneyBack` cents
  * (its admission, a full invoice's customer and registered address), except a refusal Close ends the
- * correction over (`closableRefusal`), whose money goes back unrecorded. The chain and clock checks
- * filing also runs are not repeated here.
+ * correction over (`closableRefusal`), whose money goes back unrecorded. A full invoice's
+ * corrective that can still be filed is also refused `invoice_correction.chain_unsound` while the
+ * box's invoice records need checking, so its money waits for them; a receipt's is not. The clock
+ * check filing also runs is not repeated here.
  */
 export async function checkLegFileable(
   tx: Transaction,
@@ -198,8 +200,9 @@ export async function checkLegFileable(
   correction: InvoiceCorrectionRow,
   moneyBack: number,
 ): Promise<void> {
+  let fullInvoice: boolean;
   try {
-    await previewCorrectionAmounts(
+    const preview = await previewCorrectionAmounts(
       tx,
       fiscal.backend,
       correction.originalSaleId as SaleId,
@@ -210,9 +213,13 @@ export async function checkLegFileable(
       },
       AS_ADMITTED,
     );
+    fullInvoice = preview.fullInvoice === true;
   } catch (error) {
     if (!(error instanceof AppError) || !closableRefusal(error)) throw error;
+    return;
   }
+  if (fullInvoice && (await fiscal.backend.checkIntegrity(tx, fiscal.nodeId)).issues.length > 0)
+    throw new AppError("invoice_correction.chain_unsound", { saleId: correction.originalSaleId });
 }
 
 /** The correction as its caller read it in this transaction, the cents it had left before this

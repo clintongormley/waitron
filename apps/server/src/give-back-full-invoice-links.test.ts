@@ -259,6 +259,43 @@ describe("links of a corrective given back over two payments", () => {
     return { billId, saleId, cancelId, correctionId: correctionId! };
   }
 
+  /** A full invoice (or a receipt) for a Tarta and an Octopus paid €10.00 on the reader and €28.00
+   * in cash, with €19.00 of goodwill given back from the reader: €10.00 is back and €9.00 is left
+   * for the cash. */
+  async function readerLegBack(full: boolean) {
+    const billId = await tabWith(venue, "Tarta", "Octopus");
+    if (full) await fixture.chooseFullInvoice(venue, billId);
+    await fixture.payPart(venue, billId, { reader: "10.00" });
+    await fixture.payPart(venue, billId, { cash: "28.00" });
+    const saleId = await fixture.saleOf(venue, billId);
+    const { correctionId, answer } = await press(
+      saleId,
+      ask("goodwill", "19.00", { way: readerOf(saleId) }),
+    );
+    expect(answer.json).toMatchObject({ underWay: { moneyBack: "10.00", left: "9.00" } });
+    return { saleId, correctionId: correctionId! };
+  }
+
+  const cashLeg = (correctionId: string, amount: string) =>
+    send(venue.app, adminCookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, {
+      submissionId: randomUUID(),
+      amount,
+    });
+
+  function recordsNeedChecking() {
+    const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+      ok: false,
+      checked: 1,
+      issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+    } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+    onTestFinished(() => unsound.mockRestore());
+  }
+
+  const refundCountOf = (saleId: string) =>
+    venue.db.all<{ n: number }>(
+      sql`select count(*) as n from refunds where sale_id = ${saleId}`,
+    )[0]!.n;
+
   it("links nothing between the legs, closes a second till's window, then links both legs once filed", async () => {
     const { saleId, cancelId, correctionId } = await cashLegBack();
     expect(linksOf(saleId)).toEqual([]);
@@ -330,6 +367,55 @@ describe("links of a corrective given back over two payments", () => {
     expect(correctivesOf(saleId)).toEqual([r1(-1900)]);
     expect(linksOf(saleId)).toEqual([]);
     expect(await shown(saleId, "18.00")).toEqual({ left: "9.00", owed: "9.00", back: "0.00" });
+  });
+
+  it("while the box's records need checking, sends no fresh leg and files nothing", async () => {
+    const { saleId, correctionId } = await cashLegBack();
+    recordsNeedChecking();
+    const sends = venue.card.refundCalls.length;
+    const refunds = refundCountOf(saleId);
+    expect(await readerLeg(saleId, correctionId, "8.00", randomUUID())).toEqual({
+      status: 409,
+      json: { code: "invoice_correction.chain_unsound", params: { saleId } },
+    });
+    expect(venue.card.refundCalls.length).toBe(sends);
+    expect(refundCountOf(saleId)).toBe(refunds);
+    expect(correctivesOf(saleId)).toEqual([]);
+  });
+
+  it("while the box's records need checking, still answers a resend of a leg already sent", async () => {
+    const { saleId, correctionId } = await cashLegBack();
+    const lost = randomUUID();
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+    expect(await readerLeg(saleId, correctionId, "8.00", lost)).toMatchObject({
+      status: 200,
+      json: { state: "pending" },
+    });
+    recordsNeedChecking();
+    const refunds = refundCountOf(saleId);
+    const resent = await readerLeg(saleId, correctionId, "8.00", lost);
+    expect(resent.status, JSON.stringify(resent.json)).toBe(200);
+    expect(refundCountOf(saleId)).toBe(refunds);
+  });
+
+  it("while the box's records need checking, gives no fresh cash leg on a full invoice", async () => {
+    const { saleId, correctionId } = await readerLegBack(true);
+    recordsNeedChecking();
+    const refunds = refundCountOf(saleId);
+    expect(await cashLeg(correctionId, "4.00")).toEqual({
+      status: 409,
+      json: { code: "invoice_correction.chain_unsound", params: { saleId } },
+    });
+    expect(refundCountOf(saleId)).toBe(refunds);
+  });
+
+  it("on a receipt, a fresh cash leg still goes back while the box's records need checking", async () => {
+    const { saleId, correctionId } = await readerLegBack(false);
+    recordsNeedChecking();
+    const refunds = refundCountOf(saleId);
+    const leg = await cashLeg(correctionId, "4.00");
+    expect(leg.status, JSON.stringify(leg.json)).toBe(200);
+    expect(refundCountOf(saleId)).toBe(refunds + 1);
   });
 
   it("ended unrecorded, links the money back to the cancel and does not offer it again", async () => {
