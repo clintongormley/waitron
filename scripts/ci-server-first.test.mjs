@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, it, expect } from "vitest";
+import { parse } from "yaml";
 
 const yaml = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const jobs = [...yaml.matchAll(/^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm)]
@@ -187,6 +188,19 @@ describe("server-first workflow routing", () => {
         );
       }
     }
+  });
+  it("gives the capacity read credential only to planner recovery", () => {
+    const source = readFileSync(
+      new URL("../.github/workflows/server-health.yml", import.meta.url),
+      "utf8",
+    );
+    const secret = "${{ secrets.DISPOSABLE_CAPACITY_READ_TOKEN }}";
+    const workflow = parse(source);
+    const recovery = workflow.jobs.check.steps.find(
+      (step) => step.run === "node scripts/ci-server-health.mjs recover-planners",
+    );
+    expect(recovery?.env?.CAPACITY_READ_TOKEN).toBe(secret);
+    expect(source.split(secret)).toHaveLength(2);
   });
   it("keeps new work on GitHub when routing selects hosted without server jobs", () => {
     for (const job of jobs.filter(

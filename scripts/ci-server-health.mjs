@@ -464,6 +464,10 @@ function serverFull(options) {
     return false;
   }
   const age = (options.now ?? Date.now()) - capacity?.observedAt;
+  if (options.plannersOnly && validCapacity(capacity))
+    options.report?.(
+      `Planner rescue capacity: ${capacity.serverRunning}/${capacity.slots} server slots occupied; observation age ${age} ms.`,
+    );
   return (
     Number.isSafeInteger(capacity?.slots) &&
     capacity.slots > 0 &&
@@ -506,10 +510,13 @@ export async function recoverServer(options) {
       continue;
     }
     const path = `/repos/${repository}/actions/runs/${run.id}`;
+    let retryRefusal;
     const eligible = async (cancelled = false) => {
       const current = await request(path);
       const skip = (reason) => {
-        if (plannersOnly && !cancelled) plannerSkip(options, run, run.plannerJobs, reason);
+        if (!plannersOnly) return;
+        if (cancelled) retryRefusal = `post-cancel verification: ${reason}`;
+        else plannerSkip(options, run, run.plannerJobs, reason);
       };
       if (
         current.id !== run.id ||
@@ -544,23 +551,27 @@ export async function recoverServer(options) {
         }
       }
       const jobs = await runJobs(options, current);
-      if (
-        plannersOnly &&
-        !jobs.some(
+      if (plannersOnly) {
+        const planners = jobs.filter(
           (job) =>
             job.name === "changes" &&
             job.labels.includes("self-hosted") &&
             job.labels.includes(
               `${options.prefix || "dt"}-${options.repositoryId}-${run.id}-1-changes-1`,
-            ) &&
-            (cancelled
-              ? job.status === "completed" && job.conclusion === "cancelled"
-              : job.status === "queued" && !job.runner_id) &&
-            old(job, options.now ?? Date.now()),
-        )
-      ) {
-        skip("planning job no longer queued unassigned and old");
-        return;
+            ),
+        );
+        const matchingState = planners.filter((job) =>
+          cancelled
+            ? job.status === "completed" && job.conclusion === "cancelled"
+            : job.status === "queued" && !job.runner_id,
+        );
+        if (!matchingState.some((job) => old(job, options.now ?? Date.now()))) {
+          if (!cancelled) skip("planning job no longer queued unassigned and old");
+          else if (!planners.length) skip("planning job is missing or its label changed");
+          else if (!matchingState.length) skip("planning job did not complete as cancelled");
+          else skip("cancelled planning job age is unknown or below five minutes");
+          return;
+        }
       }
       if (
         jobs.some(
@@ -640,6 +651,7 @@ export async function recoverServer(options) {
         if (plannersOnly) options.report?.(`Retried PR run ${run.id} on GitHub.`);
       } catch (error) {
         if (!plannersOnly) throw error;
+        if (retryRefusal) plannerSkip(options, run, run.plannerJobs, retryRefusal);
         throw new Error(`Cancelled PR run ${run.id}; intervention needed: ${error.message}`, {
           cause: error,
         });
@@ -816,7 +828,7 @@ export async function main(command, env = process.env, request = githubRequest) 
     appendFileSync(env.GITHUB_STEP_SUMMARY, line + "\n");
   };
   let capacity = () => JSON.parse(env.CAPACITY);
-  if (command === "route") {
+  if (command === "route" || command === "recover-planners") {
     let source = "snapshot (no read token)";
     if (env.CAPACITY_READ_TOKEN) {
       try {
