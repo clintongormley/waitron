@@ -325,10 +325,18 @@ export async function readFacts(
   const openCorrectionId = await openCorrectionOf(tx, saleId);
   let unchecked: Promise<boolean> | undefined;
   const recordsUnchecked = () => (unchecked ??= recordsNeedChecking(tx, deps.backend, cfg.nodeId));
+  // A full invoice's money waits for the records rather than going back with no corrective (D5).
+  const recordsWait =
+    correctable.waiting === null &&
+    correctable.fullInvoice &&
+    correctable.amounts.correctable > 0 &&
+    (await recordsUnchecked());
   const waits = await giveBackWaits(tx, deps, cfg, reading, saleId, {
     recordsUnchecked,
     openCorrectionId,
-    correctionWaiting: correctable.waiting,
+    correctionWaiting: recordsWait
+      ? new AppError("invoice_correction.chain_unsound", { saleId })
+      : correctable.waiting,
     correctable: correctable.amounts.correctable,
     tenderId: correctable.tenders.find((row) => positive(decimal(row.appliedRemaining)))?.tenderId,
   });

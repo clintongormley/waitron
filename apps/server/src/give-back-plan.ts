@@ -233,9 +233,6 @@ export async function planWithRights(
   if (rest > 0) {
     if (waits.correction !== null) throw refusal(waits.correction);
     const unchecked = facts.correctable > 0 && (await facts.recordsUnchecked());
-    // A full invoice's money waits for the records rather than going back with no corrective (D5).
-    if (unchecked && facts.fullInvoice)
-      throw new AppError("invoice_correction.chain_unsound", { saleId });
     const correctable = unchecked ? 0 : facts.correctable;
     if (correctable === 0) {
       refund += rest;

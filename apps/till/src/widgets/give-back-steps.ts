@@ -70,6 +70,12 @@ export const waitReasonText = (reason: GiveBackWaitReason, fullInvoice = false):
     ...reason.params,
     ...(fullInvoice && { fullInvoice }),
   });
+/** A refusal's words, on a full invoice as Give money back words its waits when `fullInvoice`. */
+export const refusalWords = (refusal: ReturnType<typeof refusalOf>, fullInvoice: boolean): string =>
+  recoveryText(refusal) ??
+  (fullInvoice
+    ? giveBackReasonMessage(refusal.code, currentLocale(), { ...refusal, fullInvoice })
+    : codeMessage(refusal.code, currentLocale(), refusal));
 /** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
  * device locks meanwhile and the window goes. */
 export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {

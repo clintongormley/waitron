@@ -549,6 +549,18 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     const cash = await tenderOf(saleId, "cash");
     const drawer = drawerCents();
 
+    const waiting = {
+      available: false,
+      reason: { code: "invoice_correction.chain_unsound", params: { saleId } },
+    };
+    const window = await steakOf(saleId);
+    expect(window.view.choices).toEqual({
+      dishes: waiting,
+      goodwill: waiting,
+      extra: { available: true, reason: null },
+    });
+    expect(window.steak).toMatchObject(waiting);
+
     const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
     expect(await routePreview(saleId, dishes)).toEqual(refused);
     expect(await routePreview(saleId, ask("goodwill", "10.00"))).toEqual(refused);

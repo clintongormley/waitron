@@ -185,6 +185,40 @@ describe("the choice", () => {
     await vi.waitFor(() => expect(underWay(opened.el)?.fullInvoice).toBe(true));
   });
 
+  describe("while the box's records need checking", () => {
+    const unsound = { code: "invoice_correction.chain_unsound", params: { saleId: "sale-1" } };
+    const fullInvoiceWords =
+      "The box's receipt and invoice records need checking, so dishes, cancelled dishes or goodwill cannot be refunded or recorded now; the extra paid on top can be refunded. Money already refunded stays refunded.";
+    const receiptWords = codeMessage("invoice_correction.chain_unsound", "en");
+
+    for (const [kind, fullInvoice, words] of [
+      ["a full invoice", true, fullInvoiceWords],
+      ["a receipt", false, receiptWords],
+    ] as const) {
+      it(`on ${kind}, words the read's wait for it`, async () => {
+        const { el } = await mount(
+          withView({
+            choices: { ...VIEW.choices, goodwill: { available: false, reason: unsound } },
+          }),
+        );
+        el.fullInvoice = fullInvoice;
+        await el.updateComplete;
+        expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(words);
+      });
+
+      it(`on ${kind}, words a preview refused for it`, async () => {
+        const api = fakeGiveBackApi();
+        api.previewGiveBack.mockRejectedValue({ ...unsound, ...unsound.params, status: 409 });
+        const { el } = await mount(api);
+        el.fullInvoice = fullInvoice;
+        await el.updateComplete;
+        await choose(el, "goodwill");
+        await type(el, "6");
+        await vi.waitFor(() => expect(bottom(el)).toBe(words));
+      });
+    }
+  });
+
   it("says on a dish line held by a refused receipt what can still go back", async () => {
     const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
     const { el } = await mount(
