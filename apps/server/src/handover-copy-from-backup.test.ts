@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { NODE_MIGRATIONS, pinPrimaryKeyTx, setNodeModeTx } from "@waitron/node-db";
-import { AppError, encodeMasterKeyCode } from "@waitron/shared";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -18,8 +18,8 @@ import { nodeDumpEntry } from "./testing/node-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { loadBoxEnv } from "./box-env.js";
-import { loadBackupKey } from "./backup-config.js";
-import { backupKeySettings, heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { loadBackupKey, loadUsableBackupKey } from "./backup-config.js";
+import { backupKeyEnv, heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
 import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 const copyFault = vi.hoisted(() => ({ interrupt: false, markerAtWrite: [] as boolean[] }));
@@ -196,7 +196,7 @@ it.each(["missing-row", "wrong-key", "untrusted-chart", "missing-chart-node", "d
 it("the emergency switch opens a current backup file with no key typed", async () => {
   await writeFile(
     join(root, "backup.env"),
-    Object.entries(backupKeySettings(held))
+    Object.entries(backupKeyEnv(held))
       .map(([name, value]) => `${name}=${value}\n`)
       .join(""),
   );
@@ -224,7 +224,7 @@ it("a file under an older key asks for the master key and names it", async () =>
 
 it("with the master key it names, the older backup is used, and backup.env is unchanged", async () => {
   ciphertext = await archive(3);
-  const saved = Object.entries(backupKeySettings(heldBackupKey(masterKey, 4)))
+  const saved = Object.entries(backupKeyEnv(heldBackupKey(masterKey, 4)))
     .map(([name, value]) => `${name}=${value}\n`)
     .join("");
   await writeFile(join(root, "backup.env"), saved);
@@ -258,12 +258,14 @@ it("a spare with no backup.env asks for the master key", async () => {
     code: "handover.backup_needs_master_key",
     params: { keyName: heldBackupKeyName(masterKey) },
   });
+  await writeFile(
+    join(root, "backup.env"),
+    Object.entries({ ...backupKeyEnv(held), WAITRON_BACKUP_RECOVERY_KEY: "too-short" })
+      .map(([name, value]) => `${name}=${value}\n`)
+      .join(""),
+  );
   await expect(
-    stage({
-      readBackupKey: async () => {
-        throw new AppError("backup.recovery_key_too_short", { min: 12 });
-      },
-    }),
+    stage({ readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv({}, root)) }),
   ).rejects.toMatchObject({ code: "handover.backup_needs_master_key" });
 });
 

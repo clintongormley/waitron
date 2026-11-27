@@ -6,7 +6,7 @@ import {
   backupKeyRecord,
   heldBackupKeyNumber,
 } from "./backup-key-record.js";
-import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
+import { backupKeyEnv, heldBackupKey } from "./testing/backup-key.js";
 
 describe("backupKeyRecord", () => {
   it("names backup key N of the master key by its number and the master key's id and day", () => {
@@ -57,7 +57,7 @@ describe("backupKeyFrameInput", () => {
 
 describe("heldBackupKeyNumber", () => {
   const masterKey = makeMasterKey();
-  const seven = backupKeySettings(heldBackupKey(masterKey, 7));
+  const seven = backupKeyEnv(heldBackupKey(masterKey, 7));
   const without = (name: string) =>
     Object.fromEntries(Object.entries(seven).filter(([key]) => key !== name));
 
@@ -90,7 +90,7 @@ describe("heldBackupKeyNumber", () => {
 describe("backupKeyFacts", () => {
   it("gives the held key's number when backup.env does not name its master key's day", () => {
     const masterKey = makeMasterKey();
-    const settings = backupKeySettings(heldBackupKey(masterKey, 7));
+    const settings = backupKeyEnv(heldBackupKey(masterKey, 7));
     delete settings.WAITRON_BACKUP_MASTER_KEY_DAY;
     expect(backupKeyFacts(settings, sealingPublicKey(masterKey))).toMatchObject({
       number: 7,

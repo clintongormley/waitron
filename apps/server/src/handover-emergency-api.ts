@@ -82,7 +82,7 @@ import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
-import type { HeldBackupKey } from "./backup-config.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
 import { followedCopyId, stageFollowedAsCopy } from "./handover-copy-from-follow.js";
 import {
@@ -134,7 +134,7 @@ interface Deps {
     migrationsRoot: string | null;
   };
   backup: {
-    readBackupKey(): Promise<HeldBackupKey | undefined>;
+    readBackupKey(): Promise<BackupKeyRecord | undefined>;
     environment: DeploymentEnvironment;
     migrationsRoot: string | null;
     restart(): void;

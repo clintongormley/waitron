@@ -65,7 +65,7 @@ import type {
 import { buildBackupBackend } from "./backup-backends.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { writeBackupKey } from "./backup-env-writer.js";
-import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
+import { backupKeyEnv, heldBackupKey } from "./testing/backup-key.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import {
   BackupSupervisor,
@@ -99,7 +99,7 @@ const KEY_3 = heldBackupKey(MASTER_BYTES, 3).key;
 /** The key the box env holds, which the next archive is locked with. */
 const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
 /** `backup.env` as setup leaves it: backup key 1, its number and its master key's id. */
-const KEY_ONE_FILE = backupKeySettings(heldBackupKey(MASTER_BYTES, 1));
+const KEY_ONE_FILE = backupKeyEnv(heldBackupKey(MASTER_BYTES, 1));
 const keyFileOf = async (stateDir: string) =>
   parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
 /** What "Change the backup key" sends. */

@@ -3,7 +3,7 @@ import { encodeMasterKeyCode } from "@waitron/shared";
 import { decryptArtifactUnderBackupKey } from "../artifact-cipher.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
 import { backupKeyFrameInput } from "../backup-key-record.js";
-import { backupKeySettings, heldBackupKey } from "./backup-key.js";
+import { backupKeyEnv, heldBackupKey } from "./backup-key.js";
 
 const HELD_MASTER_KEY = makeMasterKey();
 /** The master key {@link HELD_BACKUP_KEY} comes from, as a person types it. */
@@ -27,6 +27,6 @@ export function openUnderHeldKey(framed: Uint8Array): Buffer {
 export async function holdRecoveryKey(stateDir: string, key?: string): Promise<void> {
   await replaceBackupSettings(
     stateDir,
-    key === undefined ? backupKeySettings(HELD_BACKUP_KEY) : { WAITRON_BACKUP_RECOVERY_KEY: key },
+    key === undefined ? backupKeyEnv(HELD_BACKUP_KEY) : { WAITRON_BACKUP_RECOVERY_KEY: key },
   );
 }

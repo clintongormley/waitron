@@ -518,7 +518,7 @@ import {
   sealedStateJob,
   type SealedStateStatus,
 } from "./sealed-state.js";
-import { loadBackupKey, loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
+import { loadBackupSettings, loadRecoveryKey, loadUsableBackupKey } from "./backup-config.js";
 import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
@@ -4530,7 +4530,7 @@ async function bootServer(
             },
           }),
       backup: {
-        readBackupKey: async () => loadBackupKey(await loadBoxEnv(base, config.stateDir)),
+        readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv(base, config.stateDir)),
         environment: config.environment,
         migrationsRoot: config.migrationsRoot,
         uploadLimit: MAX_RESTORE_UPLOAD_BYTES,

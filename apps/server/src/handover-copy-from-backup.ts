@@ -11,10 +11,10 @@ import {
 } from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { writeFileDurable } from "@waitron/provisioning";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { openBackupQuery, PAIR_COPY_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
-import type { HeldBackupKey } from "./backup-config.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
 import { heldKeyOpens, openingKeyFor } from "./backup-file-key.js";
 import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
@@ -90,7 +90,7 @@ export async function stageBackupAsCopy(
   deps: CheckedCopyDeps & {
     artifactPath: string;
     masterKey?: string;
-    readBackupKey(): Promise<HeldBackupKey | undefined>;
+    readBackupKey(): Promise<BackupKeyRecord | undefined>;
     environment: DeploymentEnvironment;
   },
 ): Promise<SelectedCopy> {
@@ -101,7 +101,7 @@ export async function stageBackupAsCopy(
   if (deps.masterKey !== undefined) {
     recoveryKey = await openingKeyFor(deps, deps.masterKey);
   } else {
-    const held = await heldBackupKey(deps.readBackupKey);
+    const held = await deps.readBackupKey();
     if (held === undefined || !heldKeyOpens(header, held))
       throw new AppError("handover.backup_needs_master_key", {
         keyName: masterKeyNameOf(header.masterKeyId, header.masterKeyDay),
@@ -120,17 +120,5 @@ export async function stageBackupAsCopy(
     return selection;
   } finally {
     await validated.discard();
-  }
-}
-
-/** A held key under the length floor opens nothing, so it counts as none. */
-async function heldBackupKey(
-  read: () => Promise<HeldBackupKey | undefined>,
-): Promise<HeldBackupKey | undefined> {
-  try {
-    return await read();
-  } catch (error) {
-    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return undefined;
-    throw error;
   }
 }

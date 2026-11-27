@@ -9,6 +9,7 @@ import {
   type LoadFailureDetail,
 } from "./backup-settings-evidence.js";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
 import { isUnset } from "./env-value.js";
 export const MIN_RECOVERY_KEY_LENGTH = 12;
 import type { BackupDestination } from "./storage-backend.js";
@@ -103,13 +104,6 @@ function loadMasterKeyDay(env: Env): string | undefined {
   return raw !== undefined && isCalendarDate(raw) ? raw : undefined;
 }
 
-export interface HeldBackupKey {
-  key: string;
-  keyNumber: number;
-  masterKeyId: string;
-  masterKeyDay: string;
-}
-
 /** The number of the backup key the file holds: `undefined` when it is absent or not a number a
  * backup key can have, `null` when the file names none. */
 export function loadHeldKeyNumber(env: Env): number | undefined | null {
@@ -118,7 +112,7 @@ export function loadHeldKeyNumber(env: Env): number | undefined | null {
 
 /** The backup key with its number and master key id, or `undefined` unless the file holds all
  * three; the day is not needed to say which key is held. */
-export function loadNumberedBackupKey(env: Env): Omit<HeldBackupKey, "masterKeyDay"> | undefined {
+export function loadNumberedBackupKey(env: Env): Omit<BackupKeyRecord, "masterKeyDay"> | undefined {
   const key = loadRecoveryKey(env);
   const keyNumber = loadKeyNumber(env);
   const masterKeyId = loadMasterKeyId(env);
@@ -134,11 +128,16 @@ export function loadNumberedBackupKey(env: Env): Omit<HeldBackupKey, "masterKeyD
 
 /** The backup key with its number and master key id and day, or `undefined` unless the file holds
  * all four. */
-export function loadBackupKey(env: Env): HeldBackupKey | undefined {
+export function loadBackupKey(env: Env): BackupKeyRecord | undefined {
   const numbered = loadNumberedBackupKey(env);
   const masterKeyDay = loadMasterKeyDay(env);
   if (numbered === undefined || masterKeyDay === undefined) return undefined;
   return { ...numbered, masterKeyDay };
+}
+
+/** {@link loadBackupKey}, with a key under the length floor counted as none: it opens nothing. */
+export function loadUsableBackupKey(env: Env): BackupKeyRecord | undefined {
+  return heldUsableKey(env) === undefined ? undefined : loadBackupKey(env);
 }
 
 /** When the recovery key was last rotated, as the box env records it. */
@@ -148,7 +147,7 @@ export function loadKeyRotatedAt(env: Env): string | undefined {
     : readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT");
 }
 
-function requiredBackupKey(env: Env): HeldBackupKey {
+function requiredBackupKey(env: Env): BackupKeyRecord {
   const held = loadBackupKey(env);
   if (held === undefined) throw new AppError("backup.recovery_key_missing", {});
   return held;

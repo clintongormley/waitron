@@ -1,6 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
-import { backupKeySettings } from "./testing/backup-key.js";
+import { backupKeyEnv } from "./testing/backup-key.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -188,7 +188,7 @@ function dutyEnv(port: number) {
 // Passed as `startServer`'s RAW `base`, not the merged `env`: the supervisor re-reads its config off
 // `loadBoxEnv(base, stateDir)` on each reload.
 function backupBase() {
-  return backupKeySettings(HELD_BACKUP_KEY);
+  return backupKeyEnv(HELD_BACKUP_KEY);
 }
 
 describe("singleton-duty boot (box.singleton_role gating)", () => {

@@ -24,12 +24,4 @@ export function heldBackupKeyName(masterKey: Uint8Array, day = HELD_MASTER_KEY_D
   return masterKeyName(sealingPublicKey(masterKey), day);
 }
 
-/** {@link heldBackupKey}'s record as the `backup.env` settings that hold it. */
-export function backupKeySettings(record: BackupKeyRecord): Record<string, string> {
-  return {
-    WAITRON_BACKUP_RECOVERY_KEY: record.key,
-    WAITRON_BACKUP_KEY_NUMBER: String(record.keyNumber),
-    WAITRON_BACKUP_MASTER_KEY_ID: record.masterKeyId,
-    WAITRON_BACKUP_MASTER_KEY_DAY: record.masterKeyDay,
-  };
-}
+export { backupKeyEnv } from "../backup-env-writer.js";
