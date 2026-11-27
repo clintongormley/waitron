@@ -592,13 +592,13 @@ describe("confirming the new master key", () => {
   it.each([
     [
       "en-GB",
-      "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again.",
+      "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again. Stop closes this window.",
       "Try again",
       "Stop",
     ],
     [
       "es-ES",
-      "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo.",
+      "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo. Parar cierra esta ventana.",
       "Volver a intentarlo",
       "Parar",
     ],

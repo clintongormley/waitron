@@ -1696,7 +1696,7 @@ export const en = {
   "recovery_pack_dialog.not_kept":
     "The box did not take the new master key, so it kept the current one.",
   "recovery_pack_dialog.not_known":
-    "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again.",
+    "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again. Stop closes this window.",
   "recovery_pack_dialog.lost":
     "The box may have made the recovery pack, but it did not reach this browser.",
   "recovery_pack_dialog.lost_choices":
@@ -6595,7 +6595,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.not_kept":
     "El servidor no aceptó la clave maestra nueva, así que sigue con la actual.",
   "recovery_pack_dialog.not_known":
-    "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo.",
+    "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo. Parar cierra esta ventana.",
   "recovery_pack_dialog.lost":
     "Puede que el servidor haya hecho el paquete de recuperación, pero no llegó a este navegador.",
   "recovery_pack_dialog.lost_choices":

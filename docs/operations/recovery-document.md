@@ -35,8 +35,8 @@ or stop and change nothing.
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key in a
 new pack, but the box keeps the current master key until the pack has reached this browser: the
-browser then sends the new key back, and only then does the box take it. Until it does, nothing
-changes on the box, and a box that restarts meanwhile keeps the current key.
+browser then sends the new key back, and only then does the box take it. A box that restarts
+before then keeps the current key.
 Once the box has taken it, the dialog shows the master key with its name: use **Download** or **Print**, then
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
@@ -45,7 +45,7 @@ New backups then use a backup key from the new master key. If the card says back
 
 If the dialog cannot finish, it says which of these happened:
 
-- **The new pack did not reach this browser**, or **the box did not take the new master key**: the
+- **The new master key did not reach this browser**, or **the box did not take the new master key**: the
   box kept the current master key, and the dialog shows no new key. **Make a new master key** tries again; **Stop** closes the window.
 - **The box may be using this new master key**: the browser could not confirm whether the box took
   it. The dialog still shows the key, with **Download** and **Print**. Save or print the pack, then
@@ -69,6 +69,6 @@ The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-a
 `system.manage`, the secure connection and a fresh sign-in, check a typed master key before printing, make a new master key when asked
 and take it only when the browser sends it back with its pack's receipt, and keep a record of each pack and each master key's name and check value, never the
 key itself or the pack's contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
-cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
+and [confirm tests](../../apps/server/src/backup-recovery-pack-api.backup-key.test.ts) cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
 and [card tests](../../apps/dashboard/src/screens/recovery-pack-card.test.ts) cover the actions.
 This procedure grants no restore or fiscal activation authority.
