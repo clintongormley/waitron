@@ -35,6 +35,7 @@ const ENTRY_KIND_WORDS: Record<WorkforceEntryKind, Words> = {
   break_end: ["Break end", "Fin del descanso"],
   correction: ["Correction", "Corrección"],
   confirmation: ["Acknowledgement", "Confirmación"],
+  day_approval: ["Day approval", "Aprobación del día"],
 };
 const VALUE_WORDS: Record<string, Readonly<Record<string, Words>>> = {
   audience: {

@@ -139,6 +139,7 @@ async function attemptAppend(
       missingEntryKind: entry.extension?.missingEntryKind ?? null,
       respondsToEntryId: entry.extension?.respondsToEntryId ?? null,
       payPeriodClosureId: entry.extension?.payPeriodClosureId ?? null,
+      approvalDigest: entry.extension?.approvalDigest ?? null,
       entryHash,
       prevEntryHash,
       sequenceNo,
@@ -152,12 +153,13 @@ async function attemptAppend(
   }
   /* v8 ignore stop */
 
-  await markAttendanceEntry(tx, {
-    id: inserted.id,
-    eventAt,
-    correctsEntryId: entry.correctsEntryId ?? null,
-    respondsToEntryId: entry.extension?.respondsToEntryId ?? null,
-  });
+  if (entry.entryKind !== "day_approval")
+    await markAttendanceEntry(tx, {
+      id: inserted.id,
+      eventAt,
+      correctsEntryId: entry.correctsEntryId ?? null,
+      respondsToEntryId: entry.extension?.respondsToEntryId ?? null,
+    });
   return { id: inserted.id, sequenceNo, entryHash };
 }
 
@@ -176,17 +178,18 @@ export async function appendToChain(
   entry: TimeEntryAppend,
   clock: () => Date = () => new Date(),
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
-  if (
-    entry.extension?.selfApproved &&
-    (entry.entryKind !== "correction" ||
-      entry.correctionStatus !== "approved" ||
-      entry.extension.authorKind !== "manager" ||
-      entry.extension.direction !== "worker_request" ||
-      !entry.extension.respondsToEntryId ||
-      entry.recordedByPersonId !== entry.personId ||
-      entry.correctionActorId !== entry.personId)
-  )
-    throw new AppError("attendance.invalid", { reason: "self_approval_shape" });
+  if (entry.extension?.selfApproved) {
+    const own =
+      entry.extension.authorKind === "manager" && entry.recordedByPersonId === entry.personId;
+    const correction =
+      entry.entryKind === "correction" &&
+      entry.correctionStatus === "approved" &&
+      entry.extension.direction === "worker_request" &&
+      entry.extension.respondsToEntryId &&
+      entry.correctionActorId === entry.personId;
+    if (!own || (entry.entryKind !== "day_approval" && !correction))
+      throw new AppError("attendance.invalid", { reason: "self_approval_shape" });
+  }
   if (
     entry.extension !== undefined &&
     entry.extension !== null &&
@@ -225,6 +228,7 @@ export function verifiableEntry(row: ChainedTimeEntry): VerifiableEntry {
     row.missingEntryKind,
     row.respondsToEntryId,
     row.payPeriodClosureId,
+    row.approvalDigest,
   ];
   return {
     sequenceNo: row.sequenceNo,
@@ -254,6 +258,7 @@ export function verifiableEntry(row: ChainedTimeEntry): VerifiableEntry {
             missingEntryKind: row.missingEntryKind,
             respondsToEntryId: row.respondsToEntryId,
             payPeriodClosureId: row.payPeriodClosureId,
+            ...(row.approvalDigest !== null && { approvalDigest: row.approvalDigest }),
           },
   };
 }

@@ -120,7 +120,9 @@ export function projectTimeRecord(
         rows
           .filter(
             (e) =>
-              e.entry.personId === personId && e.entry.extension?.payPeriodClosureId !== closure.id,
+              e.entry.personId === personId &&
+              e.entry.entryKind !== "day_approval" &&
+              e.entry.extension?.payPeriodClosureId !== closure.id,
           )
           .map((e) => [
             e.entry.entryId,

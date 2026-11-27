@@ -9,7 +9,7 @@ import type { RecordAttribution } from "./record-types.js";
 
 /** `correction` supersedes an earlier entry's timestamp rather than mutating it. */
 export type WorkforceEntryKind =
-  "in" | "out" | "break_start" | "break_end" | "correction" | "confirmation";
+  "in" | "out" | "break_start" | "break_end" | "correction" | "confirmation" | "day_approval";
 
 /** Only `approved` corrections affect the projection. */
 export type CorrectionStatus = "requested" | "approved" | "declined" | "disputed";

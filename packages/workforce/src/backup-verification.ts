@@ -116,6 +116,7 @@ function entry(row: BackupRow): VerifiableEntry {
     missingEntryKind: nullable(row, "missing_entry_kind") as ChainedTimeEntry["missingEntryKind"],
     respondsToEntryId: nullable(row, "responds_to_entry_id"),
     payPeriodClosureId: nullable(row, "pay_period_closure_id"),
+    approvalDigest: nullable(row, "approval_digest"),
     prevEntryHash: nullable(row, "prev_entry_hash"),
     entryHash: text(row, "entry_hash"),
     isFirstEntry: flag(row, "is_first_entry"),

@@ -258,6 +258,7 @@ CREATE TABLE `time_entries` (
 	`missing_entry_kind` text,
 	`responds_to_entry_id` text,
 	`pay_period_closure_id` text,
+	`approval_digest` text,
 	`entry_hash` text NOT NULL,
 	`prev_entry_hash` text,
 	`sequence_no` integer NOT NULL,
@@ -281,7 +282,7 @@ CREATE TABLE `time_entries` (
 	CONSTRAINT "time_entries_correction_shape_ck" CHECK(("time_entries"."author_kind" is null and "time_entries"."correction_direction" is null
           and "time_entries"."missing_entry_kind" is null and "time_entries"."responds_to_entry_id" is null
           and "time_entries"."pay_period_closure_id" is null
-          and "time_entries"."entry_kind" <> 'confirmation'
+          and "time_entries"."entry_kind" not in ('confirmation','day_approval')
           and (("time_entries"."corrects_entry_id" is null and "time_entries"."correction_reason" is null
             and "time_entries"."correction_status" is null and "time_entries"."correction_actor_id" is null)
             or ("time_entries"."corrects_entry_id" is not null and "time_entries"."correction_reason" is not null
@@ -303,14 +304,23 @@ CREATE TABLE `time_entries` (
           and "time_entries"."pay_period_closure_id" is null
           and (("time_entries"."corrects_entry_id" is not null and "time_entries"."missing_entry_kind" is null)
             or ("time_entries"."corrects_entry_id" is null and "time_entries"."missing_entry_kind" is not null
-              and "time_entries"."correction_direction" is not null and "time_entries"."author_kind" is not null)))),
+              and "time_entries"."correction_direction" is not null and "time_entries"."author_kind" is not null)))
+        or ("time_entries"."entry_kind" = 'day_approval' and "time_entries"."author_kind" is 'manager'
+          and "time_entries"."corrects_entry_id" is null and "time_entries"."correction_reason" is null
+          and "time_entries"."correction_status" is null and "time_entries"."correction_actor_id" is null
+          and "time_entries"."correction_direction" is null and "time_entries"."missing_entry_kind" is null
+          and "time_entries"."responds_to_entry_id" is null and "time_entries"."pay_period_closure_id" is null
+          and "time_entries"."self_approved" = ("time_entries"."recorded_by_person_id" = "time_entries"."person_id"))),
+	CONSTRAINT "time_entries_approval_digest_ck" CHECK(("time_entries"."entry_kind" = 'day_approval') = ("time_entries"."approval_digest" is not null)
+        and ("time_entries"."approval_digest" is null or
+          (length("time_entries"."approval_digest") = 64 and "time_entries"."approval_digest" not glob '*[^0-9A-F]*'))),
 	CONSTRAINT "time_entries_entry_hash_ck" CHECK(length("time_entries"."entry_hash") = 64 and "time_entries"."entry_hash" not glob '*[^0-9A-F]*'),
 	CONSTRAINT "time_entries_sequence_no_ck" CHECK("time_entries"."sequence_no" > 0),
 	CONSTRAINT "time_entries_chaining_ck" CHECK(("time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is null)
           or (not "time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is not null)),
 	CONSTRAINT "time_entries_event_at_second_ck" CHECK("time_entries"."event_at" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'),
 	CONSTRAINT "time_entries_recorded_at_second_ck" CHECK("time_entries"."recorded_at" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'),
-	CONSTRAINT "time_entries_entry_kind_ck" CHECK("time_entries"."entry_kind" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation')),
+	CONSTRAINT "time_entries_entry_kind_ck" CHECK("time_entries"."entry_kind" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation', 'day_approval')),
 	CONSTRAINT "time_entries_captured_by_source_ck" CHECK("time_entries"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "time_entries_captured_by_source_device_ck" CHECK(("time_entries"."captured_by_source" = 'device') = ("time_entries"."captured_by_device_id" is not null)),
 	CONSTRAINT "time_entries_correction_status_ck" CHECK("time_entries"."correction_status" in ('requested', 'approved', 'declined', 'disputed'))

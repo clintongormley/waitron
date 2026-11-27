@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "82acb13b-c96b-4c8c-8a87-00988aa85392",
+  "id": "5e1ef5b5-fc69-4f8b-ad57-51af469f74b1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -1758,6 +1758,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "approval_digest": {
+          "name": "approval_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "entry_hash": {
           "name": "entry_hash",
           "type": "text",
@@ -1975,7 +1982,11 @@
         },
         "time_entries_correction_shape_ck": {
           "name": "time_entries_correction_shape_ck",
-          "value": "(\"time_entries\".\"author_kind\" is null and \"time_entries\".\"correction_direction\" is null\n          and \"time_entries\".\"missing_entry_kind\" is null and \"time_entries\".\"responds_to_entry_id\" is null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and \"time_entries\".\"entry_kind\" <> 'confirmation'\n          and ((\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n            and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"correction_reason\" is not null\n            and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null)))\n        or (\"time_entries\".\"entry_kind\" in ('in','out','break_start','break_end')\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null\n          and \"time_entries\".\"responds_to_entry_id\" is null and \"time_entries\".\"pay_period_closure_id\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'confirmation' and \"time_entries\".\"responds_to_entry_id\" is not null\n          and \"time_entries\".\"author_kind\" is not null\n          and ((\"time_entries\".\"author_kind\" = 'worker' and \"time_entries\".\"pay_period_closure_id\" is null)\n            or (\"time_entries\".\"author_kind\" = 'automatic' and \"time_entries\".\"pay_period_closure_id\" is not null))\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'correction' and \"time_entries\".\"correction_reason\" is not null\n          and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and ((\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"missing_entry_kind\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"missing_entry_kind\" is not null\n              and \"time_entries\".\"correction_direction\" is not null and \"time_entries\".\"author_kind\" is not null)))"
+          "value": "(\"time_entries\".\"author_kind\" is null and \"time_entries\".\"correction_direction\" is null\n          and \"time_entries\".\"missing_entry_kind\" is null and \"time_entries\".\"responds_to_entry_id\" is null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and \"time_entries\".\"entry_kind\" not in ('confirmation','day_approval')\n          and ((\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n            and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"correction_reason\" is not null\n            and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null)))\n        or (\"time_entries\".\"entry_kind\" in ('in','out','break_start','break_end')\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null\n          and \"time_entries\".\"responds_to_entry_id\" is null and \"time_entries\".\"pay_period_closure_id\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'confirmation' and \"time_entries\".\"responds_to_entry_id\" is not null\n          and \"time_entries\".\"author_kind\" is not null\n          and ((\"time_entries\".\"author_kind\" = 'worker' and \"time_entries\".\"pay_period_closure_id\" is null)\n            or (\"time_entries\".\"author_kind\" = 'automatic' and \"time_entries\".\"pay_period_closure_id\" is not null))\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null)\n        or (\"time_entries\".\"entry_kind\" = 'correction' and \"time_entries\".\"correction_reason\" is not null\n          and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null\n          and \"time_entries\".\"pay_period_closure_id\" is null\n          and ((\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"missing_entry_kind\" is null)\n            or (\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"missing_entry_kind\" is not null\n              and \"time_entries\".\"correction_direction\" is not null and \"time_entries\".\"author_kind\" is not null)))\n        or (\"time_entries\".\"entry_kind\" = 'day_approval' and \"time_entries\".\"author_kind\" is 'manager'\n          and \"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n          and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null\n          and \"time_entries\".\"correction_direction\" is null and \"time_entries\".\"missing_entry_kind\" is null\n          and \"time_entries\".\"responds_to_entry_id\" is null and \"time_entries\".\"pay_period_closure_id\" is null\n          and \"time_entries\".\"self_approved\" = (\"time_entries\".\"recorded_by_person_id\" = \"time_entries\".\"person_id\"))"
+        },
+        "time_entries_approval_digest_ck": {
+          "name": "time_entries_approval_digest_ck",
+          "value": "(\"time_entries\".\"entry_kind\" = 'day_approval') = (\"time_entries\".\"approval_digest\" is not null)\n        and (\"time_entries\".\"approval_digest\" is null or\n          (length(\"time_entries\".\"approval_digest\") = 64 and \"time_entries\".\"approval_digest\" not glob '*[^0-9A-F]*'))"
         },
         "time_entries_entry_hash_ck": {
           "name": "time_entries_entry_hash_ck",
@@ -1999,7 +2010,7 @@
         },
         "time_entries_entry_kind_ck": {
           "name": "time_entries_entry_kind_ck",
-          "value": "\"time_entries\".\"entry_kind\" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation')"
+          "value": "\"time_entries\".\"entry_kind\" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation', 'day_approval')"
         },
         "time_entries_captured_by_source_ck": {
           "name": "time_entries_captured_by_source_ck",

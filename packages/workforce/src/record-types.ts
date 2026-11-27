@@ -12,6 +12,7 @@ export interface RecordExtension {
   missingEntryKind: ClockEntryKind | null;
   respondsToEntryId: string | null;
   payPeriodClosureId: string | null;
+  approvalDigest?: string;
 }
 export interface ProjectedRecordEntry {
   entry: TimeEntryRecord;

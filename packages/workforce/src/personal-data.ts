@@ -202,6 +202,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         missingEntryKind: timeEntries.missingEntryKind,
         respondsToEntryId: timeEntries.respondsToEntryId,
         payPeriodClosureId: timeEntries.payPeriodClosureId,
+        approvalDigest: timeEntries.approvalDigest,
       })
       .from(timeEntries)
       .where(eq(timeEntries.personId, personId))

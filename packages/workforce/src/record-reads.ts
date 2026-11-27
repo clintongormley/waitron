@@ -376,6 +376,7 @@ function recordFromRow(row: typeof timeEntries.$inferSelect): TimeEntryRecord {
         row.missingEntryKind,
         row.respondsToEntryId,
         row.payPeriodClosureId,
+        row.approvalDigest,
       ].every((v) => v === null)
         ? null
         : {
@@ -385,6 +386,7 @@ function recordFromRow(row: typeof timeEntries.$inferSelect): TimeEntryRecord {
             missingEntryKind: row.missingEntryKind,
             respondsToEntryId: row.respondsToEntryId,
             payPeriodClosureId: row.payPeriodClosureId,
+            ...(row.approvalDigest !== null && { approvalDigest: row.approvalDigest }),
           },
   };
 }

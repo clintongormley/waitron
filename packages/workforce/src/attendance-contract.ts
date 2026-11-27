@@ -79,12 +79,17 @@ export interface AttendanceInbox {
   items: CorrectionItem[];
   timeZone: string;
 }
+export interface DayApproval {
+  status: "pending" | "approved";
+  digest: string;
+}
 export interface AttendanceDayView {
   personId: string;
   date: string;
   timeZone: string;
   revision: string;
   record: TimeRecord;
+  approval?: DayApproval;
   items: CorrectionItem[];
 }
 export interface AttendanceManagerQueue {
@@ -106,6 +111,7 @@ export interface HoursSelection {
 export interface HoursDay {
   date: string;
   sessions: WorkSession[];
+  approval?: DayApproval;
   workedMinutes: number;
 }
 export interface HoursOpenShift {

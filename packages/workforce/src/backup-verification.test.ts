@@ -237,6 +237,38 @@ describe("complete captured workforce backup evidence", () => {
     expect(await run()).toEqual(passed);
     expect(original.db.all(sql`select distinct node_id from time_entries`)).toHaveLength(2);
   });
+  it("rejects a changed approval digest even when both copies carry it", async () => {
+    const digest = "A".repeat(64);
+    const { id } = await original.db.transaction((tx) =>
+      appendToChain(
+        tx,
+        { nodeId: node },
+        {
+          personId: person,
+          entryKind: "day_approval",
+          eventAt: at,
+          eventOffsetMinutes: 60,
+          recordedByPersonId: person,
+          origin: jobOrigin("dashboard"),
+          extension: {
+            selfApproved: true,
+            authorKind: "manager",
+            direction: null,
+            missingEntryKind: null,
+            respondsToEntryId: null,
+            payPeriodClosureId: null,
+            approvalDigest: digest,
+          },
+        },
+      ),
+    );
+    const [approval] = await original.db.select().from(timeEntries).where(eq(timeEntries.id, id));
+    await restored.db.insert(timeEntries).values(approval!);
+    expect(await run()).toEqual(passed);
+
+    await both(`update time_entries set approval_digest='${"B".repeat(64)}' where id='${id}'`);
+    invalid(await run(), "chain");
+  });
   it.each(["before", "after"])(
     "validates %s evidence independently of row comparison",
     async (side) => {
