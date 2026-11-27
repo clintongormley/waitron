@@ -311,9 +311,10 @@ describe("the customer menu Online preview", () => {
     );
   });
 
-  it("shows the set-menu title's return focus ring only after keyboard use", async () => {
+  it("shows set-menu focus rings when opened or closed with the keyboard", async () => {
     const { el } = await open(() => Response.json(published()), "dark");
     const cardTitle = page.getByRole("button", { name: "Two courses", exact: true });
+    const detailTitle = page.getByRole("heading", { name: "Two courses", exact: true });
     const back = page.getByRole("button", { name: "Back to menu" });
     await expect.element(cardTitle).toBeVisible();
     const customer = customerPage(el)!;
@@ -326,12 +327,19 @@ describe("the customer menu Online preview", () => {
     expect.soft(getComputedStyle(button).outlineStyle).toBe("none");
 
     await userEvent.keyboard("{Enter}");
-    await expect.element(back).toBeVisible();
+    await expect.element(detailTitle).toBeVisible();
+    expect(customer.shadowRoot!.activeElement).toBe(detailTitle.element());
+    expect(getComputedStyle(detailTitle.element()).outlineStyle).toBe("solid");
     await userEvent.tab({ shift: true });
     await userEvent.keyboard("{Enter}");
     await expect.element(cardTitle, { timeout: 1000 }).toBeVisible();
     expect(customer.shadowRoot!.activeElement).toBe(button);
     expect(getComputedStyle(button).outlineStyle).toBe("solid");
+
+    await cardTitle.click();
+    await expect.element(detailTitle).toBeVisible();
+    expect(customer.shadowRoot!.activeElement).toBe(detailTitle.element());
+    expect(getComputedStyle(detailTitle.element()).outlineStyle).toBe("none");
   });
 
   it.each(["House bread", "Two courses"])(

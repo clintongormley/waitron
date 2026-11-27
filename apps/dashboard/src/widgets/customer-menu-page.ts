@@ -613,7 +613,8 @@ export class CustomerMenuPage extends LitElement {
       scroller.scrollTop += heading.parentElement!.getBoundingClientRect().top - edge;
       scroller.scrollLeft = 0;
     }
-    heading.focus({ preventScroll: true });
+    // A pointer click on the already-focused button can leave its keyboard focus ring visible.
+    heading.focus({ preventScroll: true, focusVisible: event.detail === 0 });
   }
 
   async #closeDetail({ button, top, left }: OpenDetail): Promise<void> {
