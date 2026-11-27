@@ -301,8 +301,8 @@ series, taxpayer domicile, filed receipt data and replay, original/duplicate pri
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
 F2/absent-domicile controls remain. Refund on an F1 files an R1 by differences (CORRECT-FULL-INVOICE
-PR 2a); cancelling a whole F1 and reopening one to split it are still refused, and a dish's money given back
-with Cancel and refund still goes back with no corrective until PR 2b.
+PR 2a), and a dish's money given back with Cancel and refund goes on that R1 too (PR 2b); cancelling a
+whole F1 and reopening one to split it are still refused.
 
 The owner approved the historical-export fixture's current artifact
 refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
@@ -321,8 +321,9 @@ the existing recipient checks and F1 series selection remain in place.
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
 Future structured B2B integration has its own entry above. F3 conversion remains a separate
-decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a and PR 3
-(a line given back in part prints with no quantity and no unit price) are built; PR 2b (a cancelled dish's money),
+decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a, PR 2b
+(a cancelled dish's money goes on the corrective) and PR 3 (a line given back in part prints with no quantity and no
+unit price) are built;
 PR 4a and 4b (the corrective goes out the way the original went, staff's choice stored and tried
 again) and PR 5 (staff can change it on the till) are still to come.
 
@@ -969,7 +970,9 @@ A802 slice 5b (#3108):
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
   −€0.50. When this lands, the refund suites whose setups refund a named cancel (Task 7 of the
-  goodwill plan) start filing correctives, so their counts of filed records change.
+  goodwill plan) start filing correctives, so their counts of filed records change. Still open for
+  receipts: on a full invoice naming a customer, the cancelled dish's money goes on the R1 that Give
+  money back files (CORRECT-FULL-INVOICE PR 2b).
 
 Also open, from before A802:
 
