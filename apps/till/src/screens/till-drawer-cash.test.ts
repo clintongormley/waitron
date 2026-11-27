@@ -98,6 +98,7 @@ it.each([
     expect(reasonLabel.querySelector("label")?.textContent ?? "").toContain(
       es["drawer_entry.reason"],
     );
+    expect(reasonLabel.querySelector("[data-required]")?.checkVisibility()).toBe(true);
     const saveLabel = action(dialog, "save").textContent!;
     expect(saveLabel).toContain("12,50");
     expect(saveLabel.includes(es["drawer_entry.opens_drawer"])).toBe(opensDrawer);
