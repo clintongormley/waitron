@@ -138,12 +138,10 @@ export const tablePartyMenuStyles = css`
   }
   .party-menu {
     --wt-party-menu-left: 0px;
-    --wt-party-menu-right: 0px;
     max-width: 100%;
   }
-  .party-menu::part(popup) {
-    left: var(--wt-party-menu-left);
-    right: var(--wt-party-menu-right);
+  .party-menu::part(sheet) {
+    margin-left: var(--wt-party-menu-left);
   }
   .party-menu::part(trigger) {
     max-width: 100%;

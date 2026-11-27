@@ -1269,7 +1269,8 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   Guests and Name the party with their saved values, the Bill requested switch, then Move to
   another table, Join tables and Split the table (for a party spanning several tables). Finish
   table has its own outlined button at the end. An unseated table offers Move and Join.
-  The sheet fills a narrow display and follows the order column’s edges on a wide display.
+  The sheet fills a narrow display. On a wide display it starts at the order column’s left edge
+  and ends at the display’s right edge. The whole display dims while the sheet is open.
 - **Bill actions** open from the ⋮ beside the switcher when a current bill is shown. The group
   lists Name this bill, then for an open bill Move dishes and Merge bills, then Move this bill,
   Comp the bill, Record unpaid departure, Full invoice and Print the bill, as allowed by its

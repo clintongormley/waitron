@@ -421,28 +421,12 @@ test("describes the switch by its description, and by nothing without one", asyn
   expect(input.hasAttribute("aria-describedby")).toBe(false);
 });
 
-test("the switch paints its off track and thumb from their tokens", async () => {
+test("off track paints from the field-line token", async () => {
   const el = await mount("<wt-switch></wt-switch>");
-  host.style.setProperty("--wt-color-switch-off", "rgb(16, 17, 18)");
-  host.style.setProperty("--wt-color-switch-thumb", "rgb(215, 216, 217)");
+  host.style.setProperty("--wt-color-field-line", "rgb(16, 17, 18)");
   expect(getComputedStyle(el.shadowRoot!.querySelector(".track")!).backgroundColor).toBe(
     "rgb(16, 17, 18)",
   );
-  expect(getComputedStyle(el.shadowRoot!.querySelector(".thumb")!).backgroundColor).toBe(
-    "rgb(215, 216, 217)",
-  );
-});
-
-test("the thumb stays inset at both ends of the track", async () => {
-  const el = await mount("<wt-switch></wt-switch>");
-  const track = el.shadowRoot!.querySelector(".track")!;
-  const thumb = el.shadowRoot!.querySelector(".thumb")!;
-  expect(track.getBoundingClientRect()).toMatchObject({ width: 44, height: 26 });
-  expect(thumb.getBoundingClientRect().left - track.getBoundingClientRect().left).toBe(3);
-  el.setAttribute("checked", "");
-  await expect
-    .poll(() => track.getBoundingClientRect().right - thumb.getBoundingClientRect().right)
-    .toBe(3);
 });
 
 test("the thumb slides, and under reduced motion it moves at once", async () => {

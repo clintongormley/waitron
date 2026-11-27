@@ -65,20 +65,20 @@ export class WtSwitch extends LitElement {
       }
 
       .track {
-        width: var(--wt-tap-min);
-        height: var(--wt-switch-track-height);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-switch-off);
+        width: var(--wt-space-6);
+        height: var(--wt-space-4);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-field-line);
         transition: background 120ms ease;
       }
 
       .thumb {
         position: absolute;
-        left: var(--wt-switch-thumb-inset);
-        width: var(--wt-switch-thumb-size);
-        height: var(--wt-switch-thumb-size);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-switch-thumb);
+        left: 0;
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface);
         box-shadow: var(--wt-shadow-1);
         transition: transform 120ms ease;
       }
@@ -94,9 +94,7 @@ export class WtSwitch extends LitElement {
       }
 
       :host([checked]) .thumb {
-        transform: translateX(
-          calc(var(--wt-tap-min) - var(--wt-switch-thumb-size) - 2 * var(--wt-switch-thumb-inset))
-        );
+        transform: translateX(var(--wt-space-4));
       }
 
       :host([disabled]) {

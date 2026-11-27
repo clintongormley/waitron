@@ -34,8 +34,8 @@ async function sample(checked: boolean) {
   const middle = track.top + track.height / 2;
   return {
     background: at(control.right - 2, control.top + 2),
-    start: at(track.left + track.width / 4, middle),
-    end: at(track.right - track.width / 4, middle),
+    start: at(track.left + 4, middle),
+    end: at(track.right - 4, middle),
     centre: at(track.left + track.width / 2, middle),
   };
 }
@@ -101,8 +101,7 @@ test("a keyboard-focused switch is ringed in the theme's highlight colour", asyn
   const track = el.shadowRoot!.querySelector(".track")!.getBoundingClientRect();
   const at = await elementPixels(el);
   // The ring sits a focus offset above the track, centred on its width.
-  const ring = [-4, -3, -2].map((offset) => at(track.left + track.width / 2, track.top + offset));
-  expect(ring).toContainEqual(highlight);
+  expect(at(track.left + track.width / 2, track.top - 3)).toEqual(highlight);
 });
 
 test("outside forced colours the track is still its fill alone", async () => {

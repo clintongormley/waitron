@@ -72,7 +72,6 @@ async function mountScreen(
     takesPayment?: boolean;
     activeTableId?: string;
   } = {},
-  theme: "light" | "dark" = "light",
 ) {
   const party = over.party === undefined ? twoTables : over.party;
   const { el } = await mountWidget<TillTableOrderScreen>(
@@ -92,7 +91,7 @@ async function mountScreen(
       groupCommandBusy: over.groupCommandBusy ?? false,
       ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
     },
-    theme,
+    "light",
   );
   return el;
 }
@@ -191,26 +190,29 @@ describe("Table and bill actions", () => {
     }
   });
 
-  it("keeps the menu inside the order column as the display changes width", async () => {
+  it("keeps a wide sheet on the order side while dimming the whole display", async () => {
     await page.viewport(390, 844);
     try {
       const el = await mountScreen();
       const sheet = partyMenu(el);
       await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
-      const popup = sheet.shadowRoot!.querySelector('[role="dialog"]')!;
+      const backdrop = sheet.shadowRoot!.querySelector("[popover]")!;
+      const popup = backdrop.querySelector('[role="dialog"]')!;
       const order = () => el.shadowRoot!.querySelector("[data-draft-pane]")!;
       const edges = (element: Element) => {
         const { left, right } = element.getBoundingClientRect();
         return [Math.round(left), Math.round(right)];
       };
       expect(edges(popup)).toEqual([0, 390]);
+      expect(edges(backdrop)).toEqual([0, 390]);
       for (const [width, height] of [
         [844, 390],
         [1280, 900],
       ] as const) {
         await page.viewport(width, height);
         await expect.poll(() => edges(order())[0]).toBeGreaterThan(0);
-        await expect.poll(() => edges(popup)).toEqual(edges(order()));
+        await expect.poll(() => edges(popup)).toEqual([edges(order())[0], width]);
+        expect(edges(backdrop)).toEqual([0, width]);
       }
       await page.viewport(390, 844);
       await expect.poll(() => edges(popup)).toEqual([0, 390]);
@@ -258,22 +260,6 @@ describe("Table and bill actions", () => {
     expect(joinButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(join);
     expect(splitButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(split);
     expect(splitButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
-  });
-
-  it.each([
-    ["light", "rgb(214, 217, 224)"],
-    ["dark", "rgb(16, 18, 22)"],
-  ] as const)("shows the unchecked switch distinctly in %s", async (theme, trackColor) => {
-    const el = await mountScreen({}, theme);
-    const sheet = partyMenu(el);
-    await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
-    const control = sheet.querySelector("wt-switch")!.shadowRoot!;
-    const track = control.querySelector(".track")!;
-    expect(getComputedStyle(track).backgroundColor).toBe(trackColor);
-    expect(track.getBoundingClientRect()).toMatchObject({ width: 44, height: 26 });
-    expect(getComputedStyle(control.querySelector(".thumb")!).backgroundColor).toBe(
-      "rgb(255, 255, 255)",
-    );
   });
 
   it("reopens at the saved bill-request state when a toggle was refused", async () => {

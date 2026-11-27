@@ -7002,10 +7002,6 @@ export class TillTableOrderScreen extends LitElement {
     const pane = this.wide ? this.renderRoot.querySelector("[data-draft-pane]") : null;
     const bounds = pane?.getBoundingClientRect();
     menu.style.setProperty("--wt-party-menu-left", bounds ? `${Math.max(0, bounds.left)}px` : "");
-    menu.style.setProperty(
-      "--wt-party-menu-right",
-      bounds ? `${Math.max(0, document.documentElement.clientWidth - bounds.right)}px` : "",
-    );
   }
 
   #partyMenu(): TemplateResult {
