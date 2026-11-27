@@ -1185,25 +1185,32 @@ it("an edit cannot replace a worker request without answering its requested time
   await refused(() => send(edit, manager), "correction.invalid");
 });
 
-it("a worker can keep the clocked day when disputing an added break", async () => {
-  await automaticQuestion();
-  const edit = await dayEdit(
-    [
-      { target: { missingKind: "break_start" }, at: "2026-01-05T12:00:00Z", offsetMinutes: 0 },
-      { target: { missingKind: "break_end" }, at: "2026-01-05T13:00:00Z", offsetMinutes: 0 },
-    ],
-    "Thought there was a break",
-  );
-  await send(edit, manager);
-  await send(
-    await command({ action: "disagree", itemId: edit.commandId, reason: "I worked through" }),
-  );
-  await send(await command({ action: "approve", itemId: edit.commandId }), manager);
-  const day = await workDay();
-  expect(day.record.sessions.map((shift) => shift.workedMinutes)).toEqual([480]);
-  expect(day.approval?.status).toBe("approved");
-  expect(day.items.find((item) => item.id === edit.commandId)?.status).toBe("settled");
-});
+it.each([false, true])(
+  "a worker can keep their day when disputing an added break (approved request: %s)",
+  async (approvedRequest) => {
+    if (approvedRequest) {
+      const request = await command(pair());
+      await send(request);
+      await send(await command({ action: "approve", itemId: request.commandId }), manager);
+    } else await automaticQuestion();
+    const edit = await dayEdit(
+      [
+        { target: { missingKind: "break_start" }, at: "2026-01-05T12:00:00Z", offsetMinutes: 0 },
+        { target: { missingKind: "break_end" }, at: "2026-01-05T13:00:00Z", offsetMinutes: 0 },
+      ],
+      "Thought there was a break",
+    );
+    await send(edit, manager);
+    await send(
+      await command({ action: "disagree", itemId: edit.commandId, reason: "I worked through" }),
+    );
+    await send(await command({ action: "approve", itemId: edit.commandId }), manager);
+    const day = await workDay();
+    expect(day.record.sessions.map((shift) => shift.workedMinutes)).toEqual([480]);
+    expect(day.approval?.status).toBe("approved");
+    expect(day.items.find((item) => item.id === edit.commandId)?.status).toBe("settled");
+  },
+);
 
 it.each(["new shift on another date", "clock-out two days later"] as const)(
   "refuses a day edit with %s",
@@ -1265,23 +1272,36 @@ it.each(["target", "replaced dispute"] as const)(
   },
 );
 
-it("opens an overnight end-time request on the day the shift started", async () => {
-  await clock("2026-01-05T22:00:00Z");
-  await clockEnd("2026-01-06T02:00:00Z");
-  const end = (await readRecordedEntries(suite.db, { personId })).find(
-    (entry) => entry.entryKind === "out",
-  )!;
-  await send(
-    await command({
-      action: "request",
-      questionId: null,
-      reason: "Stayed an hour",
-      changes: [retime(end.entryId, "2026-01-06T03:00:00Z")],
-    }),
-  );
-  const queue = await run((tx) => api.readAttendanceManagerQueue(tx));
-  expect(queue.items[0]?.date).toBe("2026-01-05");
-});
+it.each([false, true])(
+  "keeps the shift’s start date when an overnight end is corrected (missing: %s)",
+  async (missing) => {
+    await clock("2026-01-05T22:00:00Z");
+    if (!missing) await clockEnd("2026-01-06T02:00:00Z");
+    const end = (await readRecordedEntries(suite.db, { personId })).find(
+      (entry) => entry.entryKind === "out",
+    );
+    const request = await send(
+      await command({
+        action: "request",
+        questionId: null,
+        reason: "Stayed an hour",
+        changes: [
+          {
+            target: end ? { entryId: end.entryId } : { missingKind: "out" },
+            at: "2026-01-06T03:00:00Z",
+            offsetMinutes: 0,
+          },
+        ],
+      }),
+    );
+    const queue = await run((tx) => api.readAttendanceManagerQueue(tx));
+    expect(queue.items[0]?.date).toBe("2026-01-05");
+    await send(await command({ action: "approve", itemId: request.entryIds[0]! }), manager);
+    const day = await workDay();
+    expect(day.items[0]?.date).toBe("2026-01-05");
+    expect(day.approval?.status).toBe("approved");
+  },
+);
 
 it("applying an overnight start-time request does not approve a different work date", async () => {
   await clock("2026-01-05T22:00:00Z");

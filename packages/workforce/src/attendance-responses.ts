@@ -1,5 +1,5 @@
 import type { AttendanceResponseReceipt, CorrectionItem } from "./attendance-contract.js";
-import type { TimeEntryRecord } from "./projection.js";
+import { groupByPerson, type TimeEntryRecord } from "./projection.js";
 import {
   compareEvents,
   compareRecording,
@@ -52,6 +52,12 @@ function responses(
     .sort(compareRecording);
 }
 
+function isWorkerTime(time: TimeEntryRecord): boolean {
+  return (
+    time.recordedByPersonId === time.personId || time.extension?.direction === "worker_request"
+  );
+}
+
 export function projectCorrectionItems(
   entries: readonly TimeEntryRecord[],
   commands: readonly AttendanceResponseReceipt[],
@@ -71,11 +77,13 @@ export function projectCorrectionItems(
   const openDates = new Map<string, string>();
   const workDates = new Map<string, string>();
   const workerDays = new Set<string>();
-  for (const time of [...effective.values()].sort(compareEvents)) {
+  const times = [...effective.values()].sort(compareEvents);
+  const timesByPerson = groupByPerson(times);
+  for (const time of times) {
     if (time.entryKind === "in") openDates.set(time.personId, entryDate(time));
     const date = openDates.get(time.personId) ?? entryDate(time);
-    workDates.set(time.entryId, date);
-    if (time.recordedByPersonId === time.personId) workerDays.add(`${time.personId}/${date}`);
+    workDates.set(recordRoot(time, byId).entryId, date);
+    if (isWorkerTime(time)) workerDays.add(`${time.personId}/${date}`);
     if (time.entryKind === "out") openDates.delete(time.personId);
   }
   const replacements = new Set<string>();
@@ -135,7 +143,16 @@ export function projectCorrectionItems(
                     : "waiting-manager";
     const roots = new Set(group.requests.map((r) => recordRoot(r, byId).entryId));
     const input = receipts.get(group.id);
-    const workDate = first.correctsEntryId ? workDates.get(first.correctsEntryId) : undefined;
+    let workDate = workDates.get(recordRoot(first, byId).entryId);
+    const missingKind = first.extension?.missingEntryKind;
+    if (workDate === undefined && missingKind && missingKind !== "in") {
+      const previous = timesByPerson
+        .get(first.personId)
+        ?.filter((time) => time.eventAt <= first.eventAt)
+        .at(-1);
+      if (previous && previous.entryKind !== "out")
+        workDate = workDates.get(recordRoot(previous, byId).entryId);
+    }
     const date =
       input?.action === "propose" && input.date
         ? input.date
@@ -189,9 +206,7 @@ export function projectCorrectionItems(
     const retimes = item.changes.filter(({ target }) => "entryId" in target);
     const changes = retimes.flatMap(({ target }) => {
       const time = "entryId" in target ? effective.get(target.entryId) : undefined;
-      return time &&
-        (time.recordedByPersonId === item.personId ||
-          time.extension?.direction === "worker_request")
+      return time && isWorkerTime(time)
         ? [{ target, at: time.eventAt, offsetMinutes: time.offsetMinutes }]
         : [];
     });

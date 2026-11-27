@@ -604,6 +604,46 @@ it.each([
   },
 );
 
+it("resending a disputed edit leaves the unchanged worker time out of the new proposal", async () => {
+  const m = await mount({ live: true });
+  const out = m.data.day.record.entries[0]!;
+  m.data.day.record.entries.unshift({
+    ...out,
+    entry: { ...out.entry, entryId: "in-1", entryKind: "in", eventAt: "2026-10-14T08:00:00.000Z" },
+  });
+  const dispute: CorrectionItem = {
+    ...item,
+    direction: "manager_proposal",
+    status: "disputed",
+    requestedByPersonId: "manager",
+    workerVersion: {
+      changes: [
+        {
+          target: { entryId: "out-1" },
+          at: out.entry.eventAt,
+          offsetMinutes: out.entry.offsetMinutes,
+        },
+      ],
+    },
+  };
+  m.data.items = [dispute];
+  m.data.day.items = [dispute];
+  m.liveData!.invalidate([{ type: "time_entries" }]);
+  await expect.poll(() => m.root.querySelector("[data-dispute-comparison]")).not.toBeNull();
+  await details(m.root);
+  await click(m.root, "[data-edit-day]");
+  const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
+  await editor.updateComplete;
+  await change(editor.shadowRoot!, "attendanceTime0", "09:30");
+  await change(editor.shadowRoot!, "attendanceReason", "Confirmed the start");
+  await click(editor.shadowRoot!, "[data-save]");
+  await expect.poll(() => m.commands.length).toBe(1);
+  expect(m.commands[0]).toMatchObject({
+    replaces: dispute.id,
+    changes: [{ target: { entryId: "in-1" }, at: "2026-10-14T07:30:00.000Z", offsetMinutes: 120 }],
+  });
+});
+
 it("a changed live day preserves an edited proposal, blocks its stale submission, and retains the new history", async () => {
   const m = await mount({ live: true });
   await details(m.root);

@@ -95,6 +95,7 @@ export class AttendanceProposalDialog extends LitElement {
   @property({ attribute: false }) initialChanges: AttendanceChange[] = [];
   @property() workerName = "";
   @property({ attribute: false }) requestedChanges: AttendanceChange[] = [];
+  @property({ type: Boolean }) answersRequest = false;
   @property() purpose: "propose" | "request" = "propose";
   @property() timeZone = "UTC";
   @property({ type: Boolean }) busy = false;
@@ -206,7 +207,7 @@ export class AttendanceProposalDialog extends LitElement {
       if (
         this.workerName &&
         !all &&
-        !this.#requested(row) &&
+        !(this.answersRequest && this.#requested(row)) &&
         recorded?.eventAt === choice.at &&
         recorded.offsetMinutes === choice.offset
       )

@@ -165,6 +165,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @state() private editorOpen = false;
   @state() private editorChanges: AttendanceChange[] = [];
   @state() private editorRequested: AttendanceChange[] = [];
+  @state() private editorAnswersRequest = false;
   @state() private uncertain = false;
   @state() private retry = false;
   #api?: AttendanceApi;
@@ -617,6 +618,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.#editorReplaces = item?.id;
     this.#editorReturnFocus = this.shadowRoot?.activeElement as HTMLElement | undefined;
     this.editorRequested = item ? structuredClone(changes) : [];
+    this.editorAnswersRequest = item?.direction === "worker_request";
     this.editorChanges = dayEditorRows(this.view, changes);
     this.actionError = "";
     this.reasonRefusal = "";
@@ -972,6 +974,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
         .open=${this.editorOpen}
         .workerName=${this.view ? this.#person(this.view.personId) : ""}
         .requestedChanges=${this.editorRequested}
+        .answersRequest=${this.editorAnswersRequest}
         .initialChanges=${this.editorChanges}
         .timeZone=${this.view?.timeZone ?? "UTC"}
         .busy=${this.busy}
