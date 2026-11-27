@@ -206,12 +206,5 @@ export const sentRowStyles = [
       grid-column: 3;
       justify-self: center;
     }
-    .companion {
-      background: var(--wt-color-track);
-      color: var(--wt-color-text);
-    }
-    .companion .row-more {
-      color: inherit;
-    }
   `,
 ];

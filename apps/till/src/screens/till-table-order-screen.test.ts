@@ -1837,6 +1837,8 @@ describe("till-table-order-screen", () => {
     }
 
     const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+    /** Like `text`, but keeps the non-breaking spaces a time phrase holds. */
+    const words = (node: Element) => node.textContent!.replace(/[ \t\n\r]+/g, " ").trim();
     /** A sent row's quantity, then its name, as the row draws them in two cells. */
     const qtyName = (row: Element) =>
       `${text(row.querySelector(".row-qty")!)} ${text(row.querySelector(".row-name")!)}`;
@@ -2285,7 +2287,7 @@ describe("till-table-order-screen", () => {
           `[data-${lineId === "l-croq" ? "held" : "fired"}-line="${lineId}"]`,
         )!;
         const own = row.querySelector(".row-more");
-        return text(
+        return words(
           own ?? row.closest("[data-sent-section]")!.querySelector("[data-section-title]")!,
         );
       };

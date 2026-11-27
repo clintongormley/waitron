@@ -1109,7 +1109,10 @@ export class TillTableOrderScreen extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      /* Out to the divider, like the sent part above it, so the column keeps one left edge. */
       .side-by-side .draft-bar {
+        margin-inline-start: calc(-1 * var(--wt-space-4));
+        padding-inline-start: var(--wt-space-4);
         background: var(--wt-color-surface);
       }
 
@@ -3336,7 +3339,7 @@ export class TillTableOrderScreen extends LitElement {
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
-        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billName(this.party?.displayName ?? "", bill)]))}
+        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billLabel(bill)]))}
         .busy=${this.busy || this.groupCommandBusy || this.currentOrdersUnread}
         .now=${this.now}
         @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {

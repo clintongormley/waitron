@@ -96,6 +96,9 @@ export class TillSentOrders extends LitElement {
       section {
         min-width: 0;
       }
+      [data-sent-panel] {
+        padding-block-end: var(--wt-space-3);
+      }
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
@@ -113,6 +116,20 @@ export class TillSentOrders extends LitElement {
         min-height: var(--wt-tap-min);
         touch-action: none;
         user-select: none;
+      }
+      /* A word, not a block: its tap area spills into the heading's own padding, so the heading
+         stays as tall as its words. */
+      [data-serve-all] {
+        --wt-action-text: var(--wt-color-primary-text);
+        --wt-action-font-size: var(--wt-font-size-md);
+        --wt-action-weight: var(--wt-font-weight-bold);
+        --wt-action-border-color: transparent;
+        --wt-button-padding-inline: var(--wt-space-2);
+        margin-block: calc(-1 * var(--wt-space-3))
+          calc(-1 * var(--wt-course-heading-padding-bottom));
+      }
+      wt-course-heading[stacked] [data-serve-all] {
+        margin-block-start: 0;
       }
       .reminder {
         display: flex;
@@ -437,7 +454,7 @@ export class TillSentOrders extends LitElement {
   #title(section: SentSection): TemplateResult {
     const names = this.#courseNames(section);
     const { state, firedAt } = section.title;
-    return html`${names === "" ? nothing : `${names} · `}${sentStateWords(state, firedAt, this.#heldNow())}`;
+    return html`${names === "" ? nothing : `${names}\u00a0· `}${sentStateWords(state, firedAt, this.#heldNow())}`;
   }
   #heldActions(section: SentSection, expected: HeldOrder): TemplateResult {
     const group = section.group!;
@@ -480,7 +497,7 @@ export class TillSentOrders extends LitElement {
       }
       <wt-button
         slot="end"
-        variant=${this.busy ? "secondary" : "primary"}
+        variant="secondary"
         data-group-fire=${group.id}
         ?disabled=${this.busy}
         aria-label=${`${t("table.group_fire")} · ${groupName(group)}`}
@@ -495,7 +512,7 @@ export class TillSentOrders extends LitElement {
     return html`<wt-button
       slot="end"
       data-serve-all
-      variant=${off ? "secondary" : "primary"}
+      variant="ghost"
       ?disabled=${off}
       @click=${() =>
         this.#serve(

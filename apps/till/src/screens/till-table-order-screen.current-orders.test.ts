@@ -70,6 +70,8 @@ async function mountSent(over: Partial<TillTableOrderScreen> & {} = {}) {
 }
 
 const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+/** Like `text`, but keeps the non-breaking spaces a time phrase holds. */
+const words = (node: Element) => node.textContent!.replace(/[ \t\n\r]+/g, " ").trim();
 const q = (el: TillTableOrderScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
 const all = (el: TillTableOrderScreen, selector: string) => [
@@ -209,7 +211,7 @@ describe("Current orders and Sent service", () => {
     const { el } = await mountSent();
     const state = async (lineId: string, kind: "fired" | "served" = "fired") => {
       await openSentDish(el, lineId, kind);
-      return text(q(el, "[data-sent-line-status]")!);
+      return words(q(el, "[data-sent-line-status]")!);
     };
     const ago = t("table.group_fired_ago").replace("{n}", "25");
     expect(await state("l-croq")).toBe(ago);
@@ -932,7 +934,7 @@ describe("A773 at the pass", () => {
     expect(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .row-more')).toBeNull();
     const state = async (lineId: string, kind: "fired" | "held" = "fired") => {
       await openSentDish(el, lineId, kind);
-      const said = text(q(el, "[data-sent-line-status]")!);
+      const said = words(q(el, "[data-sent-line-status]")!);
       await closeSentDish(el);
       return said;
     };

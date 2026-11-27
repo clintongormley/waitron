@@ -276,7 +276,7 @@ it("Serve all sends nothing while busy or after a row of its section changed", a
   old.click();
   await el.updateComplete;
   expect(old.hasAttribute("disabled")).toBe(true);
-  expect(old.getAttribute("variant")).toBe("secondary");
+  expect(old.getAttribute("variant")).toBe("ghost");
   el.busy = false;
   el.snapshot = {
     ...el.snapshot!,
@@ -491,7 +491,7 @@ it("labels companions by bill without a price or line action, and fires the whol
   expect(calls).toEqual([{ groupId: "g" }]);
 });
 
-it("draws another bill's dish as a band of the track colour in full-strength text", async () => {
+it("draws another bill's dish as an ordinary muted sent row whose second line is the bill's name", async () => {
   const el = await mount(
     current(
       [],
@@ -505,10 +505,96 @@ it("draws another bill's dish as a band of the track colour in full-strength tex
   );
   el.style.setProperty("--wt-color-track", "rgb(1, 2, 3)");
   el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const companion = find(el, "[data-companion=guest]");
-  expect(getComputedStyle(companion).backgroundColor).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(companion.querySelector(".row-more")!).color).toBe("rgb(4, 5, 6)");
+  const own = find(el, "[data-held-line=own]");
+  expect(getComputedStyle(companion).backgroundColor).toBe(getComputedStyle(own).backgroundColor);
+  expect(getComputedStyle(companion).backgroundColor).not.toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(companion).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(companion.querySelector(".row-more")!).color).toBe("rgb(7, 8, 9)");
+  expect(second(el, "[data-companion=guest]")).toBe("Patio guests");
+  expect(companion.querySelector(".row-price")).toBeNull();
 });
+
+/** A fired heading and a held one with nothing released, laid out at `width`. */
+async function twoHeadings(width = 600) {
+  const el = await mount(
+    current(
+      [],
+      [
+        group("held", [row("steak", { released: false })], { position: 2 }),
+        group("fired", [row("beer")], { position: 1, state: "fired", firedAt: at(48) }),
+      ],
+    ),
+  );
+  el.style.width = `${width}px`;
+  for (let frame = 0; frame < 2; frame++)
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+  return el;
+}
+const edge = (heading: Element) =>
+  heading.getBoundingClientRect().right - parseFloat(getComputedStyle(heading).paddingRight);
+
+it("draws Serve all as a teal word on the heading's line, with a full tap area inside a compact heading", async () => {
+  const el = await twoHeadings();
+  el.style.setProperty("--wt-color-primary-text", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-font-size-md", "15px");
+  const heading = find(el, "[data-sent-section=fired] wt-course-heading");
+  const serve = find(el, "[data-sent-section=fired] [data-serve-all]");
+  expect(serve.getAttribute("variant")).toBe("ghost");
+  const inner = getComputedStyle(serve.shadowRoot!.querySelector("button")!);
+  expect(inner.color).toBe("rgb(1, 2, 3)");
+  expect(inner.fontSize).toBe("15px");
+  expect(inner.fontWeight).toBe("600");
+  expect(inner.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(inner.borderTopColor).toBe("rgba(0, 0, 0, 0)");
+  const button = serve.getBoundingClientRect();
+  const box = heading.getBoundingClientRect();
+  const title = find(el, "[data-sent-section=fired] [data-section-title]").getBoundingClientRect();
+  const pill = heading.shadowRoot!.querySelector('[part="mark"]')!.getBoundingClientRect();
+  expect(button.height).toBeGreaterThanOrEqual(44);
+  expect(button.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeLessThanOrEqual(45);
+  expect(button.top).toBeGreaterThanOrEqual(box.top - 0.5);
+  expect(button.bottom).toBeLessThanOrEqual(box.bottom + 0.5);
+  expect(button.top).toBeLessThan(title.bottom);
+  expect(button.right).toBeCloseTo(edge(heading), 0);
+  expect(pill.right).toBeLessThanOrEqual(button.left);
+});
+
+it("draws a held heading's Fire as an outlined button at the right of its line", async () => {
+  const el = await twoHeadings();
+  const heading = find(el, "[data-sent-section=held] wt-course-heading");
+  const fire = find(el, "[data-group-fire=held]");
+  expect(fire.getAttribute("variant")).toBe("secondary");
+  const button = fire.getBoundingClientRect();
+  const title = find(el, "[data-sent-section=held] [data-section-title]").getBoundingClientRect();
+  expect(button.height).toBeGreaterThanOrEqual(44);
+  expect(button.right).toBeCloseTo(edge(heading), 0);
+  expect(button.top).toBeLessThan(title.bottom);
+  el.busy = true;
+  await el.updateComplete;
+  expect(fire.getAttribute("variant")).toBe("secondary");
+});
+
+it.each(["en", "es"] as const)(
+  "never breaks a %s heading inside its time phrase or before its dot",
+  async (locale) => {
+    setLocale(locale);
+    const data = current(
+      [],
+      [group("fired", [row("beer", { courseId: "drink" })], { state: "fired", firedAt: at(48) })],
+    );
+    data.retainedCourses = [{ id: "drink", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] }];
+    const el = await mount(data);
+    const words = find(el, "[data-section-title]").textContent!.trim();
+    expect(words).toBe(
+      locale === "en"
+        ? "Drinks\u00a0· Fired\u00a012\u00a0min\u00a0ago"
+        : "Drinks\u00a0· Marchado\u00a0hace\u00a012\u00a0min",
+    );
+  },
+);
 
 it("uses only the supplied reminder to show due/snooze/fire above the sections", async () => {
   const data = current([], [group("g", [row("held", { released: false })])]);
@@ -1112,7 +1198,7 @@ it("keeps unreleased fired food visible but serves only released remainders", as
   );
   const all = find(el, "[data-serve-all]") as HTMLElement & { disabled: boolean };
   expect(all.disabled).toBe(true);
-  expect(all.getAttribute("variant")).toBe("secondary");
+  expect(all.getAttribute("variant")).toBe("ghost");
   const dish = find(el, '[data-serve-line="held-extra"]') as HTMLButtonElement;
   expect(dish.disabled).toBe(true);
   expect(find(el, '[data-fired-line="held-extra"]').textContent).toContain("3.00");
@@ -1123,7 +1209,7 @@ it("keeps unreleased fired food visible but serves only released remainders", as
   el.snapshot = { ...el.snapshot!, current: current([row("held-extra")]) };
   await el.updateComplete;
   expect(all.disabled).toBe(false);
-  expect(all.getAttribute("variant")).toBe("primary");
+  expect(all.getAttribute("variant")).toBe("ghost");
   await click(el, "[data-serve-all]");
   expect(calls).toEqual([{ items: [{ lineId: "held-extra", quantity: "1" }] }]);
 });
@@ -1373,7 +1459,7 @@ describe("A773 at the pass", () => {
     );
     expect(headings(el)).toEqual([
       [es["table.group_held"], "", ["fire"]],
-      [es["table.group_fired_ago"].replace("{n}", "10"), "sent", ["serve all"]],
+      [es["table.group_fired_ago"].replace("{n}", "10").replace(/\s/g, " "), "sent", ["serve all"]],
     ]);
     expect(second(el, "[data-fired-line=burger]")).toBe(es["table.at_the_pass"]);
     expect(second(el, "[data-fired-line=unknown]")).toBe("");

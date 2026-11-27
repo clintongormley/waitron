@@ -63,6 +63,26 @@ it("places this bill's Sent panel before its New order on the table screen", asy
   expect(panel(el).shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
 });
 
+it.each([
+  ["en", "Bill 2", "Bill 3 · Clint"],
+  ["es", "Cuenta 2", "Cuenta 3 · Clint"],
+] as const)(
+  "names another bill's dishes by the bill alone, in %s",
+  async (locale, plain, named) => {
+    setLocale(locale);
+    const { el } = await sent({
+      party: switcherParty,
+      bills: [
+        partyBill("wo-4", 1, "10.00"),
+        partyBill("wo-5", 2, "10.00"),
+        partyBill("wo-6", 3, "10.00", { billName: "Clint" }),
+      ],
+    });
+    expect(panel(el).billLabels.get("wo-5")).toBe(plain);
+    expect(panel(el).billLabels.get("wo-6")).toBe(named);
+  },
+);
+
 it("beside the menu, paints the sent section the page colour across the whole order column", async () => {
   const { el } = await sent();
   el.style.setProperty("--wt-color-bg", "rgb(1, 2, 3)");
@@ -80,6 +100,45 @@ it("beside the menu, paints the sent section the page colour across the whole or
   const title = find(el, "#draft-title").getBoundingClientRect();
   expect(heading.left).toBeCloseTo(title.left, 1);
 });
+
+it.each([1280, 844])(
+  "at %ipx beside the menu, gives the sent section and the stuck draft bar one left edge at the divider",
+  async (width) => {
+    const { el } = await sent();
+    el.style.width = `${width}px`;
+    await resized(el);
+    el.draftStore!.addProduct(beer, "1");
+    await el.updateComplete;
+    await resized(el);
+    const pane = find(el, "[data-draft-pane]");
+    const divider =
+      pane.getBoundingClientRect().left + parseFloat(getComputedStyle(pane).borderInlineStartWidth);
+    const bar = find(el, ".draft-bar");
+    expect(panel(el).getBoundingClientRect().left).toBeCloseTo(divider, 1);
+    expect(bar.getBoundingClientRect().left).toBeCloseTo(divider, 1);
+    expect(bar.getBoundingClientRect().right).toBeCloseTo(pane.getBoundingClientRect().right, 1);
+    const first = bar.firstElementChild!.getBoundingClientRect();
+    expect(first.left).toBeCloseTo(find(el, "#draft-title").getBoundingClientRect().left, 1);
+  },
+);
+
+it.each([1280, 390])(
+  "at %ipx leaves the page's space below the sent part before the New order heading",
+  async (width) => {
+    const { el } = await sent();
+    el.style.width = `${width}px`;
+    el.style.setProperty("--wt-space-3", "20px");
+    await resized(el);
+    const rows = panel(el).shadowRoot!.querySelectorAll("li");
+    const last = rows[rows.length - 1]!.getBoundingClientRect();
+    const title = find(el, "#draft-title");
+    if (title.checkVisibility()) {
+      expect(title.getBoundingClientRect().top - last.bottom).toBeGreaterThanOrEqual(40 - 0.5);
+    }
+    const section = panel(el).shadowRoot!.querySelector<HTMLElement>("[data-sent-panel]")!;
+    expect(getComputedStyle(section).paddingBottom).toBe("20px");
+  },
+);
 
 it("the draft already counts 330 ml as one item while keeping its quantity", async () => {
   const drink = {
