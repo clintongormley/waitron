@@ -553,11 +553,11 @@ describe("the customer menu Online preview", () => {
     const price = document.createRange();
     price.selectNodeContents(priceLabel);
     const photo = dish.querySelector("img")!;
-    const priceBox = price.getBoundingClientRect();
+    const dishPriceBox = price.getBoundingClientRect();
     const nameBox = pepper.getBoundingClientRect();
-    expect(priceBox.top).toBeLessThan(nameBox.bottom);
-    expect(priceBox.left).toBeGreaterThan(nameBox.right);
-    expect(priceBox.right).toBeCloseTo(photo.getBoundingClientRect().right, 0);
+    expect(dishPriceBox.top).toBeLessThan(nameBox.bottom);
+    expect(dishPriceBox.left).toBeGreaterThan(nameBox.right);
+    expect(dishPriceBox.right).toBeCloseTo(photo.getBoundingClientRect().right, 0);
     await page.getByRole("radio", { name: "Phone" }).click();
     await vi.waitFor(() => {
       expect(bread.getBoundingClientRect().left).toBe(pepper.getBoundingClientRect().left);
@@ -666,7 +666,14 @@ describe("the customer menu Online preview", () => {
   });
 
   it("paints allergen and diet icons in the same muted colour as the dish description", async () => {
-    await open(() => Response.json(published()));
+    const preview = published();
+    const section = preview.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected a section");
+    const pepper = section.members[0]!;
+    if (pepper.kind !== "product") throw new Error("Expected a dish");
+    pepper.allergens = { gluten: { kinds: ["wheat"] } };
+    pepper.dietary = ["vegan"];
+    const { el } = await open(() => Response.json(preview));
     const allergen = page.getByRole("img", { name: "Cereals containing gluten (Wheat)" });
     const diet = page.getByRole("img", { name: "Vegan" });
     await expect.element(allergen).toBeVisible();
@@ -677,6 +684,12 @@ describe("the customer menu Online preview", () => {
     expect(muted).not.toBe(getComputedStyle(dish).color);
     expect(getComputedStyle(allergen.element()).color).toBe(muted);
     expect(getComputedStyle(diet.element()).color).toBe(muted);
+
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    await expect.element(page.getByRole("heading", { name: "Dietary declarations" })).toBeVisible();
+    const detail = customerPage(el)!.shadowRoot!.querySelector(".detail")!;
+    const detailDiet = detail.querySelector("div.declarations wt-icon[name='diet-vegan']")!;
+    expect(getComputedStyle(detailDiet).color).toBe(getComputedStyle(detail).color);
   });
 
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {

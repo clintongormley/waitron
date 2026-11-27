@@ -491,7 +491,7 @@ export class CustomerMenuPage extends LitElement {
       }
       .description,
       .declarations,
-      .declarations wt-icon {
+      .dish .declarations wt-icon {
         color: var(--wt-color-text-muted);
       }
       .description,
@@ -571,13 +571,13 @@ export class CustomerMenuPage extends LitElement {
         .dish-name {
           flex: 1 1 50%;
         }
-        .price {
+        .dish-heading > .price {
           margin-block-start: 0;
           margin-inline-start: auto;
           font-size: var(--wt-font-size-lg);
           text-align: end;
         }
-        .description {
+        .dish-heading > .description {
           flex-basis: 100%;
           order: 1;
         }
