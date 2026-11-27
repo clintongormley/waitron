@@ -251,7 +251,7 @@ it("a wrong master key is refused naming the backup's key", async () => {
   });
 });
 
-it("a spare with no backup.env asks for the master key", async () => {
+it("a spare with no backup.env, or one holding a key too short to use, asks for the master key", async () => {
   await expect(
     stage({ readBackupKey: async () => loadBackupKey(await loadBoxEnv({}, root)) }),
   ).rejects.toMatchObject({

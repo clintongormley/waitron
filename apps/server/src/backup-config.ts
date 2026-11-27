@@ -27,7 +27,7 @@ export interface BackupConfig {
   /** IDs are unique, and so are local folders' resolved directories. */
   destinations: BackupDestination[];
   /** The key every backup artifact is encrypted under. `undefined` only on a switched-off record
-   * whose box holds no usable key; an enabled record holds it with its number and master key id. */
+   * whose box holds no usable key; an enabled record holds it with its number and master key id and day. */
   recoveryKey: string | undefined;
   schedule: BackupSchedule;
   /** The count cap: how many archives each destination keeps. */
@@ -104,8 +104,8 @@ function loadMasterKeyDay(env: Env): string | undefined {
   return raw !== undefined && isCalendarDate(raw) ? raw : undefined;
 }
 
-/** The number of the backup key the file holds: `undefined` when it is absent or not a number a
- * backup key can have, `null` when the file names none. */
+/** The number of the backup key the file holds: `undefined` when it is not a number a backup key
+ * can have, `null` when the file names none. */
 export function loadHeldKeyNumber(env: Env): number | undefined | null {
   return isUnset(readVariable(env, "WAITRON_BACKUP_KEY_NUMBER")) ? null : loadKeyNumber(env);
 }

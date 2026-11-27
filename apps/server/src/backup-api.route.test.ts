@@ -98,7 +98,7 @@ const KEY_2 = heldBackupKey(MASTER_BYTES, 2).key;
 const KEY_3 = heldBackupKey(MASTER_BYTES, 3).key;
 /** The key the box env holds, which the next archive is locked with. */
 const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
-/** `backup.env` as setup leaves it: backup key 1, its number and its master key's id. */
+/** `backup.env` as setup leaves it: backup key 1, its number and its master key's id and day. */
 const KEY_ONE_FILE = backupKeyEnv(heldBackupKey(MASTER_BYTES, 1));
 const keyFileOf = async (stateDir: string) =>
   parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));

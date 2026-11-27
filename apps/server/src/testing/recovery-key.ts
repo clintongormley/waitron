@@ -21,7 +21,7 @@ export function openUnderHeldKey(framed: Uint8Array): Buffer {
 
 /**
  * A main box answers a join only while its `backup.env` holds a usable recovery key. With no `key`
- * the file holds {@link HELD_BACKUP_KEY} with its number and master key id; a given `key` is no
+ * the file holds {@link HELD_BACKUP_KEY} with its number and master key id and day; a given `key` is no
  * master key's, so the file holds it alone.
  */
 export async function holdRecoveryKey(stateDir: string, key?: string): Promise<void> {
