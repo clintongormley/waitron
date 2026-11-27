@@ -9,7 +9,6 @@ const burger: TillProduct = {
   name: "Burger",
   unitPrice: "10.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: {},
   offeredModifiers: [

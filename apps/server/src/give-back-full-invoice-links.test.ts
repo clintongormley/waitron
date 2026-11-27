@@ -67,7 +67,6 @@ async function paellaWithAioli(tx: Parameters<typeof createCategory>[0]) {
       kitchenName: name.toUpperCase(),
       pricingUnit: "each",
       unitPrice,
-      vatClass: "general",
     });
   const paella = (await product("Paella", "Paella valenciana", "18.50")).id;
   const cheesecake = (await product("Cheesecake", "Tarta de queso", "6.50")).id;
