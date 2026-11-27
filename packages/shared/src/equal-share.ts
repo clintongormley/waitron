@@ -1,4 +1,5 @@
 import { AppError } from "./errors.js";
+import { isValidGuestCount } from "./guest-count.js";
 import {
   MONEY_SCALE,
   addDecimal,
@@ -7,6 +8,7 @@ import {
   divideDecimal,
   multiplyDecimal,
   subtractDecimal,
+  toScale,
   type Decimal,
 } from "./money.js";
 
@@ -25,10 +27,12 @@ export function equalShare(available: Decimal, n: number): Decimal {
     : nearest;
 }
 
-/** Each of `n` guests' `equalShare` of what the guests before them left. Refuses more guests than
- * there are cents in `left`, where some would pay nothing. */
+/** Each of `n` guests' `equalShare` of what the guests before them left. `left` must be in whole
+ * cents; refuses a count that is not a guest count or exceeds the cents in `left`. */
 export function equalShares(left: Decimal, n: number): Decimal[] {
-  if (!Number.isInteger(n) || n < 1) throw invalidCount();
+  if (compareDecimal(toScale(left, MONEY_SCALE), left) !== 0)
+    throw new AppError("shared.invalid_decimal", { value: left });
+  if (!isValidGuestCount(n)) throw invalidCount();
   if (compareDecimal(multiplyDecimal(CENT, decimal(String(n))), left) > 0) throw invalidCount();
   const shares: Decimal[] = [];
   let remaining = left;

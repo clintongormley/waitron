@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { equalShare, equalShares } from "./equal-share.js";
 import { AppError } from "./errors.js";
+import { MAX_GUEST_COUNT } from "./guest-count.js";
 import { addDecimal, decimal, sumDecimals, type Decimal } from "./money.js";
 import { shareByWeight } from "./share-by-weight.js";
 
@@ -89,6 +90,24 @@ describe("equalShares: every guest's share, each equalShare of what the guests b
     const error = thrown(() => equalShares(d("10.00"), n));
     expect(error.code).toBe("management.request_invalid");
     expect(error.params).toEqual({ field: "shareOf" });
+  });
+
+  it("refuses an amount that is not in whole cents: €1.005 among 2", () => {
+    const error = thrown(() => equalShares(d("1.005"), 2));
+    expect(error.code).toBe("shared.invalid_decimal");
+    expect(error.params).toEqual({ value: "1.005" });
+  });
+
+  it("refuses more guests than one seating records", () => {
+    const error = thrown(() => equalShares(d("100000.00"), MAX_GUEST_COUNT + 1));
+    expect(error.code).toBe("management.request_invalid");
+    expect(error.params).toEqual({ field: "shareOf" });
+  });
+
+  it("shares a large amount among the most guests one seating records, summing exactly", () => {
+    const shares = equalShares(d("987654321.07"), MAX_GUEST_COUNT);
+    expect(shares).toHaveLength(MAX_GUEST_COUNT);
+    expect(sumDecimals(shares)).toBe("987654321.07");
   });
 
   it("is each guest's equalShare of what is left, and sums to the amount", () => {
