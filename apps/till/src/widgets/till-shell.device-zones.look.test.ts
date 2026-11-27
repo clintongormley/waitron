@@ -184,7 +184,7 @@ it("keeps at least six full table targets and a one-line Spanish hint on the lan
     today: {
       placement: {
         x: (index % 2) * 4,
-        y: Math.floor(index / 2) * 3,
+        y: index < 6 ? Math.floor(index / 2) * 3 : 13,
         width: 2,
         height: 2,
         shape: index === 0 ? "round" : "rect",

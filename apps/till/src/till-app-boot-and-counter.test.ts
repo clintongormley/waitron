@@ -20,7 +20,7 @@ import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT, watchBuild } from "@waitron/diagnostics";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   blurAll,
   cleanupWidgets,
@@ -4466,7 +4466,13 @@ describe("department transfers across operator lifetimes", () => {
   async function openTransfers(el: TillApp) {
     const button = shell(el)?.shadowRoot?.querySelector<HTMLElement>("[data-open-transfers]");
     expect(button).not.toBeNull();
-    button!.click();
+    const floorMenu = button!.closest("wt-row-actions.floor-menu");
+    if (floorMenu) {
+      await userEvent.click(floorMenu.shadowRoot!.querySelector("button")!);
+      await userEvent.click(button!.shadowRoot!.querySelector("button")!);
+    } else {
+      button!.click();
+    }
     await vi.waitFor(() => expect(transferRoot(el)?.querySelector("wt-dialog")).not.toBeNull());
   }
 
@@ -4574,6 +4580,9 @@ describe("department transfers across operator lifetimes", () => {
   });
 
   it("accepts from the actual shell with a menu zone and reloads its durable pending count", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(390, 844);
     const desk = transfers();
     let accepted = false;
     const menu = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "terrace", "table_tab");
@@ -4603,6 +4612,12 @@ describe("department transfers across operator lifetimes", () => {
       acceptDepartmentTransfer: accept,
     });
     await signIn(el);
+    const status = () =>
+      shell(el)?.shadowRoot?.querySelector('[data-test="department-transfers-status"]')
+        ?.textContent;
+    await vi.waitFor(() =>
+      expect(status()).toBe(t("department_transfer.open").replace("{count}", "1")),
+    );
     await openTransfers(el);
     transferRoot(el)!.querySelector<HTMLElement>("[data-view]")!.click();
     await vi.waitFor(() =>
@@ -4633,7 +4648,9 @@ describe("department transfers across operator lifetimes", () => {
         tableId: null,
       }),
     );
-    await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
+    await vi.waitFor(() =>
+      expect(status()).toBe(t("department_transfer.open").replace("{count}", "0")),
+    );
     expect(transferRoot(el)?.querySelector("[data-current-tab]")).toBeNull();
   });
 
