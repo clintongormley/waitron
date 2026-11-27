@@ -11,6 +11,7 @@ import {
 import { fill, t } from "../i18n/t.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import type { TillBasket } from "./basket.js";
+import { dishFacts } from "./dish-facts.js";
 import { type DraftRowTap, draftRowSlotStyles } from "./draft-row.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
 
@@ -136,58 +137,93 @@ export class OpenDraftRow implements ReactiveController {
         .closest<TillBasket>("till-basket")
         ?.openLineDetails(line, { note });
     };
-    return html`<div slot=${`opened-${index}`} class="draft-open-acts" data-draft-open=${index}>
-      ${
-        stepped
-          ? html`<wt-stepper
-              .value=${count}
-              .min=${1}
-              .max=${addable ? null : count}
-              .label=${name}
-              ?disabled=${disabled}
-              .decreaseLabel=${(label: string) => fill(t("action.decrease"), { label })}
-              .increaseLabel=${(label: string) => fill(t("action.increase"), { label })}
-              .removeLabel=${
-                remove?.allowed === true
-                  ? (label: string) => fill(t("action.remove_named"), { label })
-                  : null
-              }
-              @wt-remove=${(event: Event) => {
-                event.stopPropagation();
-                if (live()) remove?.run();
-              }}
-              @wt-change=${(event: CustomEvent<{ value: number }>) => {
-                event.stopPropagation();
-                if (live())
-                  store.setLineQuantity(store.lines.indexOf(line), String(event.detail.value));
-                (event.currentTarget as WtStepper).value = Number(line.quantity);
-              }}
-            ></wt-stepper>`
-          : nothing
-      }
-      <button
-        type="button"
-        class="draft-open-act"
-        data-draft-open-options
-        ?disabled=${disabled}
-        @click=${(event: Event) => details(event, false)}
-      >
-        ${t("line.options.button")}
-      </button>
-      <button
-        type="button"
-        class="draft-open-act"
-        data-draft-open-note
-        ?disabled=${disabled}
-        @click=${(event: Event) => details(event, true)}
-      >
-        ${t("line.note.button")}
-      </button>
+    return html`<div slot=${`opened-${index}`} data-draft-open=${index}>
+      <div class="draft-open-info" data-draft-open-info>${dishFacts(line.product)}</div>
+      <div class="draft-open-acts">
+        ${
+          stepped
+            ? html`<wt-stepper
+                .value=${count}
+                .min=${1}
+                .max=${addable ? null : count}
+                .label=${name}
+                ?disabled=${disabled}
+                .decreaseLabel=${(label: string) => fill(t("action.decrease"), { label })}
+                .increaseLabel=${(label: string) => fill(t("action.increase"), { label })}
+                .removeLabel=${
+                  remove?.allowed === true
+                    ? (label: string) => fill(t("action.remove_named"), { label })
+                    : null
+                }
+                @wt-remove=${(event: Event) => {
+                  event.stopPropagation();
+                  if (live()) remove?.run();
+                }}
+                @wt-change=${(event: CustomEvent<{ value: number }>) => {
+                  event.stopPropagation();
+                  if (live())
+                    store.setLineQuantity(store.lines.indexOf(line), String(event.detail.value));
+                  (event.currentTarget as WtStepper).value = Number(line.quantity);
+                }}
+              ></wt-stepper>`
+            : nothing
+        }
+        <button
+          type="button"
+          class="draft-open-act"
+          data-draft-open-options
+          ?disabled=${disabled}
+          @click=${(event: Event) => details(event, false)}
+        >
+          ${t("line.options.button")}
+        </button>
+        <button
+          type="button"
+          class="draft-open-act"
+          data-draft-open-note
+          ?disabled=${disabled}
+          @click=${(event: Event) => details(event, true)}
+        >
+          ${t("line.note.button")}
+        </button>
+      </div>
     </div>`;
   }
 }
 
 const openedRowStyles = css`
+  .draft-open-info {
+    padding: 0 var(--wt-space-2);
+    font-size: var(--wt-font-size-sm);
+    overflow-wrap: anywhere;
+  }
+  .draft-open-info p,
+  .draft-open-info ul {
+    margin: 0 0 var(--wt-space-1);
+    padding: 0;
+  }
+  .draft-open-info [data-description] {
+    color: var(--wt-color-text-muted);
+  }
+  .draft-open-info h3 {
+    margin: var(--wt-space-1) 0 0;
+    font-size: var(--wt-font-size-sm);
+    font-weight: var(--wt-font-weight-bold);
+  }
+  .draft-open-info ul {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--wt-space-3);
+    list-style: none;
+  }
+  .draft-open-info li {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-1);
+  }
+  .draft-open-info wt-icon {
+    flex-shrink: 0;
+  }
   .draft-open-acts {
     display: flex;
     flex-wrap: wrap;

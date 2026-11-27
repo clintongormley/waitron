@@ -528,7 +528,8 @@ whole amount as served.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
 
-At a table, tap a dish in **New order** to open it in place: − and + change how many, **Options**
+At a table, tap a dish in **New order** to open it in place, with its description, allergens and
+diet labels: − and + change how many, **Options**
 opens its details and **Note** opens them at its note. At 1, − is a bin that takes the dish off.
 Tap it again to close it. A weighed dish, or one in a set menu, has no − and +: use **Options**. To
 take dishes off, tick their boxes and tap **Remove** in the bar under the order.

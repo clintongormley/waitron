@@ -6521,7 +6521,11 @@ one, the split control keeps its full `--wt-tap-min` width and, with the price, 
 column, reaching over the box's side margin and border while its arrow stays inside; on a row of one, the price ends `--wt-space-2` in from the box's edge, as frame `g` 3
 draws it. Opening a row whose box would end under the draft bar scrolls the list until the box's
 lower edge sits `--wt-space-2` above the bar; a box taller than the list shows keeps its lower edge, with
-Note, in view. Under its line sit, wrapping, a `wt-stepper` for the count
+Note, in view. Under its line, `--wt-space-2` in from the box's sides in `sm` text, sit the dish's
+description in `--wt-color-text-muted` when it has one, then its allergens and diet labels under
+bold headings, drawn by `dishFacts` (`apps/till/src/widgets/dish-facts.ts`), the same fragment the
+dish information window uses; the window's availability switches and Add to order are not in the
+box. Under them sit, wrapping, a `wt-stepper` for the count
 (not on a weighed dish or a dish in a set menu; + disabled where the dish cannot be added; at 1, −
 is its bin, named “Remove <dish>”, which takes the dish off through the draft bar's Remove, and
 where Remove would refuse, − is disabled at 1 instead), then

@@ -3,15 +3,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController } from "@waitron/ui";
 import type { TillProduct } from "../api/menu-api.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
-import { allergenLabel } from "../i18n/allergen-names.js";
+import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { trackDialog } from "./track-dialog.js";
-import { descriptionFor } from "./dish-format.js";
+import { dishFacts } from "./dish-facts.js";
 import { productName } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
-import { dietLabel } from "./nutrition-icons.js";
-import { nutritionDietLabels } from "../diet-labels.js";
 import { takesExtras } from "../state/order-line.js";
 
 export type ChangeAvailability = (productId: string, available: boolean) => Promise<void>;
@@ -107,9 +104,6 @@ export class TillProductInfo extends LitElement {
 
   override render() {
     const product = this.product;
-    const allergens = product.allergens;
-    const description = descriptionFor(product.description ?? {}, "").trim();
-    const labels = nutritionDietLabels(product.diet, product.dietaryDeclarations);
     const extrasApply =
       takesExtras(product) ||
       product.variants?.some((variant) => variant.available && takesExtras(variant));
@@ -122,33 +116,7 @@ export class TillProductInfo extends LitElement {
         this.#emit("close-info");
       }}
     >
-      ${description ? html`<p data-description>${description}</p>` : nothing}
-      <h3>${t("allergens.contains")}</h3>
-      ${
-        allergens === null
-          ? html`<p class="pending">${t("product_info.not_reviewed")}</p>`
-          : Object.keys(allergens).length === 0
-            ? html`<p>${t("allergens.as_served_none")}</p>`
-            : html`<ul>
-                ${Object.keys(allergens)
-                  .sort()
-                  .map(
-                    (code) =>
-                      html`<li>
-                        <wt-icon name=${`allergen-${code}`}></wt-icon
-                        >${allergenLabel(code, allergens[code]!, currentLocale())}
-                      </li>`,
-                  )}
-              </ul>`
-      }
-      ${
-        labels.length === 0
-          ? nothing
-          : html`<h3>${t("product_info.dietary")}</h3>
-              <ul>
-                ${labels.map((label) => html`<li><wt-icon name=${`diet-${label}`}></wt-icon>${dietLabel(label)}</li>`)}
-              </ul>`
-      }
+      ${dishFacts(product)}
       ${
         this.changeAvailability && product.productId
           ? html`

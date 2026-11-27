@@ -235,6 +235,40 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     expect(getComputedStyle(added).backgroundColor).not.toBe(plain.backgroundColor);
   });
 
+  it("an opened row's description, allergens and diet labels, or its unreviewed and none-declared wording, have no violations", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      {
+        product: {
+          ...croquettes,
+          description: { en: "Ham croquettes, fried to order" },
+          allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
+          dietaryDeclarations: ["halal"],
+        },
+        quantity: "1",
+      },
+      { product: { ...bravas, allergens: null }, quantity: "1" },
+      { product: { ...dish("olives", "Olives"), allergens: {} }, quantity: "1" },
+    ]);
+    const { el, host } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
+    const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+    for (const index of [0, 1, 2]) {
+      await basket.updateComplete;
+      await userEvent.click(
+        basket.shadowRoot!.querySelector<HTMLButtonElement>(`[data-draft-row="${index}"]`)!,
+      );
+      await el.updateComplete;
+      await basket.updateComplete;
+      const info = el.shadowRoot!.querySelector(
+        `[data-draft-open="${index}"] [data-draft-open-info]`,
+      );
+      expect(info?.textContent).toContain(
+        ["Ham croquettes", "Allergens not yet reviewed", "No declared allergens"][index],
+      );
+      await expectNoA11yViolations(host);
+    }
+  });
+
   it("an opened row keeps a closed row's height; its price and arrow keep the closed rows' column, or its price sits near the box's edge without an arrow", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
