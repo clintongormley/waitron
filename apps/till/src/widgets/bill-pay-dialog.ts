@@ -370,7 +370,6 @@ export class TillBillPayDialog extends LitElement {
   /** Split equally is open over the form. */
   @state() private splitShown: SplitOpening | null = null;
   #rowWanted = false;
-  /** Choosing another way or typing a count ends it. */
   #run = new ShareRun();
   /** Take the next was pressed since the payment last taken. */
   #leftTaken = false;

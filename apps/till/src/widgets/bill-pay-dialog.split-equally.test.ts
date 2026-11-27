@@ -11,8 +11,14 @@ import type { TillSplitEqually } from "./split-equally.js";
 import type { TablePayQuoteRequest } from "../state/table-pay-quote.js";
 import type { BillBalance } from "../api/payments-api.js";
 
-afterEach(cleanupWidgets);
+const originalLocale = currentLocale();
+
 beforeEach(() => setLocale("en"));
+
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(originalLocale);
+});
 
 const balanceOf = (over: Partial<BillBalance> = {}): BillBalance => ({
   workingOrderId: "wo-4",

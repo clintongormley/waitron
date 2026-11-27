@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { WtStepper } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./split-equally.js";
@@ -33,11 +34,17 @@ const states: [string, Partial<TillSplitEqually>][] = [
 
 describe.each(["light", "dark"] as const)("till-split-equally a11y (%s theme)", (theme) => {
   it.each(states)("has no violations %s", async (_, props) => {
-    const { host } = await mountWidget<TillSplitEqually>(
+    const { host, el } = await mountWidget<TillSplitEqually>(
       "till-split-equally",
       { billName: "Bill 1", ...props },
       theme,
     );
+    if (props.left === "0.02") {
+      const stepper = el.shadowRoot!.querySelector<WtStepper>("wt-stepper")!;
+      const increase =
+        stepper.shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
+      expect(increase.disabled).toBe(true);
+    }
     await expectNoA11yViolations(host);
   });
 });
