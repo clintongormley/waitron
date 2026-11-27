@@ -38,6 +38,8 @@ type State =
   | "busy"
   | "refused"
   | "lost"
+  | "not kept"
+  | "not known"
   | "key shown"
   | "key copied"
   | "key downloaded";
@@ -75,6 +77,8 @@ const STATES: State[] = [
   "busy",
   "refused",
   "lost",
+  "not kept",
+  "not known",
   "key shown",
   "key copied",
   "key downloaded",
@@ -90,8 +94,12 @@ describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%
     setLocale(locale);
     const api = {
       makeRecoveryPack: makeFor(state),
-      markRecoveryPackReceived: vi.fn().mockResolvedValue(undefined),
-      getRecoveryPackStatus: vi.fn().mockResolvedValue(STATUS),
+      markRecoveryPackReceived: state.startsWith("not ")
+        ? vi.fn().mockRejectedValue({ code: "connection.failed" })
+        : vi.fn().mockResolvedValue(undefined),
+      getRecoveryPackStatus: vi
+        .fn()
+        .mockResolvedValue(state === "not known" ? { ...STATUS, newKeyWaiting: true } : STATUS),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<RecoveryPackDialog>(
       "dashboard-recovery-pack-dialog",
@@ -128,6 +136,10 @@ describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%
       await expect.poll(() => root.querySelector("wt-form-actions")!.error).not.toBe("");
     if (state === "lost")
       await expect.poll(() => root.querySelector("[data-test=lost]")).toBeTruthy();
+    if (state === "not kept")
+      await expect.poll(() => root.querySelector("[data-test=not-kept]")).toBeTruthy();
+    if (state === "not known")
+      await expect.poll(() => root.querySelector("[data-test=not-known]")).toBeTruthy();
     const box = () => root.querySelector("wt-master-key-box")?.shadowRoot ?? null;
     if (state.startsWith("key "))
       await expect.poll(() => box()?.querySelector("[data-test=master-key]")).toBeTruthy();

@@ -153,7 +153,7 @@ export interface MadeRecoveryPack {
   number: number;
   /** The box's own time for the pack, the same instant its status read reports. */
   madeAt: string;
-  /** The new master key as printed, and its name; only when the box made and saved one. */
+  /** The new master key as printed, and its name; only when the box made one. */
   masterKey?: { key: string; name: string };
 }
 function decodedName(value: string): string | null {
@@ -212,6 +212,8 @@ export interface RecoveryPackStatus {
   keepOldPackUntil: string;
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
+  /** A new master key was made and shown, and the box has not yet taken or dropped it. */
+  newKeyWaiting?: boolean;
   /** The box's backup key; null while it holds none it can use. */
   backupKey: {
     number: number;
@@ -421,8 +423,13 @@ export class BackupApi extends CloudApi {
       passive: true,
     });
   }
-  markRecoveryPackReceived(packNumber: number): Promise<void> {
-    return this.#request<void>(`/api/backup/recovery-pack/${packNumber}/received`, "POST", {});
+  /** A new master key's pack sends back the key it showed: the box takes the key only then. */
+  markRecoveryPackReceived(packNumber: number, masterKey?: string): Promise<void> {
+    return this.#request<void>(
+      `/api/backup/recovery-pack/${packNumber}/received`,
+      "POST",
+      masterKey === undefined ? {} : { masterKey },
+    );
   }
   applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/apply", "POST", body);

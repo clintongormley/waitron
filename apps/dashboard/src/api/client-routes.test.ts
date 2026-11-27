@@ -2607,6 +2607,21 @@ describe("the recovery pack calls", () => {
       "application/json",
     );
   });
+
+  it("confirms a new master key's pack by sending back the key it showed", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.markRecoveryPackReceived(8, "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/api/backup/recovery-pack/8/received",
+        "POST",
+        { masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5" },
+      ],
+    ]);
+  });
 });
 
 it("confirms fresh sign-in through the shared session endpoint", async () => {

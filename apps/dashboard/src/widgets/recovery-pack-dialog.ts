@@ -19,7 +19,7 @@ import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-k
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import type { DashboardApi } from "../api/client.js";
-import type { RecoveryPackStatus } from "../api/backup-api.js";
+import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -45,7 +45,9 @@ function answeredByBox(error: unknown): boolean {
   );
 }
 
-type Step = "form" | "lost" | "shown";
+/** "not-kept": the box answered that it kept the current key; "not-known": it could not tell. */
+type Step = "form" | "lost" | "shown" | "not-kept" | "not-known";
+type NewKeyPack = MadeRecoveryPack & { masterKey: { key: string; name: string } };
 /**
  * A typed master key, and a shown master key whose pack was not yet downloaded or printed, which is
  * lost when the dialog closes.
@@ -97,6 +99,8 @@ export class RecoveryPackDialog extends LitElement {
 
   #generation = 0;
   #sent = false;
+  /** The new master key's pack while the box has not confirmed taking it. */
+  #unconfirmed: NewKeyPack | null = null;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
 
@@ -164,13 +168,16 @@ export class RecoveryPackDialog extends LitElement {
     return (this.reread ?? this.status)?.timeZone;
   }
 
-  /** The box saves a new master key before it answers, so the answer must reach the person. */
+  /** A new master key that is being made or confirmed may yet become the box's key. */
   get #making(): boolean {
     return this.busy && this.kind === "master-key";
   }
 
   #draft(): Draft {
-    return { key: this.key, unkept: this.step === "shown" && !this.used };
+    return {
+      key: this.key,
+      unkept: (this.step === "shown" || this.step === "not-known") && !this.used,
+    };
   }
 
   #close(announce = true): void {
@@ -186,6 +193,7 @@ export class RecoveryPackDialog extends LitElement {
     this.reread = null;
     this.key = "";
     this.keyRefusal = null;
+    this.#unconfirmed = null;
     this.#forgetShown();
     if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
@@ -247,44 +255,78 @@ export class RecoveryPackDialog extends LitElement {
       return;
     }
     if (generation !== this.#generation) return;
+    if (newMasterKey && made.masterKey) {
+      this.#unconfirmed = { ...made, masterKey: made.masterKey };
+      await this.#confirm(api, generation, this.#unconfirmed);
+      return;
+    }
     const received = await this.#markReceived(api, made.number);
-    // Sent even if the dialog closed meanwhile, for a card still showing; a card that has gone or
-    // lost system.manage drops it, though the box already counts it received. Never sent to a card
-    // that has since moved to another api.
-    if (api !== this.api) return;
+    if (!this.#handOver(api, made, received)) return;
+    if (generation !== this.#generation) return;
+    this.#dialog()?.closeAfter("security");
+    this.#close();
+  }
+
+  /**
+   * Sent even if the dialog closed meanwhile, for a card still showing; a card that has gone or
+   * lost system.manage drops it, though the box already counts it received. Never sent to a card
+   * that has since moved to another api. False when it was not sent.
+   */
+  #handOver(api: this["api"], made: MadeRecoveryPack, received: boolean): boolean {
+    if (api !== this.api) return false;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackMade>("recovery-pack-made", {
-        detail: {
-          pdf: made.pdf,
-          number: made.number,
-          madeAt: made.madeAt,
-          received,
-        },
+        detail: { pdf: made.pdf, number: made.number, madeAt: made.madeAt, received },
         bubbles: true,
         composed: true,
       }),
     );
+    return true;
+  }
+
+  /**
+   * Sends the shown key back, which is when the box takes it. The card gets the PDF only once the
+   * box has taken the key.
+   */
+  async #confirm(api: this["api"], generation: number, made: NewKeyPack): Promise<void> {
+    this.busy = true;
+    let confirmed = await this.#markReceived(api, made.number, made.masterKey.key);
+    let after: RecoveryPackStatus | null = null;
+    if (!confirmed) {
+      if (generation !== this.#generation) return;
+      after = await this.#readStatus(api, generation);
+      if (generation !== this.#generation) return;
+      confirmed = after?.masterKey?.name === made.masterKey.name;
+    }
+    if (confirmed) {
+      this.#unconfirmed = null;
+      this.#handOver(api, made, true);
+    }
     if (generation !== this.#generation) return;
-    if (newMasterKey && made.masterKey) {
-      this.shown = {
+    this.busy = false;
+    if (!confirmed && after && !after.newKeyWaiting) {
+      this.#unconfirmed = null;
+      this.#forgetShown();
+      this.lostMasterKey = true;
+      this.step = "not-kept";
+    } else {
+      this.shown ??= {
         key: made.masterKey.key,
         name: made.masterKey.name,
         url: URL.createObjectURL(made.pdf),
         number: made.number,
       };
-      this.step = "shown";
-      this.busy = false;
-      this.#scope?.changed();
-      return;
+      this.step = confirmed ? "shown" : "not-known";
     }
-    this.#dialog()?.closeAfter("security");
-    this.#close();
+    this.#scope?.changed();
   }
 
-  async #markReceived(api: this["api"], number: number): Promise<boolean> {
+  async #markReceived(api: this["api"], number: number, masterKey?: string): Promise<boolean> {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        await api.markRecoveryPackReceived(number);
+        await (masterKey === undefined
+          ? api.markRecoveryPackReceived(number)
+          : api.markRecoveryPackReceived(number, masterKey));
         return true;
       } catch {
         // A second failure is left for the card, which names the pack as never received.
@@ -329,12 +371,17 @@ export class RecoveryPackDialog extends LitElement {
     void this.#make();
   }
 
+  #confirmAgain(): void {
+    if (this.busy || !this.#unconfirmed) return;
+    void this.#confirm(this.api, this.#generation, this.#unconfirmed);
+  }
+
   override render(): TemplateResult {
     const open = this.opened;
     return html`<wt-dialog
       data-test="recovery-pack-dialog"
       heading=${t(
-        this.step === "shown"
+        this.step === "shown" || this.step === "not-known"
           ? "master_key_shown.heading"
           : this.kind === "master-key"
             ? "master_key_dialog.heading"
@@ -366,6 +413,22 @@ export class RecoveryPackDialog extends LitElement {
         }
       </div>
       ${this.step === "lost" ? this.#lost() : nothing}
+      ${
+        this.step === "not-kept"
+          ? html`<div data-test="not-kept" role="alert">
+              <p>${t("recovery_pack_dialog.not_kept")}</p>
+              <p>${t("recovery_pack_dialog.lost_new_key_choices")}</p>
+            </div>`
+          : nothing
+      }
+      ${
+        this.step === "not-known" && this.shown
+          ? html`<p class="warning" data-test="not-known" role="alert">
+                ${t("recovery_pack_dialog.not_known")}
+              </p>
+              ${this.#keyBox(this.shown)}`
+          : nothing
+      }
       ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
   }
 
@@ -401,23 +464,27 @@ export class RecoveryPackDialog extends LitElement {
   #shown(shown: { key: string; name: string; url: string; number: number }): TemplateResult {
     return html`<p data-test="shown-lead">${t("master_key_shown.lead")}</p>
       <p class="warning" data-test="shown-warning">${t("master_key_shown.warning")}</p>
-      <wt-master-key-box
-        data-test="master-key-box"
-        .masterKey=${shown.key}
-        .keyName=${shown.name}
-        .pdfUrl=${shown.url}
-        fileName=${`waitron-recovery-pack-${shown.number}.pdf`}
-        .copy=${{
-          name: (name: string) => fill("master_key_shown.key_name", { name }),
-          download: t("master_key_shown.download"),
-          print: t("master_key_shown.print"),
-          copy: t("master_key_shown.copy"),
-          copied: t("master_key_shown.copied"),
-          copyFailed: t("master_key_shown.copy_failed"),
-          printFailed: t("master_key_shown.print_failed"),
-        }}
-        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
-      ></wt-master-key-box>`;
+      ${this.#keyBox(shown)}`;
+  }
+
+  #keyBox(shown: { key: string; name: string; url: string; number: number }): TemplateResult {
+    return html`<wt-master-key-box
+      data-test="master-key-box"
+      .masterKey=${shown.key}
+      .keyName=${shown.name}
+      .pdfUrl=${shown.url}
+      fileName=${`waitron-recovery-pack-${shown.number}.pdf`}
+      .copy=${{
+        name: (name: string) => fill("master_key_shown.key_name", { name }),
+        download: t("master_key_shown.download"),
+        print: t("master_key_shown.print"),
+        copy: t("master_key_shown.copy"),
+        copied: t("master_key_shown.copied"),
+        copyFailed: t("master_key_shown.copy_failed"),
+        printFailed: t("master_key_shown.print_failed"),
+      }}
+      @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+    ></wt-master-key-box>`;
   }
 
   #lost(): TemplateResult {
@@ -431,7 +498,7 @@ export class RecoveryPackDialog extends LitElement {
       <p>
         ${t("recovery_pack_dialog.lost_new_key")}
         ${
-          unreceived?.holdsCurrentMasterKey
+          unreceived?.offeredAtSetup && unreceived.holdsCurrentMasterKey
             ? fill("recovery_pack_dialog.lost_new_key_named", {
                 number: String(unreceived.number),
                 date: packDate(unreceived.madeAt, this.#zone),
@@ -461,7 +528,25 @@ export class RecoveryPackDialog extends LitElement {
             >
           </wt-form-actions>`
         : html``;
-    if (this.step === "lost")
+    if (this.step === "not-known")
+      return html`<wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          data-test="stop-pack"
+          variant="secondary"
+          ?disabled=${this.busy}
+          @click=${leave}
+          >${t("master_key_dialog.stop")}</wt-button
+        >
+        <wt-button
+          data-test="retry-pack"
+          variant="primary"
+          ?disabled=${this.busy}
+          @click=${() => this.#confirmAgain()}
+          >${t("recovery_pack_dialog.try_again")}</wt-button
+        >
+      </wt-form-actions>`;
+    if (this.step === "lost" || this.step === "not-kept")
       return html`<wt-form-actions slot="footer">
         <wt-button slot="cancel" data-test="stop-pack" variant="secondary" @click=${leave}
           >${t(this.lostMasterKey ? "master_key_dialog.stop" : "recovery_pack_dialog.stop")}</wt-button

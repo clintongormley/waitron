@@ -53,7 +53,9 @@ function stubApi() {
       number: 4,
       madeAt: "2026-10-30T09:00:00.000Z",
     }),
-    markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
+    markRecoveryPackReceived: vi
+      .fn<(n: number, masterKey?: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
     getRecoveryPackStatus: vi.fn<() => Promise<RecoveryPackStatus>>().mockResolvedValue(status()),
   };
 }
@@ -477,6 +479,173 @@ describe("the new master key", () => {
   });
 });
 
+describe("confirming the new master key", () => {
+  const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+  const NAME = "2026-11-23 · QZJV";
+  const lost = { code: "connection.failed" };
+
+  /** Makes a new master key whose confirm fails twice, then waits for the dialog to settle. */
+  async function unconfirmed(
+    after: RecoveryPackStatus | Error,
+    settled: string,
+    locale: "en-GB" | "es-ES" = "en-GB",
+  ) {
+    setLocale(locale);
+    const api = stubApi();
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      madeAt: "2026-11-23T09:00:00.000Z",
+      masterKey: { key: KEY, name: NAME },
+    });
+    api.markRecoveryPackReceived.mockRejectedValueOnce(lost).mockRejectedValueOnce(lost);
+    if (after instanceof Error) api.getRecoveryPackStatus.mockRejectedValue(after);
+    else api.getRecoveryPackStatus.mockResolvedValue(after);
+    const opened = await open({ api, at: HELD, kind: "master-key" });
+    const seen = made(opened.el);
+    button(opened.el, "make-pack")!.click();
+    await expect
+      .poll(() => opened.el.shadowRoot!.querySelector(`[data-test=${settled}]`))
+      .not.toBeNull();
+    await opened.el.updateComplete;
+    return { ...opened, seen };
+  }
+
+  it("sends back the key it was shown, and hands the card the PDF only once the box confirms", async () => {
+    const api = stubApi();
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      madeAt: "2026-11-23T09:00:00.000Z",
+      masterKey: { key: KEY, name: NAME },
+    });
+    const confirm = deferred<void>();
+    api.markRecoveryPackReceived.mockReturnValue(confirm.promise);
+    const { el } = await open({ api, kind: "master-key" });
+    const seen = made(el);
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+    expect(api.markRecoveryPackReceived).toHaveBeenCalledWith(4, KEY);
+    await el.updateComplete;
+    expect(seen).toEqual([]);
+    confirm.resolve();
+    await expect.poll(() => seen.length).toBe(1);
+    expect(seen[0]).toMatchObject({ number: 4, received: true });
+    await expect.poll(() => inBox(el, "master-key")?.textContent).toBe(KEY);
+  });
+
+  it("after two failed confirms, a status naming the new key as current shows it and hands the PDF over", async () => {
+    const { el, api, seen } = await unconfirmed(
+      status({ masterKey: { name: NAME, pack: 4 } }),
+      "shown-lead",
+    );
+    expect(api.markRecoveryPackReceived.mock.calls).toEqual([
+      [4, KEY],
+      [4, KEY],
+    ]);
+    expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
+    expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ number: 4, received: true });
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "The box did not take the new master key, so it kept the current one. Make a new master key tries again. Stop closes this window.",
+    ],
+    [
+      "es-ES",
+      "El servidor no aceptó la clave maestra nueva, así que sigue con la actual. Crear una clave maestra nueva lo vuelve a intentar. Parar cierra esta ventana.",
+    ],
+  ] as const)(
+    "a status naming the old key, with nothing waiting, says the key was not kept (%s), shows no key, and the card receives no PDF",
+    async (locale, text) => {
+      const { el, seen } = await unconfirmed(HELD, "not-kept", locale);
+      expect(words(el.shadowRoot!.querySelector("[data-test=not-kept]"))).toBe(text);
+      expect(el.shadowRoot!.querySelector("[data-test=not-kept]")!.getAttribute("role")).toBe(
+        "alert",
+      );
+      expect(el.shadowRoot!.querySelector("wt-master-key-box")).toBeNull();
+      expect(words(button(el, "remake-pack"))).toBe(t("master_key_dialog.make"));
+      expect(words(button(el, "stop-pack"))).toBe(t("master_key_dialog.stop"));
+      expect(button(el, "retry-pack")).toBeNull();
+      expect(seen).toEqual([]);
+    },
+  );
+
+  it("Make a new master key from not kept goes back to the form", async () => {
+    const { el } = await unconfirmed(HELD, "not-kept");
+    button(el, "remake-pack")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=not-kept]")).toBeNull();
+    expect(button(el, "make-pack")!.disabled).toBe(false);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again.",
+      "Try again",
+      "Stop",
+    ],
+    [
+      "es-ES",
+      "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo.",
+      "Volver a intentarlo",
+      "Parar",
+    ],
+  ] as const)(
+    "a key still waiting says it is not known (%s), shows the key with Download and Print, and the card receives no PDF",
+    async (locale, text, retry, stop) => {
+      const { el, seen } = await unconfirmed(
+        status({ ...HELD, newKeyWaiting: true }),
+        "not-known",
+        locale,
+      );
+      expect(words(el.shadowRoot!.querySelector("[data-test=not-known]"))).toBe(text);
+      expect(el.shadowRoot!.querySelector("[data-test=not-known]")!.getAttribute("role")).toBe(
+        "alert",
+      );
+      expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+      expect(inBox(el, "download")).not.toBeNull();
+      expect(inBox(el, "print")).not.toBeNull();
+      expect(words(button(el, "retry-pack"))).toBe(retry);
+      expect(words(button(el, "stop-pack"))).toBe(stop);
+      expect(button(el, "remake-pack")).toBeNull();
+      expect(seen).toEqual([]);
+    },
+  );
+
+  it("an unreadable status is not known either, and the card receives no PDF", async () => {
+    const { el, seen } = await unconfirmed(new Error("offline"), "not-known");
+    expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+    expect(seen).toEqual([]);
+  });
+
+  it("Try again on not known confirms again, re-reads when that fails, and shows the key once a confirm succeeds", async () => {
+    const { el, api, seen } = await unconfirmed(
+      status({ ...HELD, newKeyWaiting: true }),
+      "not-known",
+    );
+    api.markRecoveryPackReceived.mockRejectedValueOnce(lost).mockRejectedValueOnce(lost);
+    button(el, "retry-pack")!.click();
+    await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(2);
+    await el.updateComplete;
+    expect(api.markRecoveryPackReceived).toHaveBeenCalledTimes(4);
+    expect(el.shadowRoot!.querySelector("[data-test=not-known]")).not.toBeNull();
+    expect(seen).toEqual([]);
+    button(el, "retry-pack")!.click();
+    await expect.poll(() => seen.length).toBe(1);
+    expect(api.markRecoveryPackReceived).toHaveBeenCalledTimes(5);
+    expect(api.markRecoveryPackReceived).toHaveBeenLastCalledWith(4, KEY);
+    expect(seen[0]).toMatchObject({ number: 4, received: true });
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=shown-lead]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=not-known]")).toBeNull();
+    expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+  });
+});
+
 describe("a made pack", () => {
   it("marks the pack received, then hands the PDF over and closes", async () => {
     const { el, api, dialog } = await open({ kind: "master-key" });
@@ -712,9 +881,14 @@ describe("a lost answer", () => {
     expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
   });
 
-  it("names the pack and its date when the status names it unreceived, and hands the status on", async () => {
+  it("names setup's pack and its date when the status names it unreceived, and hands the status on", async () => {
     const after = status({
-      unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+      unreceived: {
+        number: 4,
+        madeAt: MADE_AT,
+        offeredAtSetup: true,
+        holdsCurrentMasterKey: true,
+      },
       masterKey: { name: "2026-10-12 · QZJV", pack: 4 },
     });
     const statuses: RecoveryPackStatus[] = [];
@@ -729,11 +903,51 @@ describe("a lost answer", () => {
     expect(statuses).toEqual([after]);
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(
-      fill("recovery_pack_dialog.lost_new_key_named", { number: "4", date: "12 October" }),
+      "The current master key is on recovery pack 4, made on 12 October, which this box never saw arrive.",
     );
   });
 
-  it("names an older unreceived pack that shows the current master key, though a later pack was received", async () => {
+  it.each([
+    [
+      "en-GB",
+      "The new master key did not reach this browser, so the box kept the current one. The current master key is on recovery pack 3, made on 12 October, which this box never saw arrive. Make a new master key tries again. Stop closes this window.",
+    ],
+    [
+      "es-ES",
+      "La clave maestra nueva no llegó a este navegador, así que el servidor sigue con la actual. La clave maestra actual está en el paquete de recuperación 3, hecho el 12 de octubre, que este servidor nunca vio llegar. Crear una clave maestra nueva lo vuelve a intentar. Parar cierra esta ventana.",
+    ],
+  ] as const)("says in %s that the box kept the current key", async (locale, text) => {
+    setLocale(locale);
+    const { el } = await lose({
+      masterKey: true,
+      after: status({
+        unreceived: {
+          number: 3,
+          madeAt: MADE_AT,
+          offeredAtSetup: true,
+          holdsCurrentMasterKey: true,
+        },
+        masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
+      }),
+    });
+    expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toBe(text);
+  });
+
+  it("names no pack when the unreceived pack holding the current key was not setup's", async () => {
+    const { el } = await lose({
+      masterKey: true,
+      after: status({
+        unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+        masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
+      }),
+    });
+    const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
+    expect(lost).toBe(
+      `${t("recovery_pack_dialog.lost_new_key")} ${t("recovery_pack_dialog.lost_new_key_choices")}`,
+    );
+  });
+
+  it("names setup's older unreceived pack that shows the current master key, though a later pack was received", async () => {
     const { el } = await lose({
       masterKey: true,
       after: status({
@@ -744,7 +958,12 @@ describe("a lost answer", () => {
           received: true,
           parts: [],
         },
-        unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+        unreceived: {
+          number: 3,
+          madeAt: MADE_AT,
+          offeredAtSetup: true,
+          holdsCurrentMasterKey: true,
+        },
         masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
       }),
     });
@@ -957,6 +1176,8 @@ describe("the words", () => {
     "recovery_pack_dialog.lost_choices",
     "recovery_pack_dialog.try_again",
     "recovery_pack_dialog.stop",
+    "recovery_pack_dialog.not_kept",
+    "recovery_pack_dialog.not_known",
     "master_key_dialog.heading",
     "master_key_dialog.text",
     "master_key_dialog.make",
