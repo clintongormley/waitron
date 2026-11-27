@@ -70,6 +70,7 @@ async function mountScreen(
     groupCommandBusy?: boolean;
     lines?: TabLine[];
     takesPayment?: boolean;
+    activeTableId?: string;
   } = {},
   theme: "light" | "dark" = "light",
 ) {
@@ -80,6 +81,7 @@ async function mountScreen(
       products: [],
       lines: over.lines ?? [line],
       orderId: "orderId" in over ? over.orderId : "wo-2",
+      activeTableId: over.activeTableId,
       party,
       bills: over.bills ?? bills,
       fullInvoices: over.fullInvoices ?? true,
@@ -162,35 +164,92 @@ describe("Table and bill actions", () => {
   it("keeps the table name above the guest count and party name", async () => {
     const el = await mountScreen({
       party: { ...twoTables, displayName: "Garcia", name: "Garcia" },
+      activeTableId: "t5",
     });
     const sheet = partyMenu(el);
     const trigger = sheet.shadowRoot!.querySelector("button")!;
-    expect(trigger.getAttribute("aria-label")).toBe("Table 4");
-    expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 4");
+    expect(trigger.getAttribute("aria-label")).toBe("Table 5");
+    expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 5");
     expect(textOf(sheet.nextElementSibling!)).toBe("3 guests · Garcia");
     expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 
     await userEvent.click(trigger);
     await commands.parkPointer();
-    await expect.element(page.getByRole("dialog", { name: "Table 4" })).toBeVisible();
-    expect(getComputedStyle(trigger).backgroundColor).toBe("rgb(210, 239, 251)");
+    await expect.element(page.getByRole("dialog", { name: "Table 5" })).toBeVisible();
+    const title = sheet.querySelector('[slot="trigger"]')!;
+    expect(getComputedStyle(title).backgroundColor).toBe("rgb(210, 239, 251)");
+    const icon = title.querySelector("wt-icon")!;
+    expect(getComputedStyle(icon).color).toBe(getComputedStyle(title).color);
+    expect(title.getBoundingClientRect().left).toBeGreaterThan(0);
     await userEvent.keyboard("{Escape}");
     expect(focusOnMenu(el, sheet)).toBe(true);
-    await expect.poll(() => getComputedStyle(trigger).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await expect.poll(() => getComputedStyle(title).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  it("keeps the menu inside the order column as the display changes width", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen();
+      const sheet = partyMenu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const popup = sheet.shadowRoot!.querySelector('[role="dialog"]')!;
+      const order = () => el.shadowRoot!.querySelector("[data-draft-pane]")!;
+      const edges = (element: Element) => {
+        const { left, right } = element.getBoundingClientRect();
+        return [Math.round(left), Math.round(right)];
+      };
+      expect(edges(popup)).toEqual([0, 390]);
+      for (const [width, height] of [
+        [844, 390],
+        [1280, 900],
+      ] as const) {
+        await page.viewport(width, height);
+        await expect.poll(() => edges(order())[0]).toBeGreaterThan(0);
+        await expect.poll(() => edges(popup)).toEqual(edges(order()));
+      }
+      await page.viewport(390, 844);
+      await expect.poll(() => edges(popup)).toEqual([0, 390]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("opens table actions under the saved name of a joined table group", async () => {
+    const el = await mountScreen();
+    el.tables = el.tables.map((row) => ({
+      ...row,
+      today: {
+        placement: null,
+        seats: null,
+        fixed: false,
+        takenOff: false,
+        joinId: "joined",
+        joinName: "Terrace long",
+        joinSeats: null,
+        zoneRevision: 1,
+      },
+    }));
+    await el.updateComplete;
+    const sheet = partyMenu(el);
+    const trigger = sheet.shadowRoot!.querySelector("button")!;
+    expect(trigger.getAttribute("aria-label")).toBe("Terrace long");
+    await userEvent.click(trigger);
+    await expect.element(page.getByRole("dialog", { name: "Terrace long" })).toBeVisible();
   });
 
   it.each([
-    ["en", "Split the table"],
-    ["es", "Separar la mesa"],
-  ] as const)("shows the shared split row and its label in %s", async (locale, label) => {
+    ["en", "Join tables", "Split the table"],
+    ["es", "Unir mesas", "Separar la mesa"],
+  ] as const)("shows the joined-table action labels in %s", async (locale, join, split) => {
     setLocale(locale);
     const el = await mountScreen();
     const sheet = partyMenu(el);
     await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
-    const split = sheet.querySelector('[data-action="split-table"]')!;
-    const row = split.querySelector("wt-menu-row");
-    expect(row?.getAttribute("label") ?? textOf(split)).toBe(label);
-    expect(split.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+    const joinButton = sheet.querySelector('[data-action="join"]')!;
+    const splitButton = sheet.querySelector('[data-action="split-table"]')!;
+    expect(joinButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(join);
+    expect(splitButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(split);
+    expect(splitButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
   });
 
   it.each([
@@ -228,6 +287,23 @@ describe("Table and bill actions", () => {
     await userEvent.click(trigger);
     expect(control.checked).toBe(true);
   });
+
+  it.each([false, true])(
+    "toggles saved state %s when the Bill requested label is tapped",
+    async (requested) => {
+      const el = await mountScreen({ requested });
+      const events = capture(el, "request-bill");
+      const sheet = partyMenu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const label = sheet
+        .querySelector("wt-menu-row:has(wt-switch)")!
+        .shadowRoot!.querySelector(".label")!;
+      await userEvent.click(label);
+      expect(events).toEqual([{ requested: !requested }]);
+      expect(sheet.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+      expect(focusOnMenu(el, sheet)).toBe(true);
+    },
+  );
 
   it("offers the table sheet and bill picker without an empty bill actions button", async () => {
     const el = await mountScreen({ orderId: undefined });
@@ -987,6 +1063,21 @@ describe("Table and bill actions", () => {
   });
 
   describe("A1234: focus returns to the menu that opened a window", () => {
+    it("focuses the bill picker when the open naming window loses its bill", async () => {
+      const el = await mountScreen();
+      await userEvent.click(menu(el).shadowRoot!.querySelector("button")!);
+      await userEvent.click(item(el, '[data-action="name-bill"]')!);
+      expect(el.shadowRoot!.querySelector("till-bill-name-dialog")).not.toBeNull();
+
+      el.orderId = undefined;
+      el.bills = [];
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-bill-name-dialog")).toBeNull();
+      expect(menu(el)).toBeNull();
+      expect(focusOnMenu(el, el.shadowRoot!.querySelector("[data-bill-switcher]")!)).toBe(true);
+    });
+
     it("Name the party: Cancel, Escape and Save", async () => {
       const el = await mountScreen();
       const dialog = () => el.shadowRoot!.querySelector("till-party-name-dialog")!;

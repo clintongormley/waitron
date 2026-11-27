@@ -574,10 +574,9 @@ anyway**. Check an unreviewed dish or extra yourself; missing nutrition informat
 establish that it is suitable.
 
 Later sends offer new dishes for ticking. A dish you already submitted on hold is not offered
-again just because you fire it later. **Change** beside the table's answer, or **Allergies**
-under **Whole table** in the **⋮** menu, opens the full editor, including previously sent dishes.
-You can edit or delete a guest there; deleting the last guest leaves the Allergies answer until you
-change it.
+again just because you fire it later. To edit the answer, tap **Change** beside it or tap the table
+name and choose **Allergies**. The full editor includes previously sent dishes. You can edit or
+remove a guest there. When you remove the last guest, the Allergies answer stays until you change it.
 
 Moving a counter bill to a table also checks that table's answer and offers the arriving dishes.
 Cancel leaves the bill where it is. If the table changes while you answer, review the refreshed

@@ -29,6 +29,9 @@
   --wt-font-weight-bold: 600;
 
   --wt-tap-min: 44px;
+  --wt-switch-track-height: 26px;
+  --wt-switch-thumb-size: 20px;
+  --wt-switch-thumb-inset: 3px;
 
   --wt-google-mark-size: 20px;
   --wt-google-mark-gap: 10px;

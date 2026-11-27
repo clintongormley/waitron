@@ -197,7 +197,13 @@ import {
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuestCount } from "../state/receipt-guests.js";
-import { detailsHeading, seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
+import {
+  detailsHeading,
+  groupName,
+  mergeMembersOf,
+  seatsGuests,
+  shownName as tableShownName,
+} from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -2053,6 +2059,7 @@ export class TillTableOrderScreen extends LitElement {
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
     if (this.wide && this.view === "order") void this.#showMenu();
+    void this.updateComplete.then(() => this.#placePartyMenu());
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -2569,6 +2576,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
+    this.#placePartyMenu();
     this.#refocusMenu();
     this.#placeStepFocus();
     if (changed.has("splitRead")) this.#returnToSplitFoot();
@@ -2585,13 +2593,25 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Return focus to the menu that opened the naming or guests window. */
   #refocusMenu(): void {
-    const open = this.naming !== null || this.billNaming !== null || this.counting !== null;
-    if (this.#menuWindowOpen && !open) this.#menuOpener?.focus();
+    const open =
+      this.renderRoot.querySelector(
+        "till-party-name-dialog, till-bill-name-dialog, till-party-guests-dialog",
+      ) !== null;
+    if (this.#menuWindowOpen && !open) this.#focusMenuOpener();
     this.#menuWindowOpen = open;
   }
 
   #menuWindowOpen = false;
-  #menuOpener: HTMLElement | null = null;
+  #menuOpener: "[data-party-menu]" | "[data-table-menu]" | null = null;
+
+  #focusMenuOpener(): void {
+    if (this.#menuOpener === null) return;
+    const trigger =
+      this.renderRoot.querySelector<HTMLElement>(this.#menuOpener) ??
+      this.renderRoot.querySelector<HTMLElement>("[data-bill-switcher]") ??
+      this.renderRoot.querySelector<HTMLElement>("[data-party-menu]");
+    trigger?.focus();
+  }
 
   /** A step the ⋮ opens is drawn in the side panel, which can be below the order: focus and scroll
    * go to its heading. A step replaced or closed while focus is in the panel would drop focus to the
@@ -2612,7 +2632,7 @@ export class TillTableOrderScreen extends LitElement {
     const focus = this.#stepFocus;
     this.#stepFocus = undefined;
     if (focus === "menu") {
-      this.#menuOpener?.focus();
+      this.#focusMenuOpener();
       return;
     }
     if (focus !== "step") return;
@@ -6884,7 +6904,9 @@ export class TillTableOrderScreen extends LitElement {
 
   #fromMenu(event: Event, choose: () => void): void {
     if (!this.#actionControlCurrent(event)) return;
-    const opener = (event.currentTarget as HTMLElement).closest<HTMLElement>("wt-row-actions");
+    const opener = (event.currentTarget as HTMLElement).closest("[data-party-menu]")
+      ? "[data-party-menu]"
+      : "[data-table-menu]";
     this.#leavingActions(() => {
       this.#menuOpener = opener;
       choose();
@@ -6974,20 +6996,35 @@ export class TillTableOrderScreen extends LitElement {
     ]);
   }
 
+  #placePartyMenu(): void {
+    const menu = this.renderRoot.querySelector<HTMLElement>("[data-party-menu][data-open]");
+    if (menu === null) return;
+    const pane = this.wide ? this.renderRoot.querySelector("[data-draft-pane]") : null;
+    const bounds = pane?.getBoundingClientRect();
+    menu.style.setProperty("--wt-party-menu-left", bounds ? `${Math.max(0, bounds.left)}px` : "");
+    menu.style.setProperty(
+      "--wt-party-menu-right",
+      bounds ? `${Math.max(0, document.documentElement.clientWidth - bounds.right)}px` : "",
+    );
+  }
+
   #partyMenu(): TemplateResult {
     const party = this.party;
     const table =
       this.tables.find((row) => row.id === this.activeTableId) ??
       this.tables.find((row) => row.id === party?.tableIds[0]);
+    const joinedName =
+      table?.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, table));
     return tablePartyMenu({
       heading: table
-        ? detailsHeading(table, null)
+        ? detailsHeading(table, joinedName)
         : (party?.displayName ?? t("table.actions_title")),
       party,
       allergy: this.#allergy() ?? null,
       requested: party !== null && billRequestOf(this.tables, party.id) !== undefined,
       commandBusy: this.groupCommandBusy,
       choose: (event, action) => this.#fromMenu(event, () => this.#chooseTableAction(action)),
+      place: () => this.#placePartyMenu(),
       requestBill: (requested) => this.#dispatch("request-bill", { requested }),
       finish: () => this.#dispatch("finish-table", {}),
     });

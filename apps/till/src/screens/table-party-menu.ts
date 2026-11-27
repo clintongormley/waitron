@@ -17,6 +17,7 @@ interface TablePartyMenuOptions {
   requested: boolean;
   commandBusy: boolean;
   choose(event: Event, action: TablePartyAction): void;
+  place(): void;
   requestBill(requested: boolean): void;
   finish(): void;
 }
@@ -47,6 +48,11 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
     .filter(Boolean)
     .join(" · ");
   const hasSplit = party !== null && party.tableIds.length > 1;
+  const requestBill = (element: HTMLElement, checked: boolean) => {
+    if (commandBusy) return;
+    element.closest("wt-row-actions")?.hide({ restoreFocus: true });
+    options.requestBill(checked);
+  };
   const row = (action: TablePartyAction, key: StringKey, value: string | number | null = null) =>
     html`<button
       type="button"
@@ -75,6 +81,7 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
         const menu = event.currentTarget as HTMLElement;
         menu.toggleAttribute("data-open", event.detail.open);
         if (!event.detail.open) return;
+        options.place();
         const control = menu.querySelector("wt-switch");
         if (control !== null) control.checked = requested;
       }}
@@ -87,7 +94,14 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
             : html` ${row("allergy", "allergy.title", allergySummary)}
                 ${row("guests", "table.action_guests", party.guestCount)}
                 ${row("name", "table.action_name", party.name)}
-                <wt-menu-row label=${t("signal.bill_requested")} divider>
+                <wt-menu-row
+                  label=${t("signal.bill_requested")}
+                  divider
+                  @click=${(event: MouseEvent) => {
+                    if (event.target === event.currentTarget)
+                      requestBill(event.currentTarget as HTMLElement, !requested);
+                  }}
+                >
                   <wt-switch
                     data-bill-request
                     hide-label
@@ -123,29 +137,37 @@ export const tablePartyMenuStyles = css`
   .party-menu-header {
     align-self: start;
     max-width: 100%;
+    padding-inline: var(--wt-space-2);
   }
   .party-menu {
+    --wt-party-menu-left: 0px;
+    --wt-party-menu-right: 0px;
     max-width: 100%;
+  }
+  .party-menu::part(popup) {
+    left: var(--wt-party-menu-left);
+    right: var(--wt-party-menu-right);
   }
   .party-menu::part(trigger) {
     max-width: 100%;
     font-size: var(--wt-menu-row-label-size);
     font-weight: var(--wt-font-weight-bold);
-    padding-inline: var(--wt-space-2);
+    padding-inline: 0;
     overflow-wrap: anywhere;
-  }
-  .party-menu[data-open]::part(trigger),
-  .party-menu::part(trigger):hover {
-    background: var(--wt-color-surface-lifted);
   }
   .party-menu [slot="trigger"] {
     display: inline-flex;
     align-items: center;
     gap: var(--wt-space-1);
+    min-height: var(--wt-space-6);
+    padding: var(--wt-space-1) var(--wt-space-2);
+    border-radius: var(--wt-radius-md);
+  }
+  .party-menu:is([data-open], :hover) [slot="trigger"] {
+    background: var(--wt-color-surface-lifted);
   }
   .party-menu [slot="trigger"] wt-icon {
     flex: none;
-    color: var(--wt-color-text-muted);
   }
   .party-menu-subtitle {
     margin: 0 var(--wt-space-2);
@@ -160,25 +182,5 @@ export const tablePartyMenuStyles = css`
   .party-menu [data-finish-table]::part(button) {
     min-height: var(--wt-menu-row-height);
     font-size: var(--wt-menu-row-label-size);
-  }
-  @media (forced-colors: none) {
-    .party-menu wt-switch::part(track) {
-      width: var(--wt-tap-min);
-      height: calc(var(--wt-space-5) + 2 * var(--wt-field-line-width));
-      border-radius: var(--wt-radius-full);
-    }
-    .party-menu wt-switch:not([checked])::part(track) {
-      background: var(--wt-color-surface-sunken);
-    }
-    .party-menu wt-switch::part(thumb) {
-      width: calc(var(--wt-space-4) + var(--wt-space-1));
-      height: calc(var(--wt-space-4) + var(--wt-space-1));
-      margin-inline-start: calc(var(--wt-space-1) - var(--wt-field-line-width));
-      border-radius: var(--wt-radius-full);
-      background: var(--wt-color-paper);
-    }
-    .party-menu wt-switch[checked]::part(thumb) {
-      transform: translateX(calc(var(--wt-space-4) + 2 * var(--wt-field-line-width)));
-    }
   }
 `;

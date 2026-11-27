@@ -25,8 +25,8 @@ Full invoice, Print and Receipt copy keep their handlers. This changes no receip
   Keep the selector used by Full invoice and reuse all bill eligibility and document handlers.
   The bill picker is the route to **+ New bill**. Keep Split for parties at two or more tables.
 - Use `wt-row-actions` in panel mode with ordinary controls. The shared sheet focuses the first
-  enabled choice. Put the existing switch in a shared row and style its exposed track and thumb
-  for picture i in both themes. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
+  enabled choice. The 01:04 watcher note uses the shared switch with frame i’s colours, makes its
+  whole row tappable, and confines the wide sheet to the measured order column. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
   busy guard, call the sheet’s `hide()` on an accepted toggle and send the existing `request-bill`
   event once. Use the saved state on reopening after a refusal. In `#refocusMenu` and
   `#placeStepFocus`, return focus to the actual opener. Verify return from the app’s allergy

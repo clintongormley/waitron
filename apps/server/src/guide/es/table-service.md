@@ -670,7 +670,7 @@ Escape cierra la lista.
 
 Toca el nombre de la mesa para ver las acciones que afectan a todo el grupo. Puedes consultar
 **Alergias**, cambiar **Comensales** o **Poner nombre a los clientes**, y activar o desactivar
-**Cuenta pedida**. Usa **Mover a otra mesa**, **Unir una mesa** o **Separar la mesa** para cambiar
+**Cuenta pedida**. Usa **Mover a otra mesa**, **Unir mesas** o **Separar la mesa** para cambiar
 dónde se sienta el grupo. **Cerrar mesa** está al final. En una pantalla baja, desplázate por el
 panel hasta encontrarlo.
 
@@ -686,7 +686,7 @@ cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a q
 factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
 la mesa con una cuenta nueva y vacía.
 
-Si hay pedidos sin enviar que impiden **Unir una mesa**, **Mover a otra mesa**, **Mover esta cuenta**
+Si hay pedidos sin enviar que impiden **Unir mesas**, **Mover a otra mesa**, **Mover esta cuenta**
 o **Juntar cuentas**, elige **Tomar el pedido** en las cuentas indicadas y vuelve a intentarlo.
 
 Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla

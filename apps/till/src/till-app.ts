@@ -24480,6 +24480,8 @@ export class TillApp extends LitElement {
     });
   }
 
+  /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap
+   * the user with no way out. */
   #drillBody(): TemplateResult | typeof nothing {
     switch (this.drill?.kind) {
       case "find-bill":

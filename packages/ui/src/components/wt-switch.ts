@@ -65,20 +65,20 @@ export class WtSwitch extends LitElement {
       }
 
       .track {
-        width: var(--wt-space-6);
-        height: var(--wt-space-4);
-        border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-field-line);
+        width: var(--wt-tap-min);
+        height: var(--wt-switch-track-height);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-switch-off);
         transition: background 120ms ease;
       }
 
       .thumb {
         position: absolute;
-        left: 0;
-        width: var(--wt-space-4);
-        height: var(--wt-space-4);
-        border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-surface);
+        left: var(--wt-switch-thumb-inset);
+        width: var(--wt-switch-thumb-size);
+        height: var(--wt-switch-thumb-size);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-switch-thumb);
         box-shadow: var(--wt-shadow-1);
         transition: transform 120ms ease;
       }
@@ -94,7 +94,9 @@ export class WtSwitch extends LitElement {
       }
 
       :host([checked]) .thumb {
-        transform: translateX(var(--wt-space-4));
+        transform: translateX(
+          calc(var(--wt-tap-min) - var(--wt-switch-thumb-size) - 2 * var(--wt-switch-thumb-inset))
+        );
       }
 
       :host([disabled]) {
@@ -200,8 +202,8 @@ export class WtSwitch extends LitElement {
             aria-describedby=${this.description ? `${this.inputId}-description` : nothing}
             @change=${this.onChange}
           />
-          <span class="track" part="track"></span>
-          <span class="thumb" part="thumb"></span>
+          <span class="track"></span>
+          <span class="thumb"></span>
         </span>
         ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
       </span>

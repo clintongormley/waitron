@@ -633,7 +633,7 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 
 Tap the table name for actions that affect everyone at the table. You can check **Allergies**,
 change **Guests** or **Name the party**, and turn **Bill requested** on or off. Use **Move to another
-table**, **Join a table** or **Split the table** to change where the party sits. **Finish table** is at
+table**, **Join tables** or **Split the table** to change where the party sits. **Finish table** is at
 the bottom. On a short screen, scroll the sheet down to reach it.
 
 Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
@@ -648,7 +648,7 @@ receiving bill does not name, the till asks first: choose the customer the merge
 to, or **Do not merge**. If you move the table's last bill away, the till stays at the table with a
 fresh empty bill.
 
-If unsent orders block **Join a table**, **Move to another table**, **Move this bill** or **Merge bills**,
+If unsent orders block **Join tables**, **Move to another table**, **Move this bill** or **Merge bills**,
 choose **Take over draft** for the bills listed, then try the action again.
 
 If another till merges the bill on your screen into another bill, or moves it to another table,
