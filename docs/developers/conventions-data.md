@@ -5427,14 +5427,15 @@ days"). The backup schedule row below keeps its earlier wording for interval sch
 | The server's printer discovery window and its discovered list (`apps/server/src/print-api.ts`, `discoveryLeftMs`, `isFresh`; `discovery-listing.ts`, `isListed`, in memory) | the window shuts; reports age out | the window stays open, so every agent keeps running discovery passes, at least a polling interval apart, and a report stamped before the step stays listed, keeping its row and the Pair or Forget it authorises, for 400 days or until a restart | fixed: the window, the age of server discovery reports and the age of agent Bluetooth capability reports use the steady clock. The dashboard still receives wall-clock `lastSeenAt` and `discoveryUntil`, and its typed-address check still compares the report's calendar time with the probe's. Tests: `print-api.test.ts`, “keeps a reported device after a wall-clock step”, “times the discovery window on the steady clock” and “lists null once the last report is more than a minute old”. `discovery-listing.test.ts` covers elapsed cutoffs. |
 | The server's Bluetooth pair and forget commands (`apps/server/src/printer-bluetooth-commands.ts`, in memory) | each ends at its limit | a pending command, which holds a pair's PIN, keeps going out on every pull, and one pending command refuses a differing operation with `printer.bluetooth_command_busy`, its kind and remaining seconds; a result stays shown; the sweep of agents no call names stops; for 400 days or until a restart | fixed: pending commands (120 seconds), results (60 seconds) and the sweep (one minute) are measured on the steady clock, so a wall step changes nothing (tests: `printer-bluetooth-commands.test.ts`, "on the default clock, a wall-clock step changes no wait") |
 | Venue liveness (`packages/store/src/venue-liveness.ts:127`) | none: measured on `process.hrtime` | none | nothing to do |
-| The box's TLS certificate (`apps/server/src/self-signed-cert.ts:160`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | accepted with a backlog line (plan Task 15): a leaf issued while the clock was more than a day ahead is refused by devices whose clock is right; read, not run |
+| The box's TLS certificate (`apps/server/src/self-signed-cert.ts`, `reissueServerLeaf`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | Historical finding from Task 15: a leaf issued while the clock was more than a day ahead was refused by correctly timed devices. See A1617 below. |
 
 **2026-11-27, A1617:** a replacement HTTPS certificate starts when both the retained root and
 its signer are valid. A correctly timed TLS client accepted a newly added hostname after the
 replacement was issued three days ahead. See `self-signed-cert.test.ts`, "serves a replacement
-leaf to a correctly timed client". For an HTTPS certificate already dated in the future, correct the
-clock, then use **Repair** and **Continue** on the HTTP page. A future-dated authority requires
-new trust.
+leaf to a correctly timed client". For an HTTPS certificate already dated in the future, correct
+the clock, then choose **Set up secure connection** on the HTTP page. If the authority is dated
+in the future, follow the page's instructions to install the new one. Choose **Reconnect** if
+offered, then choose **Continue to Waitron** once the device trusts the certificate.
 
 ## An envío to AEAT carries one taxpayer name
 
