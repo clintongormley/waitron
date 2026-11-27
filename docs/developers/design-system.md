@@ -6509,7 +6509,9 @@ colour with a white `check`), then one button holding the quantity (`lg`, bold),
 medium), a muted `sm` second line of extras, answers and note, and the price (`md`) at the right,
 then the split control as a muted `chevron-down` on a row of more than one. The price is
 `draftLinePrice` (`apps/till/src/state/draft-layout.ts`), the same per-line rule the order total
-adds. The row added last is `--wt-color-surface-lifted`. A tap opens the dish's details; a press
+adds. The row added last is `--wt-color-surface-lifted`; on it an extra's diet badge keeps its
+`--wt-color-success` border but its text reads `--wt-color-text`, since the green text measures 4.13:1
+on that surface in the light theme. A tap opens the dish's details; a press
 held until the whole row is outlined (2px of `--wt-color-primary` inside its edge) and then moved
 drags it; released without moving, it opens the details; Remove, Move to… and Fire in the draft bar
 act on the ticked rows. The selection box is a `checkbox` named by the dish, its quantity, its guest

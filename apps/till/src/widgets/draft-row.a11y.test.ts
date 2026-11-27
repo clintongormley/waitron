@@ -19,6 +19,53 @@ const dish = (id: string, name: string): TillProduct => ({
 });
 const croquettes = dish("croquettes", "Croquettes");
 const bravas = dish("bravas", "Bravas");
+const toast: TillProduct = {
+  ...dish("toast", "Toast"),
+  offeredModifiers: [
+    {
+      kind: "extras",
+      id: "toppings",
+      name: "Toppings",
+      customerName: null,
+      kitchenName: null,
+      minPicks: 0,
+      maxPicks: 3,
+      items: [
+        {
+          presentation: {
+            name: "Cheese",
+            customerName: null,
+            kitchenName: null,
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          productId: "cheese",
+          name: "Cheese",
+          customerName: null,
+          kitchenName: null,
+          price: "1.00",
+          vatClass: "general",
+          takeawayVatClass: "general",
+          portion: "1",
+          unit: {
+            id: "each",
+            staffName: "Each",
+            staffAbbreviation: "ea",
+            name: { en: "Each" },
+            abbreviation: { en: "ea" },
+            precision: 0,
+            hardwareUnit: null,
+          },
+          maxQuantity: 3,
+          preselected: false,
+          addAllergens: { milk: {} },
+          suitableFor: ["vegetarian", "vegan"],
+        },
+      ],
+    },
+  ],
+};
 
 async function mount(theme: "light" | "dark", lines: OrderLine[], props: Partial<TillBasket> = {}) {
   const store = new WorkingOrderStore();
@@ -48,6 +95,38 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     store.addProduct(croquettes, "1");
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("[data-last-added]")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the row added last, with an extra's own allergen and diet marks, has no violations", async () => {
+    const { el, host, store } = await mount(theme, [{ product: bravas, quantity: "1" }]);
+    store.addProduct(toast, "1", {
+      extras: [
+        { listId: "toppings", productId: "cheese", name: "Cheese", price: "1.00", quantity: 1 },
+      ],
+    });
+    await el.updateComplete;
+    const row = el.shadowRoot!.querySelector("[data-last-added]")!;
+    expect(row.querySelector('[data-test="option-allergens-1-0"]')).not.toBeNull();
+    expect(row.querySelectorAll('[data-test="option-diet-1-0"] > .diet-badge')).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the row added last has no violations with its period ended, then blocked", async () => {
+    const { el, host, store } = await mount(theme, [{ product: bravas, quantity: "1" }]);
+    store.addProduct(croquettes, "1");
+    store.setEndedPeriods([undefined, { menuId: "lunch", periodName: "Lunch" }]);
+    const warning = document.createElement("div");
+    warning.slot = "after-1";
+    warning.textContent = "⚠ Kitchen is closed";
+    el.append(warning);
+    await el.updateComplete;
+    const row = () => el.shadowRoot!.querySelector("[data-last-added]")!;
+    expect(row().querySelector("[data-period-ended]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    store.setBlocked([undefined, "unavailable"]);
+    await el.updateComplete;
+    expect(row().querySelector(".not-offered")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

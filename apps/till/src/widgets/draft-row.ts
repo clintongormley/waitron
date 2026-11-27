@@ -195,6 +195,10 @@ export const draftRowStyles = css`
   :host .order-lines > .entry.draft-row[data-last-added] {
     background: var(--wt-color-surface-lifted);
   }
+  /* --wt-color-success text is under 4.5:1 on the lifted surface in light; the border keeps the green. */
+  :host .draft-row[data-last-added] .diet-badge {
+    color: var(--wt-color-text);
+  }
   :host .order-lines > .entry.draft-row[data-draft-dragging] {
     outline: 2px solid var(--wt-color-primary);
     outline-offset: -2px;
