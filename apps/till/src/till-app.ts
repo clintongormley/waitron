@@ -22619,7 +22619,7 @@ export class TillApp extends LitElement {
     const refusal = refusalOf({ code: "bill.unsent_dishes", billId: open.billId }, false);
     refusal.billLabel = this.#paymentBillLabel(open.billId);
     this.#unsentSaid = refusal;
-    this.billPaying = { ...open, refusal };
+    this.billPaying = { ...open, refusal, busy: false };
     return true;
   }
 
@@ -22733,6 +22733,7 @@ export class TillApp extends LitElement {
       const preview = await previewPayment(api, open.billId, asked, paidEdit);
       const now = this.#billPayingNow(open.id);
       if (now === null) return;
+      const busy = quote !== undefined;
       if (
         quote !== undefined &&
         (!current() || quote.request.context !== this.#tablePayContext(now))
@@ -22745,7 +22746,7 @@ export class TillApp extends LitElement {
           refusal: { code: "bill.allocation_changed" },
           busy: false,
         };
-      else this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
+      else this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
     }

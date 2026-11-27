@@ -17,11 +17,11 @@ import {
   openDialog,
   openTable,
   paymentOf,
-  choosePayMethod,
   press,
   resetBillPayDrafts,
   shell,
   stubApi,
+  takeBillPaymentFromDialog,
   tableOrder,
   text,
   till,
@@ -576,9 +576,7 @@ it("switches the button off while a card payment's outcome is unknown, saying wh
   await openTable(el);
   await openDialog(el, "rest");
   expect(deferredReason(el)).toBe("");
-  await choosePayMethod(el, "card");
-  await press(el, "[data-pay-continue]");
-  await press(el, "[data-pay-confirm]");
+  await takeBillPaymentFromDialog(el);
   await press(el, "[data-pay-confirm]");
   expect(api.takeBillPayment).toHaveBeenCalledTimes(2);
   const button = payDialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(

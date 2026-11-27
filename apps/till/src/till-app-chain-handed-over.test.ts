@@ -15,6 +15,7 @@ import {
   press,
   inDialog,
   choosePayMethod,
+  takeBillPaymentFromDialog,
 } from "../test/bill-pay-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -256,9 +257,7 @@ it.each(["en-GB", "es-ES"])(
     await openTable(el);
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
-    await choosePayMethod(el, "card");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await flush(el);
     expect(write).toHaveBeenCalledOnce();
     expect(write.mock.calls[0]![1]).toMatchObject({ method: "card", entry: "reader" });
