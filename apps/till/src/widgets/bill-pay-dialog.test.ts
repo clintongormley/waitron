@@ -211,7 +211,7 @@ it("ignores the previous quote while the next contribution is waiting to be chec
   expect(reads).toMatchObject([{ asked: { choice: { kind: "contribution", amount: "40" } } }]);
 });
 
-it("keeps the receipt guest field while checking a changed card tip", async () => {
+it("keeps the receipt guest field and holds both tenders while checking a changed card tip", async () => {
   const el = await mount({
     quiet: true,
     way: "whole",
@@ -220,17 +220,23 @@ it("keeps the receipt guest field while checking a changed card tip", async () =
     cardReader: "simulator",
   });
   await showCardQuote(el, "120.00");
+  const checked = el.checkedQuote!;
+  el.checkedQuote = { ...checked, cash: checked.preview };
+  await el.updateComplete;
   const guests = () =>
     root(el).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]');
+  const tender = (method: "card" | "cash") =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-quiet-pay-${method}]`);
   expect(guests()?.value).toBe("4");
+  expect(tender("card")?.disabled).toBe(false);
+  expect(tender("cash")?.disabled).toBe(false);
 
   await click(el, "[data-quiet-pay-tip]");
   await type(el, "cardTip", "2");
 
   expect(guests()?.value).toBe("4");
-  expect(
-    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-quiet-pay-card]")?.disabled,
-  ).toBe(true);
+  expect(tender("card")?.disabled).toBe(true);
+  expect(tender("cash")?.disabled).toBe(true);
 });
 
 it("leaves a tip entered for another card machine out of the opening amount when only that machine can take cards", async () => {

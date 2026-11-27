@@ -245,8 +245,8 @@ Use **Refresh printers** when none are listed, or **Cancel** to leave without pr
 ## Payment slips {#reader-slips}
 
 If the payer wants a slip, choose **Print payment slip** after you take their payment by cash,
-**Other card machine** or card reader. For a part payment, print the slip before taking the next
-payment. After the final payment, use **Customer document**. The button appears
+**Other card machine** or card reader. For a part payment, use the button on Pay when it shows the
+payment was received. After the final payment, use **Customer document**. The button appears
 when your device has a payment slip printer. A reader set to print its own slip handles that payment.
 A slip shows the payment and how it was made. For
 **Other card machine**, it includes the machine and operation number you entered.
@@ -1062,8 +1062,8 @@ To use a separate machine, follow [Use another card machine](table-service.md#ou
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the table’s Pay screen.
 To take it off before starting the payment, choose **Edit tip**, then **Remove tip**. For a
 separate card machine, enter the tip with the other payment details. At the Counter, enter
-**Tip on the card (optional)** before continuing. The Counter confirmation separates
-**Paid off the bill**, **Tip** and **Charged on the card**.
+**Tip on the card (optional)** before continuing. The confirmation at the Counter or for
+**Other card machine** separates **Paid off the bill**, **Tip** and **Charged on the card**.
 An amount above what is still due becomes a tip, so check the full card charge with the guest before
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
 tip. If the venue does not take tips, use the amount the refusal says can be charged.
