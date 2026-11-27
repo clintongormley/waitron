@@ -548,8 +548,12 @@ describe("the customer menu Online preview", () => {
     expect(breadDeclarations.textContent?.trim()).toBe("");
     expect(bread.getBoundingClientRect().left).toBeGreaterThan(pepper.getBoundingClientRect().left);
     const dish = pepper.closest(".dish")!;
+    const priceLabel = dish.querySelector(".price")!;
+    expect(parseFloat(getComputedStyle(priceLabel).fontSize)).toBeGreaterThanOrEqual(
+      0.85 * parseFloat(getComputedStyle(pepper).fontSize),
+    );
     const price = document.createRange();
-    price.selectNodeContents(dish.querySelector(".price")!);
+    price.selectNodeContents(priceLabel);
     const photo = dish.querySelector("img")!;
     const priceBox = price.getBoundingClientRect();
     const nameBox = pepper.getBoundingClientRect();
@@ -653,9 +657,24 @@ describe("the customer menu Online preview", () => {
     const parent = page.getByRole("heading", { name: "From the oven", exact: true }).first();
     const nested = page.getByRole("heading", { name: "Vegetables", exact: true });
     await expect.element(nested).toBeVisible();
-    expect(parseFloat(getComputedStyle(nested.element()).fontSize)).toBeLessThan(
-      parseFloat(getComputedStyle(parent.element()).fontSize),
-    );
+    const parentSize = parseFloat(getComputedStyle(parent.element()).fontSize);
+    const dish = page.getByText("Roast pepper", { exact: true }).element();
+    expect(parentSize).toBeGreaterThanOrEqual(1.35 * parseFloat(getComputedStyle(dish).fontSize));
+    expect(parseFloat(getComputedStyle(nested.element()).fontSize)).toBeLessThan(parentSize);
+  });
+
+  it("paints allergen and diet icons in the same muted colour as the dish description", async () => {
+    await open(() => Response.json(published()));
+    const allergen = page.getByRole("img", { name: "Cereals containing gluten (Wheat)" });
+    const diet = page.getByRole("img", { name: "Vegan" });
+    await expect.element(allergen).toBeVisible();
+    await expect.element(diet).toBeVisible();
+    const description = page.getByText("Wood-fired with olive oil", { exact: true }).first();
+    const muted = getComputedStyle(description.element()).color;
+    const dish = page.getByText("Roast pepper", { exact: true }).element();
+    expect(muted).not.toBe(getComputedStyle(dish).color);
+    expect(getComputedStyle(allergen.element()).color).toBe(muted);
+    expect(getComputedStyle(diet.element()).color).toBe(muted);
   });
 
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {

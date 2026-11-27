@@ -386,7 +386,9 @@ export class CustomerMenuPage extends LitElement {
         color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }
-      .section-title,
+      .section-title {
+        font-size: calc(1.4 * var(--wt-font-size-lg));
+      }
       h3 {
         font-size: var(--wt-font-size-lg);
       }
@@ -488,7 +490,8 @@ export class CustomerMenuPage extends LitElement {
         color: var(--wt-color-primary-text);
       }
       .description,
-      .declarations {
+      .declarations,
+      .declarations wt-icon {
         color: var(--wt-color-text-muted);
       }
       .description,
@@ -571,6 +574,7 @@ export class CustomerMenuPage extends LitElement {
         .price {
           margin-block-start: 0;
           margin-inline-start: auto;
+          font-size: calc(0.9 * var(--wt-font-size-lg));
           text-align: end;
         }
         .description {
