@@ -305,6 +305,8 @@ Open: which records need ten years.
 
   > **2026-11-27:** on a full invoice naming a customer, money still owed on a dish cancelled after payment now goes on the same corrective invoice, and while the box's records need checking it waits instead of coming back with no corrective (PR 2b of the same plan). Money given back on one the tax agency refused with nothing Waitron can fix still comes back with no corrective.
 
+  > **2026-11-27, A1619:** money given back no longer waits for the tax agency's answer to the ticket, nor is held back by a refusal of it: on this box's tickets or another box's, refused, held or not yet answered, it goes through a corrective invoice at once, including on a full invoice refused with nothing Waitron can fix ([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).
+
 ## Part 2: Español
 
 **1. Cuándo se expide el tique de la mesa** (a partir de sus respuestas 1.1, 1.3, 1.4 y 1.8)
@@ -469,6 +471,8 @@ Nota: ____
 
   > **27-11-2026:** en una factura completa a nombre de un cliente, el dinero pendiente de un plato cancelado después del pago pasa ahora por la misma factura rectificativa, y mientras hay que revisar los registros del servidor espera en lugar de devolverse sin rectificativa (PR 2b del mismo plan). El dinero devuelto en una factura que la Agencia Tributaria rechazó sin nada que Waitron pueda corregir se sigue devolviendo sin rectificativa.
 
+  > **27-11-2026, A1619:** el dinero devuelto ya no espera la respuesta de la Agencia Tributaria al tique, ni lo detiene un rechazo: en los tiques de este servidor o de otro, rechazados, detenidos o aún sin respuesta, pasa en el momento por una factura rectificativa, también en una factura completa rechazada sin nada que Waitron pueda corregir ([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).
+
 Nota: ____
 
 ## Old question numbers
@@ -586,7 +590,7 @@ never came is lane L's best guess, not the owner's words. Copy it into the share
 sending. The 27 November note naming PR 2b under question 14's goodwill point, and the dates in
 question 6's full-invoice point, were added in both parts with PR 2b of the full-invoice corrective
 plan; copy them too. The 27 November A1614 note beside it was added in both parts by #4471 (A1614);
-copy it too.
+copy it too. The 27 November A1619 note beside it was added in both parts by A1619 PR 1; copy it too.
 
 Question 2's point on guests who split the bill after it was printed was marked answered in both parts
 on 25 November, on the owner's words of that day (lane L `questions.md`, "WATCHER 2026-11-25 11:55";

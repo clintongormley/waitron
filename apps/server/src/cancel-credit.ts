@@ -15,7 +15,7 @@ import {
   seriesId as brandSeriesId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { AppError, type NodeId, type SaleId } from "@waitron/shared";
+import { AppError, type SaleId } from "@waitron/shared";
 import { holdsPayment } from "./bill-payments.js";
 import { servedOrCharged } from "./served-dishes.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -79,17 +79,6 @@ async function substituted(tx: Transaction, saleIds: SaleId[]): Promise<boolean>
 export async function refuseServedDishes(tx: Transaction, workingOrderId: string): Promise<void> {
   const dishes = await servedOrCharged(tx, workingOrderId);
   if (dishes.length > 0) throw new AppError("bill.served_dishes", { workingOrderId, dishes });
-}
-
-/** Refuses, as the regime does (`refuseCreditOf`), a credit `issuingNodeId` would issue of the
- * invoice `invoiceId`, filed against its replacement when it has one. */
-export async function refuseCreditOfRefused(
-  tx: Transaction,
-  backend: FiscalBackend,
-  invoiceId: SaleId,
-  issuingNodeId: NodeId,
-): Promise<void> {
-  await backend.refuseCreditOf?.(tx, await correctionTargetFor(tx, invoiceId), issuingNodeId);
 }
 
 /**

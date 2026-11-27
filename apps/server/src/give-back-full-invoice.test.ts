@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
-import { billAdvances, taxpayer } from "@waitron/db";
+import { billAdvances, invoiceCorrections, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
@@ -273,16 +273,18 @@ describe("Give money back on a full invoice", () => {
     expect(correctivesOf(advance!.advanceSaleId)).toEqual([]);
   });
 
-  it("gives goodwill back as a plain refund on a full invoice AEAT refused with no fix", async () => {
+  it("files goodwill given back on a full invoice AEAT refused with no fix as one R1", async () => {
     const { saleId } = await fullInvoice({ cash: "37.00" });
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
     const body = await giveBody(saleId, ask("goodwill", "10.00"));
-    expect(body.expected).toEqual([{ kind: "refund", amount: "10.00", way: "cash" }]);
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "10.00", way: "cash", lineIds: [] },
+    ]);
     const answer = await give(saleId, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(correctivesOf(saleId)).toEqual([]);
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
     expect(moneyOf(saleId)).toEqual([
-      { applied: 1000, method: "cash", state: "completed", leg: 0, cancel: null },
+      { applied: 1000, method: "cash", state: "completed", leg: 1, cancel: null },
     ]);
   });
 
@@ -306,7 +308,7 @@ describe("Give money back on a full invoice", () => {
   });
 });
 
-describe("a fresh leg on an open give-back once its corrective cannot be filed", () => {
+describe("a fresh leg on an open give-back, whatever AEAT has said about the original", () => {
   /** A €25.00 goodwill give-back on the sale, pressed on `way`; the correction's id. */
   async function opened(saleId: string, way = "cash") {
     const body = await giveBody(saleId, ask("goodwill", "25.00", { way }));
@@ -348,18 +350,19 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
     expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
   });
 
-  it("refuses a reader leg on a full invoice held from sending, as a fresh preview does, sending nothing", async () => {
+  it("on a full invoice held from sending, takes a reader leg, counts it and files one R1", async () => {
     const { saleId } = await fullInvoice({ cash: "20.00" }, { reader: "17.00" });
     const correctionId = await opened(saleId);
     await inTx(venue, (tx) => heldFromSending(tx, saleId));
-    const refused = {
-      status: 409,
-      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
-    };
-    const before = { money: moneyOf(saleId), calls: venue.card.refundCalls.length };
-    expect(await cardLeg(saleId, correctionId, await tenderOf(saleId, "card"))).toEqual(refused);
-    expect({ money: moneyOf(saleId), calls: venue.card.refundCalls.length }).toEqual(before);
-    expect(correctivesOf(saleId)).toEqual([]);
+    const calls = venue.card.refundCalls.length;
+    const leg = await cardLeg(saleId, correctionId, await tenderOf(saleId, "card"));
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed", appliedAmount: "5.00" } });
+    expect(venue.card.refundCalls).toHaveLength(calls + 1);
+    expect(moneyOf(saleId)).toEqual([
+      { applied: 500, method: "card", state: "completed", leg: 1, cancel: null },
+      { applied: 2000, method: "cash", state: "completed", leg: 1, cancel: null },
+    ]);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
   });
 
   it("refuses a reader leg while the business has no registered address, sending nothing", async () => {
@@ -377,22 +380,20 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
     expect({ money: moneyOf(saleId), calls: venue.card.refundCalls.length }).toEqual(before);
   });
 
-  it("refuses cash making up the rest, and cash short of it, with no money moved", async () => {
+  it("on a full invoice held from sending, takes cash short of the rest, then files one R1 with the cash making it up", async () => {
     const { saleId } = await fullInvoice({ card: "17.00" }, { cash: "20.00" });
     const correctionId = await opened(saleId, await tenderOf(saleId, "card"));
     await inTx(venue, (tx) => heldFromSending(tx, saleId));
-    const refused = {
-      status: 409,
-      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
-    };
-    const before = { money: moneyOf(saleId), drawer: drawerCents() };
-    expect(await cashLeg(correctionId, "8.00")).toEqual(refused);
-    expect({ money: moneyOf(saleId), drawer: drawerCents() }).toEqual(before);
-    expect(await cashLeg(correctionId, "3.00")).toEqual(refused);
-    expect({ money: moneyOf(saleId), drawer: drawerCents() }).toEqual(before);
+    const drawer = drawerCents();
+    expect(await cashLeg(correctionId, "3.00")).toMatchObject({ status: 200 });
+    expect(drawerCents()).toBe(drawer - 300);
+    expect(correctivesOf(saleId)).toEqual([]);
+    expect(await cashLeg(correctionId, "5.00")).toMatchObject({ status: 200 });
+    expect(drawerCents()).toBe(drawer - 800);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
   });
 
-  it("refuses a separate terminal's leg on a receipt AEAT refused", async () => {
+  it("takes a separate terminal's leg on a receipt AEAT refused, filing one R5", async () => {
     const billId = await tabWith(venue, "Steak", "House salad");
     await payPart(billId, { cash: "20.00" });
     await payPart(billId, { card: "17.00" });
@@ -410,14 +411,18 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
       invoiceCorrectionId: correctionId,
       override: supervisor(),
     });
-    expect(leg).toEqual({
-      status: 409,
-      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
-    });
-    expect(moneyOf(saleId)).toEqual(before);
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed", appliedAmount: "5.00" } });
+    expect(moneyOf(saleId)).toEqual([
+      ...before.filter((row) => row.applied < 500),
+      { applied: 500, method: "card", state: "completed", leg: 1, cancel: null },
+      ...before.filter((row) => row.applied >= 500),
+    ]);
+    expect(correctivesOf(saleId)).toEqual([
+      { type: "R5", by: "differences", purpose: "corrective", customer: null, total: -2500 },
+    ]);
   });
 
-  it("on a full invoice AEAT refused with no fix, takes cash and a reader leg unrecorded, and Finish lists them for the accountant", async () => {
+  it("on a full invoice AEAT refused with no fix, the cash making up the rest files one R1 in that step, and the accountant's list holds none of its refunds", async () => {
     const { saleId } = await fullInvoice({ card: "10.00" }, { cash: "20.00" }, { reader: "7.00" });
     const [keyed] = venue.db.all<{ id: string }>(
       sql`select id from tenders where sale_id = ${saleId} and method = 'card' and amount = 1000`,
@@ -425,8 +430,6 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
     const correctionId = await opened(saleId, keyed!.id);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
 
-    const cash = await cashLeg(correctionId, "8.00");
-    expect(cash.status, JSON.stringify(cash.json)).toBe(200);
     const reader = venue.db.all<{ id: string }>(
       sql`select id from tenders where sale_id = ${saleId} and method = 'card' and amount = 700`,
     )[0]!.id;
@@ -434,27 +437,17 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
       status: 200,
       json: { state: "completed", appliedAmount: "5.00" },
     });
-    const finished = await send(
-      venue.app,
-      adminCookie,
-      "POST",
-      `/api/invoice-corrections/${correctionId}/close`,
-      {},
-    );
-    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
-    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
     expect(correctivesOf(saleId)).toEqual([]);
+    const cash = await cashLeg(correctionId, "10.00");
+    expect(cash.status, JSON.stringify(cash.json)).toBe(200);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
+    const [correction] = await venue.db
+      .select({ state: invoiceCorrections.state })
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, correctionId));
+    expect(correction).toEqual({ state: "filed" });
     const listed = await inTx(venue, (tx) => refundsWithoutCorrectiveQuery(tx, () => sql`1`));
-    expect(
-      listed
-        .filter((row) => row.saleId === saleId)
-        .map(({ applied, method }) => ({ applied, method }))
-        .sort((a, b) => a.applied - b.applied),
-    ).toEqual([
-      { applied: 500, method: "card" },
-      { applied: 800, method: "cash" },
-      { applied: 1000, method: "card" },
-    ]);
+    expect(listed.filter((row) => row.saleId === saleId)).toEqual([]);
   });
 });
 
@@ -502,24 +495,18 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     ]);
   });
 
-  it("while the full invoice's filing waits, offers only the extra, and Refund a payment refuses the cancel's money", async () => {
+  it("on a full invoice held from sending, offers every choice, files the cancel's money as one R1, and Refund a payment sends the cancel's money to Correct invoice", async () => {
     const tipped = await tabWith(venue, "Steak", "House salad");
     await fixture.chooseFullInvoice(venue, tipped);
     await payPart(tipped, { cash: "37.00" }, { tendered: "39.00", addedTip: "2.00", tip: "2.00" });
     const tippedSale = await fixture.saleOf(venue, tipped);
     const cancelId = await cancelSteak(tipped);
     await inTx(venue, (tx) => heldFromSending(tx, tippedSale));
-    const waiting = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    const open = { available: true, reason: null };
 
     const { view, steak } = await steakOf(tippedSale);
-    expect(steak).toMatchObject({ available: false, reason: waiting });
-    expect(view.choices).toEqual({
-      dishes: { available: false, reason: waiting },
-      goodwill: { available: false, reason: waiting },
-      extra: { available: true, reason: null },
-    });
-    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
-    expect(await routePreview(tippedSale, dishes)).toEqual({ status: 409, json: waiting });
+    expect(steak).toMatchObject(open);
+    expect(view.choices).toEqual({ dishes: open, goodwill: open, extra: open });
     const extra = await routePreview(tippedSale, ask("extra", "2.00"));
     expect(extra.status, JSON.stringify(extra.json)).toBe(200);
     expect((extra.json as unknown as GiveBackPlan).parts).toEqual([
@@ -527,15 +514,26 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     ]);
 
     const cash = await tenderOf(tippedSale, "cash");
-    const before = moneyOf(tippedSale);
     expect(await plainRefund(tippedSale, cash, { cancellationIds: [cancelId] })).toEqual({
       status: 409,
-      json: waiting,
+      json: { code: "tender.refund_needs_correction", params: { tenderId: cash } },
     });
-    expect(moneyOf(tippedSale)).toEqual(before);
+    expect(moneyOf(tippedSale)).toEqual([]);
+
+    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
+    const body = await giveBody(tippedSale, dishes);
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "25.00", way: "cash", lineIds: [steak.id] },
+    ]);
+    const answer = await give(tippedSale, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(correctivesOf(tippedSale)).toEqual([r1(-2500)]);
+    expect(moneyOf(tippedSale)).toEqual([
+      { applied: 2500, method: "cash", state: "completed", leg: 1, cancel: cancelId },
+    ]);
   });
 
-  it("while the full invoice another box filed has not been answered, offers only the extra, and Refund a payment refuses the cancel's money", async () => {
+  it("on a full invoice another box filed that AEAT has not answered, offers every choice, files the cancel's money as one R1 at once, and Refund a payment sends the cancel's money to Correct invoice", async () => {
     const tipped = await tabWith(venue, "Steak", "House salad");
     await fixture.chooseFullInvoice(venue, tipped);
     await payPart(tipped, { cash: "37.00" }, { tendered: "39.00", addedTip: "2.00", tip: "2.00" });
@@ -543,22 +541,16 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     const cancelId = await cancelSteak(tipped);
     await takeOver(venue);
     const app = venue.appWith({});
-    const waiting = { code: "sale.correction_not_admitted", params: { reason: "filing_pending" } };
+    const open = { available: true, reason: null };
 
     const read = await send(app, adminCookie, "GET", `/api/transactions/${tippedSale}/give-back`);
     expect(read.status, JSON.stringify(read.json)).toBe(200);
     const view = read.json as unknown as GiveBackView;
     const steak = view.lines.find((line) => line.gross === "25.00")!;
-    expect(steak).toMatchObject({ available: false, reason: waiting });
-    expect(view.choices).toEqual({
-      dishes: { available: false, reason: waiting },
-      goodwill: { available: false, reason: waiting },
-      extra: { available: true, reason: null },
-    });
+    expect(steak).toMatchObject(open);
+    expect(view.choices).toEqual({ dishes: open, goodwill: open, extra: open });
     const preview = (request: GiveBackRequest) =>
       send(app, adminCookie, "POST", `/api/transactions/${tippedSale}/give-back/preview`, request);
-    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
-    expect(await preview(dishes)).toEqual({ status: 409, json: waiting });
     const extra = await preview(ask("extra", "2.00"));
     expect(extra.status, JSON.stringify(extra.json)).toBe(200);
     expect((extra.json as unknown as GiveBackPlan).parts).toEqual([
@@ -566,12 +558,29 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     ]);
 
     const cash = await tenderOf(tippedSale, "cash");
-    const before = moneyOf(tippedSale);
     expect(await plainRefund(tippedSale, cash, { cancellationIds: [cancelId] }, app)).toEqual({
       status: 409,
-      json: waiting,
+      json: { code: "tender.refund_needs_correction", params: { tenderId: cash } },
     });
-    expect(moneyOf(tippedSale)).toEqual(before);
+    expect(moneyOf(tippedSale)).toEqual([]);
+
+    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
+    const body = await fixture.giveBackBody(venue, adminCookie, tippedSale, dishes, reasonId, app);
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "25.00", way: "cash", lineIds: [steak.id] },
+    ]);
+    const answer = await send(
+      app,
+      adminCookie,
+      "POST",
+      `/api/transactions/${tippedSale}/give-back`,
+      body,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(correctivesOf(tippedSale)).toEqual([r1(-2500)]);
+    expect(moneyOf(tippedSale)).toEqual([
+      { applied: 2500, method: "cash", state: "completed", leg: 1, cancel: cancelId },
+    ]);
   });
 
   it("while the box's records need checking, refuses the cancel's money and goodwill on every route alike, and the extra still goes back", async () => {
@@ -637,7 +646,7 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     expect(correctivesOf(saleId)).toEqual([]);
   });
 
-  it("refuses a separate terminal's refund of the cancel's money plain, while the filing waits too", async () => {
+  it("refuses a separate terminal's refund of the cancel's money plain, and still sends it to Correct invoice once the full invoice is held from sending", async () => {
     const { billId, saleId } = await fullInvoice({ card: "37.00" });
     const cancelId = await cancelSteak(billId);
     const card = await tenderOf(saleId, "card");
@@ -653,11 +662,11 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     await inTx(venue, (tx) => heldFromSending(tx, saleId));
     expect(await refundableTenders(saleId)).toMatchObject({
       status: 200,
-      json: [{ manual: true }],
+      json: [{ manual: true, appliedRemaining: "37.00" }],
     });
     expect(await plainRefund(saleId, card, keyed)).toEqual({
       status: 409,
-      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
+      json: { code: "tender.refund_needs_correction", params: { tenderId: card } },
     });
     expect(moneyOf(saleId)).toEqual([]);
   });

@@ -85,31 +85,6 @@ it("words a card refund still waiting on a payment like one waiting on the bill"
   );
 });
 
-it("words a refused or held filing by the page that shows which, and in Give money back what can still go back", () => {
-  const refused = { reason: "filing_refused" };
-  expect(codeMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "The tax agency refused this invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
-  );
-  expect(codeMessage("sale.correction_not_admitted", "es", refused)).toBe(
-    "La Agencia Tributaria rechazó esta factura, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
-  );
-  expect(giveBackReasonMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
-  );
-  expect(giveBackReasonMessage("sale.correction_not_admitted", "es", refused)).toBe(
-    "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
-  );
-  for (const locale of ["en", "es"]) {
-    const other = { reason: "voided" };
-    expect(giveBackReasonMessage("sale.correction_not_admitted", locale, other)).toBe(
-      codeMessage("sale.correction_not_admitted", locale, other),
-    );
-    expect(giveBackReasonMessage("tender.refund_in_progress", locale)).toBe(
-      codeMessage("tender.refund_in_progress", locale),
-    );
-  }
-});
-
 it("tells staff money back that can still be recorded ends with Finish or Stop here", () => {
   expect(codeMessage("invoice_correction.still_correctable", "en")).toBe(
     "A refund was made and can still be recorded. Press Finish or Stop here.",
@@ -1133,9 +1108,8 @@ it("words sale.correction_unsupported for every flow that meets it, the whole-or
   );
 });
 
-it("words a full invoice made from receipts, and one the tax agency refused with no fix, in both places", () => {
+it("words a full invoice made from receipts in both places", () => {
   const notSimplified = { reason: "not_simplified" };
-  const noFix = { reason: "refused_no_fix" };
   const pins: [string, Record<string, string>, string, string][] = [
     [
       "codeMessage",
@@ -1149,18 +1123,6 @@ it("words a full invoice made from receipts, and one the tax agency refused with
       "This is a full invoice made from receipts, so the refund cannot be recorded on it here.",
       "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
     ],
-    [
-      "codeMessage",
-      noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that, so money refunded on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
-      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
-    ],
-    [
-      "giveBackFilingMessage",
-      noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that. Once this refund ends, the money refunded goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
-      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo. Cuando termine esta devolución, el dinero devuelto aparecerá en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
-    ],
   ];
   const words = { codeMessage, giveBackFilingMessage };
   for (const [fn, params, en, es] of pins) {
@@ -1169,86 +1131,40 @@ it("words a full invoice made from receipts, and one the tax agency refused with
   }
 });
 
-it("words an invoice still being sent to the tax agency in Correct invoice, Refund and Refund under way", () => {
-  const pending = { reason: "filing_pending" };
-  const pins: [string, string, string][] = [
-    [
-      "codeMessage",
-      "This invoice is still being sent to the tax agency, so it cannot be corrected yet. Try again in a few minutes.",
-      "Esta factura aún se está enviando a la Agencia Tributaria, así que todavía no se puede rectificar. Vuelve a intentarlo en unos minutos.",
-    ],
-    [
-      "giveBackReasonMessage",
-      "This receipt is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
-      "Este ticket aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
-    ],
-    [
-      "giveBackFilingMessage",
-      "This receipt is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
-      "Este ticket aún se está enviando a la Agencia Tributaria, así que el dinero devuelto todavía no se puede registrar en él. Pulsa Comprobar de nuevo en unos minutos.",
-    ],
-  ];
-  const words = { codeMessage, giveBackReasonMessage, giveBackFilingMessage };
-  for (const [fn, en, es] of pins) {
-    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "en", pending)).toBe(en);
-    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "es", pending)).toBe(es);
-  }
-});
-
-it("names a full invoice, not a receipt, in Give money back's and Money back under way's refusals", () => {
+it("names a full invoice, not a receipt, in Money back under way's refusals", () => {
   const full = (reason?: string) => ({
     ...(reason === undefined ? {} : { reason }),
     fullInvoice: true,
   });
-  const pins: [string, string | undefined, string, string][] = [
+  const pins: [string | undefined, string, string][] = [
     [
-      "giveBackReasonMessage",
-      "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes, cancelled dishes or goodwill cannot be refunded; the extra paid on top can.",
-      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos, de platos cancelados o por cortesía no se puede devolver; lo pagado de más, sí.",
-    ],
-    [
-      "giveBackFilingMessage",
-      "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
-      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
-    ],
-    [
-      "giveBackReasonMessage",
-      "filing_pending",
-      "This full invoice is still being sent to the tax agency, so dishes, cancelled dishes or goodwill cannot be refunded yet; the extra paid on top can. Try again in a few minutes.",
-      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos, de platos cancelados o por cortesía todavía no se puede devolver; lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
-    ],
-    [
-      "giveBackFilingMessage",
-      "filing_pending",
-      "This full invoice is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
-      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero devuelto todavía no se puede registrar en ella. Pulsa Comprobar de nuevo en unos minutos.",
-    ],
-    [
-      "giveBackFilingMessage",
       "voided",
       "This full invoice was cancelled, so the refund cannot be recorded on it.",
       "Esta factura completa se anuló, así que el dinero devuelto no se puede registrar en ella.",
     ],
     [
-      "giveBackFilingMessage",
       "missing",
       "The refund cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
       "El dinero devuelto no se puede registrar ahora en esta factura completa, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
     ],
   ];
-  const words = { giveBackReasonMessage, giveBackFilingMessage };
-  for (const [fn, reason, en, es] of pins) {
-    const say = words[fn as keyof typeof words];
-    expect(say("sale.correction_not_admitted", "en", full(reason))).toBe(en);
-    expect(say("sale.correction_not_admitted", "es", full(reason))).toBe(es);
-    expect(say("sale.correction_not_admitted", "en", { reason })).not.toBe(en);
+  for (const [reason, en, es] of pins) {
+    expect(giveBackFilingMessage("sale.correction_not_admitted", "en", full(reason))).toBe(en);
+    expect(giveBackFilingMessage("sale.correction_not_admitted", "es", full(reason))).toBe(es);
+    expect(giveBackFilingMessage("sale.correction_not_admitted", "en", { reason })).not.toBe(en);
   }
-  for (const reason of ["not_simplified", "refused_no_fix"])
-    expect(giveBackFilingMessage("sale.correction_not_admitted", "en", full(reason))).toBe(
-      giveBackFilingMessage("sale.correction_not_admitted", "en", { reason }),
-    );
+  expect(giveBackFilingMessage("sale.correction_not_admitted", "en", full("not_simplified"))).toBe(
+    giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "not_simplified" }),
+  );
+});
+
+it("words Money back under way's refusal for a reason no correction is refused for as the general one", () => {
+  for (const reason of ["filing_refused", "filing_pending", "refused_no_fix"])
+    for (const locale of ["en", "es"])
+      for (const fullInvoice of [false, true])
+        expect(
+          giveBackFilingMessage("sale.correction_not_admitted", locale, { reason, fullInvoice }),
+        ).toBe(giveBackFilingMessage("sale.correction_not_admitted", locale, { fullInvoice }));
 });
 
 it("says in Money back under way that the business's registered address is missing, and where to add it", () => {
@@ -1314,14 +1230,9 @@ it("leaves Refund a payment out of the correction refusals other flows share", (
       "sale.correction_not_admitted",
       "sale.correction_unsupported",
     ].map((code) => [code, {}] as const),
-    ...[
-      "replaced",
-      "unsupported",
-      "missing",
-      "filing_pending",
-      "not_simplified",
-      "filing_versions_unusable",
-    ].map((reason) => ["sale.correction_not_admitted", { reason }] as const),
+    ...["replaced", "unsupported", "missing", "not_simplified", "filing_versions_unusable"].map(
+      (reason) => ["sale.correction_not_admitted", { reason }] as const,
+    ),
   ];
   for (const [code, params] of worded) {
     expect(codeMessage(code, "en", params)).not.toMatch(/refund a payment/i);
@@ -1336,8 +1247,6 @@ it("words each reason a correction is not admitted, and any other reason as the 
     "missing",
     "voided",
     "not_simplified",
-    "filing_refused",
-    "filing_pending",
     "filing_versions_unusable",
     "filed_figures_unreadable",
     "filed_figures_changed",
@@ -1347,11 +1256,12 @@ it("words each reason a correction is not admitted, and any other reason as the 
     const worded = reasons.map((reason) =>
       codeMessage("sale.correction_not_admitted", locale, { reason }),
     );
-    expect(new Set(worded).size, locale).toBe(8);
+    expect(new Set(worded).size, locale).toBe(6);
     expect(worded).not.toContain(general);
-    expect(codeMessage("sale.correction_not_admitted", locale, { reason: "constructor" })).toBe(
-      general,
-    );
+    for (const unknown of ["constructor", "filing_refused", "filing_pending", "refused_no_fix"])
+      expect(codeMessage("sale.correction_not_admitted", locale, { reason: unknown })).toBe(
+        general,
+      );
   }
   expect(codeMessage("sale.correction_not_admitted", "en", { reason: "voided" })).toBe(
     "This invoice was cancelled, so there is nothing left to correct.",

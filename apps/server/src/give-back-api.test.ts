@@ -17,6 +17,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import type { GiveBackView } from "./give-back-read.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -112,12 +113,36 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
     expect(await rowCount()).toBe(before);
   });
 
-  it("answers a wait with 409 and its code, as the read shows it", async () => {
+  it("offers goodwill on a receipt AEAT refused, and answers a wait with 409 and its code, as the read shows it", async () => {
     const billId = await seated("Salad bowl");
     await payRest(billId, "20.00");
     const saleId = await restId(billId);
     await inTx(venue(), (tx) => refusedByAeat(tx, saleId));
-    const reason = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    expect((await read(saleId)).json).toMatchObject({
+      choices: { goodwill: { available: true, reason: null } },
+    });
+    expect(await preview(saleId, { purpose: "goodwill", amount: "5.00" })).toMatchObject({
+      status: 200,
+      json: { parts: [{ kind: "correction", amount: "5.00", way: "cash", lineIds: [] }] },
+    });
+    const [adjustment] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
+    const correctionId = await openedCorrection(
+      venue(),
+      saleId,
+      {
+        submissionId: randomUUID(),
+        gross: "5.00",
+        reasonId: adjustment!.id,
+        note: "Cold",
+        expectedSplit: await previewedSplit(venue(), saleId, { gross: "5.00" }),
+        override: { personId: venue().adminId, pin: "1234" },
+      },
+      venue().cookie,
+    );
+    const reason = {
+      code: "invoice_correction.already_open",
+      params: { saleId, correctionId },
+    };
     expect((await read(saleId)).json).toMatchObject({
       choices: { goodwill: { available: false, reason } },
     });

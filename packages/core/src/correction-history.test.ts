@@ -493,16 +493,17 @@ async function sellSteak() {
   return sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10");
 }
 
-it("previews an admitted correction with the admission's filing and the lines to file", async () => {
+it("previews an admitted correction with the admission's original and the lines to file", async () => {
   const { saleId, ids } = await sellSteak();
 
-  expect(await preview(saleId)).toMatchObject({
+  const found = await preview(saleId);
+  expect(found).toMatchObject({
     gross: "6.05",
     vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
-    filing: "accepted",
     original: { number: "T1-1", issuedAt: "2027-03-14" },
     lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
   });
+  expect(found).not.toHaveProperty("filing");
 });
 
 it("previews a correction of a replaced invoice from its replacement's lines", async () => {
@@ -568,9 +569,8 @@ it.each([
 });
 
 it.each([
-  { eligible: true, filing: "queued", original: { number: "A/1", issuedAt: "2026-07-20" } },
-  { eligible: false, reason: "filing_refused" },
-  { eligible: false, reason: "refused_no_fix" },
+  { eligible: true, original: { number: "A/1", issuedAt: "2026-07-20" } },
+  { eligible: false, reason: "missing" },
 ] as const)("refuses a full invoice the regime answers for as not simplified", async (answer) => {
   const { saleId } = await sellSteak();
   backend.setCorrectionAdmission({ ...answer, fullInvoice: true });
@@ -581,9 +581,9 @@ it.each([
   });
 });
 
-it("refuses a full invoice the regime answers filing_pending for as not simplified, without fullInvoice", async () => {
+it("refuses a full invoice the regime answers missing for as not simplified, without fullInvoice", async () => {
   const { saleId } = await sellSteak();
-  backend.setCorrectionAdmission({ eligible: false, reason: "filing_pending", fullInvoice: true });
+  backend.setCorrectionAdmission({ eligible: false, reason: "missing", fullInvoice: true });
 
   for (const read of [
     () => preview(saleId),
@@ -600,7 +600,6 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
   const FULL = { fullInvoice: true } as const;
   const admitted = {
     eligible: true,
-    filing: "queued",
     original: { number: "F/1", issuedAt: "2026-03-01" },
   } as const;
 
@@ -632,7 +631,6 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
 
     expect(await previewFull(saleId)).toMatchObject({
       gross: "6.05",
-      filing: "queued",
       original: { number: "F/1", issuedAt: "2026-03-01" },
       lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
     });
@@ -688,7 +686,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     });
   });
 
-  it.each(["filing_refused", "refused_no_fix", "filing_pending"] as const)(
+  it.each(["missing"] as const)(
     "refuses a full invoice the regime answers %s for, with that reason",
     async (reason) => {
       const { saleId } = await sellFull();
@@ -728,7 +726,10 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     const receipt = await sellSteak();
     backend.setCorrectionAdmission(admitted);
     const asReceipt = await asAdmitted(receipt.saleId);
-    expect(asReceipt.preview).toMatchObject({ gross: "6.05", filing: "queued" });
+    expect(asReceipt.preview).toMatchObject({
+      gross: "6.05",
+      original: { number: "F/1", issuedAt: "2026-03-01" },
+    });
     expect(asReceipt.preview).not.toHaveProperty("fullInvoice");
     expect(asReceipt.lines).toHaveLength(1);
     expect(await captureError(() => asAdmitted(full.saleId))).toMatchObject({
@@ -741,11 +742,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     const kindOf = (saleId: SaleId, kind: { fullInvoice?: true | "as_admitted" }) =>
       withTransaction(suite.db, (tx) => admittedAsFullInvoice(tx, backend, saleId, nodeId, kind));
     const full = await sellFull();
-    backend.setCorrectionAdmission({
-      eligible: false,
-      reason: "filing_refused",
-      fullInvoice: true,
-    });
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing", fullInvoice: true });
     expect(await kindOf(full.saleId, { fullInvoice: "as_admitted" })).toBe(true);
     expect(await kindOf(full.saleId, {})).toBe(false);
     backend.setCorrectionAdmission(admitted);
@@ -825,7 +822,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     expect(reads).not.toHaveBeenCalled();
   });
 
-  it("with as_admitted, tells kindSeen the kind before refusing an admission that waits", async () => {
+  it("with as_admitted, tells kindSeen the kind before refusing an admission", async () => {
     const seen: boolean[] = [];
     const read = (saleId: SaleId) =>
       captureError(() =>
@@ -837,15 +834,17 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
         ),
       );
     const full = await sellFull();
-    backend.setCorrectionAdmission({
-      eligible: false,
-      reason: "filing_refused",
-      fullInvoice: true,
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing", fullInvoice: true });
+    expect(await read(full.saleId)).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "missing" },
     });
-    expect(await read(full.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
     const receipt = await sellSteak();
-    backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
-    expect(await read(receipt.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
+    expect(await read(receipt.saleId)).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "missing" },
+    });
     expect(seen).toEqual([true, false]);
   });
 });
@@ -856,7 +855,7 @@ it("refuses a substituted invoice as replaced before asking the regime", async (
   await suite.db
     .insert(saleSubstitutions)
     .values({ substitutionSaleId: substitute.saleId, substitutedSaleId: saleId });
-  backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+  backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
 
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",

@@ -810,6 +810,39 @@ describe("POST /api/invoice-corrections/:id/cash", () => {
     expect(await giveCash(id, cashBody(patch))).toMatchObject({ status: 409, json: { code } });
     expect(counts()).toEqual(before);
   });
+
+  it("refuses with 409 and undoes the last cash leg once admission answers voided, and Close then ends the correction keeping the first leg's money", async () => {
+    const saleId = await sold(["10.00"]);
+    const id = await opened(saleId);
+    expect(await giveCash(id, cashBody({ amount: "3.00" }))).toMatchObject({
+      status: 200,
+      json: { correction: { state: "open", moneyBack: "3.00", left: "2.00" } },
+    });
+    admittingNot("voided");
+    const moneyRows = () => ({
+      refunds: venue.db.all(sql`select * from refunds where sale_id = ${saleId}`),
+      drawers: venue.db.all(sql`select * from print_jobs where kind = 'drawer'`),
+    });
+    const before = counts();
+    const rowsBefore = moneyRows();
+
+    expect(await giveCash(id, cashBody({ amount: "2.00" }))).toEqual({
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "voided" } },
+    });
+    expect(counts()).toEqual(before);
+    expect(moneyRows()).toEqual(rowsBefore);
+    expect(await read(id)).toMatchObject({
+      status: 200,
+      json: { state: "open", moneyBack: "3.00", left: "2.00" },
+    });
+
+    expect(await closeIt(id, { override: supervisor() })).toMatchObject({
+      status: 200,
+      json: { id, state: "closed", moneyBack: "3.00", correctiveSaleId: null },
+    });
+    expect(counts()).toEqual(before);
+  });
 });
 
 const fileNow = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
@@ -1213,23 +1246,25 @@ describe("Refund a payment gives back only what Correct invoice would not take n
     });
   });
 
-  it("waits while the tax agency has refused the ticket's filing", async () => {
+  it("refuses it on a ticket the tax agency refused: Correct invoice corrects it", async () => {
     const saleId = await sold(["10.00"]);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
-    await refusedWithNothingWritten(saleId, await cashOf(saleId), "10.00", {
-      code: "sale.correction_not_admitted",
-      params: { reason: "filing_refused" },
+    const tenderId = await cashOf(saleId);
+    await refusedWithNothingWritten(saleId, tenderId, "10.00", {
+      code: "tender.refund_needs_correction",
+      params: { tenderId },
     });
   });
 
-  it("waits while the tax agency has not answered a ticket another box filed", async () => {
+  it("refuses it on a ticket another box filed that the tax agency has not answered: Correct invoice corrects it", async () => {
     const saleId = await sold(["10.00"]);
     await takeOver(venue);
+    const tenderId = await cashOf(saleId);
     await refusedWithNothingWritten(
       saleId,
-      await cashOf(saleId),
+      tenderId,
       "10.00",
-      { code: "sale.correction_not_admitted", params: { reason: "filing_pending" } },
+      { code: "tender.refund_needs_correction", params: { tenderId } },
       "0.00",
       venue.appWith({}),
     );

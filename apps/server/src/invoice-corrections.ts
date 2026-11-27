@@ -169,8 +169,8 @@ async function checkCorrectionOpenable(
   return { ...preview, moneyRefundable };
 }
 
-/** Correct invoice's refusals that do not pass by waiting: a refused, held or unanswered filing,
- * another refund pending and the clock are not among them. */
+/** Correct invoice's refusals that do not pass by waiting: another refund pending and the clock
+ * are not among them. */
 const LASTING_REFUSALS: ReadonlySet<string> = new Set([
   "invoice_correction.not_settled",
   "advance.taken_off_final_invoice",
@@ -180,9 +180,7 @@ const LASTING_REFUSALS: ReadonlySet<string> = new Set([
 
 function refusesForGood(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
-  if (hasCode(error, "sale.correction_not_admitted"))
-    return error.params.reason !== "filing_refused" && error.params.reason !== "filing_pending";
-  return LASTING_REFUSALS.has(error.code);
+  return hasCode(error, "sale.correction_not_admitted") || LASTING_REFUSALS.has(error.code);
 }
 
 /** Whether the box's invoice records need checking, which leaves Correct invoice nothing it can

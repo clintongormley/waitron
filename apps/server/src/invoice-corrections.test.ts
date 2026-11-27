@@ -614,11 +614,11 @@ describe("openInvoiceCorrection", () => {
       moneyBack: "4.00",
       fileNow: { refusal: "sale.correction_not_admitted", reason: "voided", closable: true },
     });
-    expect(await readWith(admittingNot("filing_refused"))).toMatchObject({
+    expect(await readWith(admittingNot("missing"))).toMatchObject({
       moneyBack: "4.00",
       fileNow: {
         refusal: "sale.correction_not_admitted",
-        reason: "filing_refused",
+        reason: "missing",
         closable: false,
       },
     });
@@ -1033,7 +1033,7 @@ describe("openInvoiceCorrection refuses", () => {
     await close(correction.id, {
       backend: Object.create(venue.backend, {
         correctionAdmissionFor: {
-          value: async () => ({ eligible: false, reason: "refused_no_fix" }),
+          value: async () => ({ eligible: false, reason: "voided" }),
         },
       }) as typeof venue.backend,
     });
@@ -1566,24 +1566,24 @@ describe("File now and Close", () => {
     ).resolves.toMatchObject({ correction: { state: "open" } });
   });
 
-  it("closes keeping the refunds when admission answers refused_no_fix", async () => {
+  it("closes keeping the refunds when admission answers not_simplified", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
     await cash(correction.id, "15.00");
-    const noFix = Object.create(venue.backend, {
+    const notSimplified = Object.create(venue.backend, {
       correctionAdmissionFor: {
-        value: async () => ({ eligible: false, reason: "refused_no_fix" }),
+        value: async () => ({ eligible: false, reason: "not_simplified" }),
       },
     }) as typeof venue.backend;
 
-    expect(await close(correction.id, { backend: noFix })).toMatchObject({
+    expect(await close(correction.id, { backend: notSimplified })).toMatchObject({
       state: "closed",
       moneyBack: "15.00",
       correctiveSaleId: null,
     });
   });
 
-  it("refuses Close while the ticket's filing is stopped, and after another box takes over while AEAT has not answered it or its filing is stopped, then files on the new box's chain naming it", async () => {
+  it("refuses Close while the ticket's filing is stopped, and after another box takes over while AEAT has not answered it or its filing is stopped; File now files on the new box's chain naming it at once", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
     const { refunds } = await cash(correction.id, "15.00");
@@ -1598,15 +1598,12 @@ describe("File now and Close", () => {
     await waitingToBeSent(venue.db, saleId);
 
     const box = await takeOver(venue);
-    await refusedWithNothingWritten(() => fileNow(correction.id, MENU_FIFTEEN), {
-      code: "sale.correction_not_admitted",
-      params: { reason: "filing_pending" },
-    });
     await stillCorrectable();
     await heldFromSending(venue.db, saleId);
     await stillCorrectable();
     await acceptedByAeat(venue.db, saleId);
     await stillCorrectable();
+    await waitingToBeSent(venue.db, saleId);
 
     const filed = await fileNow(correction.id, MENU_FIFTEEN);
 

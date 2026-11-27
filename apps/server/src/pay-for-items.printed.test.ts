@@ -508,7 +508,7 @@ describe("Pay for items on a printed bill", () => {
     expect(await reopenedFrom(party.tabId)).toEqual([]);
   });
 
-  it("a ticket AEAT refused and that nothing replaced reopens nothing", async () => {
+  it("a ticket AEAT refused and that nothing replaced is credited and reopened", async () => {
     const party = await printed(await seated("soup", "hake"));
     const original = await fixture.invoiceOf(venue, party.tabId);
     await inTx(venue, (tx) => refusedByAeat(tx, original.id));
@@ -518,19 +518,21 @@ describe("Pay for items on a printed bill", () => {
       cashFor("15.00", "20.00"),
     );
 
-    await fixture.expectRefused(venue, party.tabId, () => payItems(party.tabId, body), {
-      status: 409,
-      code: "fiscal.original_refused",
-    });
-    expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
-    expect(await reopenedFrom(party.tabId)).toEqual([]);
+    const paid = await payItems(party.tabId, body);
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect((await fixture.creditsOf(venue, original.id)).map((credit) => credit.total)).toEqual([
+      -2100,
+    ]);
+    expect(await statusOf(venue, paid.json.billId as string)).toBe("settled");
+    expect(await reopenedFrom(party.tabId)).toHaveLength(1);
   });
 
-  it("a ticket another box issued whose filing is held from sending reopens nothing", async () => {
+  it("a ticket another box issued whose filing is held from sending is credited and reopened", async () => {
     const party = await printed(await seated("soup", "hake"));
     const original = await fixture.invoiceOf(venue, party.tabId);
     await inTx(venue, (tx) => heldFromSending(tx, original.id));
-    await takeOver(venue);
+    await takeOver(venue, { standard: true });
     const body = await itemsBody(
       party,
       [{ lineId: await lineOf(party.tabId, "hake") }],
@@ -545,13 +547,14 @@ describe("Pay for items on a printed bill", () => {
         body,
       );
 
-    const answer = await fixture.expectRefused(venue, party.tabId, onNewBox, {
-      status: 409,
-      code: "fiscal.original_unanswered",
-    });
-    expect(answer.json.params).toEqual({ saleId: original.id });
-    expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
-    expect(await reopenedFrom(party.tabId)).toEqual([]);
+    const paid = await onNewBox();
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect((await fixture.creditsOf(venue, original.id)).map((credit) => credit.total)).toEqual([
+      -2100,
+    ]);
+    expect(await statusOf(venue, paid.json.billId as string)).toBe("settled");
+    expect(await reopenedFrom(party.tabId)).toHaveLength(1);
   });
 
   it("a stale party revision is refused before the reopen", async () => {
@@ -778,21 +781,21 @@ describe("previewing Pay for items on a printed bill", () => {
     );
   });
 
-  it("the preview says a ticket AEAT refused cannot be reopened", async () => {
+  it("the preview prices a ticket AEAT refused, writing nothing", async () => {
     const party = await printed(await seated("soup", "hake"));
     const original = await fixture.invoiceOf(venue, party.tabId);
     await inTx(venue, (tx) => refusedByAeat(tx, original.id));
+    const before = fixture.written(venue);
 
-    await fixture.expectRefused(
-      venue,
-      party.tabId,
-      async () =>
-        preview(party.tabId, {
-          picks: [{ lineId: await lineOf(party.tabId, "hake") }],
-          method: "card",
-        }),
-      { status: 409, code: "fiscal.original_refused" },
-    );
+    const answer = await preview(party.tabId, {
+      picks: [{ lineId: await lineOf(party.tabId, "hake") }],
+      method: "card",
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({ total: "15.00", applied: "15.00" });
+    expect(fixture.written(venue)).toEqual(before);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
   });
 });
 

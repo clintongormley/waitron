@@ -157,9 +157,8 @@ async function correct(saleId: SaleId, gross: string) {
   const record = fromRegistroRow(after.registro);
   expect(validate(record, { now: steadyClock.now().instant })).toEqual([]);
   expect(computeHuella(record)).toBe(after.registro.huella);
-  // The filing, the stored split, the lines' [base, gross] in cents, the filed total and split.
+  // The stored split, the lines' [base, gross] in cents, the filed total and split.
   return [
-    found.filing,
     after.sale.vatBreakdown.map(({ rate, base, tax }) => [rate, base, tax]),
     after.lines.map((line) => [line.lineTotal, line.lineGross]),
     after.registro.importe_total,
@@ -180,9 +179,9 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   ];
 
   expect(rounds).toEqual([
-    ["queued", [["21.00", "-5.00", "-1.05"]], [[-500, -605]], "-6.05", [["-5.00", "-1.05"]]],
-    ["queued", [["21.00", "-4.98", "-1.04"]], [[-498, -602]], "-6.02", [["-4.98", "-1.04"]]],
-    ["queued", [["21.00", "-0.02", "-0.01"]], [[-2, -3]], "-0.03", [["-0.02", "-0.01"]]],
+    [[["21.00", "-5.00", "-1.05"]], [[-500, -605]], "-6.05", [["-5.00", "-1.05"]]],
+    [[["21.00", "-4.98", "-1.04"]], [[-498, -602]], "-6.02", [["-4.98", "-1.04"]]],
+    [[["21.00", "-0.02", "-0.01"]], [[-2, -3]], "-0.03", [["-0.02", "-0.01"]]],
   ]);
   expect(await captureError(() => preview(saleId, "0.01"))).toMatchObject({
     code: "sale.correction_amount_invalid",
@@ -190,8 +189,8 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   expect(await snapshot(saleId)).toEqual(before);
 });
 
-it("refuses an invoice the agency refused, and refuses a fix that would move it to 10%", async () => {
-  // No line gross, so the history read would refuse: each refusal must come before it.
+it("admits an invoice the agency refused as far as its history, and refuses a fix that would move it to 10%", async () => {
+  // No line gross, so a preview admitted past the refusal stops at the history read.
   const { saleId, before } = await sell(null);
   await suite.db
     .update(verifactuSubmissions)
@@ -271,13 +270,10 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     },
   });
 
-  expect(refused).toMatchObject({
-    code: "sale.correction_not_admitted",
-    params: { reason: "filing_refused" },
-  });
+  expect(refused).toMatchObject({ code: "sale.correction_history_unusable", params: {} });
   expect(await captureError(() => preview(saleId, "1.00"))).toMatchObject({
-    code: "sale.correction_not_admitted",
-    params: { reason: "filing_refused" },
+    code: "sale.correction_history_unusable",
+    params: {},
   });
   expect(await snapshot(saleId)).toEqual(before);
 });

@@ -219,30 +219,6 @@ describe("itemsRefusal", () => {
     );
   });
 
-  it("says a receipt AEAT refused cannot be reopened, as Reopen bill does", () => {
-    const refusal = itemsRefusal({ code: "fiscal.original_refused" });
-
-    expect(refusalText(refusal)).toBe(
-      "AEAT refused this receipt, so the bill cannot be reopened. Take payment.",
-    );
-    setLocale("es");
-    expect(refusalText(itemsRefusal({ code: "fiscal.original_refused" }))).toBe(
-      t("split.refused_receipt_refused"),
-    );
-  });
-
-  it("says a receipt AEAT has not answered or holds cannot be reopened yet, as Reopen bill does", () => {
-    const refusal = itemsRefusal({ code: "fiscal.original_unanswered" });
-
-    expect(refusalText(refusal)).toBe(
-      "This receipt is waiting for the tax agency's answer, or sending it to the agency is on hold, so the bill cannot be reopened yet. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
-    );
-    setLocale("es");
-    expect(refusalText(itemsRefusal({ code: "fiscal.original_unanswered" }))).toBe(
-      t("split.refused_receipt_unanswered"),
-    );
-  });
-
   it("keeps the general words for a comped or discounted dish the refusal does not name", () => {
     const refusal = refusalOf({ code: "set_menu.move_adjusted", dishNames: [] });
 

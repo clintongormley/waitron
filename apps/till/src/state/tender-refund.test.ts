@@ -565,8 +565,8 @@ it.each([
   expect(api.refundTransaction).toHaveBeenCalledTimes(3);
 });
 
-it("frees the form for a tip alone once a refused filing refuses its payment money", async () => {
-  const refusal = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+it("frees the form for a tip alone once a correction refusal refuses its payment money", async () => {
+  const refusal = { code: "sale.correction_not_admitted", params: { reason: "missing" } };
   const api = {
     refundTransaction: vi
       .fn()

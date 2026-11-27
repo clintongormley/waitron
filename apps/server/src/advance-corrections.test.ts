@@ -860,7 +860,7 @@ describe("Correct invoice on the rest's invoice for more than its payments hold"
   }
 
   /** Gives `amount` of `saleId`'s cash back by a correction of `gross`, ending it keeping
-   * the money back while the ticket's filing is refused with no fix, so nothing is filed. */
+   * the money back while the ticket's filing is refused as voided, so nothing is filed. */
   async function keptBack(saleId: string, amount: string, gross: string) {
     const opened = await open(
       saleId,
@@ -876,9 +876,9 @@ describe("Correct invoice on the rest's invoice for more than its payments hold"
       { submissionId: randomUUID(), amount, override: supervisor() },
     );
     expect(given.status, JSON.stringify(given.json)).toBe(200);
-    const noFix = vi
+    const voided = vi
       .spyOn(venue().backend, "correctionAdmissionFor")
-      .mockResolvedValue({ eligible: false, reason: "refused_no_fix" });
+      .mockResolvedValue({ eligible: false, reason: "voided" });
     try {
       const closed = await send(
         venue().app,
@@ -889,7 +889,7 @@ describe("Correct invoice on the rest's invoice for more than its payments hold"
       );
       expect(closed).toMatchObject({ status: 200, json: { state: "closed", moneyBack: amount } });
     } finally {
-      noFix.mockRestore();
+      voided.mockRestore();
     }
   }
 

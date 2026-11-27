@@ -574,11 +574,17 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     );
   });
 
-  it("refuses a linked refund on a full invoice as its corrective's money, even within what its cancels owe, and above it without new approval once AEAT refused it with no fix", async () => {
+  it("refuses a linked refund on a full invoice as its corrective's money, even within what its cancels owe and also once AEAT refused it with no fix, and above it without new approval once Correct invoice can never take it", async () => {
     const { paid, burger } = await oneCancel(false, true);
     await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
     await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
     await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
+    await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
+    await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
+    const never = vi
+      .spyOn(venue.backend, "correctionAdmissionFor")
+      .mockResolvedValue({ eligible: false, reason: "voided" });
+    onTestFinished(() => never.mockRestore());
     const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
     expect(first.status, JSON.stringify(first.json)).toBe(200);
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
