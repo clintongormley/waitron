@@ -25,6 +25,8 @@ import {
 } from "@waitron/provisioning";
 import type { WaitronModule } from "@waitron/module";
 import type { BucketConfig } from "@waitron/stream";
+import { decodeMasterKeyCode } from "@waitron/shared";
+import { writeBackupKey, type BackupKeyRecord } from "../backup-env-writer.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
 import { mintMasterKey } from "./master-key.js";
 import { formatEnvFile, parseEnvFile } from "../env-file.js";
@@ -32,6 +34,7 @@ import { seedTermZeroMembership } from "../membership-seed.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { writeStreamSettings } from "../stream-host.js";
 import { copyMigrationsRoot } from "./boot-harness.js";
+import { heldBackupKey } from "./backup-key.js";
 
 export interface BoxDirs {
   root: string;
@@ -87,7 +90,7 @@ export interface StreamBox {
 export async function provisionStreamBox(options: {
   dirs: BoxDirs;
   advertisedOrigin: string;
-  streaming?: { bucket: BucketConfig; recoveryKey: string };
+  streaming?: BucketConfig;
   modulesJson: unknown;
   venue: { request: VenueRequest; modules: readonly WaitronModule[] };
   apply?: typeof applyMinuteVenue;
@@ -147,29 +150,30 @@ export async function provisionStreamBox(options: {
       WAITRON_ENV: environment,
     }),
   );
-  if (options.streaming !== undefined) await switchOnStreaming(dirs, options.streaming);
+  if (options.streaming !== undefined) {
+    await switchOnStreaming(
+      dirs,
+      options.streaming,
+      heldBackupKey(decodeMasterKeyCode(box.nodeSecret)),
+    );
+  }
   return box;
 }
 
 /**
- * Streaming to `bucket` switched on with `recoveryKey`, written into a provisioned box's folders.
- * Only while no server runs on them.
+ * Configure a provisioned box's bucket while its server is stopped.
  */
 export async function switchOnStreaming(
   dirs: Pick<BoxDirs, "state" | "venue">,
-  streaming: { bucket: BucketConfig; recoveryKey: string },
+  bucket: BucketConfig,
+  key: BackupKeyRecord,
 ): Promise<void> {
   const ring = loadKeyRing(parseEnvFile(await readFile(join(dirs.state, "secrets.env"), "utf8")));
   const store = await openVenueDatabase(dirs.venue);
   try {
-    await withTransaction(store.venue, (tx) =>
-      writeStreamSettings(tx, ring, streaming.bucket, null),
-    );
+    await withTransaction(store.venue, (tx) => writeStreamSettings(tx, ring, bucket, null));
   } finally {
     await store.close();
   }
-  await writeFile(
-    join(dirs.state, "backup.env"),
-    formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: streaming.recoveryKey }),
-  );
+  await writeBackupKey(dirs.state, key);
 }

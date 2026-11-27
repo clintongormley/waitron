@@ -20,7 +20,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { encodeRecoveryKit } from "@waitron/stream";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import { AppError, decodeMasterKeyCode } from "@waitron/shared";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import { authorityKey } from "@waitron/credentials";
@@ -198,12 +198,11 @@ it("constructs a detached restore runner and authenticates only against the plac
 it.each(["archive", "bucket"])(
   "builds the authenticated runner from %s command environment input",
   async (kind) => {
-    const file = kind === "archive" ? archivePath : join(root, "kit");
-    if (kind === "bucket") await writeFile(file, encodeRecoveryKit(kit));
     const lines: string[] = [];
     const result = await runRestore({
-      argv: kind === "archive" ? ["restore", file] : ["restore", "--from-bucket", file],
+      argv: kind === "archive" ? ["restore", archivePath] : bucketRestoreArgs(kit.bucket),
       env: {
+        ...(kind === "bucket" ? bucketRestoreEnv(kit.bucket, nodeKey) : {}),
         WAITRON_STATE_DIR: stateDir,
         WAITRON_VENUE_DIR: join(root, "venue"),
         WAITRON_BACKUP_RECOVERY_KEY: kit.recoveryKey,
@@ -240,12 +239,11 @@ it.each(["archive", "bucket"])(
 it.each(["archive", "bucket"])(
   "refuses a wrong master key through the %s command before outside collection or secrets publication",
   async (kind) => {
-    const file = kind === "archive" ? archivePath : join(root, "kit");
-    if (kind === "bucket") await writeFile(file, encodeRecoveryKit(kit));
     const lines: string[] = [];
     const result = await runRestore({
-      argv: kind === "archive" ? ["restore", file] : ["restore", "--from-bucket", file],
+      argv: kind === "archive" ? ["restore", archivePath] : bucketRestoreArgs(kit.bucket),
       env: {
+        ...(kind === "bucket" ? bucketRestoreEnv(kit.bucket, WRONG_MASTER_KEY) : {}),
         WAITRON_STATE_DIR: stateDir,
         WAITRON_BACKUP_RECOVERY_KEY: kit.recoveryKey,
         WAITRON_RECOVERY_OPERATION_FILE: operationPath,

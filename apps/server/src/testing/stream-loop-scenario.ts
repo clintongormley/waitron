@@ -1,5 +1,5 @@
 // The stream loop, end to end, against whichever bucket its fixture names: box A streams its
-// venue, dies, box B is rebuilt with its kit, saved node key and signed allocation, sells under a fresh
+// venue, dies, box B is rebuilt with the master key and signed allocation, sells under a fresh
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
 // restore of B's generation holds exactly what B's database holds; given versitygw, B then adds a
 // spare (`stream-loop-spare.ts`). `stream-loop.e2e.test.ts` runs it against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
@@ -42,15 +42,14 @@ import {
 import { writeAllocationInput } from "./allocation-input.js";
 import {
   createS3ObjectStore,
-  encodeRecoveryKit,
   probeBucket,
-  parseRecoveryKit,
   readPointer,
   restoreGeneration,
   verifyPointer,
   type BucketConfig,
   type ObjectStore,
 } from "@waitron/stream";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../../test/bucket-restore-command.js";
 import { recordFixtureSale } from "../../scripts/testing/sale.js";
 import { deriveStreamKey } from "../stream-key.js";
 import { startServer, type StartedServer } from "../boot.js";
@@ -74,7 +73,6 @@ import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-b
 import { STREAM_LOOP_SPARE_PHASES, runLoopSpare, type StartedFollow } from "./stream-loop-spare.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
-const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
 const VENUE: VenueRequest = {
   country: "ES",
@@ -237,7 +235,6 @@ function differingTables(a: Map<string, string[]>, b: Map<string, string[]>): st
 
 export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise<void> {
   const { bucket, scratch, litestreamBin, signal } = fixture;
-  let recoveryKey = RECOVERY_KEY;
   const clock = stageClock(fixture.record, signal);
   const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
     waitUntil(what, timeoutMs, probe, signal, POLL_MS);
@@ -285,12 +282,15 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const { nodeSecret: mintedSecret, ...a } = await provisionStreamBox({
       dirs: dirsA,
       advertisedOrigin: `https://127.0.0.1:${portA}`,
-      streaming: { bucket, recoveryKey: RECOVERY_KEY },
+      streaming: bucket,
       modulesJson: { modules: { "fiscal-none": false } },
       venue: { request: VENUE, modules: ALL_MODULES },
       ...(fixture.useRecoveryPack ? { apply: applyWithFirstSetup(dirsA.state) } : {}),
     });
     let nodeSecret = mintedSecret;
+    const originalRecoveryKey = (await readBackupSettings(dirsA.state))!
+      .WAITRON_BACKUP_RECOVERY_KEY!;
+    let recoveryKey = originalRecoveryKey;
 
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
     const serverA = await startWithRetainedListeners([heldA], async () =>
@@ -377,10 +377,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       saleInGeneration(pointerA.pointer.body.generation, saleA.saleId),
     );
 
-    const kitPath = join(
-      scratch,
-      fixture.useRecoveryPack ? "rotated-recovery-pack.pdf" : "recovery-kit.txt",
-    );
+    const packPath = join(scratch, "rotated-recovery-pack.pdf");
     if (fixture.useRecoveryPack) {
       const originalGeneration = pointerA.pointer.body.generation;
       const { via, close } = httpsVia(await readFile(join(dirsA.state, "tls", "ca.crt")));
@@ -413,7 +410,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         expect(rotated.status).toBe(200);
         await rotated.arrayBuffer();
         recoveryKey = (await readBackupSettings(dirsA.state))!.WAITRON_BACKUP_RECOVERY_KEY!;
-        expect(recoveryKey).not.toBe(RECOVERY_KEY);
+        expect(recoveryKey).not.toBe(originalRecoveryKey);
         pointerA = await waitFor("the rotated generation's pointer", POINTER_WAIT_MS, async () => {
           const read = await readPointer(store, streamId);
           return read !== null && read.pointer.body.generation !== originalGeneration
@@ -436,12 +433,12 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
               ceilingMs: RESTORE_MS,
             });
           await expect(
-            restore(pointerA.pointer.body.generation, RECOVERY_KEY, "wrong.db"),
+            restore(pointerA.pointer.body.generation, originalRecoveryKey, "wrong.db"),
           ).rejects.toMatchObject({
             code: "backup.stream_request_failed",
             params: { operation: "get", status: 403 },
           });
-          await restore(originalGeneration, RECOVERY_KEY, "old.db");
+          await restore(originalGeneration, originalRecoveryKey, "old.db");
           const old = new DatabaseSync(join(checkFolder, "old.db"));
           try {
             expect(
@@ -479,9 +476,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         const rotatedGeneration = pointerA.pointer.body.generation;
         recoveryKey = (await readBackupSettings(dirsA.state))!.WAITRON_BACKUP_RECOVERY_KEY!;
         expect(recoveryKey === rotatedKey).toBe(false);
-        expect(parseRecoveryKit(pack.bucketCode!).recoveryKey === recoveryKey).toBe(true);
         nodeSecret = pack.masterKey!;
-        await writeFile(kitPath, pdf);
+        await writeFile(packPath, pdf);
         pointerA = await waitFor("the new master key's generation", POINTER_WAIT_MS, async () => {
           const read = await readPointer(store, streamId);
           return read !== null && read.pointer.body.generation !== rotatedGeneration
@@ -504,18 +500,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await readFile(join(dirsA.state, "tls", "server.pem"), "utf8"),
     );
     await rm(dirsA.root, { recursive: true, force: true });
-    if (!fixture.useRecoveryPack)
-      await writeFile(
-        kitPath,
-        encodeRecoveryKit({
-          version: 2,
-          streamId,
-          bucket,
-          recoveryKey: RECOVERY_KEY,
-          pointerSignerPublicKey: a.publicKey,
-        }),
-      );
-
     // 6. B is rebuilt from the bucket through the command line. A changed within the last ten
     //    minutes, so the owner's confirmation that it is gone is required, and given.
     const dirsB = await boxDirs(scratch, "box-b");
@@ -551,15 +535,15 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         nodeSecret!,
       ),
       argv: [
-        "restore",
-        "--from-bucket",
-        kitPath,
+        ...bucketRestoreArgs(bucket),
+        ...(fixture.useRecoveryPack ? ["--master-key-file", packPath] : []),
         "--confirm-old-box-gone",
         "--confirm-venue",
         "74000001P",
       ],
       env: {
-        WAITRON_MASTER_KEY: nodeSecret!,
+        ...bucketRestoreEnv(bucket, nodeSecret),
+        WAITRON_MASTER_KEY: fixture.useRecoveryPack ? undefined : nodeSecret,
         WAITRON_STATE_DIR: dirsB.state,
         WAITRON_VENUE_DIR: dirsB.venue,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -575,7 +559,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
 
     clock.begin("pointer-b");
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
-    //    pointer moved — still verifiable with the key the owner's kit carries.
+    //    pointer moved, signed by the same node.
     const serverB = await startWithRetainedListeners([heldB], async () =>
       startServer(
         await loadBoxEnv(bootEnv(dirsB, portB, migrationsRoot, litestreamBin), dirsB.state),

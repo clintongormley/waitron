@@ -375,6 +375,7 @@ export async function stageStreamRestore(
     Omit<EntryValidationDeps, "skipSecrets"> & {
       /** The tax id the owner confirmed; null until they have seen one. */
       venueConfirmed: string | null;
+      selectedSourceId?: string;
       recoveryOperation?: RecoveryOperationInput;
       nodeRecoverySecret?: string;
       recoveryContext?: RecoveryEntryContext;
@@ -382,6 +383,9 @@ export async function stageStreamRestore(
 ): Promise<void> {
   const prepared = await prepareStreamRestore(deps);
   try {
+    if (deps.selectedSourceId !== undefined && prepared.sourceId !== deps.selectedSourceId) {
+      throw new AppError("restore.stream_copy_changed", {});
+    }
     if (!confirmsVenue(prepared.venue, deps.venueConfirmed)) {
       throw new AppError("restore.stream_venue_unconfirmed", { ...prepared.venue });
     }

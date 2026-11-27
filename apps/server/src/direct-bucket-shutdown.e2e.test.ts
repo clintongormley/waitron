@@ -84,10 +84,7 @@ it(
         request: VENUE_M,
         modules: enabledModules(ALL_MODULES, parseModuleConfig(MODULES_M, ALL_MODULES)),
       },
-      streaming: {
-        bucket: { ...bucket, endpoint: uploads.endpoint },
-        recoveryKey: USABLE_RECOVERY_KEY,
-      },
+      streaming: { ...bucket, endpoint: uploads.endpoint },
     });
     await holdRecoveryKey(dirs.state);
     const env = await loadBoxEnv(

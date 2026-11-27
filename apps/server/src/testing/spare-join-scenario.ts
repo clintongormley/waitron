@@ -25,7 +25,8 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { authenticateAgent } from "@waitron/printing";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
-import { nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
+import { decodeMasterKeyCode, nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
+import { heldBackupKey } from "./backup-key.js";
 import type { VenueRequest } from "@waitron/provisioning";
 import { createS3ObjectStore, readPointer, type BucketConfig } from "@waitron/stream";
 import { backupSettingsDigestOf, readBackupSettings } from "../backup-env-writer.js";
@@ -66,7 +67,6 @@ import { joinThenFinish, type SetupPageSend } from "./setup-join.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
 import { offerProducts } from "./zone-offers.js";
 
-const RECOVERY_KEY = "spare-join-e2e-recovery-key";
 export const MODULES_M = { modules: { "fiscal-verifactu": false } };
 const LOCALE_M = "en-GB";
 export const ADMIN = { email: "owner@example.test", password: "dashPass123" };
@@ -822,7 +822,8 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // M gets its key and its bucket copy while it is down: a real Save is refused against
     // versitygw (`encryption_ignored`), and the join checks for a bucket copy before a key.
     await boxM.stopForRestart();
-    await switchOnStreaming(dirsM, { bucket, recoveryKey: RECOVERY_KEY });
+    const firstBackupKey = heldBackupKey(decodeMasterKeyCode(m.nodeSecret));
+    await switchOnStreaming(dirsM, bucket, firstBackupKey);
     await boundedStart(boxM.start(), "M's start with its bucket copy");
     await fetchHealthOk(`${urlM}/health`, viaM);
 
@@ -842,7 +843,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
 
     clock.begin("bucket-stopped");
     const managing = await managementHeaders(urlM, boxM.origin, viaM);
-    const keys: string[] = [RECOVERY_KEY];
+    const keys: string[] = [firstBackupKey.key];
     const rotate = async (): Promise<string> => {
       const rotated = await fetch(`${urlM}/api/backup/rotate`, {
         ...viaM,

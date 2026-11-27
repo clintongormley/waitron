@@ -19,8 +19,9 @@ import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } fr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { encodeRecoveryKit, signPointer, writePointer, type RecoveryKit } from "@waitron/stream";
+import { signPointer, writePointer, type RecoveryKit } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import { ALL_MODULES } from "./modules.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -235,6 +236,11 @@ describe.each(paths)("invoice email after %s", (path) => {
               nodeId: T.nodeId,
               generation: `gen-0-${T.nodeId}-20261008T120000Z`,
               writtenAt: NOW.toISOString(),
+              recovery: {
+                signerPublicKey: signer.publicKey,
+                keyNumber: HELD_BACKUP_KEY.keyNumber,
+                masterKeyId: HELD_BACKUP_KEY.masterKeyId,
+              },
             },
             signer.privateKey,
           ),
@@ -253,19 +259,16 @@ describe.each(paths)("invoice email after %s", (path) => {
           },
         };
         if (path === "command bucket") {
-          const kitPath = join(root, "kit.json");
-          await writeFile(kitPath, encodeRecoveryKit(kit));
           expect(
             await runRestore({
               argv: [
-                "restore",
-                "--from-bucket",
-                kitPath,
+                ...bucketRestoreArgs(kit.bucket),
                 "--confirm-venue",
                 "89890001K",
                 "--confirm-old-box-gone",
               ],
               env: {
+                ...bucketRestoreEnv(kit.bucket, HELD_MASTER_KEY_TEXT),
                 WAITRON_STATE_DIR: stateDir,
                 WAITRON_VENUE_DIR: venueDir,
                 WAITRON_ENV: environment,

@@ -11,6 +11,18 @@ function hanging(): ObjectStore {
 }
 
 describe("boundObjectStore", () => {
+  it("keeps the folder discovery limit and times out a listing without an answer", async () => {
+    const listFolders = vi.fn(never);
+    const store = boundObjectStore({ ...hanging(), listFolders }, 10);
+    await expect(
+      Promise.resolve().then(() => store.listFolders?.("", { limit: 25 })),
+    ).rejects.toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "list", key: "", status: null, name: "TimedOut" },
+    });
+    expect(listFolders).toHaveBeenCalledWith("", { limit: 25, signal: expect.any(AbortSignal) });
+  });
+
   it.each([
     ["get", (s: ObjectStore) => s.get("venues/v1/current.json"), "venues/v1/current.json"],
     ["put", (s: ObjectStore) => s.put("probe/x", new Uint8Array([1])), "probe/x"],

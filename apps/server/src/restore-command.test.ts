@@ -2,7 +2,7 @@ import { ensureStreamId } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadKeyRing } from "@waitron/credentials";
@@ -10,14 +10,12 @@ import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
-import { encodeRecoveryKit, type ObjectStore, type RecoveryKit } from "@waitron/stream";
+import type { BucketConfig, ObjectStore } from "@waitron/stream";
 import {
-  NOT_A_PACK,
-  PACK_DAMAGED,
-  plainPdf,
-  recoveryPackPdf,
-  withDigest,
-} from "../test/recovery-pack-pdf.js";
+  bucketRestoreArgs,
+  bucketRestoreEnv,
+  TEST_MASTER_KEY,
+} from "../test/bucket-restore-command.js";
 import { describe, expect, it, vi } from "vitest";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
@@ -570,23 +568,17 @@ describe("waitron-restore restore", () => {
   });
 });
 
-const KIT: RecoveryKit = {
-  version: 2 as const,
-  streamId: "c0000000-0000-4000-8000-000000000002",
-  bucket: {
-    endpoint: "https://s3.example.net",
-    region: "eu-west-1",
-    bucket: "venue-copy",
-    prefix: "waitron/",
-    accessKeyId: "AKIAEXAMPLE",
-    secretAccessKey: "not-a-real-secret-0123456789",
-  },
-  recoveryKey: "recovery-key-one-strong",
-  pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
+const BUCKET: BucketConfig = {
+  endpoint: "https://s3.example.net",
+  region: "eu-west-1",
+  bucket: "venue-copy",
+  prefix: "waitron/",
+  accessKeyId: "AKIAEXAMPLE",
+  secretAccessKey: "not-a-real-secret-0123456789",
 };
-
-/** Where the kit's encoded body starts, after its fixed prefix. */
-const KIT_TOKEN_START = "WAITRON-RECOVERY-KIT-2:".length;
+const BUCKET_ARGS = bucketRestoreArgs(BUCKET);
+const BUCKET_FLAGS = BUCKET_ARGS.slice(1);
+const BUCKET_ENV = bucketRestoreEnv(BUCKET);
 
 const BUCKET_NOTICE =
   "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled";
@@ -595,18 +587,12 @@ type StreamDeps = Parameters<typeof restoreFromStream>[0];
 type RestoreStreamFake = (deps: StreamDeps) => Promise<void>;
 const VENUE: RestoredVenue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
-async function kitFile(text = `Waitron recovery kit\n\n${encodeRecoveryKit(KIT)}\n`) {
-  const dir = await mkdtemp(join(tmpdir(), "waitron-cli-kit-"));
-  await writeFile(join(dir, "kit.txt"), text);
-  return { dir, kitPath: join(dir, "kit.txt") };
-}
-
 async function refusedWith(error: unknown): Promise<{ code: number; out: string[] }> {
-  const { dir, kitPath } = await kitFile();
+  const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
   const out: string[] = [];
   const code = await runRestore({
-    argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", VENUE.taxId],
-    env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+    argv: [...BUCKET_ARGS, "--confirm-venue", VENUE.taxId],
+    env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
     out: (line) => out.push(line),
     restoreStream: async () => {
       throw error;
@@ -616,13 +602,14 @@ async function refusedWith(error: unknown): Promise<{ code: number; out: string[
 }
 
 describe("waitron-restore restore --from-bucket", () => {
-  it("reads the kit file, needs no recovery key in the environment, and runs the bucket restore", async () => {
-    const { dir, kitPath } = await kitFile();
+  it("passes the bucket settings and master key through the normal restore command", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     const out: string[] = [];
     let received: StreamDeps | undefined;
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", VENUE.taxId],
+      argv: [...BUCKET_ARGS, "--confirm-venue", VENUE.taxId],
       env: {
+        ...BUCKET_ENV,
         WAITRON_ENV: "preproduction",
         WAITRON_STATE_DIR: dir,
         WAITRON_LITESTREAM_BIN: "/opt/litestream",
@@ -635,7 +622,8 @@ describe("waitron-restore restore --from-bucket", () => {
     });
     expect(code).toBe(0);
     expect(received).toMatchObject({
-      kit: KIT,
+      bucket: BUCKET,
+      masterKey: TEST_MASTER_KEY,
       oldBoxGone: false,
       environment: "preproduction",
       stateDir: resolve(dir),
@@ -649,10 +637,10 @@ describe("waitron-restore restore --from-bucket", () => {
     expect(out).toEqual([
       BUCKET_NOTICE,
       expect.stringContaining("restore.stream_prepared"),
-      `restored from the bucket named in ${kitPath}`,
+      "restored from the bucket",
     ]);
-    expect(out.join("\n")).not.toContain(KIT.recoveryKey);
-    expect(out.join("\n")).not.toContain(KIT.bucket.secretAccessKey);
+    expect(out.join("\n")).not.toContain(TEST_MASTER_KEY);
+    expect(out.join("\n")).not.toContain(BUCKET.secretAccessKey);
   });
 
   // It goes ahead only when --confirm-venue names the copy's tax id exactly.
@@ -664,12 +652,11 @@ describe("waitron-restore restore --from-bucket", () => {
   ] as const)(
     "shows the restored venue and, with %j, confirms it: %s",
     async (flags, confirmed) => {
-      const { kitPath } = await kitFile();
       const out: string[] = [];
       let answer: boolean | undefined;
       await runRestore({
-        argv: ["restore", "--from-bucket", kitPath, ...flags],
-        env: { WAITRON_ENV: "preproduction" },
+        argv: [...BUCKET_ARGS, ...flags],
+        env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
         lockVenue: unlockedVenue,
         out: (line) => out.push(line),
         restoreStream: async (d) => {
@@ -682,11 +669,10 @@ describe("waitron-restore restore --from-bucket", () => {
   );
 
   it("never confirms a copy that names no tax id, even against an empty --confirm-venue", async () => {
-    const { kitPath } = await kitFile();
     let answer: boolean | undefined;
     await runRestore({
-      argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", ""],
-      env: { WAITRON_ENV: "preproduction" },
+      argv: [...BUCKET_ARGS, "--confirm-venue", ""],
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
       lockVenue: unlockedVenue,
       out: () => {},
       restoreStream: async (d) => {
@@ -720,11 +706,10 @@ describe("waitron-restore restore --from-bucket", () => {
   });
 
   it("passes the operator's confirmation that the old box is gone", async () => {
-    const { kitPath } = await kitFile();
     const restoreStream = vi.fn<RestoreStreamFake>(async () => {});
     await runRestore({
-      argv: ["restore", "--from-bucket", kitPath, "--confirm-old-box-gone"],
-      env: { WAITRON_ENV: "preproduction" },
+      argv: [...BUCKET_ARGS, "--confirm-old-box-gone"],
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
       lockVenue: unlockedVenue,
       out: () => {},
       restoreStream,
@@ -759,19 +744,21 @@ describe("waitron-restore restore --from-bucket", () => {
     ],
     [
       new AppError("restore.stream_pointer_missing", {}),
-      "restore failed: restore.stream_pointer_missing — the bucket holds no copy for the venue this kit names; check that the kit is this venue's",
+      "restore failed: restore.stream_pointer_missing — no backup copy was found; check the bucket and folder",
+    ],
+    [
+      new AppError("restore.stream_folder_required", {
+        folders: ["waitron/first", "waitron/second"],
+      }),
+      "restore failed: restore.stream_folder_required — give the backup's specific folder with --prefix, then run the command again",
     ],
     [
       new AppError("restore.stream_pointer_unverified", { reason: "signature" }),
-      "restore failed: restore.stream_pointer_unverified — the copy in the bucket was not signed by the key in this kit, so it is not trusted; check that the kit is this venue's newest",
-    ],
-    [
-      new AppError("restore.stream_pointer_unverified", { reason: "venue_mismatch" }),
-      "restore failed: restore.stream_pointer_unverified — the bucket's record of its newest copy names a different venue from this kit",
+      "restore failed: restore.stream_pointer_unverified — the backup's pointer did not pass its signature check; choose another backup",
     ],
     [
       new AppError("restore.stream_pointer_unverified", { reason: "key_or_access" }),
-      "restore failed: restore.stream_pointer_unverified — the recovery pack does not match this copy, or the bucket login cannot read it; use the pack matching this copy, or correct the bucket access and try again",
+      "restore failed: restore.stream_pointer_unverified — check that this copy matches the master key and the storage credentials can read it",
     ],
     [
       new AppError("restore.stream_integrity_failed", {}),
@@ -787,11 +774,11 @@ describe("waitron-restore restore --from-bucket", () => {
     ],
     [
       new AppError("recovery.passphrase_invalid", {}),
-      "restore failed: the recovery key in this kit does not open the copy's locked secrets, or they are damaged",
+      "restore failed: the backup's locked secrets could not be opened; try another backup copy",
     ],
     [
       new AppError("backup.artifact_invalid", { reason: "tag" }),
-      "restore failed: the recovery key in this kit does not open the copy's locked secrets, or they are damaged",
+      "restore failed: the backup's locked secrets could not be opened; try another backup copy",
     ],
     [
       new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }),
@@ -812,7 +799,7 @@ describe("waitron-restore restore --from-bucket", () => {
         status: 403,
         name: "AccessDenied",
       }),
-      "restore failed: backup.stream_request_failed — the bucket did not answer, or refused the kit's key; check this server's network and that the bucket and its key still exist",
+      "restore failed: backup.stream_request_failed — the bucket did not answer or refused access; check the network, bucket and storage credentials",
     ],
     [
       new AppError("restore.hook_failed", { module: "fiscal-verifactu", code: "series.x" }),
@@ -846,77 +833,12 @@ describe("waitron-restore restore --from-bucket", () => {
     });
   });
 
-  it("reports a file with no kit in it by what is wrong, never its contents", async () => {
-    const { kitPath } = await kitFile("not a kit, secret-0123456789");
-    const out: string[] = [];
-    const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction" },
-      out: (line) => out.push(line),
-    });
-    expect(code).toBe(1);
-    expect(out).toEqual([
-      "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery pack PDF or kit file saved for this venue",
-    ]);
-    expect(out.join("\n")).not.toContain("secret-0123456789");
-  });
-
-  it("refuses a kit cut short by name, and restores nothing", async () => {
-    const whole = encodeRecoveryKit(KIT);
-    const { dir, kitPath } = await kitFile(whole.slice(0, Math.floor(whole.length / 2)));
-    const out: string[] = [];
-    const restoreStream = vi.fn(async () => {});
-    const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
-      out: (line) => out.push(line),
-      restoreStream,
-    });
-    expect(code).toBe(1);
-    expect(out).toEqual([
-      "restore failed: backup.stream_kit_invalid — the recovery kit in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole kit file as it was saved",
-    ]);
-    expect(out.join("\n")).not.toContain(whole.slice(KIT_TOKEN_START, KIT_TOKEN_START + 24));
-    expect(restoreStream).not.toHaveBeenCalled();
-    expect(await readdir(dir)).toEqual(["kit.txt"]);
-  });
-
-  it("names an old bucket code and restores nothing", async () => {
-    const { dir, kitPath } = await kitFile("WAITRON-RECOVERY-KIT-1:old-code");
-    const out: string[] = [];
-    const restoreStream = vi.fn(async () => {});
-    const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
-      out: (line) => out.push(line),
-      restoreStream,
-    });
-    expect(code).toBe(1);
-    expect(out).toEqual([
-      "restore failed: backup.stream_kit_invalid — this bucket recovery code was made before this version of Waitron and cannot be used; choose a newer recovery pack, or restore an archive backup",
-    ]);
-    expect(restoreStream).not.toHaveBeenCalled();
-    expect(await readdir(dir)).toEqual(["kit.txt"]);
-  });
-
-  it("names the kit path it cannot read", async () => {
-    const out: string[] = [];
-    const code = await runRestore({
-      argv: ["restore", "--from-bucket", "/does/not/exist/kit.txt"],
-      env: {},
-      out: (line) => out.push(line),
-    });
-    expect(code).toBe(1);
-    expect(out).toEqual(["cannot read recovery pack or kit file: /does/not/exist/kit.txt"]);
-  });
-
   it("reports an invalid WAITRON_ENV by code and runs no restore", async () => {
-    const { kitPath } = await kitFile();
     const out: string[] = [];
     const restoreStream = vi.fn(async () => {});
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "garbage" },
+      argv: BUCKET_ARGS,
+      env: { ...BUCKET_ENV, WAITRON_ENV: "garbage" },
       out: (line) => out.push(line),
       restoreStream,
     });
@@ -935,20 +857,12 @@ describe("waitron-restore restore --from-bucket", () => {
   });
 
   it("takes the bucket form when flags come before --from-bucket", async () => {
-    const { kitPath } = await kitFile();
     const out: string[] = [];
     let received: StreamDeps | undefined;
     let answer: boolean | undefined;
     const code = await runRestore({
-      argv: [
-        "restore",
-        "--confirm-venue",
-        VENUE.taxId,
-        "--confirm-old-box-gone",
-        "--from-bucket",
-        kitPath,
-      ],
-      env: { WAITRON_ENV: "preproduction" },
+      argv: ["restore", "--confirm-venue", VENUE.taxId, "--confirm-old-box-gone", ...BUCKET_FLAGS],
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
       lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       restoreStream: async (d) => {
@@ -957,12 +871,16 @@ describe("waitron-restore restore --from-bucket", () => {
       },
     });
     expect(code).toBe(0);
-    expect(received).toMatchObject({ kit: KIT, oldBoxGone: true });
+    expect(received).toMatchObject({
+      bucket: BUCKET,
+      masterKey: TEST_MASTER_KEY,
+      oldBoxGone: true,
+    });
     expect(answer).toBe(true);
-    expect(out.at(-1)).toBe(`restored from the bucket named in ${kitPath}`);
+    expect(out.at(-1)).toBe("restored from the bucket");
   });
 
-  it("prints the one-line usage when --from-bucket comes last with no kit file", async () => {
+  it("prints the one-line usage when --from-bucket comes last with no location", async () => {
     const out: string[] = [];
     const restoreStream = vi.fn<RestoreStreamFake>();
     const code = await runRestore({
@@ -977,7 +895,7 @@ describe("waitron-restore restore --from-bucket", () => {
   });
 
   it("uses the real bucket restore when none is injected", async () => {
-    const { dir, kitPath } = await kitFile();
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     const out: string[] = [];
     const empty: ObjectStore = {
       get: async () => null,
@@ -988,8 +906,8 @@ describe("waitron-restore restore --from-bucket", () => {
     };
     const opened: unknown[] = [];
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      argv: BUCKET_ARGS,
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
       out: (line) => out.push(line),
       openStore: (bucket) => {
         opened.push(bucket);
@@ -997,16 +915,15 @@ describe("waitron-restore restore --from-bucket", () => {
       },
     });
     expect(code).toBe(1);
-    expect(opened).toEqual([KIT.bucket]);
+    expect(opened).toEqual([BUCKET]);
     expect(out.at(-1)).toMatch(/^restore failed: restore\.stream_pointer_missing — /);
   });
 
   it("gives up on a bucket call that never answers", async () => {
-    const { kitPath } = await kitFile();
     const out: string[] = [];
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction" },
+      argv: BUCKET_ARGS,
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
       lockVenue: unlockedVenue,
       out: (line) => out.push(line),
       openStore: () => ({
@@ -1018,7 +935,7 @@ describe("waitron-restore restore --from-bucket", () => {
       }),
       bucketTimeoutMs: 20,
       restoreStream: async (d) => {
-        await d.openStore!(KIT.bucket).get("current.json");
+        await d.openStore!(BUCKET).get("current.json");
       },
     });
     expect(code).toBe(1);
@@ -1028,11 +945,12 @@ describe("waitron-restore restore --from-bucket", () => {
 
 describe("waitron-restore restore --from-bucket, where things live", () => {
   it("resolves overridden venue and migrations folders as the archive path does", async () => {
-    const { dir, kitPath } = await kitFile();
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     let received: StreamDeps | undefined;
     await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
+      argv: BUCKET_ARGS,
       env: {
+        ...BUCKET_ENV,
         WAITRON_ENV: "production",
         WAITRON_STATE_DIR: dir,
         WAITRON_VENUE_DIR: join(dir, "elsewhere"),
@@ -1051,18 +969,24 @@ describe("waitron-restore restore --from-bucket, where things live", () => {
   });
 
   it("opens the real bucket client when no opener is injected, without sending anything", async () => {
-    const { kitPath } = await kitFile();
     let opened: ObjectStore | undefined;
     await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction" },
+      argv: BUCKET_ARGS,
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction" },
       lockVenue: unlockedVenue,
       out: () => {},
       restoreStream: async (d) => {
-        opened = d.openStore!(KIT.bucket);
+        opened = d.openStore!(BUCKET);
       },
     });
-    expect(Object.keys(opened!).sort()).toEqual(["delete", "deleteMany", "get", "list", "put"]);
+    expect(Object.keys(opened!).sort()).toEqual([
+      "delete",
+      "deleteMany",
+      "get",
+      "list",
+      "listFolders",
+      "put",
+    ]);
   });
 });
 
@@ -1090,7 +1014,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
         invoiceLocales: ["es"],
       });
       await withTransaction(copy.venue, ensureStreamId);
-      await withTransaction(copy.venue, (tx) => writeStreamSettings(tx, ring, KIT.bucket, null));
+      await withTransaction(copy.venue, (tx) => writeStreamSettings(tx, ring, BUCKET, null));
     } finally {
       await copy.close();
     }
@@ -1132,7 +1056,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
       code: "restore.stream_source_unchecked",
       params: { reason: "bucket" },
     });
-    expect(opened).toEqual([KIT.bucket]);
+    expect(opened).toEqual([BUCKET]);
   });
 });
 
@@ -1231,38 +1155,39 @@ describe("waitron-restore restore <artifact> and the old server", () => {
 
 describe("waitron-restore restore, the arguments each form accepts", () => {
   const ARTIFACT = "<artifact>";
-  const KIT_FILE = "<kit>";
+  const RETIRED_INPUT = "<backup-name>";
   it.each([
-    ["--confirm-venue with no value", ["--from-bucket", KIT_FILE, "--confirm-venue"]],
+    ["--confirm-venue with no value", [...BUCKET_FLAGS, "--confirm-venue"]],
     [
       "--confirm-venue followed by another flag",
-      ["--from-bucket", KIT_FILE, "--confirm-venue", "--confirm-old-box-gone"],
+      [...BUCKET_FLAGS, "--confirm-venue", "--confirm-old-box-gone"],
     ],
     ["--confirm-venue on the file form", [ARTIFACT, "--confirm-venue", "89890001K"]],
     ["a misspelled flag on the file form", [ARTIFACT, "--confirm-old-box-gon"]],
-    ["a misspelled flag on the bucket form", ["--from-bucket", KIT_FILE, "--confrim-venue", "X"]],
-    ["an artifact given with --from-bucket", [ARTIFACT, "--from-bucket", KIT_FILE]],
-    ["an artifact after the kit file", ["--from-bucket", KIT_FILE, ARTIFACT]],
+    ["a misspelled flag on the bucket form", [...BUCKET_FLAGS, "--confrim-venue", "X"]],
+    [
+      "a secret on the bucket form",
+      [...BUCKET_FLAGS, "--secret-access-key", BUCKET.secretAccessKey],
+    ],
+    ["an artifact given with --from-bucket", [ARTIFACT, ...BUCKET_FLAGS]],
+    ["an artifact after the bucket options", [...BUCKET_FLAGS, ARTIFACT]],
     ["a second artifact", [ARTIFACT, ARTIFACT]],
-    ["--from-bucket given twice", ["--from-bucket", KIT_FILE, "--from-bucket", KIT_FILE]],
+    ["--from-bucket given twice", [...BUCKET_FLAGS, "--from-bucket"]],
     [
       "--confirm-old-box-gone given twice",
       [ARTIFACT, "--confirm-old-box-gone", "--confirm-old-box-gone"],
     ],
     [
       "--from-archive with --archive-key",
-      ["--from-archive", KIT_FILE, "--archive-key", "waitron-20261001T030000Z-n-x.backup.enc"],
+      ["--from-archive", RETIRED_INPUT, "--archive-key", "waitron-20261001T030000Z-n-x.backup.enc"],
     ],
-    ["--from-archive alone", ["--from-archive", KIT_FILE]],
+    ["--from-archive alone", ["--from-archive", RETIRED_INPUT]],
     ["--archive-key on the file form", [ARTIFACT, "--archive-key", "any"]],
   ])("prints the one-line usage and runs nothing for %s", async (_label, args) => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-cli-args-"));
     const artifactPath = await makeArtifact(dir);
-    const { kitPath } = await kitFile();
-    const argv = [
-      "restore",
-      ...args.map((a) => (a === ARTIFACT ? artifactPath : a === KIT_FILE ? kitPath : a)),
-    ];
+
+    const argv = ["restore", ...args.map((a) => (a === ARTIFACT ? artifactPath : a))];
     const out: string[] = [];
     const restore = vi.fn(async () => {});
     const restoreStream = vi.fn<RestoreStreamFake>(async () => {});
@@ -1322,67 +1247,6 @@ describe("waitron-restore restore, when the restored database could not be put i
   });
 });
 
-describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
-  async function packFile(bytes: Uint8Array) {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-pack-"));
-    await writeFile(join(dir, "pack.pdf"), bytes);
-    return { dir, packPath: join(dir, "pack.pdf") };
-  }
-
-  async function run(packPath: string, dir: string) {
-    const out: string[] = [];
-    let received: StreamDeps | undefined;
-    const code = await runRestore({
-      argv: ["restore", "--from-bucket", packPath, "--confirm-venue", VENUE.taxId],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
-      out: (line) => out.push(line),
-      restoreStream: async (d) => {
-        received = d;
-      },
-    });
-    return { code, out, received };
-  }
-
-  it("reads the bucket copy code out of the pack's attached file and runs the bucket restore", async () => {
-    const { dir, packPath } = await packFile(
-      await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT) }),
-    );
-    const { code, out, received } = await run(packPath, dir);
-    expect(code).toBe(0);
-    expect(received).toMatchObject({ kit: KIT });
-    expect(out).toEqual([BUCKET_NOTICE, `restored from the bucket named in ${packPath}`]);
-  });
-
-  it("says a pack made with no bucket copy holds no code, and restores nothing", async () => {
-    const { dir, packPath } = await packFile(await recoveryPackPdf({ bucketCode: null }));
-    const { code, out, received } = await run(packPath, dir);
-    expect(received).toBeUndefined();
-    expect({ code, out }).toEqual({
-      code: 1,
-      out: [
-        "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
-      ],
-    });
-  });
-
-  it("says a PDF that is not a recovery pack is not one", async () => {
-    const { dir, packPath } = await packFile(await plainPdf());
-    const { code, out, received } = await run(packPath, dir);
-    expect(received).toBeUndefined();
-    expect({ code, out }).toEqual({ code: 1, out: [NOT_A_PACK] });
-  });
-
-  it("says a pack whose attached file was changed is damaged", async () => {
-    const bytes = await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT) });
-    const { dir, packPath } = await packFile(
-      await withDigest(bytes, "sha256-v1:" + "0".repeat(64)),
-    );
-    const { code, out, received } = await run(packPath, dir);
-    expect(received).toBeUndefined();
-    expect({ code, out }).toEqual({ code: 1, out: [PACK_DAMAGED] });
-  });
-});
-
 describe("waitron-restore restore, the venue folder", () => {
   const IN_USE =
     "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
@@ -1395,13 +1259,13 @@ describe("waitron-restore restore, the venue folder", () => {
   }
 
   it("refuses at once while another program holds the venue folder, before reading the bucket", async () => {
-    const { dir, kitPath } = await kitFile();
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     const out: string[] = [];
     const seen: string[] = [];
     const restoreStream = vi.fn(async () => {});
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath, "--confirm-venue", VENUE.taxId],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      argv: [...BUCKET_ARGS, "--confirm-venue", VENUE.taxId],
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
       out: (line) => out.push(line),
       lockVenue: heldElsewhere(seen),
       restoreStream,
@@ -1442,7 +1306,7 @@ describe("waitron-restore restore, the venue folder", () => {
       let argv: string[];
       const extra: Partial<Parameters<typeof runRestore>[0]> = {};
       if (form === "bucket") {
-        argv = ["restore", "--from-bucket", (await kitFile()).kitPath];
+        argv = BUCKET_ARGS;
         extra.restoreStream = heldDuringRestore;
       } else {
         argv = ["restore", await makeArtifact(dir)];
@@ -1452,6 +1316,7 @@ describe("waitron-restore restore, the venue folder", () => {
       const code = await runRestore({
         argv,
         env: {
+          ...(form === "bucket" ? BUCKET_ENV : {}),
           WAITRON_ENV: "preproduction",
           WAITRON_STATE_DIR: dir,
           WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
@@ -1467,11 +1332,11 @@ describe("waitron-restore restore, the venue folder", () => {
   );
 
   it("lets go of the venue folder when the restore fails", async () => {
-    const { dir, kitPath } = await kitFile();
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     const release = vi.fn();
     const code = await runRestore({
-      argv: ["restore", "--from-bucket", kitPath],
-      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      argv: BUCKET_ARGS,
+      env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
       out: () => {},
       lockVenue: async () => ({ release }),
       restoreStream: async () => {
@@ -1483,7 +1348,7 @@ describe("waitron-restore restore, the venue folder", () => {
   });
 
   it("is refused by a real second process holding the folder", async () => {
-    const { dir, kitPath } = await kitFile();
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-bucket-"));
     const stateDir = join(dir, "state");
     const venueDir = join(stateDir, "venue");
     await mkdir(venueDir, { recursive: true });
@@ -1505,8 +1370,8 @@ setInterval(() => db, 1000);`;
       const out: string[] = [];
       const openStore = vi.fn();
       const code = await runRestore({
-        argv: ["restore", "--from-bucket", kitPath],
-        env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: stateDir },
+        argv: BUCKET_ARGS,
+        env: { ...BUCKET_ENV, WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: stateDir },
         out: (line) => out.push(line),
         openStore,
       });

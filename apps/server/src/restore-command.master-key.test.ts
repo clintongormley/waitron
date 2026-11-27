@@ -7,12 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecoveryPackFileError } from "@waitron/recovery-pack";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import {
+  NOT_A_PACK,
+  PACK_DAMAGED,
   packPdfWithArchiveFields,
   packPdfWithoutMasterKey,
+  plainPdf,
   recoveryPackPdf,
+  withDigest,
 } from "../test/recovery-pack-pdf.js";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import { decryptBackupFile } from "./artifact-cipher-file.js";
 import { encryptArtifact } from "./artifact-cipher.js";
+import { formatEnvFile } from "./env-file.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import type { RestoreFileDeps } from "./restore.js";
 import { runRestore } from "./restore-command.js";
@@ -143,6 +149,24 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["a plain PDF", plainPdf, NOT_A_PACK],
+    [
+      "a bad digest",
+      async () =>
+        withDigest(await recoveryPackPdf({ bucketCode: null }), "sha256-v1:" + "0".repeat(64)),
+      PACK_DAMAGED,
+    ],
+  ])("refuses %s supplied as the master key file", async (_label, pdf, message) => {
+    const path = await backupFile();
+    const pack = join(dir, "pack.pdf");
+    await writeFile(pack, await pdf());
+    const { code, out, restore } = await run(["restore", path, "--master-key-file", pack], {});
+    expect(code).toBe(1);
+    expect(out).toEqual([message]);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
   const UNREADABLE_KEY_FILE =
     "cannot read the master key file: give a readable file holding the master key, or the recovery pack PDF";
 
@@ -194,7 +218,7 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
-  it("refuses --master-key-file with the bucket form", async () => {
+  it("refuses the retired kit argument", async () => {
     const keyFile = join(dir, "master-key.txt");
     await writeFile(keyFile, MASTER_KEY_TEXT);
     const { code, out } = await run(
@@ -204,6 +228,49 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(code).toBe(2);
     expect(out[0]).toMatch(/^usage: /);
   });
+
+  it.each(["file", "environment"] as const)(
+    "opens a bucket with the master key and bucket credentials from %s",
+    async (source) => {
+      const bucket = {
+        bucket: "my-bucket",
+        region: "eu-west-1",
+        prefix: "dinner",
+        endpoint: "https://storage.example.com",
+        accessKeyId: "test-access-id",
+        secretAccessKey: "test-secret-access-key",
+      };
+      const { WAITRON_MASTER_KEY, ...creds } = bucketRestoreEnv(bucket, MASTER_KEY_TEXT);
+      const credentialsFile = join(dir, "credentials.env");
+      const masterKeyFile = join(dir, "master-key.txt");
+      await writeFile(credentialsFile, formatEnvFile(creds));
+      await writeFile(masterKeyFile, WAITRON_MASTER_KEY);
+      const argv = [
+        ...bucketRestoreArgs(bucket),
+        ...(source === "file"
+          ? ["--bucket-credentials-file", credentialsFile, "--master-key-file", masterKeyFile]
+          : []),
+      ];
+      const out: string[] = [];
+      const restoreStream = vi.fn(async () => {});
+      const code = await runRestore({
+        argv,
+        env: {
+          WAITRON_ENV: "preproduction",
+          WAITRON_STATE_DIR: dir,
+          ...(source === "environment" ? { ...creds, WAITRON_MASTER_KEY } : {}),
+        },
+        out: (line) => out.push(line),
+        restoreStream,
+      });
+      expect(code).toBe(0);
+      expect(restoreStream).toHaveBeenCalledWith(
+        expect.objectContaining({ masterKey: MASTER_KEY_TEXT, bucket }),
+      );
+      for (const secret of [...Object.values(creds), MASTER_KEY_TEXT])
+        expect(out.join("\n")).not.toContain(secret);
+    },
+  );
 
   it("refuses a master key made after the backup, naming the backup's key", async () => {
     const older = makeMasterKey();

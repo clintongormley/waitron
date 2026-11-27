@@ -131,11 +131,7 @@ export async function previewRecoveryStream(
   try {
     const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, deps);
     const activationSourceId = copy.sourceId;
-    const preview = await readRecoveryCopyPreview(
-      copy,
-      `stream:${deps.kit.streamId}:${prepared.generation}`,
-      deps,
-    );
+    const preview = await readRecoveryCopyPreview(copy, prepared.sourceId, deps);
     return { ...preview, activationSourceId };
   } finally {
     await prepared.discard();

@@ -544,13 +544,7 @@ export function createSetupRecoveryPreparation(
         ...options,
         environment: source.environment,
       });
-      return await interactive.prepare(
-        copy,
-        `stream:${kit.streamId}:${prepared.generation}`,
-        request,
-        hold,
-        client,
-      );
+      return await interactive.prepare(copy, prepared.sourceId, request, hold, client);
     } finally {
       await prepared.discard();
     }

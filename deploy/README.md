@@ -894,38 +894,37 @@ command against it treat that entrypoint differently:
   Cloud copy opens instead with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`; that variable
   opens only a version 1 file such as a Cloud copy, never a backup file the box keeps in its backup
   folders or bucket, which opens only with the master key.
-  `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
-  owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Print the recovery
-  pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
-  it. Either holds the bucket's key and the recovery key, so nothing secret goes on the command
-  line. The file must be visible inside the container and readable by the image's user, `waitron`
-  (uid 10001):
-  `sudo chown 10001 recovery-pack.pdf` keeps it private at mode 0600. Otherwise the command stops
-  with `cannot read recovery pack or kit file: /recovery-pack.pdf`.
+  To rebuild from the continuous copy, use `restore --from-bucket` with the bucket's name and
+  region. Use `--prefix` for the folder and `--endpoint` for a storage provider's custom address.
+  If the command asks for a specific folder, give that copy's full folder in `--prefix`.
 
-  The command reads the bucket copy code from the file attached inside the PDF, never from its
-  printed text, where a long code wraps. It restores nothing and prints one line when the pack
-  holds no bucket copy code (the box had no bucket copy when the pack was made), when the PDF is not
-  a Waitron recovery pack, or when the file attached inside the pack is damaged or was changed after
-  it was made. Keep the pack locked away, off the box.
+  Set `WAITRON_RESTORE_BUCKET_ACCESS_KEY_ID` and `WAITRON_RESTORE_BUCKET_SECRET_ACCESS_KEY` in the
+  restore process's environment, or put both as `NAME=value` lines in a private file and give its
+  path with `--bucket-credentials-file`. Supply the master key through `WAITRON_MASTER_KEY` or
+  `--master-key-file`. The latter can read the key from the recovery pack PDF. Mount files
+  read-only and make them readable by the image's `waitron` user (uid 10001). Keep the files private.
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
   backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The bucket example below
   shows bucket access only; add that procedure's recovery override and credentials
-  when restoring Veri*Factu. A bucket kit's or Cloud copy's recovery key alone does not authorise activation.
+  when restoring Veri*Factu.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
   `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
   that reason, says no invoice series was made, and asks you to check that `timedatectl` shows
   "System clock synchronized: yes" before running the command again.
 
   ```bash
-  docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
-    /app/bin-restore.js restore --from-bucket /recovery-pack.pdf --confirm-venue <tax-id>
+  docker compose run --rm \
+    -v "$PWD/bucket-credentials.env:/bucket-credentials.env:ro" \
+    -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-bucket --bucket restaurant-backups --region eu-west-1 \
+    --prefix main-room --bucket-credentials-file /bucket-credentials.env \
+    --master-key-file /recovery-pack.pdf
   ```
 
-  It prints the business name, tax id and venue name of the copy it found, and restores nothing
-  unless `--confirm-venue` names that tax id. If the old box wrote to the bucket in the last ten
+  Check the printed business name, tax id and venue name. To restore that copy, run the command
+  again with `--confirm-venue` and the tax id you confirmed. If the old box wrote to the bucket in the last ten
   minutes, or that cannot be checked, it stops and says so; add `--confirm-old-box-gone` only when
   the old box is switched off for good. A backup file whose box was copying to a bucket gets the
   same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the

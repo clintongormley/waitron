@@ -11,14 +11,13 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  encodeRecoveryKit,
   generationPrefix,
   pointerKey,
   signPointer,
@@ -33,6 +32,7 @@ import {
   createMemoryObjectStore,
   type MemoryObjectStore,
 } from "@waitron/stream/testing/memory-store.js";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
@@ -83,7 +83,9 @@ const T = {
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
-const RECOVERY_KEY = "recovery-key-one-strong";
+const MASTER_KEY = encodeMasterKeyCode(Buffer.alloc(16, 17));
+const RECOVERY_KEY = "WlbX9O6pDWuyQ3Utr-71V-HHMNIAb0_ALFmJkV4mIbo";
+const STREAM_KEY = "oLD+J0A1pG1VISJFPr0oTGmkSaUDLrDYs9uC5PMs0kk=";
 const GENERATION = `gen-0-${T.nodeId}-20260923T090000Z`;
 const NOW = new Date("2026-09-23T12:00:00Z");
 const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
@@ -218,8 +220,8 @@ const copyFixture = vi.fn(async (args: RestoreGenerationArgs) => {
 
 async function prepareDeps(
   store: ObjectStore,
-  overrides: Partial<PrepareStreamDeps> = {},
-): Promise<PrepareStreamDeps> {
+  overrides: Partial<Extract<PrepareStreamDeps, { kit: RecoveryKit }>> = {},
+): Promise<Extract<PrepareStreamDeps, { kit: RecoveryKit }>> {
   return {
     kit: KIT,
     stateDir: await fresh("waitron-stream-state-"),
@@ -241,7 +243,118 @@ async function expectStateUntouched(stateDir: string): Promise<void> {
   if (names.includes("scratch")) expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 }
 
+async function numberedBucket(signWith = signer.privateKey) {
+  const store = await bucket();
+  const pointer = signPointer(
+    {
+      ...POINTER,
+      recovery: {
+        signerPublicKey: signer.publicKey,
+        keyNumber: 2,
+        masterKeyId: "1caa45f2d2fe567b",
+      },
+    },
+    signWith,
+  );
+  await store.put(pointerKey(), Buffer.from(JSON.stringify(pointer)));
+  return store;
+}
+
+async function masterKeyDeps(
+  store: ObjectStore,
+  masterKey = MASTER_KEY,
+  restore: typeof copyFixture = copyFixture,
+) {
+  const { kit, ...deps } = await prepareDeps(store);
+  return { ...deps, bucket: kit.bucket, masterKey, restoreGeneration: restore };
+}
+
 describe("prepareStreamRestore", () => {
+  it("opens the stream and sealed state with numbered backup key 2", async () => {
+    const deps = await masterKeyDeps(await numberedBucket());
+    const prepared = await prepareStreamRestore(deps);
+    try {
+      expect(prepared.venue).toEqual(VENUE);
+      expect(prepared.entries.find((entry) => entry.name === "secrets/secrets.env")).toEqual(
+        ENTRIES.find((entry) => entry.name === "secrets/secrets.env"),
+      );
+      expect(copyFixture).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          streamId: T.streamId,
+          generation: GENERATION,
+          streamKey: STREAM_KEY,
+        }),
+      );
+    } finally {
+      await prepared.discard();
+    }
+  });
+
+  it("refuses a different master key before downloading the copy", async () => {
+    const store = await numberedBucket();
+    const restore = vi.fn<typeof copyFixture>();
+    const deps = await masterKeyDeps(store, encodeMasterKeyCode(Buffer.alloc(16, 18)), restore);
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "promotion.break_glass_invalid",
+      params: { masterKeyId: "1caa45f2d2fe567b", keyNumber: 2 },
+    });
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("refuses a pointer whose signature does not match its named signer", async () => {
+    const store = await numberedBucket(generateNodeKeyPair().privateKey);
+    const restore = vi.fn<typeof copyFixture>();
+    const deps = await masterKeyDeps(store, MASTER_KEY, restore);
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_pointer_unverified",
+      params: { reason: "signature" },
+    });
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("asks which child stream to use and opens the chosen folder on retry", async () => {
+    const parent = createMemoryObjectStore();
+    const chosen = await numberedBucket();
+    const other = await numberedBucket();
+    const deps = await masterKeyDeps(parent);
+    const openStore = ({ prefix }: BucketConfig) => {
+      if (prefix === "first") return other;
+      if (prefix === "second") return chosen;
+      return { ...parent, listFolders: async () => ["first", "second"] };
+    };
+    await expect(prepareStreamRestore({ ...deps, openStore })).rejects.toMatchObject({
+      code: "restore.stream_folder_required",
+      params: { folders: ["first", "second"] },
+    });
+    const prepared = await prepareStreamRestore({
+      ...deps,
+      bucket: { ...deps.bucket, prefix: "second" },
+      openStore,
+    });
+    try {
+      expect(prepared.venue).toEqual(VENUE);
+      expect(copyFixture).toHaveBeenLastCalledWith(
+        expect.objectContaining({ bucket: { ...deps.bucket, prefix: "second" } }),
+      );
+    } finally {
+      await prepared.discard();
+    }
+  });
+
+  it("asks for the exact folder when there are more than 24 child folders", async () => {
+    const parent = createMemoryObjectStore();
+    const deps = await masterKeyDeps(parent);
+    const openStore = vi.fn(() => ({
+      ...parent,
+      listFolders: async () => Array.from({ length: 25 }, (_, i) => `folder-${i}`),
+    }));
+    await expect(prepareStreamRestore({ ...deps, openStore })).rejects.toMatchObject({
+      code: "restore.stream_folder_required",
+      params: { folders: [] },
+    });
+    expect(openStore).toHaveBeenCalledTimes(1);
+  });
+
   it("restores the pointer's generation and unlocks the node's secrets row", async () => {
     const deps = await prepareDeps(await bucket());
     const prepared = await prepareStreamRestore(deps);
@@ -254,7 +367,7 @@ describe("prepareStreamRestore", () => {
         generation: GENERATION,
         streamId: T.streamId,
         bucket: KIT.bucket,
-        streamKey: "ORDJdLj2BbyzMwSmlgQMW4J4JTtlToWe1oIRIEd9D/M=",
+        streamKey: STREAM_KEY,
       }),
     );
     expect(await readFile(join(dirname(prepared.databasePath), "node.db"))).toEqual(
@@ -1126,22 +1239,22 @@ describe("restoreFromStream (the command line's whole path)", () => {
   });
 
   it("the bucket CLI restores through real placement without database-wide reads", async () => {
-    const deps = await prepareDeps(await bucket());
-    const kitPath = join(deps.stateDir, "kit.txt");
-    await writeFile(kitPath, encodeRecoveryKit(KIT));
+    const deps = await masterKeyDeps(await numberedBucket());
     bulkReadGuard.stateDir = deps.stateDir;
     const out: string[] = [];
     expect(
       await runRestore({
         argv: [
-          "restore",
-          "--from-bucket",
-          kitPath,
+          ...bucketRestoreArgs(deps.bucket),
           "--confirm-venue",
           VENUE.taxId,
           "--confirm-old-box-gone",
         ],
-        env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: deps.stateDir },
+        env: {
+          ...bucketRestoreEnv(deps.bucket, MASTER_KEY),
+          WAITRON_ENV: "preproduction",
+          WAITRON_STATE_DIR: deps.stateDir,
+        },
         out: (line) => out.push(line),
         openStore: deps.openStore,
         restoreStream: (args) =>
@@ -1152,7 +1265,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
           }),
       }),
     ).toBe(0);
-    expect(out).toContain(`restored from the bucket named in ${kitPath}`);
+    expect(out).toContain("restored from the bucket");
     const placed = await openVenueDatabase(join(deps.stateDir, "venue"));
     try {
       expect(await placed.venue.select({ taxId: taxpayer.taxId }).from(taxpayer)).toEqual([
@@ -1354,6 +1467,26 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
       return names;
     }
   };
+
+  it("refuses a different bucket folder after the owner reviewed the same venue", async () => {
+    const store = await numberedBucket();
+    const deps = await masterKeyDeps(store);
+    const preview = await prepareStreamRestore(deps);
+    await preview.discard();
+    const changed = {
+      ...deps,
+      bucket: { ...deps.bucket, prefix: "replacement" },
+      selectedSourceId: preview.sourceId,
+      stagingDir: join(deps.stateDir, "scratch/restore"),
+      modules: [],
+      environment: "preproduction" as const,
+      venueConfirmed: VENUE.taxId,
+    };
+    await expect(stageStreamRestore(changed)).rejects.toMatchObject({
+      code: "restore.stream_copy_changed",
+    });
+    expect(await leftovers(deps.stateDir)).toEqual([]);
+  });
 
   it("saves the selected stream database's administrator verifier before discarding the validation copy", async () => {
     const deps = await stageDeps({

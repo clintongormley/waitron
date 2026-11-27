@@ -1,25 +1,30 @@
 import { tableExists } from "@waitron/db";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
-import { loadKeyRing } from "@waitron/credentials";
+import { backupKey, loadKeyRing, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { openVenueDatabase, readVenue, taxpayer, type VenueDatabase } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead } from "@waitron/provisioning";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, hasCode, isAppError } from "@waitron/shared";
 import { SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
 import {
   PROBE_PREFIX,
   bucketClockOffset,
+  createS3FolderStore,
   createS3ObjectStore,
   newestUpload,
+  normalisePrefix,
+  parseGenerationName,
+  readBucketConfig,
   readPointer,
   restoreGeneration,
   verifyPointer,
   type BucketConfig,
   type ObjectStore,
   type RecoveryKit,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
@@ -58,8 +63,11 @@ export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | nul
 /** A fresh folder keeps concurrent preparations from removing each other's copy. */
 const SCRATCH = STREAM_RESTORE_PREFIX;
 
-export interface PrepareStreamDeps {
-  kit: RecoveryKit;
+type RecoveryStore = ObjectStore & Partial<Pick<S3ObjectStore, "listFolders">>;
+
+type BucketRecoveryInput = { bucket: BucketConfig; masterKey: string };
+
+export type PrepareStreamDeps = ({ kit: RecoveryKit } | BucketRecoveryInput) & {
   stateDir: string;
   migrationsRoot: string | null;
   litestreamBin: string;
@@ -67,11 +75,11 @@ export interface PrepareStreamDeps {
   oldBoxGone: boolean;
   now: () => Date;
   log: Logger;
-  openStore?: (bucket: BucketConfig) => ObjectStore;
+  openStore?: (bucket: BucketConfig) => RecoveryStore;
   restoreGeneration?: typeof restoreGeneration;
   signal?: AbortSignal;
   checkIntegrity?: (databasePath: string, options: { signal?: AbortSignal }) => Promise<boolean>;
-}
+};
 
 export interface PreparedStream {
   /** The restored `venue.db`, inside the scratch folder. */
@@ -80,6 +88,7 @@ export interface PreparedStream {
   entries: ArchiveEntry[];
   nodeId: string;
   generation: string;
+  sourceId: string;
   venue: RestoredVenue;
   /** Removes this preparation's scratch folder. */
   discard(): Promise<void>;
@@ -302,19 +311,122 @@ async function readVerifiedPointer(store: ObjectStore, kit: RecoveryKit) {
   return read.pointer.body;
 }
 
+const DISCOVERY_LIMIT = 24;
+
+function checkedRestoreBucket(bucket: BucketConfig): BucketConfig {
+  return readBucketConfig(bucket, (field) => {
+    throw new AppError("setup.request_invalid", { field });
+  });
+}
+
+async function locateBucketCopy(
+  bucket: BucketConfig,
+  openStore: (bucket: BucketConfig) => RecoveryStore,
+  signal?: AbortSignal,
+) {
+  const call = { signal, requireRecovery: true };
+  const store = openStore(bucket);
+  const exact = await readPointer(store, undefined, call);
+  if (exact !== null) return { bucket, store, pointer: exact.pointer };
+
+  const folders = (await store.listFolders?.("", { signal, limit: DISCOVERY_LIMIT + 1 })) ?? [];
+  if (folders.length > DISCOVERY_LIMIT) {
+    throw new AppError("restore.stream_folder_required", { folders: [] });
+  }
+  const copies = [];
+  for (const folder of folders) {
+    if (`${folder}/` === PROBE_PREFIX || parseGenerationName(folder) !== null) continue;
+    const candidate = checkedRestoreBucket({
+      ...bucket,
+      prefix: `${normalisePrefix(bucket.prefix)}${folder}`,
+    });
+    const child = openStore(candidate);
+    const read = await readPointer(child, undefined, call);
+    if (read !== null) copies.push({ bucket: candidate, store: child, pointer: read.pointer });
+  }
+  if (copies.length > 1) {
+    throw new AppError("restore.stream_folder_required", {
+      folders: copies.map((copy) => copy.bucket.prefix),
+    });
+  }
+  if (copies[0] === undefined) throw new AppError("restore.stream_pointer_missing", {});
+  return copies[0];
+}
+
+async function openBucketCopy(
+  input: BucketRecoveryInput,
+  openStore: (bucket: BucketConfig) => RecoveryStore,
+  signal?: AbortSignal,
+) {
+  const bucket = checkedRestoreBucket(input.bucket);
+  const selected = await locateBucketCopy(bucket, openStore, signal);
+  const { pointer } = selected;
+  const recovery = pointer.body.recovery!;
+  if (!verifyPointer(pointer, recovery.signerPublicKey)) {
+    throw new AppError("restore.stream_pointer_unverified", { reason: "signature" });
+  }
+  const wrongKey = new AppError("promotion.break_glass_invalid", {
+    masterKeyId: recovery.masterKeyId,
+    keyNumber: recovery.keyNumber,
+  });
+  let masterKey: Uint8Array;
+  try {
+    masterKey = decodeMasterKeyCode(input.masterKey);
+  } catch (error) {
+    if (isAppError(error) && hasCode(error, "master_key.code_invalid")) throw wrongKey;
+    throw error;
+  }
+  if (masterKeyId(sealingPublicKey(masterKey)).toString("hex") !== recovery.masterKeyId)
+    throw wrongKey;
+  const { endpoint, region, bucket: name, prefix } = selected.bucket;
+  const { streamId, generation } = pointer.body;
+  const source = createHash("sha256")
+    .update(
+      JSON.stringify([
+        endpoint,
+        region,
+        name,
+        normalisePrefix(prefix),
+        recovery.signerPublicKey,
+        streamId,
+        generation,
+      ]),
+    )
+    .digest("hex");
+  return {
+    bucket: selected.bucket,
+    store: selected.store,
+    body: pointer.body,
+    recoveryKey: backupKey(masterKey, recovery.keyNumber).toString("base64url"),
+    sourceId: `stream:${source}`,
+  };
+}
+
+async function openKitCopy(kit: RecoveryKit, openStore: (bucket: BucketConfig) => ObjectStore) {
+  const store = openStore(kit.bucket);
+  const body = await readVerifiedPointer(store, kit);
+  return {
+    bucket: kit.bucket,
+    store,
+    body,
+    recoveryKey: kit.recoveryKey,
+    sourceId: `stream:${body.streamId}:${body.generation}`,
+  };
+}
+
 /**
- * Everything a bucket rebuild decides before it changes the venue folder, the box's identity or its
- * secrets: the pointer, verified with the kit's key; the old-box check; the download into a scratch
- * folder; its integrity and schema; the node's locked row, unlocked with the kit's recovery key; and
- * whose copy it is. The scratch folder is removed on every failure.
+ * Verify, download and unlock the selected copy before placement. Each attempt owns its scratch
+ * folder so a failed preparation can discard it.
  */
 export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<PreparedStream> {
-  const { kit } = deps;
-  const store = (deps.openStore ?? createS3ObjectStore)(kit.bucket);
-  const { generation, nodeId } = await readVerifiedPointer(store, kit);
+  const { bucket, store, body, recoveryKey, sourceId } =
+    "kit" in deps
+      ? await openKitCopy(deps.kit, deps.openStore ?? createS3ObjectStore)
+      : await openBucketCopy(deps, deps.openStore ?? createS3FolderStore, deps.signal);
+  const { streamId, generation, nodeId } = body;
   await refuseIfSourceLive({
     store,
-    streamId: kit.streamId,
+    streamId,
     generation,
     now: deps.now,
     oldBoxGone: deps.oldBoxGone,
@@ -327,9 +439,9 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
     try {
       await (deps.restoreGeneration ?? restoreGeneration)({
         litestreamBin: deps.litestreamBin,
-        bucket: kit.bucket,
-        streamKey: deriveStreamKey(kit.recoveryKey, kit.streamId),
-        streamId: kit.streamId,
+        bucket,
+        streamKey: deriveStreamKey(recoveryKey, streamId),
+        streamId,
         generation,
         outPath: databasePath,
         configDir: join(scratch, "litestream"),
@@ -360,14 +472,14 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       checkIntegrity: deps.checkIntegrity ?? checkIntegrity,
       log: deps.log,
     });
-    const entries = await unsealNodeStateAsync(sealed, kit.recoveryKey);
+    const entries = await unsealNodeStateAsync(sealed, recoveryKey);
     // A sealed state with no node copy is refused when its entries are validated.
     await writeStagedNodeCopy(
       databasePath,
       entries.find((entry) => entry.name === "node.dump")?.bytes,
     );
     deps.log("info", "restore.stream_prepared", { generation });
-    return { databasePath, entries, nodeId, generation, venue, discard };
+    return { databasePath, entries, nodeId, generation, sourceId, venue, discard };
   } catch (error) {
     await discard();
     throw error;
@@ -423,8 +535,7 @@ export async function restoreFromStream(
       { ...deps, databasePath: prepared.databasePath, entries: prepared.entries },
       prepareModuleOperations === undefined
         ? undefined
-        : (copy) =>
-            prepareModuleOperations(copy, `stream:${deps.kit.streamId}:${prepared.generation}`),
+        : (copy) => prepareModuleOperations(copy, prepared.sourceId),
     );
   } finally {
     await prepared.discard();

@@ -2091,8 +2091,10 @@ declare module "@waitron/shared" {
      * restore-file-placement.ts). They may be the venue's only copy, so the folder is kept and the
      * start refused until they are moved back or a restore is run again. */
     "restore.database_set_aside": { folder: string };
-    /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
+    /** The owner's bucket holds no current pointer to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;
+    "restore.stream_folder_required": { folders: string[] };
+    "restore.stream_copy_changed": Record<string, never>;
     "restore.stream_pointer_unverified": {
       reason: "signature" | "venue_mismatch" | "key_or_access";
     };
