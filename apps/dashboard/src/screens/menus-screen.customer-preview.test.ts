@@ -526,6 +526,8 @@ describe("the customer menu Online preview", () => {
       expect(price.getBoundingClientRect().top).toBeLessThan(dish.getBoundingClientRect().bottom);
       const searchHost = customer.shadowRoot!.querySelector("wt-input[type=search]")!;
       const input = searchHost.shadowRoot!.querySelector("input")!;
+      input.style.fontFamily = "monospace";
+      input.style.fontSize = "16px";
       const style = getComputedStyle(input);
       const metrics = document.createElement("canvas").getContext("2d")!;
       metrics.font = style.font;

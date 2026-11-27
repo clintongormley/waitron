@@ -296,7 +296,7 @@ export const customerMenuPageStyles = [
         --menu-padding: var(--wt-space-6);
       }
       header {
-        grid-template-columns: minmax(0, 1fr) minmax(320px, 44%);
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 44%);
         align-items: center;
       }
       .members {
