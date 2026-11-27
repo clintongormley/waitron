@@ -65,7 +65,7 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
     if (args[0] !== "replicate") return spawnLitestream(binary, args, env, options);
     const configFile = args[args.indexOf("-config") + 1]!;
     const config = readFileSync(configFile, "utf8");
-    const urlLine = /^      url: (.+)$/m.exec(config)![1]!;
+    const urlLine = /^ {6}url: (.+)$/m.exec(config)![1]!;
     const url = new URL(JSON.parse(urlLine));
     if (url.hostname !== "waitron") return spawnLitestream(binary, args, env, options);
     store = {
