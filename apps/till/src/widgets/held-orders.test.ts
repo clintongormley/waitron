@@ -119,11 +119,6 @@ describe("till-held-orders", () => {
     expect(el.shadowRoot!.textContent).toContain(t("held.empty"));
   });
 
-  it("shows the section title", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [] });
-    expect(el.shadowRoot!.textContent).toContain(t("held.title"));
-  });
-
   it("renders one row per parked order with its number, label, item count and total", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder, unlabeledOrder],

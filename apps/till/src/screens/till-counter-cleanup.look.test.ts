@@ -370,14 +370,18 @@ for (const kind of ["counter", "table"] as const)
             );
             await userEvent.keyboard("{Escape}");
             await parkClosed;
-            for (const list of ["parked", "waiting"] as const) {
-              screen.orderList = list;
-              screen.heldOrders = [parked];
-              screen.counterWaiting = [waiting];
-              await screen.updateComplete;
-              const widget = screen.shadowRoot!.querySelector(
-                list === "parked" ? "till-held-orders" : "till-counter-waiting",
-              )!;
+            screen.store.clear();
+            screen.selectedServiceZoneId = "counter";
+            screen.counterFloor = true;
+            screen.heldOrders = [{ ...parked, zoneId: "counter", partyId: "at-counter" }];
+            screen.counterWaiting = [{ ...waiting, zoneId: "counter" }];
+            await screen.updateComplete;
+            const floor = screen.shadowRoot!.querySelector("till-counter-floor")!;
+            await floor.updateComplete;
+            for (const widget of [
+              ...floor.shadowRoot!.querySelectorAll("till-held-orders"),
+              ...floor.shadowRoot!.querySelectorAll("till-counter-waiting"),
+            ]) {
               await widget.updateComplete;
               await userEvent.click(
                 widget.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!,
@@ -386,12 +390,12 @@ for (const kind of ["counter", "table"] as const)
               expect(widget.shadowRoot!.querySelector(".order-preview")!.textContent).toContain(
                 "Recorded roasted pumpkin soup",
               );
-              await capture(list);
-              screen.heldOrders = [];
-              screen.counterWaiting = [];
-              await screen.updateComplete;
-              await capture(`${list}-empty`);
             }
+            await capture("counter-floor");
+            screen.heldOrders = [];
+            screen.counterWaiting = [];
+            await screen.updateComplete;
+            await capture("counter-floor-empty");
           }
         }, 90_000);
       }

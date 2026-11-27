@@ -71,27 +71,7 @@ describe("the order screen's help", () => {
   });
 });
 
-describe("the order lists' help", () => {
-  it("the Spanish Waiting orders help calls counter orders by the till's word for the counter", () => {
-    expect(helpEs["help.counter.waiting_orders"]).toContain(es["tab.counter"].toLowerCase());
-  });
-
-  const states = ["items", "unsent", "held", "waiting", "ready"] as const;
-  // \b is ASCII-only in JS, so a boundary here is "no letter on either side", accents included.
-  const wholeWord = (word: string) =>
-    new RegExp(`(?<!\\p{L})${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\p{L})`, "u");
-  for (const [language, help, words] of [
-    ["English", helpEn, en],
-    ["Spanish", helpEs, es],
-  ] as const) {
-    for (const key of ["help.counter.parked_orders", "help.counter.waiting_orders"] as const) {
-      it(`${key} in ${language} names the five counts by their chips' words`, () => {
-        for (const state of states)
-          expect(help[key]).toMatch(wholeWord(words[`order_counts.${state}`].replace("{n} ", "")));
-      });
-    }
-  }
-
+describe("the Transfers help", () => {
   it('help.more.transfers drops its third sentence (owner, 2026-11-10: "Drop the third sentence (Rec.)")', () => {
     const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
     expect(sentences(helpEn["help.more.transfers"])).toBe(2);

@@ -53,39 +53,33 @@ afterEach(async () => {
   await page.viewport(viewport.width, viewport.height);
 });
 
-const lists = [
-  { list: "parked", badges: 3 },
-  { list: "waiting", badges: 3 },
-] as const;
-
 describe.each(["light", "dark"] as const)("Counter's help badges a11y (%s theme)", (theme) => {
-  it.each(lists.flatMap(({ list, badges }) => [390, 1280].map((width) => [list, width, badges])))(
-    "the payment area and the %s list at %i px with help on have no violations",
-    async (list, width, badges) => {
-      await page.viewport(width as number, 900);
+  it.each([390, 1280])(
+    "Counter and the basket with help on at %i px have no violations",
+    async (width) => {
+      await page.viewport(width, 900);
       setHelpMode(true);
       const { el, host } = await mountWidget<TillCounterScreen>(
         "till-counter-screen",
         {
           store: new WorkingOrderStore(),
           asksGuests: true,
-          orderList: list as "parked" | "waiting",
+          counterFloor: true,
           heldOrders: [heldOrder],
           counterWaiting: [waitingOrder],
         },
         theme,
       );
-      const shown: WtHelpTooltip[] = [];
-      for (const owner of el.shadowRoot!.querySelectorAll<HTMLElement>(
-        "till-tender-pay, till-held-orders, till-counter-waiting",
-      )) {
-        await (owner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-        shown.push(...owner.shadowRoot!.querySelectorAll<WtHelpTooltip>("wt-help-tooltip"));
-      }
-      for (const badge of shown) await badge.updateComplete;
-      expect(shown.filter((badge) => badge.getBoundingClientRect().width > 0)).toHaveLength(
-        badges as number,
-      );
+      const floor = el.shadowRoot!.querySelector("till-counter-floor")!;
+      await expectNoA11yViolations(host);
+
+      floor.shadowRoot!.querySelector<HTMLElement>(".new-order wt-button")!.click();
+      await el.updateComplete;
+      const tender = el.shadowRoot!.querySelector("till-tender-pay")!;
+      await tender.updateComplete;
+      const badges = [...tender.shadowRoot!.querySelectorAll<WtHelpTooltip>("wt-help-tooltip")];
+      for (const badge of badges) await badge.updateComplete;
+      expect(badges.filter((badge) => badge.getBoundingClientRect().width > 0)).toHaveLength(2);
       await expectNoA11yViolations(host);
     },
   );

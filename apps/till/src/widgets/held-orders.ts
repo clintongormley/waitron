@@ -15,7 +15,6 @@ import { seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
-import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { HeldOrderSummary } from "../api/orders-api.js";
 import type { FloorZone, TableState } from "../api/floor-api.js";
 
@@ -49,22 +48,11 @@ export class TillHeldOrders extends LitElement {
     signalChipStyles,
     orderNumberStyles,
     orderCountStyles,
-    helpAnchorStyles,
     counterFloorRowStyles,
     actionChoiceStyles,
     css`
       :host {
         display: block;
-      }
-
-      .title-anchor {
-        width: fit-content;
-      }
-
-      .title {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .empty {
@@ -436,14 +424,6 @@ export class TillHeldOrders extends LitElement {
   override render() {
     const moving = this.moving;
     return html`
-      ${
-        this.floor
-          ? nothing
-          : html`<div class="title-anchor help-anchor">
-              <h2 class="title">${t("held.title")}</h2>
-              ${helpBadge("help.counter.parked_orders", t("held.title"))}
-            </div>`
-      }
       ${
         this.orders.length === 0
           ? html`<p class="empty">${t("held.empty")}</p>`

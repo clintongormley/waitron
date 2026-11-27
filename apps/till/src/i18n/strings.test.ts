@@ -180,12 +180,12 @@ describe("the floor's held chip, the Waiting chip's own word, and no retenido in
   });
 });
 
-describe("the Find a bill state filter calls a set-aside order by the Parked orders list's word", () => {
+describe("the Find a bill state filter calls a set-aside order by Counter's word", () => {
   it.each([
     ["English", en],
     ["Spanish", es],
   ])("in %s", (_, table) => {
-    expect(table["held.title"].toLowerCase()).toContain(table["find_page.held"].toLowerCase());
+    expect(table["find_page.held"].toLowerCase()).toContain(table["counter.floor_parked"]);
   });
 });
 

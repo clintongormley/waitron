@@ -7831,12 +7831,7 @@ describe("A1208 a retrieved counter order's portions", () => {
       };
     };
     async function moveToOtherBasket(el: TillApp, c: TillCounterScreen) {
-      c.orderList = "parked";
-      await c.updateComplete;
-      const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
-      expect(heldList).not.toBeNull();
-      await heldList.updateComplete;
-      heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
+      emit(c, "retrieve-order", { id: "wo-2" });
       await flush(el);
       const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
       expect(question.open).toBe(true);

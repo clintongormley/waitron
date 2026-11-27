@@ -168,15 +168,18 @@ it.each(["preview", "write"])(
       },
       answer,
     );
-    screen.orderList = "parked";
-    await screen.updateComplete;
-    const list = screen.shadowRoot!.querySelector("till-held-orders")!;
+    emit(shell(el), "screen-select", { screen: "counter", counterFloor: true });
+    await flush(el);
+    const list = screen
+      .shadowRoot!.querySelector("till-counter-floor")!
+      .shadowRoot!.querySelector("till-held-orders")!;
     await list.updateComplete;
     const controls = list.shadowRoot!;
     const button = (selector: string) =>
       controls.querySelector(selector)?.shadowRoot?.querySelector("button");
     await vi.waitFor(() => expect(button(".move")).not.toBeNull());
     await userEvent.click(button(".move")!);
+    await userEvent.click(controls.querySelector<HTMLButtonElement>('.move [role="menuitem"]')!);
     const target = () => button('[data-target="destination"]');
     const chooseTarget = async () => {
       await vi.waitFor(() => expect(target()).not.toBeNull());

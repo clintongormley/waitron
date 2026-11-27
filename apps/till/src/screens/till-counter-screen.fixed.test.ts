@@ -70,8 +70,14 @@ it("renders menu, basket, total and payment without an authored layout", async (
 });
 
 it("shows a waiting order when no order is held, and removes the lists when both are empty", async () => {
-  const { el } = await mount({ counterWaiting: [waiting], orderList: "waiting" });
-  const list = el.shadowRoot!.querySelector("till-counter-waiting");
+  const { el } = await mount({
+    store: new WorkingOrderStore(),
+    counterWaiting: [waiting],
+    selectedServiceZoneId: waiting.zoneId!,
+    counterFloor: true,
+  });
+  const floor = el.shadowRoot!.querySelector("till-counter-floor")!.shadowRoot!;
+  const list = floor.querySelector("till-counter-waiting");
   expect(list).not.toBeNull();
   await list!.updateComplete;
   expect(
@@ -79,8 +85,8 @@ it("shows a waiting order when no order is held, and removes the lists when both
   ).toContain("Ana");
   el.counterWaiting = [];
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("till-counter-waiting")).toBeNull();
-  expect(el.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+  expect(floor.querySelector("till-counter-waiting")).toBeNull();
+  expect(floor.querySelector("till-held-orders")).toBeNull();
 });
 
 it("shows the remaining amount and blocks Pay while its request is busy", async () => {

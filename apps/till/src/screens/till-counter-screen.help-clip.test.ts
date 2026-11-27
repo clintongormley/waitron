@@ -9,7 +9,6 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
@@ -21,41 +20,6 @@ const coffee: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-};
-
-const heldOrder: HeldOrderSummary = {
-  zoneId: null,
-  items: [],
-  id: "held",
-  orderNumber: 1,
-  label: "Ana",
-  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
-  total: "1.50",
-  outstanding: "1.50",
-  hasPayments: false,
-  partyId: null,
-  billNumber: null,
-  billName: null,
-  openedAt: "2026-10-16T10:00:00.000Z",
-  signals: [],
-};
-
-const waitingOrder: CounterWaitingOrder = {
-  items: [],
-  id: "waiting",
-  orderNumber: 2,
-  label: "Luis",
-  status: "settled",
-  openedAt: "2026-10-16T10:00:00.000Z",
-  settledAt: "2026-10-16T10:01:00.000Z",
-  readyAt: null,
-  zoneId: "zone-counter",
-  collectedAt: null,
-  total: "1.50",
-  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
-  canHandOver: true,
-  serviceMode: null,
-  movableDishes: [],
 };
 
 let locale = currentLocale();
@@ -106,18 +70,6 @@ const parts: Part[] = [
     label: "menu.search",
     over: {},
     owner: (el) => shadowChild(el, "till-menu-browser"),
-  },
-  {
-    name: "Parked orders",
-    label: "held.title",
-    over: { orderList: "parked", heldOrders: [heldOrder] },
-    owner: (el) => shadowChild(el, "till-held-orders"),
-  },
-  {
-    name: "Waiting orders",
-    label: "waiting.title",
-    over: { orderList: "waiting", counterWaiting: [waitingOrder] },
-    owner: (el) => shadowChild(el, "till-counter-waiting"),
   },
   {
     name: "Park",
