@@ -1217,12 +1217,14 @@ Not in any track until the standalone primary is done.
   replacement through Cloud. Other evidence that a box was replaced still needs a decision.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
   for scheduled and manual backups. A standalone main box with streaming and Cloud off can save
-  and check a final copy at every enabled backup destination before it records the next-start hold.
+  and check a final copy at every saved backup destination before it records the next-start hold.
   With no saved destination and a numbered backup key, an administrator can download the checked
   final copy and confirm saving it before the box records the next-start hold.
   If that backup check fails, an administrator can retry, cancel or explicitly shut down with
-  an unchecked copy. The remaining shutdown work adds a choice to keep waiting on stalled uploads
-  once measured, controlled handover for paired boxes and appliance power-off.
+  an unchecked copy. The remaining shutdown work covers a choice to keep waiting on stalled
+  uploads once measured, stream catch-up, Cloud backups, controlled handover for paired boxes
+  and appliance power-off. Box status still needs to name the destination if a saved copy fails
+  its check.
 
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),

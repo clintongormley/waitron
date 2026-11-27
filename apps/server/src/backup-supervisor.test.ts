@@ -55,6 +55,7 @@ import {
   type BackupSupervisorDeps,
 } from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -288,7 +289,7 @@ it("rehearses placement of its saved shutdown archive and clears the private cop
   }
 });
 
-async function shutdownSupervisor(folders: string[]) {
+async function shutdownSupervisor(folders: string[], statfs?: BackupSupervisorDeps["statfs"]) {
   const stateDir = await makeStateDir();
   const venueDir = await makeVenueDir();
   const venue = await openVenueDatabase(venueDir);
@@ -321,6 +322,7 @@ async function shutdownSupervisor(folders: string[]) {
     nodeId: BACKUP_NODE_ID,
     jitterSeed: "shutdown",
     outcomes,
+    statfs,
     buildBackend: (dest) => backends.find((backend) => backend.id === dest.id)!,
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: () => {},
@@ -390,6 +392,72 @@ describe("multi-destination shutdown", () => {
     }
   });
 
+  it("reports the first failing destination in configuration order", async () => {
+    const {
+      sup,
+      backends: [first, second],
+    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()]);
+    const firstError = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
+    const secondError = new AppError("backup.destination_object_too_large", { maxBytes: 1 });
+    const secondFailed = gate();
+    vi.spyOn(first!, "putFile").mockImplementation(async () => {
+      await secondFailed.released;
+      throw firstError;
+    });
+    vi.spyOn(second!, "putFile").mockImplementation(async () => {
+      secondFailed.release();
+      throw secondError;
+    });
+    try {
+      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(firstError);
+    } finally {
+      secondFailed.release();
+      await sup.stop();
+    }
+  });
+
+  it("needs rehearsal space for the first read and only ciphertext space for the next", async () => {
+    let ciphertextBytes = 0;
+    let rehearsalFits = false;
+    let ciphertextShortfall = 0;
+    const {
+      sup,
+      backends: [first, second],
+    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()], async (dir) => ({
+      frsize: 1,
+      bavail:
+        !basename(dir).startsWith("shutdown-") ||
+        (rehearsalFits && firstRead.mock.calls.length === 0)
+          ? Number.MAX_SAFE_INTEGER
+          : START_FREE_SPACE_FLOOR + ciphertextBytes - ciphertextShortfall,
+    }));
+    const put = first!.putFile.bind(first!);
+    vi.spyOn(first!, "putFile").mockImplementation(async (key, source, call) => {
+      ciphertextBytes = (await stat(source)).size;
+      await put(key, source, call);
+    });
+    const firstRead = vi.spyOn(first!, "getFile");
+    const secondRead = vi.spyOn(second!, "getFile");
+    try {
+      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
+        code: "backup.staging_space_low",
+      });
+      expect(firstRead).not.toHaveBeenCalled();
+      rehearsalFits = true;
+      ciphertextShortfall = 1;
+      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
+        code: "backup.staging_space_low",
+      });
+      expect(firstRead).toHaveBeenCalledOnce();
+      expect(secondRead).not.toHaveBeenCalled();
+      firstRead.mockClear();
+      ciphertextShortfall = 0;
+      await sup.runForShutdown(new AbortController().signal, null);
+    } finally {
+      await sup.stop();
+    }
+  });
+
   it.each([0, 1])("refuses same-length corruption at destination %i", async (index) => {
     const { sup, backends, restoreScratch } = await shutdownSupervisor([
       await makeDestDir(),
@@ -422,6 +490,7 @@ describe("multi-destination shutdown", () => {
     } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()]);
     const reading = gate<string>();
     const cancelled = gate();
+    const remove = vi.spyOn(fs, "rm");
     vi.spyOn(second!, "getFile").mockImplementation(async (_key, output, { signal }) => {
       await writeFile(output, "partial download");
       const abort = () => cancelled.entered();
@@ -445,7 +514,8 @@ describe("multi-destination shutdown", () => {
       ]);
       controller.abort();
       await cancelled.reached;
-      expect(await readFile(output, "utf8")).toBe("partial download");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(remove).not.toHaveBeenCalledWith(dirname(output), expect.anything());
       cancelled.release();
       await expect(shutdown).rejects.toMatchObject({ code: "backup.destination_cancelled" });
       expect(await readdir(restoreScratch)).toEqual([]);

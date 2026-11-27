@@ -1815,8 +1815,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor está en pausa para apagarse. Abre Estado del servidor para ver el progreso.",
   },
   "box.shutdown_unavailable": {
-    en: "Checked shutdown needs a standalone main box with streaming and Cloud turned off. Enable a backup destination, or use a numbered backup key to download a copy if there are no saved backup settings.",
-    es: "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con la copia continua y Cloud desactivados. Activa un destino de copias o, si no hay ajustes de copia guardados, usa una clave de copia numerada para descargarla.",
+    en: "Checked shutdown needs a standalone main box with streaming and Cloud turned off and a numbered backup key. Turn on saved backups with at least one destination, or download a copy if there are no saved backup settings.",
+    es: "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con la copia continua y Cloud desactivados y una clave de copia numerada. Activa las copias guardadas con al menos un destino o descarga una copia si no hay ajustes de copia guardados.",
   },
   "handover.stepping_down": {
     en: "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",

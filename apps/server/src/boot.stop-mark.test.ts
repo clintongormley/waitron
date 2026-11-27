@@ -83,6 +83,7 @@ it.each([
   ["multi-destination shutdown offers a saved folder and bucket", "multiple"],
 ] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
+  const writeMark = scenario === "multiple" ? vi.spyOn(atomic, "writeFileDurable") : null;
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
   let releaseScheduled!: () => void;
@@ -279,7 +280,7 @@ it.each([
         await checking;
         if (scenario === "multiple") {
           const mark = join(stateDir, "admin-shutdown.json");
-          await expect(stat(mark)).rejects.toHaveProperty("code", "ENOENT");
+          expect(writeMark).not.toHaveBeenCalledWith(mark, expect.any(String), 0o600);
           finishCheck();
           await vi.waitFor(async () => {
             expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "ready" } });
@@ -360,6 +361,7 @@ it.each([
       },
     );
   } finally {
+    writeMark?.mockRestore();
     scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();
