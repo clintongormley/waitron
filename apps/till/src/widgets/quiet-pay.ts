@@ -85,7 +85,7 @@ export const quietPayStyles = css`
     justify-content: center;
     align-items: baseline;
     column-gap: calc(var(--wt-space-1) * 1.5);
-    margin-inline: calc(-1 * var(--wt-space-1));
+    margin-inline: calc(-1 * var(--wt-space-2));
   }
 
   @media (height > 480px), (orientation: portrait) {
