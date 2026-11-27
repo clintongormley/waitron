@@ -65,7 +65,7 @@ describe("bill money notices", () => {
     expect(text(host.querySelector("[data-overpaid] p"))).toBe(
       fill(t("table.overpaid"), { amount: money("5.00") }),
     );
-    expect(text(host.querySelector("[data-give-back]"))).toBe(`Give back ${money("5.00")}`);
+    expect(text(host.querySelector("[data-give-back]"))).toBe(`Refund ${money("5.00")}`);
     expect(text(host.querySelector("[data-keep-as-tip]"))).toBe(`Keep ${money("5.00")} as tip`);
     host.querySelector<HTMLElement>("[data-give-back]")!.click();
     host.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
@@ -82,7 +82,7 @@ describe("bill money notices", () => {
     const asked = overpaid({
       balance: balance({ total: "0.00", outstanding: "-15.00", overpaid: "15.00" }),
     });
-    expect(text(host.querySelector("[data-give-back]"))).toBe(`Give back ${money("15.00")}`);
+    expect(text(host.querySelector("[data-give-back]"))).toBe(`Refund ${money("15.00")}`);
     expect(host.querySelector("[data-keep-as-tip]")).toBeNull();
     host.querySelector<HTMLElement>("[data-give-back]")!.click();
     expect(asked).toEqual(["give back 15.00"]);

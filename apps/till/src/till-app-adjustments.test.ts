@@ -3704,7 +3704,7 @@ describe("till-app: service cancellation consent", () => {
         const widget = cancelDialog(el)!;
         expect(widget.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
         expect(widget.shadowRoot!.textContent).toContain(
-          "Give the money back at a till: choose Give money back on the receipt.",
+          "Refund it at a till: choose Refund on the receipt.",
         );
         await chooseChargedReason(el);
         expect(widget.shadowRoot!.querySelector("[data-confirm]")!.textContent!.trim()).toBe(
@@ -3740,9 +3740,7 @@ describe("till-app: service cancellation consent", () => {
         await openTable4(el);
         await openCancel(el);
         expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
-        expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-          "Give the money back at a till",
-        );
+        expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain("Refund it at a till");
         expect(api.refundTransaction).not.toHaveBeenCalled();
       },
     );
@@ -3761,9 +3759,7 @@ describe("till-app: service cancellation consent", () => {
       await openTable4(el);
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
-      expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-        "Give the money back at a till",
-      );
+      expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain("Refund it at a till");
     });
 
     it.each([
@@ -4236,7 +4232,7 @@ describe("till-app: service cancellation consent", () => {
       await expect
         .poll(() => cancelDialog(el)?.refusal)
         .toBe(
-          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then open Give money back on the receipt.",
+          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then refund it from the receipt.",
         );
       expect(api.refundTransaction).not.toHaveBeenCalled();
     });

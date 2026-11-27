@@ -587,9 +587,7 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
     expect(text(el.shadowRoot!.querySelector("[data-overpaid] p"))).toBe(
       `Paid ${money("5.00")} more than this bill comes to`,
     );
-    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(
-      `Give back ${money("5.00")}`,
-    );
+    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(`Refund ${money("5.00")}`);
     expect(text(el.shadowRoot!.querySelector("[data-keep-as-tip]"))).toBe(
       `Keep ${money("5.00")} as tip`,
     );
@@ -620,9 +618,7 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
       tipsEnabled: true,
     });
 
-    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(
-      `Give back ${money("15.00")}`,
-    );
+    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(`Refund ${money("15.00")}`);
     expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
   });

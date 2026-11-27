@@ -13,7 +13,7 @@ export const helpEn = {
   "help.payment":
     "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
   "help.give_money_back":
-    "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. If you close it before all the money is back, find the receipt in Find a bill under Money back under way; if it is not there, open Give money back on the receipt again on this till.",
+    "Refund a guest: for a dish, as goodwill, or the extra paid on top. If you close it before it is all refunded, find the receipt in Find a bill under Refunds under way; if it is not there, open Refund on the receipt again on this till.",
   "help.counter.park":
     "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
   "help.counter.parked_orders":

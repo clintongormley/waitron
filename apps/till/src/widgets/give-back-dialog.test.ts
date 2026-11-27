@@ -128,12 +128,12 @@ describe("the choice", () => {
       [
         "goodwill",
         "Goodwill or a complaint",
-        "Give back an amount you choose, for example for a complaint.",
+        "Refund an amount you choose, for example for a complaint.",
       ],
       [
         "extra",
         "Extra paid on top of the bill",
-        "Give back some or all of the €3.00 paid on top of the bill, and nothing else. The receipt shows it as Tip.",
+        "Refund some or all of the €3.00 paid on top of the bill, and nothing else. The receipt shows it as Tip.",
       ],
     ]);
   });
@@ -155,7 +155,7 @@ describe("the choice", () => {
     expect(goodwill.tagName).not.toBe("WT-CHOICE-ROW");
     expect(goodwill.getAttribute("aria-disabled")).toBe("true");
     expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     );
     await choose(el, "goodwill");
     expect(root(el).querySelector("[data-purpose]")).toBeNull();
@@ -196,7 +196,7 @@ describe("the choice", () => {
     );
     await choose(el, "dishes");
     expect(text(root(el).querySelector("[data-line-reason=croquetas]"))).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     );
   });
 
@@ -204,9 +204,9 @@ describe("the choice", () => {
     const { el } = await mount();
     const badge = root(el).querySelector("wt-help-tooltip")!;
     expect(badge.getAttribute("mode")).toBe("help-mode");
-    expect(badge.getAttribute("aria-label")).toBe("Help: Give money back");
+    expect(badge.getAttribute("aria-label")).toBe("Help: Refund");
     expect(text(badge)).toBe(
-      "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. If you close it before all the money is back, find the receipt in Find a bill under Money back under way; if it is not there, open Give money back on the receipt again on this till.",
+      "Refund a guest: for a dish, as goodwill, or the extra paid on top. If you close it before it is all refunded, find the receipt in Find a bill under Refunds under way; if it is not there, open Refund on the receipt again on this till.",
     );
     expect(badge.getAttribute("guide-href")).toBe(guideHref("table-service.give-money-back"));
   });
@@ -258,7 +258,7 @@ describe("A dish", () => {
     ).toEqual([
       ["2 × Croquetas · €8.00", ""],
       ["Paella · €18.50", "Cancelled, not served"],
-      ["Salad · €9.50", "Cancelled, money given back"],
+      ["Salad · €9.50", "Cancelled, refunded"],
     ]);
     expect(text(root(el).querySelector("[data-extra-of=paella]"))).toBe("Aioli · €1.50");
     expect(dish(el, "aioli")).toBeNull();
@@ -276,9 +276,7 @@ describe("A dish", () => {
       withView({ lines: VIEW.lines.map((line) => (line.id === "salad" ? waiting : line)) }),
     );
     await choose(el, "dishes");
-    expect(dish(el, "salad")!.description).toBe(
-      "Cancelled, money back waiting for the card company",
-    );
+    expect(dish(el, "salad")!.description).toBe("Cancelled, refund waiting for the card company");
     expect(dish(el, "paella")!.description).toBe("Cancelled, not served");
   });
 
@@ -345,7 +343,7 @@ describe("A dish", () => {
     await el.updateComplete;
     const extra =
       root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch[name=extra]")!;
-    expect(extra.label).toBe("Give back the extra paid on top too (€3.00)");
+    expect(extra.label).toBe("Refund the extra paid on top too (€3.00)");
     await tick(el, "croquetas");
     extra.shadowRoot!.querySelector("input")!.click();
     await vi.waitFor(() =>
@@ -478,7 +476,7 @@ describe("a card refund the box knows is waiting", () => {
     api.retryTenderRefund.mockResolvedValueOnce(refundAnswer({ state: "completed" }));
     api.readGiveBack.mockResolvedValueOnce(PENDING).mockResolvedValueOnce(VIEW);
     check(el)!.click();
-    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is refunded to card ···4242."));
     expect(choice(el, "goodwill")!.tagName).toBe("WT-CHOICE-ROW");
     expect(check(el)).toBeNull();
     expect(api.retryTenderRefund).toHaveBeenCalledTimes(2);
@@ -535,7 +533,7 @@ describe("a card refund the box knows is waiting", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
     check(el)!.click();
     await vi.waitFor(() =>
-      expect(status(el)).toBe(`€5.50 is back on the card. ${t("tender_refund.read_failed")}`),
+      expect(status(el)).toBe(`€5.50 is refunded to the card. ${t("tender_refund.read_failed")}`),
     );
     expect(check(el)).not.toBeNull();
   });
@@ -555,7 +553,7 @@ describe("a card refund the box knows is waiting", () => {
     api.retryTenderRefund.mockResolvedValueOnce(refundAnswer({ state: "completed" }));
     api.readGiveBack.mockResolvedValueOnce(PENDING).mockResolvedValueOnce(VIEW);
     approve(el);
-    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is refunded to card ···4242."));
     expect(prompt(el)).toBeNull();
     const approver = { personId: "boss", pin: "1234" };
     expect(api.retryTenderRefund.mock.calls).toEqual([
@@ -651,7 +649,7 @@ describe("a card refund the box knows is waiting", () => {
 
     answer.resolve(refundAnswer({ state: "completed" }));
     api.readGiveBack.mockResolvedValueOnce(VIEW);
-    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(status(el)).toBe("€5.00 is refunded to card ···4242."));
     expect(api.readGiveBack).toHaveBeenCalledTimes(3);
     expect(api.retryTenderRefund).toHaveBeenCalledOnce();
     expect(dialog.dismissible).toBe(true);
@@ -746,7 +744,7 @@ describe("How it goes back", () => {
       withView({ ways: [CASH, { ...CARD, pending: true, reason: held }] }),
     );
     await choose(el, "goodwill");
-    expect(text(root(el).querySelector("[data-how] legend"))).toBe("How it goes back");
+    expect(text(root(el).querySelector("[data-how] legend"))).toBe("How to refund");
     expect(text(way(el, "cash")!.closest("label"))).toBe("Cash · up to €30.00");
     expect(text(way(el, "card-1")!.closest("label"))).toBe("Card ···4242 · up to €17.00");
     expect(way(el, "cash")!.checked).toBe(true);
@@ -760,7 +758,7 @@ describe("How it goes back", () => {
     const { el } = await mount();
     await choose(el, "goodwill");
     expect(amountField(el).value).toBe("");
-    expect(text(root(el).querySelector("[data-up-to]"))).toBe("Up to €47.00 can go back.");
+    expect(text(root(el).querySelector("[data-up-to]"))).toBe("Refund up to €47.00.");
   });
 
   it("treats a payment this device does not take as held, and picks the next", async () => {
@@ -784,7 +782,7 @@ describe("the extra paid on top", () => {
   it("fills the extra in, offers only payments holding one, and previews it alone", async () => {
     const { el, api } = await mount();
     await choose(el, "extra");
-    expect(amountField(el).label).toBe("Extra to give back");
+    expect(amountField(el).label).toBe("Extra to refund");
     expect(amountField(el).value).toBe("3.00");
     expect(way(el, "cash")).toBeNull();
     expect(text(way(el, "card-1")!.closest("label"))).toBe("Card ···4242 · up to €3.00");
@@ -814,11 +812,11 @@ describe("the summary", () => {
     const el = await ready();
     expect(text(root(el).querySelector("[data-summary-total]"))).toBe("€10.00");
     expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-      "€10.00 goes back in cash. The cash drawer opens: give it to the customer.",
+      "€10.00 is refunded in cash. The cash drawer opens: hand it over.",
     );
     expect(root(el).querySelector("[data-pin]")).toBeNull();
     expect(root(el).querySelector("[data-summary-rest]")).toBeNull();
-    expect(text(submit(el))).toBe("Give back €10.00");
+    expect(text(submit(el))).toBe("Refund €10.00");
   });
 
   it("names the card, the PIN step and what stays under way from the preview", async () => {
@@ -833,14 +831,14 @@ describe("the summary", () => {
     way(el, "card-1")!.click();
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-        "€7.00 goes back to card ···4242 through the card reader.",
+        "€7.00 is refunded to card ···4242 by the card reader.",
       ),
     );
     expect(text(root(el).querySelector("[data-summary-rest]"))).toBe(
-      "€3.00 cannot go back this way: it stays under way for the other payments.",
+      "€3.00 cannot be refunded this way: it stays under way for other payments.",
     );
     expect(text(root(el).querySelector("[data-pin]"))).toBe(
-      "If you cannot give money back yourself, a supervisor or manager approves it with their PIN next.",
+      "If you cannot refund it yourself, a supervisor or manager approves it with their PIN next.",
     );
   });
 
@@ -854,7 +852,7 @@ describe("the summary", () => {
     way(el, "card-1")!.click();
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-        "€10.00 goes back to card ···4242 on the separate card terminal.",
+        "Refund €10.00 to card ···4242 on the separate card terminal.",
       ),
     );
   });
@@ -1151,7 +1149,7 @@ describe("choosing and changing", () => {
     await type(el, "2");
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-        "€2.00 goes back to card through the card reader.",
+        "€2.00 is refunded to card by the card reader.",
       ),
     );
   });
@@ -1425,7 +1423,7 @@ describe("sending", () => {
     const api = fakeGiveBackApi();
     const el = await press(api);
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.giveBack).toHaveBeenCalledOnce();
     expect(sent(api)).toMatchObject({
@@ -1447,7 +1445,9 @@ describe("sending", () => {
     const card = fakeGiveBackApi();
     answering(card, { parts: parts("card-1") });
     const onCard = await press(card, "card-1");
-    await vi.waitFor(() => expect(outcomeText(onCard)).toContain("€5.00 is back on card ···4242."));
+    await vi.waitFor(() =>
+      expect(outcomeText(onCard)).toContain("€5.00 is refunded to card ···4242."),
+    );
     expect(outcomeText(onCard)).toContain(t("give_back.print_later"));
     cleanupWidgets();
     localStorage.clear();
@@ -1455,7 +1455,7 @@ describe("sending", () => {
     answering(cash, { parts: parts("cash") });
     const inCash = await press(cash);
     await vi.waitFor(() =>
-      expect(outcomeText(inCash)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(inCash)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(outcomeText(inCash)).not.toContain(t("give_back.print_later"));
   });
@@ -1483,7 +1483,7 @@ describe("sending", () => {
     expect(api.giveBack).not.toHaveBeenCalled();
     await approve(el);
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(sent(api).override).toEqual({ personId: "boss", pin: "1234" });
     expect(approval(el)).toBeNull();
@@ -1518,7 +1518,7 @@ describe("sending", () => {
     expect(root(el).querySelector("[data-outcome]")).toBeNull();
     await approve(el, "1234");
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
@@ -1534,7 +1534,7 @@ describe("sending", () => {
       const el = await press(api);
       await approve(el);
       await vi.waitFor(() =>
-        expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+        expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
       );
       expect(api.listApprovers).toHaveBeenCalledWith([right], { signal: expect.any(AbortSignal) });
       expect(sent(api, 1).override).toEqual({ personId: "boss", pin: "1234" });
@@ -1658,7 +1658,7 @@ describe("sending", () => {
     await approve(el);
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain(
-        "€10.00 given back on the separate card terminal is recorded.",
+        "€10.00 refunded on the separate card terminal is recorded.",
       ),
     );
     expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"], {
@@ -1718,7 +1718,7 @@ describe("sending", () => {
     expect(outcomeText(reopened)).toContain("€5.00 is waiting for the card company's answer.");
     reopened.shadowRoot!.querySelector<HTMLElement>("[data-check-again]")!.click();
     await vi.waitFor(() =>
-      expect(outcomeText(reopened)).toContain("€5.00 is back on card ···4242."),
+      expect(outcomeText(reopened)).toContain("€5.00 is refunded to card ···4242."),
     );
     expect(api.getTenderRefund).toHaveBeenLastCalledWith("refund-1", {});
     expect(reopened.shadowRoot!.querySelector("[data-check-again]")).toBeNull();
@@ -1745,7 +1745,7 @@ describe("sending", () => {
   it("names no card number in the outcome when the card has none", async () => {
     const api = fakeGiveBackApi({ ...VIEW, ways: [CASH, { ...CARD, last4: null }] });
     const el = await press(api, "card-1");
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back on the card."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is refunded to the card."));
   });
 
   it("counts an open correction as under way, not as waiting for the card company", async () => {
@@ -1758,7 +1758,7 @@ describe("sending", () => {
       ],
     }));
     const el = await press(api, "card-1");
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is refunded to card ···4242."));
     expect(outcomeText(el)).not.toContain("waiting");
     expect(root(el).querySelector("[data-check-again]")).toBeNull();
   });
@@ -1806,7 +1806,7 @@ describe("sending", () => {
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await approve(el);
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"], {
       signal: expect.any(AbortSignal),
@@ -1836,7 +1836,7 @@ describe("sending", () => {
     const el = await press(api, "card-1");
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain(
-        "€3.00 has not gone back yet: it follows when the card company answers.",
+        "€3.00 is not refunded yet: it follows when the card company answers.",
       ),
     );
     expect(outcomeText(el)).toContain("€2.00 is waiting for the card company's answer.");
@@ -1846,7 +1846,7 @@ describe("sending", () => {
     expect(api.getTenderRefund).toHaveBeenCalledWith("refund-1", {});
     expect(api.giveBack).toHaveBeenCalledOnce();
     again().click();
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is refunded to card ···4242."));
     expect(api.previewGiveBack).toHaveBeenLastCalledWith("sale-1", restRequest);
     expect(sent(api, 1)).toMatchObject({ request: restRequest, reasonId: "complaint" });
     for (const id of Object.values(sent(api, 1).submissionIds))
@@ -1867,7 +1867,7 @@ describe("sending", () => {
     el.remove();
     release();
     // Check again marks the first refund back as its last step before it would send the rest.
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("is back on card ···4242."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("is refunded to card ···4242."));
     expect(api.giveBack).toHaveBeenCalledOnce();
   });
 
@@ -1928,7 +1928,9 @@ describe("sending", () => {
       const { el, api } = await waiting();
       api.retryTenderRefund.mockResolvedValueOnce(refundAnswer({ state: "completed" }));
       again(el).click();
-      await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€3.00 is refunded to card ···4242."),
+      );
       expect(api.retryTenderRefund.mock.calls).toEqual([["refund-1", undefined]]);
       expect(api.giveBack).toHaveBeenCalledTimes(2);
       expect(sent(api, 1).request).toEqual(restRequest);
@@ -1974,7 +1976,9 @@ describe("sending", () => {
       await vi.waitFor(() => expect(approval(el)!.error).not.toBeNull());
       api.retryTenderRefund.mockResolvedValueOnce(refundAnswer({ state: "completed" }));
       await approve(el);
-      await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€3.00 is refunded to card ···4242."),
+      );
       expect(approval(el)).toBeNull();
       const approver = { personId: "boss", pin: "1234" };
       expect(api.retryTenderRefund.mock.calls).toEqual([
@@ -1997,7 +2001,7 @@ describe("sending", () => {
       api.listApprovers.mockRejectedValueOnce(new TypeError("Failed to fetch"));
       again(el).click();
       await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.uw_approvers_failed")));
-      expect(outcomeText(el)).not.toContain("Nothing has been given back");
+      expect(outcomeText(el)).not.toContain("Nothing has been refunded");
       expect(again(el).disabled).toBe(false);
       expect(api.giveBack).toHaveBeenCalledOnce();
     });
@@ -2019,7 +2023,7 @@ describe("sending", () => {
           said === "give_back.uw_unknown" ? t(said) : codeMessage(said, "en"),
         ),
       );
-      expect(outcomeText(el)).not.toContain("Nothing has been given back");
+      expect(outcomeText(el)).not.toContain("Nothing has been refunded");
       expect(new GiveBackSession(SCOPE, api).read("sale-1")?.rest?.waitFor).toBe("refund-1");
       expect(again(el).disabled).toBe(false);
     });
@@ -2032,7 +2036,7 @@ describe("sending", () => {
       onTestFinished(() => reading.mockRestore());
       again(el).click();
       await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.uw_unknown")));
-      expect(outcomeText(el)).not.toContain("Nothing has been given back");
+      expect(outcomeText(el)).not.toContain("Nothing has been refunded");
       expect(api.getTenderRefund).not.toHaveBeenCalled();
       expect(again(el).disabled).toBe(false);
     });
@@ -2090,7 +2094,7 @@ describe("sending", () => {
       await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
       el.remove();
       answer.resolve(refundAnswer({ state: "completed" }));
-      await vi.waitFor(() => expect(outcomeText(el)).toContain("is back on card ···4242."));
+      await vi.waitFor(() => expect(outcomeText(el)).toContain("is refunded to card ···4242."));
       expect(api.giveBack).toHaveBeenCalledOnce();
       expect(new GiveBackSession(SCOPE, api).read("sale-1")?.rest?.request).toEqual(restRequest);
     });
@@ -2129,7 +2133,7 @@ describe("sending", () => {
     await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
     root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
     await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.uw_unknown")));
-    expect(outcomeText(el)).not.toContain("Nothing has been given back");
+    expect(outcomeText(el)).not.toContain("Nothing has been refunded");
   });
 
   it("says Check again waits while another send on the receipt is still out, asking nothing", async () => {
@@ -2171,7 +2175,7 @@ describe("sending", () => {
       refusal: { code: "give_back.refund_failed", params: {} },
     }));
     const el = await press(api, "card-1");
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is refunded to card ···4242."));
     expect(outcomeText(el)).toContain(codeMessage("give_back.refund_failed", "en"));
     expect(root(el).querySelector("[data-check-again]")).toBeNull();
   });
@@ -2221,7 +2225,7 @@ describe("sending", () => {
     const el = await press(api, "card-1");
     await vi.waitFor(() => expect(underWay(el)).not.toBeNull());
     expect(heading(el)).toBe(t("give_back.under_way"));
-    expect(outcomeText(el)).toContain("€5.00 is back on card ···4242.");
+    expect(outcomeText(el)).toContain("€5.00 is refunded to card ···4242.");
     expect(underWay(el)!.correction).toBe(UNDER_WAY);
     expect(root(el).querySelector("[data-check-again]")).toBeNull();
   });
@@ -2279,7 +2283,7 @@ describe("sending", () => {
     );
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
@@ -2293,7 +2297,7 @@ describe("sending", () => {
     again.click();
     again.click();
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.giveBack).toHaveBeenCalledTimes(2);
   });
@@ -2347,7 +2351,7 @@ describe("sending", () => {
     await out;
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.giveBack).toHaveBeenCalledOnce();
   });
@@ -2375,7 +2379,7 @@ describe("sending", () => {
     await out;
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.giveBack).toHaveBeenCalledTimes(2);
   });
@@ -2691,7 +2695,7 @@ describe("sending", () => {
     });
     const { el: reopened } = await mount(later);
     expect(outcomeText(reopened)).toContain(
-      "€3.00 has not gone back yet: it follows when the card company answers.",
+      "€3.00 is not refunded yet: it follows when the card company answers.",
     );
     expect(reopened.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull();
   });
@@ -2719,7 +2723,7 @@ describe("sending", () => {
     expect(outcomeText(el)).not.toContain("card company");
     expect(text(button(el))).toBe(t("give_back.send_rest"));
     button(el).click();
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is refunded to card ···4242."));
     expect(api.getTenderRefund).not.toHaveBeenCalled();
     expect(api.previewGiveBack).toHaveBeenLastCalledWith("sale-1", restRequest);
     for (const id of Object.values(sent(api, 1).submissionIds))
@@ -2768,7 +2772,7 @@ describe("sending", () => {
     expect(api.giveBack).toHaveBeenCalledOnce();
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
@@ -2799,7 +2803,7 @@ describe("sending", () => {
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await approve(el);
     await vi.waitFor(() =>
-      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      expect(outcomeText(el)).toContain("€5.00 refunded in cash. Give it to the customer."),
     );
     expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"], {
       signal: expect.any(AbortSignal),

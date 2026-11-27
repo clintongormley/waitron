@@ -886,10 +886,10 @@ it("lists the corrections under way and opens the one chosen", async () => {
     return found!;
   });
   expect(el.shadowRoot!.querySelector("[data-corrections] h2")!.textContent).toBe(
-    "Money back under way",
+    "Refunds under way",
   );
   expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "T/0012 · 15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to give back",
+    "T/0012 · 15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to refund",
   );
   expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(1);
   const opened = vi.fn();
@@ -916,7 +916,7 @@ it("writes a reason exactly as typed, even one holding replacement patterns", as
     return found!;
   });
   expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    `T/0012 · 15/10/2026, 14:00:00 · ${reason} · €4.05 of €6.05 left to give back`,
+    `T/0012 · 15/10/2026, 14:00:00 · ${reason} · €4.05 of €6.05 left to refund`,
   );
 });
 

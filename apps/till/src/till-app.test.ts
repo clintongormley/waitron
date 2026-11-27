@@ -20567,10 +20567,10 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     try {
       setLocale("en");
       expect(t("counter.moved_to_table_overpaid")).toBe(
-        "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back, or keep it as a tip, on its bill there.",
+        "Moved to {table}. It has been paid {amount} more than it now comes to: refund the extra, or keep it as a tip, on its bill there.",
       );
       expect(t("counter.moved_to_table_overpaid_give_back")).toBe(
-        "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back on its bill there.",
+        "Moved to {table}. It has been paid {amount} more than it now comes to: refund the extra on its bill there.",
       );
       setLocale("es");
       expect(t("counter.moved_to_table_overpaid")).toBe(

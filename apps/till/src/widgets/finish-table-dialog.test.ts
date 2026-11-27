@@ -230,7 +230,7 @@ it("hides unavailable refund choices and points to a till without asking for app
   const el = await mount({ refunds: {}, refundAtTill: true });
   await reason(el);
   expect(root(el).querySelector("input[name=refund]")).toBeNull();
-  expect(root(el).textContent).toContain("Give the money back at a till");
+  expect(root(el).textContent).toContain("Refund it at a till");
   expect(button(el).textContent?.trim()).toBe("Cancel");
   const calls = collect(el);
   await click(el, "[data-confirm]");
@@ -717,7 +717,7 @@ it("says on a free item's row whether it gives money back, in English and Spanis
   const line = () => root(el).querySelector('[data-dish="water"] [data-free]')?.textContent?.trim();
   expect(line()).toBe("Given free: refunded with the paid dishes");
   await click(el, '[data-dish="croquetas"] input[name=refund]');
-  expect(line()).toBe("Given free: no money back");
+  expect(line()).toBe("Given free: no refund");
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
