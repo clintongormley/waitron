@@ -81,8 +81,7 @@ it("an opened dish shows its description, allergens by name and diet labels abov
     getComputedStyle(muted).color,
   );
   muted.remove();
-  // An extra chosen on the line declares its own allergens, so the heading names the dish.
-  expect(text(facts.querySelector("h3"))).toBe("Tortilla contains");
+  expect(text(facts.querySelector("h3"))).toBe("Allergens in Tortilla");
   const allergens = [...facts.querySelectorAll("[data-allergens] li")].map(text);
   expect(allergens).toEqual(["Eggs", "Cereals containing gluten (Wheat)"]);
   expect(
@@ -159,7 +158,7 @@ it("shows the dish's information in Spanish", async () => {
     return es[key];
   };
   expect(text(facts.querySelector("h3"))).toBe(
-    fill(spanish("allergens.contains_named"), { label: "Tortilla" }),
+    fill(spanish("allergens.contains_named"), { dish: "Tortilla" }),
   );
   const allergens = [
     allergenLabel("eggs", {}, "es"),

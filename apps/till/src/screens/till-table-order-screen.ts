@@ -2059,7 +2059,7 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Brings an open row back above the bar after the layout changes. The bar was measured when
+  /** Brings an open row back above the bar after the screen's width changes. The bar was measured when
    * drawn, before its buttons were, and its watcher reports only after the next layout. */
   async #revealOpenRowAgain(): Promise<void> {
     const bar = this.#sizedBar;

@@ -391,7 +391,6 @@ test("with + disabled at max, Enter on − that brings the bin moves focus to th
   expect(el.shadowRoot!.activeElement).toBe(group);
   await userEvent.keyboard("{Enter}");
   expect(seen).toEqual([]);
-  // The group is focusable only while it holds focus.
   bin(el)!.focus();
   expect(group.hasAttribute("tabindex")).toBe(false);
 });

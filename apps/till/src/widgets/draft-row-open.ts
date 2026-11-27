@@ -63,7 +63,7 @@ export class OpenDraftRow implements ReactiveController {
 
   /** Brings the open row's box's foot above the bar at the scroll area's foot, which the row's
    * `scroll-margin-block-end` measures, once drawn. Where the box is taller than the area, its foot
-   * wins. The screen calls it again when its layout changes, once the new bar is measured. */
+   * wins. The screen calls it again when its width changes, once the new bar is measured. */
   async reveal(): Promise<void> {
     if (this.#opened === undefined) return;
     const { store, line } = this.#opened;
@@ -147,7 +147,7 @@ export class OpenDraftRow implements ReactiveController {
         ${dishFacts(
           line.product,
           // An extra chosen on the line declares its own allergens beside it.
-          fill(t("allergens.contains_named"), { label: name }),
+          fill(t("allergens.contains_named"), { dish: name }),
         )}
       </div>
       <div class="draft-open-acts">
@@ -168,7 +168,7 @@ export class OpenDraftRow implements ReactiveController {
                 }
                 @wt-remove=${(event: Event) => {
                   event.stopPropagation();
-                  // The stepper checks the count it last drew, which may since have changed.
+                  // The stepper knows only the count it was last given, which the order may since have changed.
                   if (live() && Number(line.quantity) <= 1) remove?.run();
                 }}
                 @wt-change=${(event: CustomEvent<{ value: number }>) => {
