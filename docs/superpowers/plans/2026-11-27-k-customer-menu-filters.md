@@ -56,3 +56,9 @@ same diet rules as the till and keep the advisory under the declarations in pict
 includes diet exclusions in the hidden count. Count each placement once after search and report
 the subset hidden for lack of allergen review. In staff Preview, label an extra with the dishes
 that offer it and verify that each counted product is reachable.
+
+**Owner follow-up, 2026-11-27 09:48.** The **No fish** diet uses the published diet declaration and
+its existing implications. **Exclude allergens** handles the Fish declaration. The guest menu drops
+the hidden-dish count and general allergen notice from the results. Empty results still have a
+message, and staff can still review the warning list in Preview. The watcher recorded the owner's
+directions in Lane K's questions.

@@ -39,8 +39,6 @@ it("requires one reviewed variant that passes every exclusion and a reviewed dis
 
   const result = filterCustomerMenu(menu, "", "en", "", ["eggs", "milk"]);
   expect(result.entries.map(({ member }) => member.name)).toEqual(["Reviewed option"]);
-  expect(result.hidden).toBe(5);
-  expect(result.unreviewed).toBe(2);
 });
 
 it("hides dishes served with a default extra that declares an exclusion or lacks review", () => {
@@ -85,11 +83,9 @@ it("hides dishes served with a default extra that declares an exclusion or lacks
     "Unknown optional",
     "Reviewed default",
   ]);
-  expect(result.hidden).toBe(4);
-  expect(result.unreviewed).toBe(2);
 });
 
-it("counts diet and allergen exclusions once per matching placement", () => {
+it("keeps only matching dishes and set menus across sections", () => {
   const bread = dish("House bread", { allergens: null, dietary: ["vegan"] });
   const clear = dish("Garden bread", { dietary: ["vegan"] });
   const set: GuestMember = { kind: "set_menu", name: "Bread lunch", price: "20.00", lines: [] };
@@ -113,8 +109,6 @@ it("counts diet and allergen exclusions once per matching placement", () => {
       { member: { kind: "section", name: "Garden", members: [clear] }, sectionId: "section-3" },
       { member: set, sectionId: "section-4" },
     ],
-    hidden: 3,
-    unreviewed: 2,
     dishes: 1,
   });
 });
@@ -141,18 +135,18 @@ it.each([
   expect(result.entries.map(({ member }) => member.name)).toEqual(expected);
 });
 
-it("hides a dish with declared fish when No fish is selected", () => {
+it("matches No fish by diet and excludes Fish by allergen", () => {
   const menu = [
     dish("Fish sauce noodles", {
       dietary: ["no_fish", "no_meat"],
       allergens: { fish: {} },
-      variants: [choice({})],
     }),
     dish("Fresh pasta", { dietary: ["no_fish", "no_meat"] }),
+    dish("Unlabelled salad"),
   ];
-  const namesFor = (diet: string) =>
-    filterCustomerMenu(menu, "", "en", diet, []).entries.map(({ member }) => member.name);
-  expect(namesFor("no_fish")).toEqual(["Fresh pasta"]);
+  const namesFor = (diet: string, excluded: string[] = []) =>
+    filterCustomerMenu(menu, "", "en", diet, excluded).entries.map(({ member }) => member.name);
+  expect(namesFor("no_fish")).toEqual(["Fish sauce noodles", "Fresh pasta"]);
   expect(namesFor("no_meat")).toEqual(["Fish sauce noodles", "Fresh pasta"]);
-  expect(filterCustomerMenu(menu, "", "en", "no_fish", []).hidden).toBe(1);
+  expect(namesFor("no_fish", ["fish"])).toEqual(["Fresh pasta"]);
 });

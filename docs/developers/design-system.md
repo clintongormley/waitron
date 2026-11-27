@@ -6194,8 +6194,8 @@ Dish and set-menu names open details inside the canvas. The heading takes focus 
 The **Menu** button restores the search, filters, scroll position and focus on the name that
 opened the details. **Allergies and diets** sits beside search and opens a dialog with a
 multiple-choice allergen field and a single-choice diet field. **Close** returns focus to the
-trigger. When filters hide dishes, the menu announces the count in a notice. Choices
-that declare a selected allergen or still need review carry a mark.
+trigger. When filters leave no matching dishes, the menu announces that result. Choices that declare
+a selected allergen or still need review carry a mark.
 
 The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id

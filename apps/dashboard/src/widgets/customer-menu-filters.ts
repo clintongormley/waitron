@@ -20,21 +20,15 @@ export function hasCautionedChoice(dish: Dish, excluded: readonly string[]) {
   return [...dish.variants, ...extrasOf(dish)].some((choice) => choiceCaution(choice, excluded));
 }
 
-function dishCaution(dish: Dish, excluded: readonly string[]) {
-  if (!excluded.length) return;
-  const extras = extrasOf(dish)
-    .filter((extra) => extra.preselected)
-    .map((extra) => choiceCaution(extra, excluded));
-  if (extras.includes("selectedAllergen")) return "selectedAllergen";
-  const unreviewedExtra = extras.includes("unreviewedAllergens")
-    ? "unreviewedAllergens"
-    : undefined;
-  if (!dish.variants.length) return choiceCaution(dish, excluded) ?? unreviewedExtra;
-  const variants = dish.variants.map((choice) => choiceCaution(choice, excluded));
-  if (variants.every((caution) => caution === "selectedAllergen")) return "selectedAllergen";
-  if (dish.allergens === null || variants.every((caution) => caution !== undefined))
-    return "unreviewedAllergens";
-  return unreviewedExtra;
+function excludesDish(dish: Dish, excluded: readonly string[]) {
+  if (!excluded.length) return false;
+  if (extrasOf(dish).some((extra) => extra.preselected && choiceCaution(extra, excluded)))
+    return true;
+  if (!dish.variants.length) return choiceCaution(dish, excluded) !== undefined;
+  return (
+    dish.allergens === null ||
+    dish.variants.every((choice) => choiceCaution(choice, excluded) !== undefined)
+  );
 }
 
 export function filterCustomerMenu(
@@ -44,8 +38,6 @@ export function filterCustomerMenu(
   diet: string,
   excluded: readonly string[],
 ) {
-  let hidden = 0;
-  let unreviewed = 0;
   let dishes = 0;
   const match = (member: GuestMember): GuestMember[] => {
     if (member.kind === "section") {
@@ -54,24 +46,14 @@ export function filterCustomerMenu(
     }
     if (query && !member.name.toLocaleLowerCase(language).includes(query)) return [];
     if (member.kind === "set_menu") return [member];
-    if (
-      (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet)) ||
-      (diet === "no_fish" && Object.hasOwn(member.allergens ?? {}, "fish"))
-    ) {
-      hidden++;
+    if (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet))
       return [];
-    }
-    const caution = dishCaution(member, excluded);
-    if (caution) {
-      hidden++;
-      if (caution === "unreviewedAllergens") unreviewed++;
-      return [];
-    }
+    if (excludesDish(member, excluded)) return [];
     dishes++;
     return [member];
   };
   const entries = members.flatMap((member, index) =>
     match(member).map((matched) => ({ member: matched, sectionId: `section-${index}` })),
   );
-  return { entries, hidden, unreviewed, dishes };
+  return { entries, dishes };
 }

@@ -281,11 +281,6 @@ describe("the customer menu Online preview", () => {
       (filters.element() as HTMLElement).focus();
       await userEvent.keyboard("{Enter}");
       await expect.element(dialog).toBeVisible();
-      const allergyAdvice = page.getByText(
-        "If you have an allergy, use Exclude allergens and ask staff.",
-      );
-      await expect.element(allergyAdvice, { timeout: 1500 }).toBeVisible();
-      expect(allergyAdvice.element().getBoundingClientRect().height).toBeGreaterThan(12);
       await expectNoA11yViolations(host);
       const allergensControl = allergens.element();
       expect((allergensControl.getRootNode() as ShadowRoot).activeElement).toBe(allergensControl);
@@ -307,13 +302,7 @@ describe("the customer menu Online preview", () => {
       await expect.element(dish).toBeVisible();
       await expect.element(set).toBeVisible();
       await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
-      const notice = page.getByRole("status").filter({ hasText: "1 dish hidden" });
-      await expect
-        .element(notice, { timeout: 1500 })
-        .toHaveTextContent("1 dish hidden: 1 not yet checked for allergens.");
-      expect(parseFloat(getComputedStyle(notice.element()).paddingBlockEnd)).toBeGreaterThanOrEqual(
-        12,
-      );
+      await expect.element(page.getByRole("status")).toHaveTextContent(/^$/);
       await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
       await expectNoA11yViolations(host);
 
@@ -352,7 +341,7 @@ describe("the customer menu Online preview", () => {
       await close.click();
       const empty = page.getByRole("status").filter({ hasText: "No dishes match these filters." });
       await expect.element(empty).toBeVisible();
-      await expect.element(empty).toHaveTextContent("2 dishes hidden.");
+      await expect.element(empty).toHaveTextContent(/^No dishes match these filters\.$/);
       expect(parseFloat(getComputedStyle(empty.element()).marginBlockStart)).toBeGreaterThan(0);
       await expect.element(set).toBeVisible();
 
@@ -364,16 +353,14 @@ describe("the customer menu Online preview", () => {
       const filterStatus = page.getByRole("status").filter({
         hasText: "No dishes match your search and filters.",
       });
-      await expect.element(filterStatus).not.toHaveTextContent(/\b0\b/);
-      await expect.element(filterStatus).toHaveTextContent("Ask staff about allergens");
+      await expect
+        .element(filterStatus)
+        .toHaveTextContent(/^No dishes match your search and filters\.$/);
       await expectNoA11yViolations(host);
 
       await filters.click();
       await page.getByRole("button", { name: "Clear filters" }).click();
       await close.click();
-      await expect
-        .element(page.getByText("Ask staff about allergens", { exact: false }))
-        .not.toBeInTheDocument();
       await expect.element(search).toHaveValue("two courses");
       await search.fill("");
       await expect.element(page.getByRole("button", { name: "House bread" })).toBeVisible();

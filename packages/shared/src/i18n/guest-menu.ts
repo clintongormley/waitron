@@ -57,10 +57,6 @@ clearFilters|Clear filters|Quitar filtros|Treure els filtres|Quitar os filtros
 closeFilters|Close|Cerrar|Tanca|Pechar
 noFilteredDishes|No dishes match these filters.|Ningún plato coincide con estos filtros.|Cap plat coincideix amb aquests filtres.|Ningún prato coincide con estes filtros.
 noDishesSearchAndFilters|No dishes match your search and filters.|Ningún plato coincide con tu búsqueda y tus filtros.|Cap plat coincideix amb la teva cerca i els teus filtres.|Ningún prato coincide coa túa busca e os teus filtros.
-hiddenDish|{hidden} dish hidden|{hidden} plato oculto|{hidden} plat amagat|{hidden} prato oculto
-hiddenDishes|{hidden} dishes hidden|{hidden} platos ocultos|{hidden} plats amagats|{hidden} pratos ocultos
-hiddenUnreviewed|: {unreviewed} not yet checked for allergens.|: {unreviewed} sin revisión de alérgenos.|: {unreviewed} sense revisió d’al·lèrgens.|: {unreviewed} sen revisión de alérxenos.
-dietAllergyAdvice|If you have an allergy, use Exclude allergens and ask staff.|Si tienes una alergia, usa Excluir alérgenos y pregunta al personal.|Si tens una al·lèrgia, fes servir Exclou al·lèrgens i pregunta al personal.|Se tes unha alerxia, usa Excluír alérxenos e pregunta ao persoal.
 askAboutAllergens|Ask staff about allergens, even when no icons appear.|Pregunta al personal por los alérgenos, aunque no veas iconos.|Pregunta al personal pels al·lèrgens, encara que no vegis icones.|Pregunta ao persoal polos alérxenos, aínda que non vexas iconas.
 askAboutSetMenu|Ask staff about the choices in this set menu.|Pregunta al personal por las opciones de este menú.|Pregunta al personal per les opcions d’aquest menú.|Pregunta ao persoal polas opcións deste menú.
 checkChoices|Check the choices for allergens.|Consulta los alérgenos de las opciones.|Consulta els al·lèrgens de les opcions.|Consulta os alérxenos das opcións.

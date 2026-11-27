@@ -17,7 +17,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { classMap } from "lit/directives/class-map.js";
 import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
 
 registerIcons(NUTRITION_ICONS);
@@ -321,29 +320,11 @@ export class CustomerMenuPage extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
-      .diet-advice {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       .filter-actions {
         display: flex;
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
-      }
-      .filter-summary {
-        margin-block: var(--wt-space-4);
-        padding: var(--wt-space-4);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-lg);
-      }
-      .filter-summary p {
-        margin: 0;
-      }
-      .filter-summary p + p {
-        margin-block-start: var(--wt-space-2);
       }
       .choice-caution {
         grid-column: 1 / -1;
@@ -393,7 +374,7 @@ export class CustomerMenuPage extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
-      .no-results:not(.filter-summary) {
+      .no-results {
         margin-block-start: calc(var(--wt-space-2) + var(--wt-space-3));
       }
       header + [role="status"] + .members {
@@ -764,7 +745,6 @@ export class CustomerMenuPage extends LitElement {
             this.diet = event.detail.value;
           }}
         ></wt-combobox>
-        <p class="diet-advice">${text.dietAllergyAdvice}</p>
       </div>
       <div slot="footer" class="filter-actions">
         <wt-button
@@ -793,15 +773,15 @@ export class CustomerMenuPage extends LitElement {
     const detail = this.detail;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const query = this.query.trim().toLocaleLowerCase(menu.language);
-    const {
-      entries: visible,
-      dishes,
-      hidden,
-      unreviewed,
-    } = filterCustomerMenu(menu.members, query, menu.language, this.diet, this.excluded);
+    const { entries: visible, dishes } = filterCustomerMenu(
+      menu.members,
+      query,
+      menu.language,
+      this.diet,
+      this.excluded,
+    );
     const sections = visible.filter(({ member }) => member.kind === "section");
     const filtered = this.excluded.length > 0 || this.diet !== "";
-    const filterNotice = hidden > 0 || this.excluded.length > 0;
     const noResults =
       (filtered && dishes === 0) || (!filtered && query.length > 0 && visible.length === 0);
     const emptyMessage = !filtered
@@ -809,15 +789,6 @@ export class CustomerMenuPage extends LitElement {
       : query
         ? words.text.noDishesSearchAndFilters
         : words.text.noFilteredDishes;
-    const number = new Intl.NumberFormat(words.language);
-    const hiddenSummary = words.text[hidden === 1 ? "hiddenDish" : "hiddenDishes"]!.replace(
-      "{hidden}",
-      number.format(hidden),
-    );
-    const unreviewedSummary = words.text.hiddenUnreviewed!.replace(
-      "{unreviewed}",
-      number.format(unreviewed),
-    );
     const money = (value: string) => formatMoney(value, menu.language);
     let firstPhoto = true;
 
@@ -947,14 +918,8 @@ export class CustomerMenuPage extends LitElement {
               </nav>`
             : nothing
         }
-        <div
-          role="status"
-          lang=${words.language}
-          class=${classMap({ "filter-summary": filterNotice, "no-results": noResults })}
-        >
-          ${noResults ? (filterNotice ? html`<p>${emptyMessage}</p>` : emptyMessage) : nothing}
-          ${hidden ? html`<p>${hiddenSummary}${unreviewed ? unreviewedSummary : "."}</p>` : nothing}
-          ${this.excluded.length ? html`<p>${words.text.askAboutAllergens}</p>` : nothing}
+        <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
+          ${noResults ? emptyMessage : nothing}
         </div>
         ${members(visible, 3)} ${legend(words)} ${this.#filterDialog(words)}
       </div>
