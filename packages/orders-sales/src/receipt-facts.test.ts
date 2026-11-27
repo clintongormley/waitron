@@ -1052,3 +1052,90 @@ describe("a full invoice of a divided set menu", () => {
     expect(table(input)).toEqual([part("Daily menu", "12.73", "10.00", "14.00")]);
   });
 });
+
+// Owner's answer 4 (correct-full-invoice design §6): a line given back only in part prints its
+// amount without a quantity or a unit price; a whole line keeps −1 × price.
+describe("a corrective holding a whole line and a line given back in part", () => {
+  const whole: TillSaleLine = {
+    descriptions: { "es-ES": "Croquetas", "en-GB": "Croquettes" },
+    quantity: "-1",
+    gross: "-6.00",
+    vatRate: "10.00",
+    net: { unitPrice: "5.45", priceQuantity: "1.000", base: "-5.45", tax: "-0.55", rate: "10.00" },
+  };
+  const part: TillSaleLine = {
+    descriptions: { "es-ES": "Paella", "en-GB": "Paella" },
+    quantity: "-1",
+    gross: "-6.82",
+    vatRate: "10.00",
+    net: { unitPrice: "18.18", priceQuantity: "1.000", base: "-6.20", tax: "-0.62", rate: "10.00" },
+    givenBackInPart: true,
+  };
+  const corrective = (invoiceType: "R1" | "R5"): ReceiptDocumentInput => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result.invoiceType = invoiceType;
+    input.result.corrects = { invoiceNumber: "FF/1", issuedAt: "2026-08-17T22:34:00.000Z" };
+    input.result.lines = [structuredClone(whole), structuredClone(part)];
+    input.result.total = "-12.82";
+    input.result.vatBreakdown = [{ rate: "10.00", base: "-11.65", tax: "-1.17" }];
+    return input;
+  };
+
+  it("leaves the quantity and unit price off the part row of a full invoice's table", () => {
+    const [table] = receiptFigures(corrective("R1")).sections;
+    expect(table).toEqual({
+      kind: "filed",
+      rows: [
+        {
+          kind: "line",
+          units: "-1",
+          item: "Croquetas",
+          indent: 0,
+          rate: decimal("10.00"),
+          unitPrice: decimal("5.45"),
+          amountExVat: decimal("-5.45"),
+          chargedWithVat: decimal("-6.00"),
+        },
+        {
+          kind: "line",
+          units: "",
+          item: "Paella",
+          indent: 0,
+          rate: decimal("10.00"),
+          amountExVat: decimal("-6.20"),
+          chargedWithVat: decimal("-6.82"),
+        },
+      ],
+    });
+  });
+
+  it("leaves the quantity off the part line of a corrective receipt", () => {
+    const groups = receiptFigures(corrective("R5")).sections.map((section) =>
+      section.kind === "withVat"
+        ? [section.group.quantity, section.group.item, section.group.amount, section.group.perUnit]
+        : section.kind,
+    );
+    expect(groups).toEqual([
+      ["-1", "Croquetas", decimal("-6.00"), undefined],
+      ["", "Paella", decimal("-6.82"), undefined],
+    ]);
+  });
+
+  it("leaves the count off an extra given back in part, and keeps a whole extra's", () => {
+    const input = corrective("R5");
+    const extra = (givenBackInPart: boolean): TillSaleLine => ({
+      descriptions: { "es-ES": "Huevo" },
+      quantity: "-2",
+      gross: givenBackInPart ? "-0.50" : "-2.00",
+      vatRate: "10.00",
+      parentLineNo: 1,
+      ...(givenBackInPart ? { givenBackInPart: true as const } : {}),
+    });
+    input.result.lines = [structuredClone(whole), extra(false), structuredClone(part), extra(true)];
+    input.result.lines[3]!.parentLineNo = 3;
+    const counts = receiptFigures(input).sections.flatMap((section) =>
+      section.kind === "withVat" ? section.group.options.map((option) => option.quantity) : [],
+    );
+    expect(counts).toEqual(["x2", ""]);
+  });
+});

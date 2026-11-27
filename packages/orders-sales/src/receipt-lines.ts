@@ -351,6 +351,9 @@ function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   if (a.options.length !== b.options.length) return false;
   if (a.dish.setMenuRole !== b.dish.setMenuRole) return false;
   if (isDividedSetMenu(a.dish) !== isDividedSetMenu(b.dish)) return false;
+  if (lines(a).some((left, i) => left.givenBackInPart !== lines(b)[i]!.givenBackInPart)) {
+    return false;
+  }
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
   const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];

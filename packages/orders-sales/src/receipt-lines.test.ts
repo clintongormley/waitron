@@ -307,6 +307,19 @@ describe("mergeIdenticalGroups", () => {
     expect(merged([undefined, "1.50"])).toEqual([["2", undefined]]);
   });
 
+  it("joins two rows given back in part, but never a row given back in part with a whole one", () => {
+    const part = row("Beer", "1", "1.50", { givenBackInPart: true });
+    expect(printed([part, { ...part }])).toEqual([["Beer", "2", "3.00"]]);
+    expect(printed([part, row("Beer", "1", "1.50")])).toEqual([
+      ["Beer", "1", "1.50"],
+      ["Beer", "1", "1.50"],
+    ]);
+    expect(printed([row("Beer", "1", "1.50"), part])).toEqual([
+      ["Beer", "1", "1.50"],
+      ["Beer", "1", "1.50"],
+    ]);
+  });
+
   it("A803 portion grouping: rows at one unit price group whatever each row's count", () => {
     expect(printed([row("Beer", "2", "3.00"), row("Beer", "1", "1.50")])).toEqual([
       ["Beer", "3", "4.50"],

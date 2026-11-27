@@ -211,7 +211,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     };
   };
   const withVatGroup = (group: WithVatFigures): void => {
-    const quantity = `${group.quantity}  `;
+    const quantity = group.quantity === "" ? "" : `${group.quantity}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const plus = group.surcharge ? "+" : "";
     row(

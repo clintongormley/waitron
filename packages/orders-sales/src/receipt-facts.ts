@@ -329,7 +329,7 @@ export function receiptFigures({
     const { line, figures } = figuredLine;
     const heading: FiledFigureRow = {
       kind: line.advance === undefined ? kind : "advance",
-      units: quantityText(line, namesLocale, locale),
+      units: line.givenBackInPart ? "" : quantityText(line, namesLocale, locale),
       item: itemName(line),
       indent,
     };
@@ -338,7 +338,7 @@ export function receiptFigures({
     if (isCoveredOnFullInvoice(line)) return row;
     return {
       ...row,
-      unitPrice: figures.price,
+      ...(line.givenBackInPart ? {} : { unitPrice: figures.price }),
       amountExVat: figures.amount,
       chargedWithVat: chargedFor(figuredLine),
     };
@@ -388,7 +388,7 @@ export function receiptFigures({
     const shown = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
     const amount = dish.listGross === undefined ? soldGross(dish) : decimal(dish.listGross);
     const group: WithVatFigures = {
-      quantity: shown,
+      quantity: dish.givenBackInPart ? "" : shown,
       item: itemName(dish),
       ...(isCoveredDish(dish) ? {} : { amount }),
       ...(simplified && isSurcharge(dish, amount) ? { surcharge: true as const } : {}),
@@ -424,7 +424,9 @@ export function receiptFigures({
       const item = resolveSnapshotText(option.descriptions, namesLocale, namesLocale);
       let quantity: string;
       let combinedCount: string | undefined;
-      if (!simplified) {
+      if (option.givenBackInPart) {
+        quantity = "";
+      } else if (!simplified) {
         const { quantity: count, unitName, soldInEach } = option;
         quantity = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
       } else if (option.unitName == null || option.soldInEach === true) {

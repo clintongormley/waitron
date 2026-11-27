@@ -153,8 +153,10 @@ async function printedItems(saleId: string): Promise<string[]> {
   const lines = decodeTicket(job!.payload)
     .split("\n")
     .map((line) => line.replace(/\s+/gu, " ").trim());
-  const first = lines.findIndex((line) => /^-?\d+ /u.test(line));
-  const total = lines.findIndex((line, at) => at > first && /^TOTAL/u.test(line));
+  // The items sit between the two rules before TOTAL; a line given back in part prints no count.
+  const total = lines.findIndex((line) => /^TOTAL/u.test(line));
+  const rules = lines.flatMap((line, at) => (at < total && /^-+$/u.test(line) ? [at] : []));
+  const first = rules.at(-2)! + 1;
   return [
     ...lines.slice(first, total + 1).filter((line) => line !== "" && !/^-+$/u.test(line)),
     ...lines.slice(total + 1).filter((line) => /^\d+ ?% /u.test(line)),
@@ -259,7 +261,7 @@ describe("a goodwill amount", () => {
     ]);
     // Its set menu's own row is not on the corrective, so the line prints its amount.
     expect(await printedItems(correctiveId)).toEqual([
-      "-1 Lemonade -2,00",
+      "Lemonade -2,00",
       "TOTAL -2,00 €",
       "21% -1,65 -0,35 -2,00",
     ]);

@@ -2032,8 +2032,8 @@ describe("a correction's receipts", () => {
     );
     expect(shown(document.result.lines)).toEqual(FILED);
     expect(itemRows(document)).toEqual([
-      ["House salad", "-1", "", "-2,50"],
-      ["Mineral water", "-1", "", "-0,50"],
+      ["House salad", "", "", "-2,50"],
+      ["Mineral water", "", "", "-0,50"],
     ]);
   });
 
