@@ -35,9 +35,7 @@ function transport() {
     environment: "production" as const,
     skipRetryMs: DEFAULT_SKIP_RETRY_MS,
     resolveClient: async () =>
-      state.revision === undefined
-        ? client
-        : { ...client, certificateRevision: state.revision },
+      state.revision === undefined ? client : { ...client, certificateRevision: state.revision },
   };
   return { state, deps };
 }
