@@ -1256,3 +1256,229 @@ test("an inheritance arrow leaves a partially typed native number clear", async 
   expect(arrow?.checkVisibility()).toBe(false);
   expect(parseFloat(getComputedStyle(input).paddingInlineStart)).toBeLessThan(withArrow);
 });
+
+function setOutlinedTokens(): void {
+  host.style.setProperty("--wt-tap-min", "47px");
+  host.style.setProperty("--wt-radius-md", "9px");
+  host.style.setProperty("--wt-field-line-width", "1px");
+  host.style.setProperty("--wt-field-line-width-active", "3px");
+  host.style.setProperty("--wt-space-3", "13px");
+  host.style.setProperty("--wt-space-2", "7px");
+  host.style.setProperty("--wt-font-size-lg", "19px");
+  host.style.setProperty("--wt-color-border", "rgb(31, 32, 33)");
+  host.style.setProperty("--wt-color-bg", "rgb(34, 35, 36)");
+  host.style.setProperty("--wt-color-primary", "rgb(37, 38, 39)");
+  host.style.setProperty("--wt-color-danger", "rgb(40, 41, 42)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(43, 44, 45)");
+  host.style.setProperty("--wt-color-text", "rgb(46, 47, 48)");
+  host.style.setProperty("--wt-color-field-fill-disabled", "rgb(49, 50, 51)");
+}
+
+const OUTLINED_SEARCH =
+  '<wt-input variant="outlined" label="Find a bill" placeholder="Number or amount"><wt-icon slot="start" name="inherit"></wt-icon></wt-input>';
+
+test("the default variant is filled and reflected, and draws the filled look", async () => {
+  const el = (await mount('<wt-input label="Name"></wt-input>')) as WtInput;
+  setOutlinedTokens();
+  host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
+  expect(el.variant).toBe("filled");
+  expect(el.getAttribute("variant")).toBe("filled");
+  const { field, label } = parts(el);
+  expect(label).not.toBeNull();
+  expect(getComputedStyle(field).backgroundColor).toBe("rgb(8, 8, 8)");
+  expect(getComputedStyle(field).borderTopStyle).toBe("none");
+  expect(getComputedStyle(field).borderBottomLeftRadius).toBe("0px");
+  expect(getComputedStyle(field).boxShadow).toMatch(/inset/);
+  expect(el.shadowRoot!.querySelector('slot[name="start"]')).toBeNull();
+});
+
+test("the outlined look is a tap-height box with a line border on the page ground and no bottom line", async () => {
+  const el = await mount(OUTLINED_SEARCH);
+  setOutlinedTokens();
+  const { field } = parts(el);
+  const style = getComputedStyle(field);
+  expect(field.getBoundingClientRect().height).toBe(47);
+  expect(el.getBoundingClientRect().height).toBe(47);
+  for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+    expect(style[`border${side}Width`]).toBe("1px");
+    expect(style[`border${side}Style`]).toBe("solid");
+    expect(style[`border${side}Color`]).toBe("rgb(31, 32, 33)");
+  }
+  for (const corner of ["TopLeft", "TopRight", "BottomLeft", "BottomRight"] as const) {
+    expect(style[`border${corner}Radius`]).toBe("9px");
+  }
+  expect(style.backgroundColor).toBe("rgb(34, 35, 36)");
+  expect(style.boxShadow).toBe("none");
+  expect(getComputedStyle(field, "::after").content).toBe("none");
+});
+
+test("the outlined look draws no label but names its input by it", async () => {
+  const el = await mount(OUTLINED_SEARCH);
+  const { input } = parts(el);
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(input.getAttribute("aria-label")).toBe("Find a bill");
+  expect(input.placeholder).toBe("Number or amount");
+});
+
+test("the outlined start icon sits before the text, centred, at its size and hidden from screen readers", async () => {
+  const el = await mount(OUTLINED_SEARCH);
+  setOutlinedTokens();
+  const { field, input } = parts(el);
+  const icon = el.querySelector("wt-icon")!;
+  await (icon as LitElement).updateComplete;
+  const iconBox = icon.getBoundingClientRect();
+  const fieldBox = field.getBoundingClientRect();
+  expect(iconBox.width).toBe(19);
+  expect(iconBox.height).toBe(19);
+  expect(iconBox.left - fieldBox.left).toBe(1 + 13);
+  expect(input.getBoundingClientRect().left - iconBox.right).toBe(7);
+  expect(iconBox.top + iconBox.height / 2).toBeCloseTo(fieldBox.top + fieldBox.height / 2, 0);
+  expect(icon.shadowRoot!.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("the outlined start icon is muted at rest and takes the text colour while focused", async () => {
+  const el = await mount(OUTLINED_SEARCH);
+  setOutlinedTokens();
+  const icon = el.querySelector("wt-icon")!;
+  expect(getComputedStyle(icon).color).toBe("rgb(43, 44, 45)");
+  el.focus();
+  expect(getComputedStyle(icon).color).toBe("rgb(46, 47, 48)");
+});
+
+test("a focused outlined field draws a thicker primary border without moving its text or growing", async () => {
+  const el = await mount(OUTLINED_SEARCH);
+  setOutlinedTokens();
+  const { field, input } = parts(el);
+  const restLeft = input.getBoundingClientRect().left;
+  const restIcon = el.querySelector("wt-icon")!.getBoundingClientRect().left;
+  el.focus();
+  const style = getComputedStyle(field);
+  for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+    expect(style[`border${side}Width`]).toBe("3px");
+    expect(style[`border${side}Color`]).toBe("rgb(37, 38, 39)");
+  }
+  expect(style.boxShadow).toBe("none");
+  expect(input.getBoundingClientRect().left).toBe(restLeft);
+  expect(el.querySelector("wt-icon")!.getBoundingClientRect().left).toBe(restIcon);
+  expect(field.getBoundingClientRect().height).toBe(47);
+});
+
+test("an invalid outlined field paints its border from the danger token, thicker while focused", async () => {
+  const el = await mount(OUTLINED_SEARCH.replace("<wt-input ", "<wt-input invalid "));
+  setOutlinedTokens();
+  const { field, input } = parts(el);
+  expect(getComputedStyle(field).borderTopColor).toBe("rgb(40, 41, 42)");
+  expect(getComputedStyle(field).borderTopWidth).toBe("1px");
+  const restLeft = input.getBoundingClientRect().left;
+  el.focus();
+  expect(getComputedStyle(field).borderTopColor).toBe("rgb(40, 41, 42)");
+  expect(getComputedStyle(field).borderTopWidth).toBe("3px");
+  expect(input.getBoundingClientRect().left).toBe(restLeft);
+});
+
+test("a disabled outlined field keeps a one-line dashed border on the disabled fill with muted text", async () => {
+  const el = await mount(OUTLINED_SEARCH.replace("<wt-input ", '<wt-input disabled value="12" '));
+  setOutlinedTokens();
+  const { field, input } = parts(el);
+  const style = getComputedStyle(field);
+  expect(style.backgroundColor).toBe("rgb(49, 50, 51)");
+  expect(style.borderTopWidth).toBe("1px");
+  expect(style.borderTopStyle).toBe("dashed");
+  expect(style.borderTopColor).toBe("rgb(31, 32, 33)");
+  expect(getComputedStyle(field, "::after").content).toBe("none");
+  expect(getComputedStyle(input).color).toBe("rgb(43, 44, 45)");
+});
+
+/** Where the input lays out its text: its box less its padding and border. */
+function textArea(input: HTMLInputElement): { left: number; right: number } {
+  const box = input.getBoundingClientRect();
+  const style = getComputedStyle(input);
+  return {
+    left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+    right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+  };
+}
+
+function expectApart(
+  text: { left: number; right: number },
+  other: { left: number; right: number },
+  what: string,
+): void {
+  expect(Math.max(text.left, other.left), `${what} overlaps the text`).toBeGreaterThanOrEqual(
+    Math.min(text.right, other.right),
+  );
+}
+
+async function expectApartAtRestAndFocused(
+  el: HTMLElement,
+  decoration: () => Element,
+  what: string,
+): Promise<void> {
+  const { input } = parts(el);
+  expectApart(textArea(input), decoration().getBoundingClientRect(), what);
+  el.focus();
+  await settle(el);
+  expectApart(textArea(input), decoration().getBoundingClientRect(), `${what} (focused)`);
+}
+
+test("an outlined field's text stops short of an end action", async () => {
+  const el = await mount(
+    OUTLINED_SEARCH.replace("</wt-input>", '<button slot="end">Clear</button></wt-input>'),
+  );
+  host.style.width = "320px";
+  await settle(el);
+  expect(parts(el).field.classList.contains("has-end")).toBe(true);
+  await expectApartAtRestAndFocused(el, () => el.querySelector('[slot="end"]')!, "end action");
+});
+
+test("an outlined password field's text stops short of its visibility button", async () => {
+  const el = (await mount(
+    '<wt-input variant="outlined" label="Password" type="password" value="correct horse"></wt-input>',
+  )) as WtInput;
+  host.style.width = "320px";
+  el.passwordVisibility = {
+    show: "Show password",
+    hide: "Hide password",
+    shown: "Password shown",
+    hidden: "Password hidden",
+  };
+  await settle(el);
+  const button = () => el.shadowRoot!.querySelector(".end wt-button")!;
+  expect(button().checkVisibility()).toBe(true);
+  await expectApartAtRestAndFocused(el, button, "visibility button");
+});
+
+test("an outlined field's inherited arrow sits between its start icon and its text", async () => {
+  const el = (await mount(OUTLINED_SEARCH)) as WtInput;
+  host.style.width = "320px";
+  el.inherited = { value: "Kitchen" };
+  await settle(el);
+  const arrow = () => el.shadowRoot!.querySelector('.inherit-cue wt-icon[name="inherit"]')!;
+  const icon = el.querySelector('[slot="start"]')!;
+  expect(arrow().checkVisibility()).toBe(true);
+  expectApart(icon.getBoundingClientRect(), arrow().getBoundingClientRect(), "start icon");
+  expect(arrow().getBoundingClientRect().left).toBeGreaterThan(icon.getBoundingClientRect().left);
+  await expectApartAtRestAndFocused(el, arrow, "inherited arrow");
+});
+
+test.each(["light", "dark"])(
+  "an outlined field's typed value paints from the text token (%s)",
+  async (theme) => {
+    const el = await mount(OUTLINED_SEARCH);
+    host.setAttribute("data-theme", theme);
+    const { field, input } = parts(el);
+    el.focus();
+    await userEvent.keyboard("80.52");
+    expect(input.value).toBe("80.52");
+    const resolved = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(field).getPropertyValue(token).trim();
+      host.appendChild(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      return colour;
+    };
+    expect(resolved("--wt-color-text")).not.toBe(resolved("--wt-color-field-value"));
+    expect(getComputedStyle(input).color).toBe(resolved("--wt-color-text"));
+  },
+);

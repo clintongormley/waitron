@@ -108,3 +108,25 @@ for (const { tag } of interactiveComponents) {
     ).toBeGreaterThanOrEqual(44);
   });
 }
+
+test("an outlined wt-input's inner input clears the 44×44 tap target at rest and while focused", async () => {
+  const wrapper = document.createElement("div");
+  wrapper.style.width = "20px";
+  document.body.appendChild(wrapper);
+  mounted.push(wrapper);
+  applyTokens(wrapper);
+  wrapper.innerHTML = '<wt-input variant="outlined" label="Find"></wt-input>';
+  const el = wrapper.firstElementChild as HTMLElement & { updateComplete: Promise<unknown> };
+  await el.updateComplete;
+  const input = el.shadowRoot!.querySelector("input")!;
+
+  const resting = input.getBoundingClientRect();
+  expect(resting.width, "outlined input width at rest").toBeGreaterThanOrEqual(44);
+  expect(resting.height, "outlined input height at rest").toBeGreaterThanOrEqual(44);
+
+  el.focus();
+  expect(el.shadowRoot!.activeElement).toBe(input);
+  const focused = input.getBoundingClientRect();
+  expect(focused.width, "outlined input width while focused").toBeGreaterThanOrEqual(44);
+  expect(focused.height, "outlined input height while focused").toBeGreaterThanOrEqual(44);
+});

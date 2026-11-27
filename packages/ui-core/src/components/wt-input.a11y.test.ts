@@ -154,4 +154,41 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     );
     await expectNoA11yViolations(host);
   });
+
+  describe("outlined search field", () => {
+    const search = (attributes = "") =>
+      `<wt-input variant="outlined" label="Find a bill" placeholder="Number or amount" ${attributes}><wt-icon slot="start" name="inherit"></wt-icon></wt-input>`;
+
+    test("at rest with its placeholder", async () => {
+      await mountThemed(search(), theme);
+      await expectNoA11yViolations(host);
+      const el = host.querySelector("wt-input")!;
+      const root = el.shadowRoot!;
+      const placeholder = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+      const ground = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+      expect(contrastRatio(placeholder, ground)).toBeGreaterThanOrEqual(4.5);
+      const icon = getComputedStyle(el.querySelector("wt-icon")!).color;
+      expect(contrastRatio(icon, ground)).toBeGreaterThanOrEqual(3);
+      expect(
+        page.getByRole("textbox", { name: "Find a bill", exact: true }).query(),
+      ).not.toBeNull();
+    });
+
+    test("focused with a value", async () => {
+      const el = await mountThemed(search('value="80.52"'), theme);
+      el.focus();
+      expect(el.shadowRoot!.activeElement).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
+    test("invalid", async () => {
+      await mountThemed(search('value="x" invalid'), theme);
+      await expectNoA11yViolations(host);
+    });
+
+    test("disabled", async () => {
+      await mountThemed(search('value="80.52" disabled'), theme);
+      await expectNoA11yViolations(host);
+    });
+  });
 });

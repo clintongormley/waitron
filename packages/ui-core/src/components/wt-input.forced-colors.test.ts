@@ -86,3 +86,63 @@ test("a focused invalid field's bottom edge is still thicker than a focused vali
   const valid = await focusedEdge('<wt-input label="Name"></wt-input>');
   expect(await focusedEdge('<wt-input label="Name" invalid></wt-input>')).toBeGreaterThan(valid);
 });
+
+type Edges = Record<"top" | "right" | "bottom" | "left", number>;
+
+/** How many px in from each edge of the field, at the middle of that edge, are not its background. */
+async function outlineEdges(field: HTMLElement): Promise<Edges> {
+  const box = field.getBoundingClientRect();
+  const at = await elementPixels(field);
+  const midX = box.left + box.width / 2;
+  const midY = box.top + box.height / 2;
+  const background = at(midX, midY);
+  const inkFrom = (point: (step: number) => [number, number]) => {
+    let steps = 0;
+    while (steps < 8 && !same(at(...point(steps)), background)) steps += 1;
+    return steps;
+  };
+  return {
+    top: inkFrom((step) => [midX, box.top + 0.5 + step]),
+    right: inkFrom((step) => [box.right - 0.5 - step, midY]),
+    bottom: inkFrom((step) => [midX, box.bottom - 0.5 - step]),
+    left: inkFrom((step) => [box.left + 0.5 + step, midY]),
+  };
+}
+
+function expectEverySide(edges: Edges, compare: (side: keyof Edges, width: number) => void): void {
+  for (const side of ["top", "right", "bottom", "left"] as const) compare(side, edges[side]);
+}
+
+const OUTLINED = '<wt-input variant="outlined" label="Find"></wt-input>';
+
+test("an outlined field draws its outline on every side, thicker while focused and when invalid", async () => {
+  const el = await mount(OUTLINED);
+  const field = fieldOf(el);
+  const resting = await outlineEdges(field);
+  expectEverySide(resting, (side, width) => expect(width, side).toBeGreaterThan(0));
+
+  el.shadowRoot!.querySelector("input")!.focus();
+  expectEverySide(await outlineEdges(field), (side, width) =>
+    expect(width, side).toBeGreaterThan(resting[side]),
+  );
+
+  const invalid = fieldOf(await mount(OUTLINED.replace("<wt-input ", "<wt-input invalid ")));
+  expectEverySide(await outlineEdges(invalid), (side, width) =>
+    expect(width, side).toBeGreaterThan(resting[side]),
+  );
+  // The danger colour is repainted away here, so only the width tells invalid apart.
+  expect(getComputedStyle(invalid).borderLeftWidth).toBe(getComputedStyle(field).borderLeftWidth);
+  expect(getComputedStyle(invalid).borderLeftWidth).not.toBe("1px");
+  expect(invalid.offsetHeight).toBe(field.offsetHeight);
+});
+
+test("a focused invalid outlined field's edge is still thicker than a focused valid one's", async () => {
+  const focusedEdges = async (markup: string) => {
+    const el = await mount(markup);
+    el.shadowRoot!.querySelector("input")!.focus();
+    return outlineEdges(fieldOf(el));
+  };
+  const valid = await focusedEdges(OUTLINED);
+  const invalid = await focusedEdges(OUTLINED.replace("<wt-input ", "<wt-input invalid "));
+  expectEverySide(invalid, (side, width) => expect(width, side).toBeGreaterThan(valid[side]));
+});
