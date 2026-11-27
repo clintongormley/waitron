@@ -36,6 +36,7 @@ export class WtShareList extends LitElement {
 
       li {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
         padding: calc(var(--wt-space-2) + var(--wt-space-1) * 0.75)
@@ -62,8 +63,10 @@ export class WtShareList extends LitElement {
 
       .text {
         display: flex;
+        flex: 1 1 auto;
         flex-direction: column;
         min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .detail {
@@ -71,8 +74,11 @@ export class WtShareList extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      /* Too wide to share a line with the text, the amount wraps to its own line, at the end. */
       .amount {
+        flex: none;
         margin-inline-start: auto;
+        white-space: nowrap;
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
       }
@@ -96,7 +102,7 @@ export class WtShareList extends LitElement {
       }
 
       .marker wt-icon {
-        color: var(--wt-color-primary-text);
+        color: var(--wt-color-primary);
       }
 
       li[data-state="paid"] .amount {

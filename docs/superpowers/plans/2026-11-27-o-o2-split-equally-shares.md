@@ -27,6 +27,10 @@ rounded up to the cent. "Left" is the bill less what was received and what a car
 (`bill-pay-dialog.ts:1236-1241`) because it cannot import `@waitron/orders-sales`, which depends
 on `@waitron/db`.
 
+2026-11-27, after O2a: `equalShare` is in `packages/shared/src/equal-share.ts`, called at
+`bill-allocation.ts:80`, and the till imports it; `bill-pay-dialog.ts` line numbers in this
+plan predate O2a and later changes, and `bill.allocation_changed` is at `bill-allocation.ts:136-152`. The paid tick is drawn in `--wt-color-primary`, not `--wt-color-primary-text` (root `CLAUDE.md`: the primary colour paints icons). The round stepper's number is `--wt-font-size-payment-amount`, 42px, where §7.10 and `ba` 1 draw 44: the difference listed under "Pictures" below.
+
 O2a moves `equalShare` and its tests unchanged to `packages/shared/src/equal-share.ts`, exported
 from `packages/shared/src/index.ts`, and adds `equalShares(left, n)`: `equalShare` applied guest by
 guest, the list the screen shows. The till's copy becomes an import of it. **The reviewer's

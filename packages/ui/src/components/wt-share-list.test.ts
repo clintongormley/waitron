@@ -157,7 +157,7 @@ test("the current share: ring and fill in the brand colour, on the lifted surfac
   expect(getComputedStyle(current.name).color).toBe("rgb(3, 3, 3)");
 });
 
-test("a paid share: a brand-coloured ring holding a check in the brand text colour, muted text, a medium amount", async () => {
+test("a paid share: a brand-coloured ring holding a brand-coloured check, muted text, a medium amount", async () => {
   const el = await list();
   paint(el);
   const paid = rows(el)[0]!;
@@ -165,7 +165,7 @@ test("a paid share: a brand-coloured ring holding a check in the brand text colo
   expect(marker.borderTopWidth).toBe("3px");
   expect(marker.borderTopColor).toBe("rgb(5, 5, 5)");
   expect(marker.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(getComputedStyle(paid.marker.querySelector("wt-icon")!).color).toBe("rgb(6, 6, 6)");
+  expect(getComputedStyle(paid.marker.querySelector("wt-icon")!).color).toBe("rgb(5, 5, 5)");
   expect(getComputedStyle(paid.name).color).toBe("rgb(4, 4, 4)");
   expect(getComputedStyle(paid.amount).color).toBe("rgb(4, 4, 4)");
   expect(getComputedStyle(paid.amount).fontWeight).toBe("500");
@@ -180,4 +180,99 @@ test("a card in progress is a due share whose detail says so", async () => {
   expect(row!.li.getAttribute("aria-current")).toBeNull();
   expect(row!.detail.textContent?.trim()).toBe("card in progress");
   expect(row!.marker.querySelector("wt-icon")).toBeNull();
+});
+
+function overlaps(a: DOMRect, b: DOMRect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+function inside(inner: DOMRect, outer: DOMRect): boolean {
+  return (
+    inner.left >= outer.left &&
+    inner.right <= outer.right &&
+    inner.top >= outer.top &&
+    inner.bottom <= outer.bottom
+  );
+}
+
+/** Where the text column's words are drawn, which a box that shrank can be narrower than. */
+function textExtent(row: ReturnType<typeof rows>[number]): DOMRect {
+  const range = document.createRange();
+  range.selectNodeContents(row.name.parentElement!);
+  return range.getBoundingClientRect();
+}
+
+async function narrowList(shares: ShareListShare[]): Promise<WtShareList> {
+  const el = (
+    await mount('<div style="width: 320px"><wt-share-list label="Partes"></wt-share-list></div>')
+  ).querySelector<WtShareList>("wt-share-list")!;
+  el.shares = shares;
+  await el.updateComplete;
+  return el;
+}
+
+test("at double text size in 320px the amount keeps clear of the text and inside the card", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  try {
+    document.documentElement.style.fontSize = "32px";
+    const el = await narrowList([
+      {
+        name: "Comensal 1",
+        detail: "Pagando ahora con tarjeta contactless",
+        amount: "9.999,99 €",
+        state: "current",
+      },
+      {
+        name: "Comensal 2",
+        detail: "Pagandoahoraconunapalabramuylargasinespacios",
+        amount: "9.999,99 €",
+        state: "due",
+      },
+    ]);
+    const card = el.shadowRoot!.querySelector("ol")!.getBoundingClientRect();
+    for (const row of rows(el)) {
+      const text = textExtent(row);
+      const amount = row.amount.getBoundingClientRect();
+      expect(overlaps(text, amount)).toBe(false);
+      expect(inside(amount, card)).toBe(true);
+      expect(inside(text, card)).toBe(true);
+    }
+  } finally {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  }
+});
+
+test("a long unbroken detail at normal size stays clear of the amount", async () => {
+  const el = await narrowList([
+    {
+      name: "Guest 1",
+      detail: "cardcardcardcardcardcardcardcardcardcardcardcard",
+      amount: "€24.44",
+      state: "due",
+    },
+  ]);
+  const [row] = rows(el);
+  const card = el.shadowRoot!.querySelector("ol")!.getBoundingClientRect();
+  const amount = row!.amount.getBoundingClientRect();
+  expect(overlaps(textExtent(row!), amount)).toBe(false);
+  expect(inside(textExtent(row!), card)).toBe(true);
+  expect(inside(amount, card)).toBe(true);
+});
+
+test("at normal size in 320px the amount stays on the name's line, at the row's end", async () => {
+  const el = await narrowList([
+    { name: "Comensal 1", detail: "Pagando ahora", amount: "9.999,99 €", state: "current" },
+  ]);
+  const [row] = rows(el);
+  const amount = row!.amount.getBoundingClientRect();
+  const marker = row!.marker.getBoundingClientRect();
+  const li = row!.li.getBoundingClientRect();
+  expect(Math.abs(amount.top + amount.height / 2 - (marker.top + marker.height / 2))).toBeLessThan(
+    2,
+  );
+  expect(amount.left).toBeGreaterThan(textExtent(row!).right);
+  expect(Math.round(li.right - amount.right)).toBe(
+    Math.round(parseFloat(getComputedStyle(row!.li).paddingRight)),
+  );
 });
