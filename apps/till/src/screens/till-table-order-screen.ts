@@ -1566,6 +1566,7 @@ export class TillTableOrderScreen extends LitElement {
   #sizedDockShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
+  #orderBeforeWide = false;
 
   @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
 
@@ -2038,11 +2039,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#sizedDock = undefined;
   }
 
-  /** Side by side has no views, so Order left shown goes back to Menu rather than being kept for a
-   * later narrowing. */
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
-    if (this.wide && this.view === "order") void this.#showMenu();
+    const reopen = !this.wide && this.#orderBeforeWide;
+    this.#orderBeforeWide = this.wide && (this.#orderBeforeWide || this.view === "order");
+    void (this.wide ? this.#showMenu() : reopen && this.#showOrder());
     void this.updateComplete.then(() => {
       this.#placeOrderPanels();
       this.#dispatch("order-pane-resized", {});
@@ -2050,8 +2051,8 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Brings an open row back above the bar after the screen's width changes. The bar was measured when
-   * drawn, before its buttons were, and its watcher reports only after the next layout. */
+  /** Brings an open row back above the bar after the screen's width changes. The bar and its dock
+   * were measured when drawn, before the bar's buttons were; their watchers report a layout later. */
   async #revealOpenRowAgain(): Promise<void> {
     const bar = this.#sizedBar;
     await Promise.all(
@@ -2060,6 +2061,8 @@ export class TillTableOrderScreen extends LitElement {
       ),
     );
     if (bar?.isConnected) barSize(bar, bar.getBoundingClientRect().height);
+    const dock = this.#sizedDock;
+    if (dock?.isConnected) dockSize(dock, dock.getBoundingClientRect().height);
     await this.#openRow.reveal();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
@@ -2499,6 +2502,7 @@ export class TillTableOrderScreen extends LitElement {
       this.servePending = null;
       this.view = "menu";
       this.#browsingScroll = undefined;
+      this.#orderBeforeWide = false;
     }
     // A bill switch is left on Menu: the app moves `orderId` before it reads the new bill's lines.
     const opened = this.hasUpdated ? changed.get("loading") === true : true;
