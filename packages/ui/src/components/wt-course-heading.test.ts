@@ -203,6 +203,17 @@ describe("laying out a title, the mark and an action that cannot all share one l
     expect(button.right).toBeCloseTo(right, 0);
   });
 
+  it("keeps the title at least --wt-course-heading-title-min-width wide, moving the mark under it", async () => {
+    const el = await laidOut(317);
+    const before = parts(el);
+    expect(before.mark.top).toBeLessThan(before.title.bottom);
+    expect(before.title.width).toBeLessThan(250);
+    el.style.setProperty("--wt-course-heading-title-min-width", "250px");
+    const { title: words, mark: pill } = parts(el);
+    expect(words.width).toBeGreaterThanOrEqual(250);
+    expect(pill.top).toBeGreaterThanOrEqual(words.bottom);
+  });
+
   it("gives a title too long for one line the whole width, with the mark and action under it", async () => {
     const el = await laidOut(220);
     const { title: words, mark: pill, button, right } = parts(el);

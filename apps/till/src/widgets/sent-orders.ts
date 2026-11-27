@@ -233,10 +233,13 @@ export class TillSentOrders extends LitElement {
       ? this.snapshot.current
       : null;
   }
-  /** The sections as the inputs now stand, built again only when one of them is replaced. */
+  /** Keyed on the snapshot's fields, not the snapshot itself: the order screen wraps the same
+   * read in a new snapshot on every draw. */
   #model(): SentModel | null {
     const inputs = [
-      this.snapshot,
+      this.snapshot?.current,
+      this.snapshot?.scope,
+      this.snapshot?.billId,
       this.scope,
       this.billId,
       this.lines,

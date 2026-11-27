@@ -198,6 +198,40 @@ describe("sentSections (till redesign PR 8a)", () => {
     expect(ids(section!.rows).flat()).toEqual(["z-steak", "a-steak-part", "m-fish"]);
   });
 
+  it("orders a held group mixing held and released dishes the same way whatever order they come in", () => {
+    const rows = [
+      row("z-held", { lineNo: 1, released: false, firedAt: null }),
+      row("m-fired", { lineNo: 2, firedAt: at(3) }),
+      row("a-held", { lineNo: 3, released: false, firedAt: null }),
+      row("q-unfired", { lineNo: 4, firedAt: null }),
+      row("r-ready", { lineNo: 5, readyAt: at(5) }),
+      row("s-served", { lineNo: 6, servedQuantity: "1.000", servedAt: at(6) }),
+    ];
+    const heldOrder = (list: CurrentOrderRow[]) =>
+      list.filter((each) => !each.released).map((each) => each.lineId);
+    const permutations = (list: CurrentOrderRow[]): CurrentOrderRow[][] =>
+      list.length <= 1
+        ? [list]
+        : list.flatMap((first, index) =>
+            permutations([...list.slice(0, index), ...list.slice(index + 1)]).map((rest) => [
+              first,
+              ...rest,
+            ]),
+          );
+    for (const order of permutations(rows)) {
+      const [section] = sentSections(current([group("held", "held", order)]), "bill-1");
+      const [first, second] = heldOrder(order);
+      expect(ids(section!.rows).flat()).toEqual([
+        "r-ready",
+        "m-fired",
+        "q-unfired",
+        first,
+        second,
+        "s-served",
+      ]);
+    }
+  });
+
   it("orders groups at one position by id, and sorts a course it does not know first", () => {
     const sections = sentSections(
       current([

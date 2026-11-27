@@ -112,26 +112,31 @@ function joinRows(
   return joined.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
 }
 
+const byNumber = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Each row's place: something left before nothing left; among the rows with something left,
+ * ready, then the other released rows, then held rows, which have no time to sort by. */
+function rank(row: SentRow): number {
+  const left = row.left[0]?.row;
+  if (left === undefined) return 3;
+  if (row.state === "held") return 2;
+  return left.readyAt === null ? 1 : 0;
+}
+
 function compareRows(
   a: SentRow,
   b: SentRow,
   readOrder: Map<CurrentOrderRow, number>,
   when: Map<SentRow, number>,
 ): number {
-  const aLeft = a.left[0]?.row;
-  const bLeft = b.left[0]?.row;
-  // A row with nothing left goes after those with something left; two such keep line order.
-  if (aLeft === undefined && bLeft === undefined)
-    return a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo;
-  if (aLeft === undefined) return 1;
-  if (bLeft === undefined) return -1;
-  // Held rows have no firing time to sort by, so they keep the order the read lists them in.
-  if (a.state === "held" && b.state === "held")
-    return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
-  const aReady = aLeft.readyAt !== null;
-  const bReady = bLeft.readyAt !== null;
-  if (aReady !== bReady) return aReady ? -1 : 1;
-  return when.get(a)! - when.get(b)! || aLeft.lineId.localeCompare(bLeft.lineId);
+  const order = rank(a) - rank(b);
+  if (order !== 0) return order;
+  if (rank(a) === 3)
+    return a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo || a.id.localeCompare(b.id);
+  const aLeft = a.left[0]!.row;
+  const bLeft = b.left[0]!.row;
+  if (rank(a) === 2) return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
+  return byNumber(when.get(a)!, when.get(b)!) || aLeft.lineId.localeCompare(bLeft.lineId);
 }
 
 /**
