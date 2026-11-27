@@ -14,7 +14,11 @@ import { resolveInvoicePrinter } from "./receipt-print.js";
 import { requestCfg } from "./request-config.js";
 import { parseSetMenuWireLines, type SetMenuWireFields } from "./set-menu-wire-lines.js";
 import { resolveHttpOrderZone, named } from "./till-order-zones.js";
-import { requireUuidId, requireRevision } from "./till-request-fields.js";
+import {
+  parseClosedZoneConfirmation,
+  requireUuidId,
+  requireRevision,
+} from "./till-request-fields.js";
 import { runBodyCourse, run } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
@@ -60,6 +64,7 @@ export function mountTillWorkingOrderRoutes(
         zoneId?: string;
         label?: string;
         kitchenNote?: string | null;
+        closedZoneId?: unknown;
         lateSend?: unknown;
         dining?: unknown;
       }>(c);
@@ -89,6 +94,7 @@ export function mountTillWorkingOrderRoutes(
             label: body.label,
             kitchenNote: body.kitchenNote,
             operatorId: personId,
+            zoneConfirmation: parseClosedZoneConfirmation(body.closedZoneId, personId),
             lateSend: late,
             dining,
           },
@@ -146,6 +152,7 @@ export function mountTillWorkingOrderRoutes(
         label?: string;
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
+        closedZoneId?: unknown;
         lateSend?: unknown;
         dining?: unknown;
       }>(c);
@@ -165,6 +172,7 @@ export function mountTillWorkingOrderRoutes(
             revision: expected,
             operatorId: personId,
             expectedEdit: body.expectedEdit,
+            zoneConfirmation: parseClosedZoneConfirmation(body.closedZoneId, personId),
             lateSend: late,
             dining,
           },

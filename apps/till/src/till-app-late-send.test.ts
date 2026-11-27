@@ -1553,6 +1553,82 @@ const integratedCard = () => ({
 });
 
 describe("counter pay", () => {
+  it("asks about the closure before saving an order for the bill payment window", async () => {
+    const parkOrder = vi.fn().mockRejectedValue({
+      code: "service_zone.closed",
+      status: 409,
+      zoneId: "zone-bar",
+      closedZoneName: "Bar",
+      closesAt: "22:00",
+    });
+    const el = await counterBasket({ parkOrder });
+
+    emit(counterScreen(el), "counter-bill-pay", {});
+    await flush(el, 6);
+
+    expect(windowOf(el)?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+      "Bar closed at 22:00",
+    );
+    expect(parkOrder).toHaveBeenCalledOnce();
+    await choose(el, "data-late-agreed");
+
+    expect(parkOrder.mock.calls[1]).toEqual([
+      { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar" },
+    ]);
+  });
+
+  it.each(["cash", "card"])(
+    "asks once for closed-zone %s payment and the ended period",
+    async (method) => {
+      const payment = vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "service_zone.closed",
+          status: 409,
+          zoneId: "zone-bar",
+          closedZoneName: "Bar",
+          closesAt: "22:00",
+          lateSend: {
+            ...BREAKFAST_ENDED,
+            menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
+          },
+        })
+        .mockResolvedValueOnce(
+          method === "cash" ? saleResult : { outcome: "captured", ticket: saleResult },
+        );
+      const el = await lateCounter(
+        method === "cash" ? { recordSale: payment } : { ...integratedCard(), pay: payment },
+      );
+      counterMenus = { ...counterMenus, service: { ...counterMenus.service, zoneOpen: false } };
+      await poll(el);
+      const orderId = counterScreen(el).store.id;
+      if (method === "cash") emit(counterScreen(el), "confirm-payment", CASH);
+      else emit(counterScreen(el), "collect-card", {});
+      await flush(el, 6);
+
+      expect(windowOf(el)?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+        "Bar closed at 22:00",
+      );
+      expect(windowOf(el)!.shadowRoot!.textContent).toContain("Breakfast has ended");
+      expect(payment).toHaveBeenCalledOnce();
+      await choose(el, "data-late-agreed");
+
+      expect(windowOf(el)).toBeNull();
+      const calls =
+        method === "cash"
+          ? payment.mock.calls.map((call) => [call[2], call[12], call[10]])
+          : payment.mock.calls.map(([request]) => [
+              request.id,
+              request.closedZoneId,
+              request.lateSend,
+            ]);
+      expect(calls).toEqual([
+        [orderId, undefined, undefined],
+        [orderId, "zone-bar", BREAKFAST_CONFIRMED],
+      ]);
+    },
+  );
+
   it("asks about the marked dish before cash Pay records anything", async () => {
     const el = await lateCounter();
 

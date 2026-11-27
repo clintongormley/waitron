@@ -446,6 +446,8 @@ export function mountTillTableRoutes(
         const body = asObject(await readRawJsonBody<unknown>(c));
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
+        if (path === "move")
+          command.zoneConfirmation = parseClosedZoneConfirmation(body.closedZoneId, personId);
         const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
         const sent =
           path === "join" ? (merge === null ? sentRevision : requiredRevision)(body) : undefined;

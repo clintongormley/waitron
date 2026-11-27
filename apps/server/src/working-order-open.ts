@@ -84,6 +84,7 @@ export interface ParkOrderRequest {
   label?: string;
   operatorId?: string;
   lateSend?: LateSendConfirmation;
+  zoneConfirmation?: ClosedZoneConfirmation;
   dining?: Dining;
 }
 
@@ -197,11 +198,12 @@ export async function createOpenOrder(
     }
     effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, { profileId })).zoneId;
   }
-  if (placement.existingService !== true) {
+  const priceWithZone = lines.length > 0 && placement.zoneConfirmation !== undefined;
+  if (placement.existingService !== true && !priceWithZone) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(
       tx,
       effectiveZoneId,
-      new Date(),
+      routing.at,
       placement.zoneConfirmation,
     );
   }
@@ -228,6 +230,7 @@ export async function createOpenOrder(
     placement.lateSend,
     unwrittenBill,
     routing,
+    priceWithZone ? placement.zoneConfirmation : undefined,
   );
   const { gross, offers } = pricedLines;
   const expanded = expandPortionRows(
@@ -324,6 +327,7 @@ export async function parkOrder(
         zoneId: req.zoneId,
         creditedTo: req.operatorId,
         lateSend: req.lateSend,
+        zoneConfirmation: req.zoneConfirmation,
         dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");

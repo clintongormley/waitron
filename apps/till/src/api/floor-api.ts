@@ -499,7 +499,7 @@ export class FloorApi extends InvoiceDeliveryApi {
   moveGuests(
     partyId: string,
     toTableId: string,
-    revisions: TableActionRevisions,
+    revisions: TableActionRevisions & { closedZoneId?: string },
   ): Promise<TableActionResult> {
     return this.#request(`/api/parties/${partyId}/move`, "POST", { toTableId, ...revisions });
   }
@@ -511,7 +511,7 @@ export class FloorApi extends InvoiceDeliveryApi {
   moveBill(
     billId: string,
     to: MoveBillTarget,
-    revisions: MoveBillRevisions,
+    revisions: MoveBillRevisions & { closedZoneId?: string },
     command?: { submissionId: string; allergy: AllergyPatch },
     options: ReadOptions = {},
   ): Promise<MoveBillResult> {

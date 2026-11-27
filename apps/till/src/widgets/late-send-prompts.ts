@@ -101,13 +101,32 @@ export function closedZonePrompt(
   };
 }
 
+export function askCounterClosedZone(
+  error: unknown,
+  show: (prompt: LateSendPrompt) => void,
+  lines: readonly OrderLine[],
+  retry: (lateSend: LateSend | undefined, zoneId: string) => Promise<void>,
+  current: () => boolean,
+): boolean {
+  const zone = closedZoneQuestionOf(error);
+  if (zone === undefined) return false;
+  if (current())
+    show(
+      closedZonePrompt(zone, lines, "send", (lateSend) => {
+        if (current()) return retry(lateSend, zone.zoneId);
+      }),
+    );
+  return true;
+}
+
 export async function writeWithClosedZone<T>(
   write: (zoneId?: string) => Promise<T>,
   show: (prompt: LateSendPrompt) => void,
   current: () => boolean,
+  confirmation: { zoneId?: string } = {},
 ): Promise<T | undefined> {
   try {
-    return await write();
+    return await write(confirmation.zoneId);
   } catch (error) {
     const zone = closedZoneQuestionOf(error);
     if (zone === undefined) throw error;
@@ -123,7 +142,10 @@ export async function writeWithClosedZone<T>(
         ),
       ),
     );
-    if (agreed && current()) return write(zone.zoneId);
+    if (agreed && current()) {
+      confirmation.zoneId = zone.zoneId;
+      return write(zone.zoneId);
+    }
   }
 }
 

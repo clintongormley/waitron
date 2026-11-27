@@ -428,6 +428,32 @@ describe("till-app: seating a party", () => {
     expect(tableOrder(el)).toBeNull();
   });
 
+  it("retries the same guest move with the confirmed destination zone", async () => {
+    const moveGuests = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: "z2",
+        closedZoneName: "Terrace",
+        closesAt: "22:00",
+      })
+      .mockResolvedValueOnce({ partyId: "v1", billIds: ["wo-4"] });
+    const { el } = await mountApp({ moveGuests });
+    const order = await openPartyTable(el);
+
+    emit(order, "move-guests", { toTableId: "t9" });
+    await flush(el);
+    const modal = el.shadowRoot!.querySelector("till-late-send-dialog");
+    expect(modal?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe("Terrace closed at 22:00");
+    expect(moveGuests).toHaveBeenCalledOnce();
+
+    await userEvent.click(modal!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!);
+    await vi.waitFor(() => expect(moveGuests).toHaveBeenCalledTimes(2));
+    const [party, table, revisions] = moveGuests.mock.calls[0]!;
+    expect(moveGuests.mock.calls[1]).toEqual([party, table, { ...revisions, closedZoneId: "z2" }]);
+  });
+
   it("names the table that needs moving by today's name when moving guests to it is refused", async () => {
     const today = {
       placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
@@ -3425,7 +3451,8 @@ describe("till-app: moving a bill", () => {
     expect(moveBill).toHaveBeenCalledOnce();
   });
 
-  it("rechecks a table bill move after its replacement station closes", async () => {
+  it.each(["open", "closed"])("retries when a station closes (%s zone)", async (state) => {
+    const closed = state === "closed";
     const askOrderDeadEnds = vi
       .fn()
       .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })
@@ -3445,16 +3472,34 @@ describe("till-app: moving a bill", () => {
         stations: [{ id: "kitchen", name: "Kitchen", open: true }],
       });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
-    const moveBill = vi
-      .fn()
+    const moveBill = vi.fn();
+    if (closed)
+      moveBill.mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: zone.id,
+        closedZoneName: "Terrace",
+        closesAt: "22:00",
+      });
+    moveBill
       .mockRejectedValueOnce({ code: "station.no_replacement" })
       .mockResolvedValue({ partyId: null, billId: "wo-check" });
     const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, moveBill });
     const order = await openPartyTable(el);
     emit(order, "move-bill", { to: { counter: true } });
     await flush(el);
+    if (closed) {
+      const question = el.shadowRoot!.querySelector("till-late-send-dialog");
+      expect(question?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+        "Terrace closed at 22:00",
+      );
+      await userEvent.click(
+        question!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!,
+      );
+      await flush(el);
+    }
     expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
-    expect(moveBill).toHaveBeenCalledOnce();
+    expect(moveBill).toHaveBeenCalledTimes(closed ? 2 : 1);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(dialog).not.toBeNull();
     dialog
@@ -3466,7 +3511,13 @@ describe("till-app: moving a bill", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
     expect(setMakeAt).toHaveBeenCalledOnce();
-    expect(moveBill).toHaveBeenCalledTimes(2);
+    expect(moveBill).toHaveBeenCalledTimes(closed ? 3 : 2);
+    if (closed) {
+      const [first, confirmed, afterStation] = moveBill.mock.calls;
+      expect(confirmed![2]).toEqual({ ...first![2], closedZoneId: zone.id });
+      expect(afterStation).toEqual(confirmed);
+      expect(el.shadowRoot!.querySelector("till-late-send-dialog")).toBeNull();
+    }
   });
 
   it("moves the bill on screen to the counter, sending the counter's zone and the party revision", async () => {

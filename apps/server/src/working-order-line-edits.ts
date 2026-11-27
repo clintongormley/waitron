@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import {
   type Transaction,
@@ -160,6 +161,7 @@ export async function applyLineEdits(
   operatorId: string | undefined,
   attendance?: OrderAttendance,
   lateSend?: LateSendConfirmation,
+  zoneConfirmation?: ClosedZoneConfirmation,
 ): Promise<{ changed: boolean; chargesUnchanged: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   // An overpaid bill takes dishes that use up its excess.
@@ -604,6 +606,7 @@ export async function applyLineEdits(
     lateSend,
     undefined,
     routing,
+    zoneConfirmation,
   );
   const groups: {
     rows: WorkingOrderLineInsert[];

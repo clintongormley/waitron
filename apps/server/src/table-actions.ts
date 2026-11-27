@@ -58,6 +58,7 @@ import {
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { OrderAttendance } from "./working-order-context.js";
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 
 /**
@@ -68,6 +69,7 @@ import "./errors.js";
  */
 
 export interface TableActionOptions extends OtherPartyRead {
+  zoneConfirmation?: ClosedZoneConfirmation;
   expectedEdits: BillEditExpected[];
   /** The party in the path. */
   expectedPartyRevision: number;
@@ -97,11 +99,26 @@ export async function moveGuests(
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, toTableId, partyId, options);
   const zoneBefore = await partyZone(tx, partyId);
-  if (table.zoneId !== zoneBefore)
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, table.zoneId, new Date());
+  const checkedZoneId = table.zoneId === zoneBefore ? undefined : table.zoneId;
+  if (checkedZoneId !== undefined)
+    await VENUE_SERVICE.assertZoneTakesNewOrders(
+      tx,
+      checkedZoneId,
+      new Date(),
+      options.zoneConfirmation,
+    );
   const held = await memberTables(tx, partyId);
   if (table.holding !== null && table.holding !== partyId) {
-    const combined = await combineAt(tx, cfg, partyId, table.holding, "leave", options);
+    const combined = await combineAt(
+      tx,
+      cfg,
+      partyId,
+      table.holding,
+      "leave",
+      options,
+      undefined,
+      checkedZoneId,
+    );
     await leaveMergeOf(tx, toTableId, held);
     return combined;
   }
@@ -196,6 +213,7 @@ async function combineAt(
   tables: "leave" | "join",
   options: TableActionOptions,
   intoZoneId?: string | null,
+  checkedZoneId?: string,
 ): Promise<TableActionResult> {
   const reach =
     options.slipsLater === undefined ? { parties: [from, into] } : { later: options.slipsLater };
@@ -207,6 +225,7 @@ async function combineAt(
       operatorId: options.operatorId,
       expectedEdits: options.expectedEdits,
       intoZoneId,
+      checkedZoneId,
     });
     return { partyId: into, billIds: await shownBillIds(tx, cfg, into) };
   });
@@ -236,6 +255,7 @@ export async function combineParties(
     operatorId: string;
     /** `into`'s zone, when the caller has just read it. */
     intoZoneId?: string | null;
+    checkedZoneId?: string;
   },
 ): Promise<void> {
   const { from, into } = args;
@@ -275,7 +295,7 @@ export async function combineParties(
   const movingBills = await billsTaking(tx, from, ["open", "placed"]);
   for (const billId of movingBills) {
     // Whole groups travel with the party, so no bill leaves its group here.
-    await takeIntoParty(tx, cfg, billId, into, zoneId);
+    await takeIntoParty(tx, cfg, billId, into, zoneId, { checkedZoneId: args.checkedZoneId });
   }
 
   await VENUE_SERVICE.rescopeBillNumbers(tx, billIds, into);
@@ -576,6 +596,6 @@ async function retargetUnsettledBills(
   zoneId: string,
 ): Promise<void> {
   for (const billId of await billsTaking(tx, partyId, ["open", "placed"])) {
-    await takeIntoParty(tx, cfg, billId, partyId, zoneId);
+    await takeIntoParty(tx, cfg, billId, partyId, zoneId, { checkedZoneId: zoneId });
   }
 }

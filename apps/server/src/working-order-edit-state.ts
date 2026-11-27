@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import {
   workingOrderLines,
@@ -59,6 +60,7 @@ export interface UpdateHeldOrderRequest {
    * period ended earlier today.
    */
   lateSend?: LateSendConfirmation;
+  zoneConfirmation?: ClosedZoneConfirmation;
   /** The way the till showed; refused `working_order.out_of_date` when the order has the other. */
   dining?: Dining;
 }

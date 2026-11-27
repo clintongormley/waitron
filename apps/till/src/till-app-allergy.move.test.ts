@@ -373,6 +373,45 @@ describe("A669 counter move refusal recovery", () => {
     });
   }, 15_000);
 
+  it("keeps the closed-zone answer when retrying a Counter move whose reply was lost", async () => {
+    const write = vi.fn().mockRejectedValueOnce({
+      code: "service_zone.closed",
+      status: 409,
+      zoneId: "z2",
+      closedZoneName: "Terrace",
+      closesAt: "22:00",
+    });
+    for (let retry = 0; retry < 3; retry++)
+      write.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    write.mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
+    const { el, move } = await counter({ moveBill: write }, "allergies");
+    const question = () => el.shadowRoot!.querySelector("till-late-send-dialog");
+    move();
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() =>
+      expect(question()?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+        "Terrace closed at 22:00",
+      ),
+    );
+    await userEvent.click(
+      question()!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!,
+    );
+    await vi.waitFor(() => expect(dialog(el)?.retryOnly).toBe(true), { timeout: 5000 });
+    await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!);
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+
+    expect(write).toHaveBeenCalledTimes(5);
+    const [first, ...retries] = write.mock.calls;
+    const confirmed = [...first!.slice(0, 2), { ...first![2], closedZoneId: "z2" }, first![3]];
+    expect(retries.map((call) => call.slice(0, 4))).toEqual([
+      confirmed,
+      confirmed,
+      confirmed,
+      confirmed,
+    ]);
+  });
+
   it("does not retry an uncertain move through a replacement API", async () => {
     const write = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el, move } = await counter({ moveBill: write }, "allergies");

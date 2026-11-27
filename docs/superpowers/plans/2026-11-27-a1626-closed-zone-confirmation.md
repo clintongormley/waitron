@@ -19,8 +19,8 @@ At 13:52 the owner said, “i don't think we should have the option to extend th
 
 ## 1a-2. Ask about Counter and relocation actions
 
-- [ ] Reuse the question and activity entry for a Counter payment and when guests or a bill move in. Keep payment and move submission identities on retry. Move the payment retry shape and fingerprint to `bill-payment-fingerprint.ts`.
-- [ ] Keep the existing refusal checks until each corresponding confirmed action is available. Check the Counter payment and guest-move retries in the till and a confirmed payment replay on the box. Allow about 750 changed production and test lines, based on the saved draft's size after the move and the 1a allocation.
+- [x] Reuse the question and activity entry for a Counter payment and when guests or a bill move in. Keep payment and move submission identities on retry. Move the payment retry shape and fingerprint to `bill-payment-fingerprint.ts`.
+- [x] Keep the existing refusal checks until each corresponding confirmed action is available. Check the Counter payment and guest-move retries in the till and a confirmed payment replay on the box. Allow about 750 changed production and test lines, based on the saved draft's size after the move and the 1a allocation.
 
 ## 1b. Offer the actions while the area is closed
 

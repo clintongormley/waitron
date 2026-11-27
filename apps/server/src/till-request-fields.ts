@@ -214,6 +214,8 @@ export function moveCommand(personId: string, body: Record<string, unknown>): Mo
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
   if (partyId === null) command.partyId = null;
+  if (body.closedZoneId !== undefined)
+    command.zoneConfirmation = parseClosedZoneConfirmation(body.closedZoneId, personId);
   if (body.submissionId !== undefined || body.allergy !== undefined) {
     if (body.submissionId === undefined || body.allergy === undefined) throw invalid("allergy");
     command.submissionId = requireBodyUuid(body.submissionId, "submissionId").toLowerCase();

@@ -70,6 +70,7 @@ import {
   routingOnce,
 } from "./working-order-kitchen-fire.js";
 import type { OrderAttendance } from "./working-order-context.js";
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 
 export type MoveTarget = { tableId: string } | { counter: { zoneId: string | null } };
@@ -84,6 +85,7 @@ export interface OtherPartyRead {
 }
 
 export interface MoveBillOptions extends OtherPartyRead {
+  zoneConfirmation?: ClosedZoneConfirmation;
   submissionId?: string;
   allergy?: AllergyPatch;
   expectedEdits: BillEditExpected[];
@@ -182,7 +184,7 @@ export async function moveBill(
       { kind: "bill", workingOrderId: billId },
       command.submissionId,
       "bill.move.allergy",
-      { billId, to, ...command },
+      { billId, to, ...command, zoneConfirmation: undefined },
       () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue),
       cfg.madeHereSink,
     );
@@ -283,7 +285,11 @@ async function moveBillOnce(
         ...(open ? { label: await counterLabel(tx, source) } : {}),
       })
       .where(eq(workingOrders.id, billId));
-    if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
+    if (open && destination.zoneId !== null)
+      await adoptZone(tx, cfg, billId, destination.zoneId, {
+        takesOrders: true,
+        zoneConfirmation: options.zoneConfirmation,
+      });
     await relocateBillEditor(tx, billId, expectedEdit);
     result = { partyId: null, billId };
   } else if (destination.kind === "free") {
@@ -296,7 +302,10 @@ async function moveBillOnce(
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
-    await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId, () => recordAllergy(partyId));
+    await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId, {
+      beforeSend: () => recordAllergy(partyId),
+      zoneConfirmation: options.zoneConfirmation,
+    });
     await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     ({ held } = await groupArrivingDishes(
@@ -319,7 +328,10 @@ async function moveBillOnce(
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
-    await takeIntoParty(tx, cfg, billId, partyId, zoneId, () => recordAllergy(partyId));
+    await takeIntoParty(tx, cfg, billId, partyId, zoneId, {
+      beforeSend: () => recordAllergy(partyId),
+      zoneConfirmation: options.zoneConfirmation,
+    });
     ({ held } = await groupArrivingDishes(
       tx,
       cfg,
@@ -557,7 +569,11 @@ export async function takeIntoParty(
   billId: string,
   partyId: string,
   zoneId: string | null,
-  beforeSend?: () => Promise<void>,
+  options: {
+    beforeSend?: () => Promise<void>;
+    zoneConfirmation?: ClosedZoneConfirmation;
+    checkedZoneId?: string;
+  } = {},
 ): Promise<void> {
   const [bill] = await tx
     .update(workingOrders)
@@ -570,9 +586,12 @@ export async function takeIntoParty(
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status });
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
-  await beforeSend?.();
+  await options.beforeSend?.();
   if (zoneId !== null && (bill!.status === "open" || bill!.status === "placed")) {
-    await adoptZone(tx, cfg, billId, zoneId, { takesOrders: bill!.status === "open" });
+    await adoptZone(tx, cfg, billId, zoneId, {
+      takesOrders: bill!.status === "open" && options.checkedZoneId !== zoneId,
+      zoneConfirmation: options.zoneConfirmation,
+    });
   }
 }
 
@@ -659,11 +678,11 @@ async function adoptZone(
   cfg: TradingContext,
   billId: string,
   zoneId: string,
-  options: { takesOrders: boolean } = { takesOrders: true },
+  options: { takesOrders: boolean; zoneConfirmation?: ClosedZoneConfirmation },
 ): Promise<void> {
   const previous = await VENUE_SERVICE.findOrderContext(tx, billId);
   if (options.takesOrders && previous?.zoneId !== zoneId)
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, zoneId, new Date());
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, zoneId, new Date(), options.zoneConfirmation);
   if (previous === null) {
     await VENUE_SERVICE.recordOrderContext(tx, billId, zoneId);
   } else {

@@ -34,6 +34,7 @@ import {
 import type { BillUnsent, Tender } from "./api/payments-api.js";
 import type { BillEditExpected, BillEditState } from "./api/order-types.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
+import type { CounterError, ExcessCause } from "./state/counter-error.js";
 import {
   APPROVER_REFUSALS,
   closedZoneQuestionOf,
@@ -377,6 +378,7 @@ import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
 import type { LateSendPurpose } from "./widgets/late-send-dialog.js";
 import {
+  askCounterClosedZone,
   closedZonePrompt,
   lateSendPrompt,
   showMarkedLateSend,
@@ -443,7 +445,6 @@ import {
   partyChangeMessage,
   partyOf,
   tableLabels,
-  type PartyChange,
 } from "./state/party-change.js";
 import {
   barBillToOpen,
@@ -984,7 +985,6 @@ function refusedBillIn(error: unknown): { billId?: string } {
 }
 
 /** What was refused for leaving a bill owing less than it has received, which picks its words. */
-type ExcessCause = "move" | "line" | "send" | "merge";
 
 const EXCESS_WORDS = {
   move: "bill.received_exceeds_total_excess",
@@ -1686,78 +1686,6 @@ interface WaitingOrderMove {
   busy: boolean;
   session: number;
   api: TillApi;
-}
-
-/** A banner's string key, a refusal shown through its code's own message, a save refused because
- * someone took the draft over (naming them), or a change that failed after its order left the
- * screen, with a second message when something else failed since. */
-type CounterError =
-  | StringKey
-  /** `tableId`: the table a refusal names, for wording that names it; `bill`: the label of the
-   * bill it names when that is not the bill on screen. */
-  | {
-      code: string;
-      menuId?: string;
-      tableId?: string;
-      bill?: string;
-      recoveryUrl?: string;
-      manualCard?: true;
-      dishes?: string;
-      /** The refusal's `reason`, or the till's own, for a code worded by it. */
-      reason?: string;
-      /** A `bill.below_advances` refusal's: what the payments on account came to, and by how much
-       * the bill would come to less. */
-      advances?: string;
-      excess?: string;
-      /** The ticket an `advance.correction_open` refusal names. */
-      invoiceNumber?: string;
-      /** The way an `order.dining_fixed` refusal names. */
-      dining?: string;
-      /** Followed by how to finish the counter's sale with a printed invoice instead. */
-      printedInstead?: true;
-      setMenuName?: unknown;
-      dishName?: unknown;
-      dishNames?: unknown;
-    }
-  | { billPayments: string }
-  | { replacedGroups: string }
-  /** `cause`: what was refused, when not a move of items. `billId`: the bill the Refund acts on,
-   * for a refusal that names one; `bill`: its label when it is not on screen. `split`: refused by
-   * Split a table. */
-  | {
-      excess: string;
-      cause?: Exclude<ExcessCause, "move">;
-      billId?: string;
-      bill?: string;
-      split?: true;
-    }
-  /** A ticked bill of Split a table's panel changed: its label. */
-  | { splitChanged: string }
-  /** A refusal named someone else's unsent order on a ticked bill: their name, or "" for none. */
-  | { splitTaken: string }
-  /** The bill a split's refusal's Refund named has left the party: its label. */
-  | { splitGone: string }
-  /** The bill another refusal's Refund named has left the party: its label. */
-  | { refundGone: string }
-  /** An order past the simplified-invoice limit, `overLimit` being the limit. */
-  | { overLimit: string }
-  | { clockUnusable: { clockAt: string; offsetMinutes: number } }
-  | { unsentBill: BillUnsent }
-  | { takenOver: string; unsent?: true }
-  /** Renaming a bill refused because another person's unsent dishes hold it: their name. */
-  | { billNameTakenOver: string }
-  /** Print the bill refused because another person's unsent order holds the bill: their name. */
-  | { printTakenOver: string }
-  | { partyChanged: PartyChange }
-  | { billChanged: BillChange }
-  | { lateChange: LateChange; also?: StringKey | { code: string } }
-  | { sentDishRefused: SentItemRefusal };
-
-/** What a refusal as out of date found changed when the bill was read again: the dish the
- * adjustment named, gone or changed, or something else on the bill. */
-interface BillChange {
-  key: "adjust.changed_bill" | "adjust.changed_line" | "adjust.changed_line_gone";
-  line: string;
 }
 
 interface ServedCommand {
@@ -7465,6 +7393,7 @@ export class TillApp extends LitElement {
     retried = false,
     lateSend?: LateSend,
     sourceForm?: HTMLElementTagNameMap["till-tender-pay"],
+    closedZoneId?: string,
   ): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
     if (this.submitting || this.#refusePaidInPart()) return;
@@ -7479,8 +7408,10 @@ export class TillApp extends LitElement {
         .composedPath()
         .find((node) => node instanceof HTMLElement && node.localName === "till-tender-pay") as
         HTMLElementTagNameMap["till-tender-pay"] | undefined);
-    const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed, form);
-    if (this.#askLateSendAtCounter(lateSend, retry)) return;
+    const retry = (confirmed: LateSend | undefined, zoneId = closedZoneId) =>
+      this.#onConfirmPayment(event, false, confirmed ?? lateSend, form, zoneId);
+    if (this.counterService?.zoneOpen !== false && this.#askLateSendAtCounter(lateSend, retry))
+      return;
     this.submitting = true;
     this.sendingTender = (event as CustomEvent<ConfirmPaymentDetail>).detail.method;
     this.#counterSends++;
@@ -7525,6 +7456,7 @@ export class TillApp extends LitElement {
         this.#store.dining,
         lateSend,
         edit,
+        ...(closedZoneId === undefined ? [] : ([closedZoneId] as const)),
       );
       this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
@@ -7551,6 +7483,17 @@ export class TillApp extends LitElement {
         form?.restoreManualCard(tender);
       }
 
+      if (
+        askCounterClosedZone(
+          error,
+          this.#presentLateSend,
+          basketLines,
+          retry,
+          () =>
+            !this.#hasLeftCounterOrder(id, session) && basketVisit === this.#store.loadGeneration,
+        )
+      )
+        return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
@@ -7593,14 +7536,14 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onConfirmPayment(event, true, lateSend, form),
+        this.#onConfirmPayment(event, true, lateSend, form, closedZoneId),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#onConfirmPayment(event, true, lateSend, form);
+      await this.#onConfirmPayment(event, true, lateSend, form, closedZoneId);
   }
 
   /** The late-send window over the counter basket's marked lines; answers whether it opened. */
@@ -7643,12 +7586,12 @@ export class TillApp extends LitElement {
     ];
   }
 
-  async #onCollectCard(event: Event, lateSend?: LateSend): Promise<void> {
+  async #onCollectCard(event: Event, lateSend?: LateSend, closedZoneId?: string): Promise<void> {
     // A tap ignored here is not counted and moves nothing.
     if (this.submitting) return;
     this.#cardAttemptsRunning++;
     try {
-      await this.#collectCard(event, false, lateSend);
+      await this.#collectCard(event, false, lateSend, closedZoneId);
     } finally {
       if (--this.#cardAttemptsRunning === 0) this.cardAttemptsOver++;
     }
@@ -7659,7 +7602,12 @@ export class TillApp extends LitElement {
    * `network_unavailable` comes back as data, not a throw: nothing was filed, so it is recorded in
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
-  async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
+  async #collectCard(
+    event: Event,
+    retried: boolean,
+    lateSend?: LateSend,
+    closedZoneId?: string,
+  ): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
     const placed = this.stage === "collect";
     const storedChoice = this.#counterStoredInvoice;
@@ -7671,8 +7619,10 @@ export class TillApp extends LitElement {
       this.errorKey = { code: "sale.full_invoice_unavailable" };
       return;
     }
-    const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
-    if (this.#askLateSendAtCounter(lateSend, retry)) return;
+    const retry = (confirmed: LateSend | undefined, zoneId = closedZoneId) =>
+      this.#onCollectCard(event, confirmed ?? lateSend, zoneId);
+    if (this.counterService?.zoneOpen !== false && this.#askLateSendAtCounter(lateSend, retry))
+      return;
     this.submitting = true;
     this.sendingTender = "card";
     this.#counterSends++;
@@ -7724,6 +7674,7 @@ export class TillApp extends LitElement {
               // Omitted, the server uses the paying device's chosen reader, else its profile's default.
               ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
               ...(lateSend === undefined ? {} : { lateSend }),
+              ...(closedZoneId === undefined ? {} : { closedZoneId }),
             },
             () => id === this.#store.id,
           ),
@@ -7793,6 +7744,17 @@ export class TillApp extends LitElement {
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       const unknown = reachedFiscal && this.#saleSendEnded(id, error);
       if (session !== this.#operatorSession || basketVisit !== this.#store.loadGeneration) return;
+      if (
+        askCounterClosedZone(
+          error,
+          this.#presentLateSend,
+          basketLines,
+          retry,
+          () =>
+            !this.#hasLeftCounterOrder(id, session) && basketVisit === this.#store.loadGeneration,
+        )
+      )
+        return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
@@ -7841,14 +7803,14 @@ export class TillApp extends LitElement {
     if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#collectCard(event, true, lateSend),
+        this.#collectCard(event, true, lateSend, closedZoneId),
       );
     if (
       recheck &&
       (await this.#askCounterDeadEnds("pay", true, inactiveChoice)) &&
       session === this.#operatorSession
     )
-      await this.#collectCard(event, true, lateSend);
+      await this.#collectCard(event, true, lateSend, closedZoneId);
   }
 
   readonly #counterOverpaid = new CounterOverpaidRead(
@@ -8568,6 +8530,7 @@ export class TillApp extends LitElement {
     rows: readonly OrderLine[],
     label: string | undefined,
     lateSend?: LateSend,
+    closedZoneId?: string,
   ): Promise<boolean> {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
@@ -8584,6 +8547,7 @@ export class TillApp extends LitElement {
         revision: this.#store.revision,
         dining: this.#store.dining,
         ...(lateSend === undefined ? {} : { lateSend }),
+        ...(closedZoneId === undefined ? {} : { closedZoneId }),
       });
       if (movedOn()) return false;
       this.#store.markSaved(saved.revision);
@@ -17591,16 +17555,24 @@ export class TillApp extends LitElement {
       this.api === asked.source.api &&
       this.#operatorSession === asked.source.session &&
       !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
-    let result: TableActionResult;
+    let result: TableActionResult | undefined;
     try {
-      result = await asked.source.api.moveGuests(party.id, toTableId, revisions);
+      result = await writeWithClosedZone(
+        (closedZoneId) =>
+          asked.source.api.moveGuests(party.id, toTableId, {
+            ...revisions,
+            ...(closedZoneId === undefined ? {} : { closedZoneId }),
+          }),
+        this.#presentLateSend,
+        () => live() && this.#billCompositionUnchanged(asked.source),
+      );
     } catch (error) {
       if (!live()) return;
       if (!this.#offerBillEditConflicts(error, asked.source, asked))
         await this.#onRelocationRefusal(error, live);
       return;
     }
-    if (!live()) return;
+    if (result === undefined || !live()) return;
     this.floorCarried = carryRevisions(this.floorCarried, result.zoneRevisions);
     await this.#refreshBillDraft();
     if (!live()) return;
@@ -17647,6 +17619,7 @@ export class TillApp extends LitElement {
     };
     const live = () => this.#billCompositionCurrent(asked.source);
     let result: MoveBillResult | undefined;
+    const confirmation = {};
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const zoneId = toTable
@@ -17664,12 +17637,18 @@ export class TillApp extends LitElement {
         ).finally(() => hold?.take());
         if (!proceed) return;
         if (!this.#billCompositionUnchanged(asked.source)) return;
-        result = await asked.source.api.moveBill(
-          billId,
-          toTable
-            ? { tableId: to.tableId }
-            : { counter: { zoneId: this.counterServiceZoneId || null } },
-          revisions,
+        const target = toTable
+          ? { tableId: to.tableId }
+          : { counter: { zoneId: this.counterServiceZoneId || null } };
+        result = await writeWithClosedZone(
+          (closedZoneId) =>
+            asked.source.api.moveBill(billId, target, {
+              ...revisions,
+              ...(closedZoneId === undefined ? {} : { closedZoneId }),
+            }),
+          this.#presentLateSend,
+          () => this.#billCompositionUnchanged(asked.source),
+          confirmation,
         );
         break;
       } catch (error) {
@@ -17817,6 +17796,7 @@ export class TillApp extends LitElement {
     let view: AllergyMoveRead;
     let key = crypto.randomUUID();
     let command: { submissionId: string; allergy: AllergyPatch } | undefined;
+    let confirmation = {};
     let refusal = "";
     let fieldRefusal: AllergyFieldRefusal | undefined;
     let requireConfirmation = false;
@@ -17849,20 +17829,18 @@ export class TillApp extends LitElement {
                 });
           if (patch === null || !current()) return false;
           command = { submissionId: crypto.randomUUID(), allergy: structuredClone(patch) };
+          confirmation = {};
         }
         try {
           const packet = command;
           const observed = revisions();
-          const limit = limited(TABLE_REQUEST_LIMIT_MS);
-          // Not cut short once staff move on: the answer may name an invoice whose receipt is owed.
-          const moved = await this.#resend(
-            (attempt) =>
-              asked.api.moveBill(asked.orderId, { tableId: asked.tableId }, observed, packet, {
-                signal: attempt,
-              }),
-            limit.signal,
-            () => this.#sameSession(asked),
-          ).finally(() => limit.done());
+          const moved = await writeWithClosedZone(
+            (closedZoneId) => this.#sendCounterMove(asked, observed, packet, closedZoneId),
+            this.#presentLateSend,
+            current,
+            confirmation,
+          );
+          if (moved === undefined) return false;
           if (current()) this.#closeMoveAllergy(true);
           return moved;
         } catch (error) {
@@ -17914,6 +17892,28 @@ export class TillApp extends LitElement {
     } finally {
       if (this.#moveAllergyOpening === opening) this.#closeMoveAllergy();
     }
+  }
+
+  #sendCounterMove(
+    asked: CounterRelocation,
+    observed: Parameters<TillApi["moveBill"]>[2],
+    packet: NonNullable<Parameters<TillApi["moveBill"]>[3]>,
+    closedZoneId?: string,
+  ): Promise<MoveBillResult> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    // A late reply can name an invoice whose receipt is owed.
+    return this.#resend(
+      (signal) =>
+        asked.api.moveBill(
+          asked.orderId,
+          { tableId: asked.tableId },
+          { ...observed, ...(closedZoneId === undefined ? {} : { closedZoneId }) },
+          packet,
+          { signal },
+        ),
+      limit.signal,
+      () => this.#sameSession(asked),
+    ).finally(() => limit.done());
   }
 
   #sameSession(asked: CounterRelocation): boolean {
@@ -22029,7 +22029,12 @@ export class TillApp extends LitElement {
   }
 
   /** Persist the Counter basket before the payment window allocates its stored dishes. */
-  async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
+  async #onCounterBillPay(
+    event: Event,
+    retried = false,
+    lateSend?: LateSend,
+    closedZoneId?: string,
+  ): Promise<void> {
     if (
       this.submitting ||
       this.billPaying !== null ||
@@ -22038,8 +22043,10 @@ export class TillApp extends LitElement {
     )
       return;
     if (this.#askInvoiceRecipientForLargeBill()) return;
-    const retry = (confirmed: LateSend) => this.#onCounterBillPay(event, false, confirmed);
-    if (this.#askLateSendAtCounter(lateSend, retry)) return;
+    const retry = (confirmed: LateSend | undefined, zoneId = closedZoneId) =>
+      this.#onCounterBillPay(event, false, confirmed ?? lateSend, zoneId);
+    if (this.counterService?.zoneOpen !== false && this.#askLateSendAtCounter(lateSend, retry))
+      return;
     this.#counterSends++;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
@@ -22058,6 +22065,7 @@ export class TillApp extends LitElement {
           dining: this.#store.dining,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
           ...(lateSend === undefined ? {} : { lateSend }),
+          ...(closedZoneId === undefined ? {} : { closedZoneId }),
         });
         if (this.#hasLeftCounterOrder(id, session) || basketVisit !== this.#store.loadGeneration)
           return;
@@ -22071,6 +22079,7 @@ export class TillApp extends LitElement {
           [...this.#store.lines],
           this.#store.label,
           lateSend,
+          closedZoneId,
         )) ||
         basketVisit !== this.#store.loadGeneration
       )
@@ -22100,6 +22109,17 @@ export class TillApp extends LitElement {
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
+        if (
+          askCounterClosedZone(
+            error,
+            this.#presentLateSend,
+            basketLines,
+            retry,
+            () =>
+              !this.#hasLeftCounterOrder(id, session) && basketVisit === this.#store.loadGeneration,
+          )
+        )
+          return;
         const asked = lateSendAsked(error, basketLines);
         if (asked !== undefined) return this.#openCounterLateSend(asked, retry);
         const approval = lateSendApprovalAsked(error, lateSend);
@@ -22122,7 +22142,7 @@ export class TillApp extends LitElement {
         (await this.#askCounterDeadEnds("place", false, deadEnd === "route.station_inactive"))
       ) {
         this.errorKey = undefined;
-        await this.#onCounterBillPay(event, true, lateSend);
+        await this.#onCounterBillPay(event, true, lateSend, closedZoneId);
       }
       return;
     }

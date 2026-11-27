@@ -304,6 +304,7 @@ export class OrdersApi extends FloorApi {
       expectedEdit: BillEditExpected | null;
       dining: Dining;
       lateSend?: LateSend;
+      closedZoneId?: string;
     },
   ): Promise<{ revision: number; invoice?: TillSaleResult }> {
     return this.#request<{ revision: number; invoice?: TillSaleResult }>(
