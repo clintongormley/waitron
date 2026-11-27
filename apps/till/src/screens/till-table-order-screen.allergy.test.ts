@@ -215,8 +215,6 @@ it("marks the saved draft and sent dish without borrowing a same-id working assi
   expect(mark?.querySelector("[data-allergy-tag]")?.textContent).toBe("Blue shirt");
   const sent = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await sent.updateComplete;
-  await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-  await sent.updateComplete;
   expect(
     sent.shadowRoot!.querySelector('[data-fired-line="sent"] [data-allergy-tag]')?.textContent,
   ).toBe("Blue shirt");

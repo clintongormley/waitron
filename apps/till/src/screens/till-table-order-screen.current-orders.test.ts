@@ -719,7 +719,7 @@ describe("the release reminder in Sent", () => {
     );
     expect(sq(el, "[data-reminder-snooze]")).toBeNull();
     expect(sq(el, "[data-reminder-fire]")).toBeNull();
-    const panel = await sentPanelFor(el);
+    await sentPanelFor(el);
     expect(sq(el, '[data-group-fire="g3"]')).not.toBeNull();
   });
 
@@ -926,9 +926,9 @@ describe("A773 at the pass", () => {
     });
     const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
     const panel = await sentPanelFor(el);
-    expect(text(panel.shadowRoot!.querySelector('[data-sent-section=""] [data-section-title]')!)).toBe(
-      es["table.at_the_pass"],
-    );
+    expect(
+      text(panel.shadowRoot!.querySelector('[data-sent-section=""] [data-section-title]')!),
+    ).toBe(es["table.at_the_pass"]);
     expect(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .row-more')).toBeNull();
     const state = async (lineId: string, kind: "fired" | "held" = "fired") => {
       await openSentDish(el, lineId, kind);
@@ -956,9 +956,9 @@ describe("A773 at the pass", () => {
     });
     const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
     const panel = await sentPanelFor(el);
-    expect(text(panel.shadowRoot!.querySelector('[data-sent-section=""] [data-section-title]')!)).toBe(
-      t("table.at_the_pass"),
-    );
+    expect(
+      text(panel.shadowRoot!.querySelector('[data-sent-section=""] [data-section-title]')!),
+    ).toBe(t("table.at_the_pass"));
     expect(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .row-more')).toBeNull();
     await openSentDish(el, "l-burger", "fired");
     expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.at_the_pass"));

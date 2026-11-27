@@ -232,16 +232,12 @@ it("A803 portion grouping: the Sent panel shows identical portions as one row", 
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
   expect(panel.lines).toBe(el.lines);
-  if (
-    panel.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded") !== "true"
-  ) {
-    panel.shadowRoot!.querySelector<HTMLButtonElement>("[data-sent-toggle]")!.click();
-    await panel.updateComplete;
-  }
+  const words = (node: Element, part: string) =>
+    node.querySelector(part)!.textContent!.replace(/\s+/g, " ").trim();
   expect(
     [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map((node) => [
       node.dataset.firedLine,
-      node.querySelector(".what")!.textContent!.replace(/\s+/g, " ").trim(),
+      `${words(node, ".row-qty")} ${words(node, ".row-name")}`,
     ]),
-  ).toEqual([["burger-1", "Burger ×2"]]);
+  ).toEqual([["burger-1", "2 Burger"]]);
 });

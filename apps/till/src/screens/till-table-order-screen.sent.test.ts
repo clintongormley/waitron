@@ -57,9 +57,7 @@ it("places this bill's Sent panel before its New order on the table screen", asy
     panel(el).compareDocumentPosition(find(el, "[data-round-controls]")) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).not.toBe(0);
-  expect(inside(el, '[data-sent-section="g3"] [data-section-title]').textContent).toContain(
-    "Held",
-  );
+  expect(inside(el, '[data-sent-section="g3"] [data-section-title]').textContent).toContain("Held");
   expect(panel(el).billId).toBe("wo-4");
   expect(inside(el, '[data-held-line="l-flan"]').textContent).toContain("Cream ×2");
   expect(panel(el).shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
@@ -115,7 +113,7 @@ it("each fired heading's Serve all sends only its own group's fired rows of this
   const { el } = await sent();
   const events = collect(el, "serve-lines");
   expect(panel(el).shadowRoot!.querySelectorAll("[data-serve-all]")).toHaveLength(3);
-  expect(panel(el).shadowRoot!.querySelector('[data-held-group] [data-serve-all]')).toBeNull();
+  expect(panel(el).shadowRoot!.querySelector("[data-held-group] [data-serve-all]")).toBeNull();
   for (const id of ["g1", "g2", ""]) {
     await click(el, `[data-sent-section="${id}"] [data-serve-all]`);
   }
@@ -273,7 +271,7 @@ it("forwards due Snooze and Clear snooze once without needing the Sent box opene
   expect(panel(el).shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
 });
 
-it("shows a passive ready update on its row, and a new bill's ready row, with no box or \"!\"", async () => {
+it('shows a passive ready update on its row, and a new bill\'s ready row, with no box or "!"', async () => {
   const data = current({ groups: [], reminder: null, ungrouped: [row("one", "One", "1.000")] });
   const { el } = await sent({ currentOrders: data });
   expect(inside(el, '[data-fired-line="one"]').querySelector(".row-ready")).toBeNull();

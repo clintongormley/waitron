@@ -20,13 +20,6 @@ it.each([390, 1280])(
     await showView(el, "order", { ifShown: true });
     const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
-    for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-      if (toggle.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
-    }
     const reorders: CustomEvent[] = [];
     el.addEventListener("reorder-groups", (event) => reorders.push(event as CustomEvent));
     const menu = panel.shadowRoot!.querySelector<WtRowActions>('[data-group-more="g3"]')!;

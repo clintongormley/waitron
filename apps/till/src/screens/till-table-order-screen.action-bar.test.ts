@@ -74,12 +74,9 @@ async function orderedInWindow(
   return { el, host };
 }
 
-/** Opens the Sent panel so every sent dish is listed above the unsent order. */
+/** Waits for the Sent panel, which lists every sent dish above the unsent order. */
 async function sentExpanded(el: TillTableOrderScreen): Promise<void> {
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-  await panel.updateComplete;
-  const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-  if (toggle.getAttribute("aria-expanded") === "false") await userEvent.click(toggle);
   await panel.updateComplete;
   expect(panel.shadowRoot!.querySelectorAll("[data-fired-line]")).toHaveLength(20);
   await resized(el);
@@ -388,8 +385,9 @@ const shortPhoneBill: Partial<TillTableOrderScreen> = {
   billBalance: footerBalance,
 };
 
-/** As Order opens: the switch and the Sent box show above the bar. Then, at the top, the middle
- * and the end of the scroll: Move to…, Fire and Send all lie wholly in the window, above the foot. */
+/** As Order opens: the switch and the first sent heading show above the bar. Then, at the top,
+ * the middle and the end of the scroll: Move to…, Fire and Send all lie wholly in the window,
+ * above the foot. */
 async function expectBarWholeAboveFoot(el: TillTableOrderScreen, host: HTMLElement) {
   const root = el.shadowRoot!;
   const area = host.getBoundingClientRect();
@@ -410,9 +408,19 @@ async function expectBarWholeAboveFoot(el: TillTableOrderScreen, host: HTMLEleme
   };
 
   expectBarAboveFoot("on opening");
-  for (const above of ["[data-view-switch]", "[data-sent-orders]"]) {
-    expect(box(above).top, above).toBeGreaterThanOrEqual(area.top);
-    expect(box(above).bottom, above).toBeLessThanOrEqual(box(".draft-bar").top + 1);
+  // The sent list no longer folds, so it can be taller than the window: what must not sit under
+  // the bar is where it starts, its first heading with that group's Serve all.
+  const firstHeading = root
+    .querySelector<TillSentOrders>("till-sent-orders")!
+    .shadowRoot!.querySelector("[data-sent-section] wt-course-heading")!
+    .getBoundingClientRect();
+  for (const [above, shown] of [
+    ["[data-view-switch]", box("[data-view-switch]")],
+    ["first sent heading", firstHeading],
+  ] as const) {
+    expect(shown.height, above).toBeGreaterThan(0);
+    expect(shown.top, above).toBeGreaterThanOrEqual(area.top);
+    expect(shown.bottom, above).toBeLessThanOrEqual(box(".draft-bar").top + 1);
   }
 
   expect(host.scrollHeight).toBeGreaterThan(host.clientHeight);
