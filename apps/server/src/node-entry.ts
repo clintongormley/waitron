@@ -31,8 +31,6 @@ import {
   readVenueHolder,
   resolveLogDir,
   setVenueHolderIdentity,
-  type VenueHolder,
-  type VenueLock,
 } from "@waitron/db";
 import { assertNotAhead } from "./upgrade-schema-check.js";
 export { assertNotAhead } from "./upgrade-schema-check.js";
@@ -48,7 +46,6 @@ import {
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
-import { withRecoveryLock } from "./recovery-lock.js";
 import { finishTlsInstall } from "./box-tls-install.js";
 import {
   afterFailure,
@@ -57,30 +54,28 @@ import {
   readRecoveryState,
   refusedAtStart,
   stayedUpClear,
-  updateRecoveryState,
   withFailureCode,
   withoutAttempt,
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
-import { installShutdownHandlers, type ShutdownTarget } from "./run-server.js";
+import { installShutdownHandlers } from "./run-server.js";
 import { readPreviousStop, type PreviousStop } from "./stop-mark.js";
 import { closeListener } from "./close-listener.js";
-import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { runStagedRestore } from "./restore-request.js";
 import { createStartClockWaiting, type StartClockWaiting } from "./start-clock-waiting.js";
 import { boxHostClient } from "./box-host-client.js";
 import { createSetupClockSet, type SetupClockSet } from "./setup-clock-set.js";
 import { timeServiceReader } from "./clock-service-reading.js";
-import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./reset-request.js";
-import { clearReplacedDatabases } from "./restore.js";
+import { runStagedReset, stagedResetEmptiesTls } from "./reset-request.js";
+import { clearReplacedDatabases } from "./restore-file-placement.js";
 import { clearRestoreSecretFiles } from "./restore-secrets.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient, reportSavedCloudRestore } from "./cloud-recovery.js";
-import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
-import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
 import { resumeEnvironmentRecovery } from "./recovery-environment.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
@@ -89,6 +84,13 @@ import { finishReplacedReset, readReplacedResetMarker } from "./replaced-reset.j
 import { maskPersonalData } from "./log-personal-data.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
+import type { EntryDeps, StartedEntryServer } from "./node-entry-deps.js";
+import {
+  type CountCheck,
+  countWritable,
+  persistState,
+  changeState,
+} from "./node-entry-recovery-state.js";
 
 /** How long a boot must survive before its failure counter is cleared. */
 const STAYED_UP_MS = 120_000;
@@ -102,130 +104,9 @@ const CLOCK_WAIT_REASONS: ReadonlySet<unknown> = new Set([
 ]);
 const CLOCK_LOOK_MS = 15_000;
 
-export interface EntryDeps {
-  /** The arguments the process was started with, after the script's own path. */
-  args: readonly string[];
-  /** The process environment, before the box's own env files are merged under it. */
-  baseEnv: NodeJS.ProcessEnv;
-  stateDir: string;
-  /** Resolved by the caller, because the entrypoint never runs `loadConfig`: a box reaches recovery
-   *  precisely when its configuration is what is broken. */
-  venueDir: string;
-  runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
-  runStagedReset?: (deps: StagedResetDeps) => Promise<boolean>;
-  /** Defaults to the shared `assertNotAhead`, never a no-op: it is a guard, and a no-op default
-   *  is lost silently by any caller that forgets the dependency. */
-  assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
-  /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */
-  clearReplacedDatabases?: (venueDir: string, log: Logger) => Promise<void>;
-  clearRestoreSecretFiles?: (stateDir: string, log: Logger) => Promise<void>;
-  /** Defaults to the real `lockVenueDatabase`, never a no-op: the clearing is safe only while the
-   *  folder is held. */
-  lockVenue?: (venueDir: string) => Promise<VenueLock>;
-  /**
-   * The installer's channel — the container's stdout (`docker logs`). Its no-op default, unlike
-   * `assertNotAhead`'s, is safe because it is diagnostic output, not a guard: omitting it changes
-   * no outcome.
-   */
-  reportFailure?: (text: string) => void;
-  loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
-  readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
-  writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
-  /** Held around every change to `recovery.json`; defaults to the real cross-process lock. */
-  withRecoveryLock?: <T>(stateDir: string, body: () => Promise<T>) => Promise<T>;
-  /** Reads the holder file beside `venue.lock`; defaults to the real reader. */
-  readVenueHolder?: (venueDir: string) => VenueHolder | null;
-  now?: () => Date;
-  startServer: (
-    env: NodeJS.ProcessEnv,
-    base?: NodeJS.ProcessEnv,
-    stop?: { previousStop: PreviousStop },
-  ) => Promise<StartedEntryServer>;
-  serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
-  /** Serves the page a restore's start shows while it waits to confirm its time. */
-  serveStartClockWaiting: (
-    app: Hono,
-    opts: RecoveryServeOptions,
-  ) => Promise<{ close(): Promise<void> }>;
-  /** Whether the box's internet time service answers synchronised; absent, the host's answer. */
-  timeServiceSynchronised?: () => Promise<boolean>;
-  /** The waiting page's clock setter; absent, the restore page's (`createSetupClockSet`). */
-  startClockSetter?: () => SetupClockSet;
-  /** Also installed while a restore's start waits to confirm its time, and taken off through
-   *  the answer before the server's go on; an answer that is not a function takes nothing off. */
-  installShutdownHandlers: (server: ShutdownTarget) => (() => void) | void;
-  /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
-  scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
-  log: Logger;
-  /** Where the recovery page reads its log tail from, and where each start records itself. */
-  logDir?: string;
-  /**
-   * Where the migration sets live. Never `null`: null means "resolve from the bundle's own
-   * directory", which fails a real container's first boot with `migrations.set_missing`. `runEntry`
-   * hands this one value to both the staged restore and the ahead check.
-   */
-  migrationsRoot?: string;
-  exit?: (code: number) => void;
-  /** Below this many free bytes the start deletes the files it no longer needs; defaults to
-   *  `START_FREE_SPACE_FLOOR`. */
-  freeSpaceFloor?: number;
-  /** Reads a folder's filesystem; defaults to the real `statfs`. */
-  statfs?: Statfs;
-  /** The spare file's size; defaults to `SPARE_SPACE_BYTES`, and `0` keeps none. */
-  spareBytes?: number;
-}
-
-/** What a start hands back; `fullyStarted` is present when it answers before its start finishes. */
-interface StartedEntryServer {
-  markRestart?: () => Promise<void>;
-  close(): Promise<void>;
-  fullyStarted?: Promise<void>;
-}
-
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
 const DEFAULT_EXIT = (code: number): void => process.exit(code);
 /* v8 ignore stop */
-
-/**
- * One change to `recovery.json`, read and written under the recovery lock, so no change is computed
- * from a count read before another process wrote.
- */
-function changeState(
-  deps: EntryDeps,
-  change: (current: RecoveryState) => RecoveryState,
-): Promise<{ before: RecoveryState; after: RecoveryState }> {
-  return updateRecoveryState(
-    {
-      lock: deps.withRecoveryLock ?? withRecoveryLock,
-      read: deps.readRecoveryState,
-      write: deps.writeRecoveryState,
-    },
-    deps.stateDir,
-    change,
-  );
-}
-
-/**
- * Persist the escalation state, logging a write failure rather than letting it become the outcome:
- * on the failure path the boot's own error is what matters, and in the stayed-up callback a
- * floating rejection would kill a healthy server. The pre-boot counter, and the write-back before
- * it, are the writes not routed through here, and are allowed to throw: a box whose count cannot be
- * written can never escalate. A full disk found below the free-space floor serves the page instead
- * (`countWritable`).
- */
-async function persistState(
-  deps: EntryDeps,
-  change: (current: RecoveryState) => RecoveryState,
-): Promise<void> {
-  try {
-    await changeState(deps, change);
-  } catch (error) {
-    deps.log("warn", "recovery.state_write_failed", {
-      errorCode: codeOf(error),
-      errno: errnoOf(error) ?? null,
-    });
-  }
-}
 
 /** An `AppError`'s params as one line, or a placeholder when they will not serialise. */
 function paramsLine(params: unknown): string {
@@ -649,8 +530,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   );
 }
 
-type CountCheck = { written: true } | { written: false; freeBytes: number | null };
-
 /** Serves through `serveRecovery`, on the address and port the box's tills and health check use. */
 export async function serveStartClockWaiting(
   app: Hono,
@@ -675,25 +554,6 @@ async function waitForClockReason(
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, CLOCK_LOOK_MS));
     if (page.confirmation() !== null || (await timeServiceSynchronised())) return;
-  }
-}
-
-/**
- * Writes `recovery.json` back unchanged through the count's own path. Only a failure a full disk
- * explains, judged on free space read after it, is answered; any other is thrown.
- */
-async function countWritable(deps: EntryDeps): Promise<CountCheck> {
-  try {
-    await changeState(deps, (current) => current);
-    return { written: true };
-  } catch (error) {
-    deps.log("warn", "recovery.state_write_failed", {
-      errorCode: codeOf(error),
-      errno: errnoOf(error) ?? null,
-    });
-    const freeBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
-    if (fullDiskFailure(error, freeBytes)) return { written: false, freeBytes };
-    throw error;
   }
 }
 

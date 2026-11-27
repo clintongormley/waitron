@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
-import { restoreDatabase } from "./restore.js";
+import { restoreDatabase } from "./restore-file-placement.js";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
 const LEDGER_TABLE = "verifactu_records";

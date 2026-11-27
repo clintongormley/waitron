@@ -16,7 +16,8 @@ import { retainHttpListener, type RetainedHttpListener } from "./testing/retaine
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { leafExpiresAt, tlsFile, tlsSetMatches } from "./testing/box-tls.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
-import { runEntry, type EntryDeps } from "./node-entry.js";
+import { runEntry } from "./node-entry.js";
+import { type EntryDeps } from "./node-entry-deps.js";
 import { FRESH } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";

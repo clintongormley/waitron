@@ -24,7 +24,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { restoreDatabase } from "./restore.js";
+import { restoreDatabase } from "./restore-file-placement.js";
 import { deletePrinter } from "./printer-delete.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

@@ -32,7 +32,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { decodeTicket, opensDrawer, commandNames } from "./testing/decode-ticket.js";
-import { readOrderDetail } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";

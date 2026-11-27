@@ -3,14 +3,12 @@ import "./errors.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { DeviceZoneSelectionInput } from "@waitron/module";
 import { Hono, type Context } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { AppError, compareStationNames, PERSON_HEADER } from "@waitron/shared";
+import { and, desc, eq, isNull } from "drizzle-orm";
+import { AppError, PERSON_HEADER } from "@waitron/shared";
 import {
   deviceNotDeleted,
   deviceProfiles,
   devices,
-  kitchenStations,
   ticketItems,
   withTransaction,
 } from "@waitron/db";
@@ -43,7 +41,6 @@ import {
   requireDevice,
   requireDeviceProof,
   setDeviceCookie,
-  type DeviceBinding,
 } from "./device-session.js";
 import {
   approveDeviceProfiles,
@@ -63,9 +60,6 @@ import {
   equipmentRefusal,
   selectDeviceEquipment,
   type EquipmentRefusal,
-  type EquipmentRole,
-  type EquipmentSelection,
-  type EquipmentPickup,
 } from "./device-equipment.js";
 import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
@@ -80,34 +74,25 @@ import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { type TicketState } from "./kitchen-ticket-state.js";
-import {
-  listStationQueues,
-  stationHasWork,
-  type StationQueueGroup,
-} from "./working-order-station-queue.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import {
   assertRequestDevice,
   assertStillSignedIn,
   isUuid,
   requireSession,
-  SESSION_STATUS,
   signedInPersonOn,
 } from "./till-session.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { deviceDrawer } from "./receipt-print.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, requireMadeHereStations } from "./made-here.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
-import type { PassBoard } from "./pass-card.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { stationMoveRequest } from "./till-order-commands.js";
-import { STATUS as TILL_STATUS } from "./till-api-errors.js";
 import { moveDishesToStation } from "./station-move.js";
 import { listStationsToday } from "./kitchen.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
@@ -120,6 +105,15 @@ import {
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
+import { run, LEVER_STATUS, runDeviceStationMove, runDeviceEdit } from "./device-api-errors.js";
+import { parseEquipmentChoice } from "./device-equipment-choice.js";
+import {
+  kitchenScreenOf,
+  passBoardAnswer,
+  stationScreenOf,
+  stationScreenSlots,
+  worksStation,
+} from "./device-kitchen-screen.js";
 
 export interface DeviceApiDeps {
   db: Database;
@@ -175,79 +169,6 @@ function deviceClockOf(value: string | undefined): number | undefined {
   const ms = Number(value);
   return Number.isSafeInteger(ms) ? ms : undefined;
 }
-
-/**
- * CLIENT faults only: a code absent here takes the boundary's 400 default. A code this surface does
- * not throw itself is mapped to the status its own surface gives it.
- */
-const STATUS: Record<string, ContentfulStatusCode> = {
-  "device.unauthorized": 401,
-  ...SESSION_STATUS,
-  "device.forbidden_station": 403,
-  "device.forbidden_action": 403,
-  "device_profile.not_approved": 403,
-  "device_profile.not_admitted": 403,
-  "device_profile.incompatible": 400,
-  "device.payment_in_progress": 409,
-  "device_zones.invalid": 400,
-  "device_zones.changed": 409,
-  // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
-  // the caller unknown, and the device's next step is a person, not a credential.
-  "device.pairing_closed": 403,
-  "device.join_full": 429,
-  "device.join_rate_limited": 429,
-  "device.join_stale": 409,
-  // A wrong number denies the request (the row is already gone), so this is a plain request fault.
-  "device.join_mismatch": 400,
-  "join_request.not_found": 404,
-  "kitchen_screen.invalid": 400,
-  "kitchen_screen.not_allowed": 400,
-  "kitchen_screen.zone_not_allowed": 400,
-  // A conflict the operator resolves by renaming the device.
-  "device.name_taken": 409,
-  "device.binding_invalid": 400,
-  "device.equipment_held": 409,
-  "reader.payment_in_progress": 409,
-  "device_profile.not_found": 404,
-  "device.not_found": 404,
-  "station.not_found": 404,
-  "station.not_allowed": 400,
-  "management_session.required": 401,
-  "management_session.expired": 401,
-  "person.suspended": 403,
-  "authorization.not_permitted": 403,
-  "management.request_invalid": 400,
-  "ticket.invalid_transition": 409,
-  "ticket_item.not_found": 404,
-  "ticket.item_held": 409,
-  "kitchen_notice.not_found": 404,
-  "ticket.pass_context_changed": 409,
-};
-
-/**
- * The pass levers run the till's Fire, Ready and Away, so they answer its codes as the till does.
- * On a lever `kitchen_screen.zone_not_allowed` means the order or party the path names is outside
- * this pass's zones: 403.
- */
-export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
-  ...TILL_STATUS,
-  ...STATUS,
-  "kitchen_screen.zone_not_allowed": 403,
-};
-
-const run = createErrorBoundary(STATUS, "device.failed");
-/** A device's edit names its profiles and made-here stations only in the body
- * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
-const runDeviceEdit = createErrorBoundary(
-  { ...STATUS, "device_profile.not_found": 400, "station.not_found": 400 },
-  "device.failed",
-);
-/** A kitchen screen's move names its dishes and destination station only in the body
- * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
-const runDeviceStationMove = createErrorBoundary(
-  { ...LEVER_STATUS, "tab.line_not_found": 400, "station.not_found": 400 },
-  "device.failed",
-);
 
 /** The device's own housekeeping: none is a sale, an order, a kitchen send or a clock-in. */
 const DEVICE_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
@@ -1012,144 +933,4 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     );
   }
   mountGatedWhileDiskFull(root, app, { disk: deps.disk, log, open: DEVICE_OPEN_WHILE_DISK_FULL });
-}
-
-const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
-  "receipt",
-  "payment_slip",
-  "cash_drawer",
-  "invoice",
-  "card_terminal",
-];
-
-/** `PUT /api/device/equipment`'s body, each field checked for shape. */
-function parseEquipmentChoice(
-  body: Record<string, unknown>,
-): Omit<EquipmentSelection, "deviceId"> | Omit<EquipmentPickup, "deviceId"> {
-  if (body.role === undefined) {
-    if (body.kind !== "printer" && body.kind !== "reader") {
-      throw new AppError("management.request_invalid", { field: "kind" });
-    }
-    if (body.via !== "scan") throw new AppError("management.request_invalid", { field: "via" });
-    if (
-      typeof body.selection !== "object" ||
-      body.selection === null ||
-      !("id" in body.selection)
-    ) {
-      throw new AppError("management.request_invalid", { field: "selection" });
-    }
-    return {
-      kind: body.kind,
-      selection: { id: requireBodyUuid(body.selection.id, "selection") },
-      via: "scan",
-    };
-  }
-  const role = EQUIPMENT_ROLES.find((known) => known === body.role);
-  if (role === undefined) throw new AppError("management.request_invalid", { field: "role" });
-  const selection = body.selection;
-  let chosen: "default" | { id: string };
-  if (selection === "default") chosen = "default";
-  else if (typeof selection === "object" && selection !== null && "id" in selection) {
-    chosen = { id: requireBodyUuid(selection.id, "selection") };
-  } else throw new AppError("management.request_invalid", { field: "selection" });
-  if (body.via !== "scan" && body.via !== "list") {
-    throw new AppError("management.request_invalid", { field: "via" });
-  }
-  if (body.takeOver !== undefined && typeof body.takeOver !== "boolean") {
-    throw new AppError("management.request_invalid", { field: "takeOver" });
-  }
-  return { role, selection: chosen, via: body.via, takeOver: body.takeOver === true };
-}
-
-async function stationScreenOf(
-  tx: Transaction,
-  c: Context,
-  device: DeviceBinding,
-): Promise<ResolvedKitchenScreen> {
-  return (await kitchenScreenOf(tx, c, device, "station")).screen;
-}
-
-/** A pass board's answer: the board, the screen's stations and zones, and its display choice. */
-function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
-  return {
-    board,
-    stations: screen.stations,
-    zones: screen.zones,
-    display: {
-      showNonPassStations: screen.showNonPassStations,
-    },
-  };
-}
-
-async function kitchenScreenOf(
-  tx: Transaction,
-  c: Context,
-  device: DeviceBinding,
-  kind: KitchenScreenKind,
-): Promise<{ screen: ResolvedKitchenScreen; personId: string | null }> {
-  const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId)).find(
-    (candidate) => candidate.kind === kind,
-  );
-  if (screen?.available !== true) throw new AppError("device.unauthorized", {});
-  const signedIn = await signedInPersonOn(tx, c, device.deviceId);
-  if (device.formFactor === "kds")
-    return { screen, personId: signedIn.outcome === "person" ? signedIn.personId : null };
-  if (signedIn.outcome === "refused") throw signedIn.refusal;
-  if (signedIn.outcome === "nobody") throw new AppError("session.required", {});
-  return { screen, personId: signedIn.personId };
-}
-
-async function stationScreenSlots(
-  tx: Transaction,
-  screen: ResolvedKitchenScreen,
-): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
-  const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
-  if (!screen.everyStation) {
-    const queues = await listStationQueues(
-      tx,
-      screen.stations.filter(worked).map((slot) => slot.id),
-    );
-    return { slots: [...screen.stations], queues };
-  }
-  const listed = new Map(screen.stations.map((slot) => [slot.id, slot]));
-  const everyStation = await stationsHere(tx);
-  const off = everyStation.filter((station) => !station.active && !listed.has(station.id));
-  const queues = await listStationQueues(tx, [
-    ...screen.stations.filter(worked).map((slot) => slot.id),
-    ...off.map((station) => station.id),
-  ]);
-  for (const station of off) if (queues.get(station.id)!.length === 0) queues.delete(station.id);
-  const slots = everyStation.flatMap(({ id, name }): ScreenSlot[] => {
-    const slot = listed.get(id);
-    if (slot !== undefined) return [slot];
-    return queues.has(id) ? [{ id, name, available: false, switchedOff: true }] : [];
-  });
-  return { slots, queues };
-}
-
-/** Whether the station screen may start, ready and acknowledge work at `stationId`: as
- *  {@link stationScreenSlots} lists it with a queue. */
-async function worksStation(
-  tx: Transaction,
-  screen: ResolvedKitchenScreen,
-  stationId: string,
-): Promise<boolean> {
-  const slot = screen.stations.find((candidate) => candidate.id === stationId);
-  if (slot !== undefined) return slot.available || slot.switchedOff;
-  if (!screen.everyStation) return false;
-  const [station] = await tx
-    .select({ active: kitchenStations.active })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.id, stationId));
-  if (station === undefined || station.active) return false;
-  return stationHasWork(tx, stationId);
-}
-
-/** The venue's stations, historical rows included. */
-async function stationsHere(tx: Transaction) {
-  const stations = await tx
-    .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
-    .from(kitchenStations)
-    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
-  return stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
 }

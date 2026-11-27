@@ -23,7 +23,8 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreDatabase, restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { restoreDatabase } from "./restore-file-placement.js";
 
 const roots: string[] = [];
 afterEach(async () => {

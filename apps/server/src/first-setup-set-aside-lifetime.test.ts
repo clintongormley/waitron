@@ -22,7 +22,8 @@ import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { clearReplacedDatabases, restoreDatabase, restoreSecrets } from "./restore.js";
+import { restoreSecrets } from "./restore.js";
+import { clearReplacedDatabases, restoreDatabase } from "./restore-file-placement.js";
 import { BACKUP_STAGING_DIR, START_FREE_SPACE_FLOOR, freeSpaceAtStart } from "./start-space.js";
 
 /** A box after a real Move of a found venue.db and node.db. */

@@ -14,7 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { provisionOrderVenue, billlessSale, type OrderVenue } from "./testing/order-venue.js";
-import * as history from "./orders-list.js";
+import * as history from "./orders-detail.js";
 import * as firstSetupMode from "./first-fiscal-mode.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_PRODUCER } from "./testing/test-producer.js";

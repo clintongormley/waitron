@@ -6,12 +6,8 @@ import { openBackupQuery } from "@waitron/store";
 import { loadRecoveryKey } from "./backup-config.js";
 import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
-import {
-  readCopyNode,
-  restoreDatabase,
-  restoreSecrets,
-  type ValidatedArtifact,
-} from "./restore.js";
+import { readCopyNode, restoreSecrets, type ValidatedArtifact } from "./restore.js";
+import { restoreDatabase } from "./restore-file-placement.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import "./errors.js";
 

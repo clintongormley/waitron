@@ -53,8 +53,8 @@ import {
   runEntry,
   serveRecovery,
   serveStartClockWaiting,
-  type EntryDeps,
 } from "./node-entry.js";
+import { type EntryDeps } from "./node-entry-deps.js";
 import type { StagedRestoreDeps } from "./restore-request.js";
 import * as cloudRecovery from "./cloud-recovery.js";
 
@@ -2086,7 +2086,7 @@ setInterval(() => {}, 1000);`;
   );
 });
 
-// `restoreDatabase` (restore.ts) moves the old database into a `.venue.db-replaced-` folder and
+// `restoreDatabase` (restore-file-placement.ts) moves the old database into a `.venue.db-replaced-` folder and
 // can leave that folder behind. The real venue lock and the real folder, in a temporary directory.
 describe("a start with a folder a restore set the old database aside into", () => {
   const CHALLENGE_TIMEOUT_MS = 10_000;

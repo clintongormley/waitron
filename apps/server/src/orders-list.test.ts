@@ -32,12 +32,8 @@ import {
   voidInvoice,
   type OrderVenue,
 } from "./testing/order-venue.js";
-import {
-  listOrders,
-  readOrderDetail,
-  type OrderCursor,
-  type OrderListFilter,
-} from "./orders-list.js";
+import { listOrders, type OrderCursor, type OrderListFilter } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import "./errors.js";

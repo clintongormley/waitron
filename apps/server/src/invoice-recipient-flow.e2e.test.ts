@@ -14,7 +14,7 @@ import { readOrderRevision } from "./working-order-context.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import { readPartyBills } from "./parties.js";
-import { readOrderDetail } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";

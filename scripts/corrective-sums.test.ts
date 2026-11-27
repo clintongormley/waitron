@@ -48,7 +48,7 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "the number search finds a bill by a corrective of its replacement",
   },
   {
-    file: "apps/server/src/orders-list.ts",
+    file: "apps/server/src/orders-detail.ts",
     fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
     lines: 1,
     reason: "finds the replacement itself, to list it as Replaced by",

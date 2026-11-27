@@ -33,11 +33,10 @@ import {
   listOrders,
   listOrdersTablePage,
   optionalSearch,
-  orderInvoicePrinters,
-  readOrderDetail,
   type OrderListFilter,
   type OrderTableRequest,
 } from "./orders-list.js";
+import { orderInvoicePrinters, readOrderDetail } from "./orders-detail.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";

@@ -53,7 +53,7 @@ import {
 } from "./emergency-copy-check.js";
 import { parseEnvFile } from "./env-file.js";
 import { errnoOf } from "./errno.js";
-import { VENUE_FILE_MODE } from "./restore.js";
+import { VENUE_FILE_MODE } from "./restore-file-placement.js";
 import { reachDisk } from "./sync-path.js";
 import { writeTradingEnv } from "./trading-config.js";
 import "./errors.js";

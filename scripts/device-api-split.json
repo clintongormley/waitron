@@ -1,0 +1,27 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/device-api.ts",
+      "targets": {
+        "apps/server/src/device-api-errors.ts": [
+          "STATUS",
+          "LEVER_STATUS",
+          "run",
+          "runDeviceEdit",
+          "runDeviceStationMove"
+        ],
+        "apps/server/src/device-equipment-choice.ts": ["EQUIPMENT_ROLES", "parseEquipmentChoice"],
+        "apps/server/src/device-kitchen-screen.ts": [
+          "stationScreenOf",
+          "passBoardAnswer",
+          "kitchenScreenOf",
+          "stationScreenSlots",
+          "worksStation",
+          "stationsHere"
+        ]
+      },
+      "keep": ["DeviceApiDeps", "deviceClockOf", "DEVICE_OPEN_WHILE_DISK_FULL", "mountDeviceApi"]
+    }
+  ]
+}

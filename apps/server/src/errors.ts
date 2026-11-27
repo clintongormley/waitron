@@ -2081,7 +2081,7 @@ declare module "@waitron/shared" {
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. */
     "restore.hook_failed": { module: string; code: string };
     /** Placing the restored database failed after part of the old one had been moved aside
-     * (`restoreDatabase`, restore.ts). `previous`: every part was put back, so the server's old
+     * (`restoreDatabase`, restore-file-placement.ts). `previous`: every part was put back, so the server's old
      * database is unchanged. `set_aside`: a part could not be put back, and what was not is in
      * `folder`, a folder inside the venue folder, which must be moved back before the server starts.
      * Carries no filesystem error text, which can name paths. */

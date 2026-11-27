@@ -1,4 +1,4 @@
-import { discardRestoreSetAside } from "./restore.js";
+import { discardRestoreSetAside } from "./restore-file-placement.js";
 import { RESTORE_DISCARD_WORDS } from "./i18n/recovery-page.js";
 import type { Hono } from "hono";
 import { AppError, type SupportedLocale } from "@waitron/shared";

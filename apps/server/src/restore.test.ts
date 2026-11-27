@@ -63,9 +63,7 @@ import {
   readArtifactIdentity,
   readArtifactNode,
   resolveArtifactNode,
-  clearReplacedDatabases,
   putIdentityBack,
-  restoreDatabase as placeDatabaseFile,
   restoreFromArtifact,
   restoreSecrets,
   setAsideExistingIdentity,
@@ -74,6 +72,10 @@ import {
   validateDatabaseEntries,
   writeValidated,
 } from "./restore.js";
+import {
+  clearReplacedDatabases,
+  restoreDatabase as placeDatabaseFile,
+} from "./restore-file-placement.js";
 
 const RESTORE_RECORD = "flows/restore/record.json";
 const ownedValidations: ValidatedArtifact[] = [];
