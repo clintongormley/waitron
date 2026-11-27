@@ -1230,10 +1230,10 @@ describe("fiscal.certificate_not_accepted", () => {
   it("names the day AEAT refused the installed certificate, in English and Spanish", () => {
     const params = { date: "2026-10-25" };
     expect(alertMessage("fiscal.certificate_not_accepted", params, "en")).toBe(
-      "On 25 Oct 2026, AEAT did not accept the installed AEAT certificate. Sales continue, but fiscal records wait until you install a new one in Venue settings.",
+      "AEAT did not accept the installed AEAT certificate on 25 Oct 2026. Sales continue, but fiscal records wait. Install a new one in Venue settings.",
     );
     expect(alertMessage("fiscal.certificate_not_accepted", params, "es")).toBe(
-      "El 25 oct 2026, la AEAT no aceptó el certificado de la AEAT instalado. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local.",
+      "La AEAT no aceptó el certificado de la AEAT instalado el 25 oct 2026. Las ventas continúan, pero los registros fiscales esperan. Instala uno nuevo en Ajustes del local.",
     );
   });
 });

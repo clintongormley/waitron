@@ -401,7 +401,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
         details: { codigo: "4112", taxpayerNif: "B12345678" },
       },
       "bottom",
-      "AEAT refused this certificate for B12345678 (4112).",
+      "AEAT refused this certificate for B12345678 (4112). The current certificate is unchanged. Choose another certificate, or Cancel to stop.",
     ],
     [
       "a SOAP fault",
@@ -638,7 +638,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
         reason: "aeat_refused",
         details: { codigo: "4112", taxpayerNif: "B12345678" },
       },
-      "La AEAT ha rechazado este certificado para el NIF B12345678 (4112).",
+      "La AEAT ha rechazado este certificado para el NIF B12345678 (4112). El certificado actual no cambia. Elige otro certificado o pulsa Cancelar para parar.",
     ],
   ] satisfies Array<[InstallAnswerView, string]>)(
     "says AEAT's refusal in Spanish (%o)",

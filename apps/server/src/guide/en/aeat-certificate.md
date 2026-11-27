@@ -34,8 +34,8 @@ type in the dialog. Select **Save** to check again. Select **Cancel** to stop wi
 the current certificate.
 An HTTP status alone does not tell you whether waiting will help.
 
-If the card says AEAT did not accept the certificate, fiscal records wait until you install a
-new one.
+If the card says AEAT did not accept the certificate, fiscal records wait. Install a new
+certificate.
 
 ## Find out what a check observed {#diagnosis}
 

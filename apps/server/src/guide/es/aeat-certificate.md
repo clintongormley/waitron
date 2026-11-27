@@ -33,8 +33,8 @@ el certificado actual sigue instalado. Comprueba la conexión a internet o elige
 tipo de certificado en el diálogo. Pulsa **Guardar** para repetir la comprobación. Pulsa
 **Cancelar** para parar sin sustituir el certificado actual. El código HTTP por sí solo no indica si esperar ayudará.
 
-Si la tarjeta dice que la AEAT no aceptó el certificado, los registros fiscales esperan hasta que
-instales uno nuevo.
+Si la ficha del certificado dice que la AEAT no aceptó el certificado, los registros fiscales
+esperan. Instala un certificado nuevo.
 
 ## Averigua qué ha observado una comprobación {#diagnosis}
 

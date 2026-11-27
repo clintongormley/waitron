@@ -195,7 +195,9 @@ export interface FiscalContribution {
   /** Regimes with stored fiscal records probe their environment before boot migrates anything.
    * An absent regime table is an empty history; an unknown record environment is not production. */
   hasNonproductionRecords?(db: Database): Promise<boolean>;
-  /** Saved authority refusals from the isolated readiness sample, without changing its records. */
+  /** Saved authority refusals from the isolated readiness sample, without changing its records;
+   * `code` is the authority's error number, or `fiscal.certificate_not_accepted` when the authority
+   * refused the certificate itself. */
   readinessRejections?(db: Database): Promise<{ code: string | null; message: string | null }[]>;
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
    * may block a sale. */
