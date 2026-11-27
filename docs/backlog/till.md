@@ -1731,7 +1731,8 @@ layout during service, screen plugins and Bizum.
   Stripe terminal only). A bill reader payment refused this way is marked failed at once
   (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held, and
   the till's next confirm sends a new request id, which the server checks under the device's
-  new profile.
+  new profile. The 27 November split moved `takeReaderBillPayment` to
+  `apps/server/src/bill-reader-payment.ts`.
 
 - **As built by W101 (departmental tab transfers, #1351):** Unsent counter edits and standalone
   table drafts are retained as read-only local copies for explicit review and dismissal, rather
