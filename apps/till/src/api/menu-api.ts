@@ -10,6 +10,7 @@ import type {
   DiningStart,
   MenuState,
   ServedSetMenu,
+  ServedSetMenuOffer,
   ContentLanguages,
 } from "@waitron/shared";
 import type { TillRequest, ReadOptions } from "./till-request.js";
@@ -72,6 +73,7 @@ export interface TillProduct {
   };
   pricingUnit?: "each" | "weight";
   unitPrice: string;
+  productPrices?: ServedSetMenuOffer["productPrices"];
   vatClass?: "general" | "reduced" | "super_reduced" | "zero";
   takeawayVatClass?: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
@@ -185,7 +187,10 @@ function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedM
  * Adapt a menu offer to the till's display model while keeping product and selling ids distinct.
  * `menuVersionId` is the published version of the offer's menu, which each line added from it sends.
  */
-export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: string): TillProduct {
+export function menuOfferToTillProduct(
+  offer: TillMenuOffer & Pick<ServedSetMenuOffer, "productPrices">,
+  menuVersionId?: string,
+): TillProduct {
   return {
     id: offer.productId,
     productId: offer.productId,
@@ -203,6 +208,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always
     // carries its `unit`.
     unitPrice: offer.unitPrice,
+    ...(offer.productPrices === undefined ? {} : { productPrices: offer.productPrices }),
     category: offer.category,
     allergens: offer.allergens,
     courseId: offer.courseId,

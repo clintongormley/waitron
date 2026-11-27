@@ -12,7 +12,7 @@ import {
   sections,
   type Transaction,
 } from "@waitron/db";
-import { AppError, effectiveColor, DEFAULT_HOME_ORDER } from "@waitron/shared";
+import { AppError, centsToDecimal, effectiveColor, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
 import { readMenuDefaultColor } from "./settings.js";
@@ -623,6 +623,7 @@ function setMenuOffersInOrder(copy: PublishedSetMenu): SetMenuFrozenOffer[] {
 interface LiveProductRow {
   active: boolean;
   available: boolean;
+  unitPrice: number;
   courseId: string | null;
   category: string | null;
 }
@@ -675,6 +676,7 @@ async function readLiveRows(
         id: products.id,
         active: products.active,
         available: products.available,
+        unitPrice: effectiveProductColumns.unitPrice,
         courseId: effectiveProductColumns.courseId,
         category: categories.name,
       })
@@ -728,7 +730,7 @@ function liveFieldsDigest({
           ordinary,
           [...setMenuProductIds].sort().map((id) => {
             const row = products.get(id);
-            return [id, row !== undefined && sellable(row)];
+            return [id, row !== undefined && sellable(row), row?.unitPrice ?? null];
           }),
         ];
   return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
@@ -841,7 +843,13 @@ function serveSetMenuOffer(
   const variantCountsAs = Object.fromEntries(
     variants.map((variant) => [variant.id, variant.countsAsCourseId]),
   );
-  return { ...live, countsAsCourseId, variantCountsAs };
+  const productPrices = Object.fromEntries(
+    [live.productId, ...live.variants.map(({ id }) => id)].map((id) => [
+      id,
+      centsToDecimal(rows.products.get(id)!.unitPrice),
+    ]),
+  );
+  return { ...live, countsAsCourseId, variantCountsAs, productPrices };
 }
 
 function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {

@@ -41,12 +41,13 @@ it("shows the bill's set menus above the draft with no count or Cancel, keeping 
   expect(basket.shadowRoot!.textContent).toMatch(/Sea bass\s*menu/);
 });
 
-it("marks an unplaced dish's price as pending while the order total includes its known extras", async () => {
+it("shows an unplaced dish's own price and its extra in the row and order total", async () => {
   const draft = new WorkingOrderStore();
+  const offer = daily.offers[1]!;
   draft.appendLines([
     {
       product: setMenuProduct({
-        offer: daily.offers[1]!,
+        offer: { ...offer, productPrices: { [offer.productId]: "18.00" } },
         setMenuId: daily.menuId,
         versionId: "lunch",
       }),
@@ -64,9 +65,9 @@ it("marks an unplaced dish's price as pending while the order total includes its
   await showView(el, "order", { ifShown: true });
   await vi.waitFor(() => {
     const row = draftRow(el, 0)!;
-    expect(row.querySelector(".draft-row-price")?.textContent?.trim()).toBe("Price after Send");
+    expect(row.querySelector(".draft-row-price")?.textContent?.trim()).toBe("€20.00");
     expect(row.querySelector(".set-menu-tag")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-order-total]")?.textContent?.trim()).toBe("€2.00");
+    expect(el.shadowRoot!.querySelector("[data-order-total]")?.textContent?.trim()).toBe("€20.00");
   });
 });
 

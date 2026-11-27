@@ -193,7 +193,8 @@ export function draftLinePrice(
   placedPrice?: (line: OrderLine) => string | undefined,
 ): Decimal {
   if (line.setMenuId === undefined) return lineGross(line);
-  // A folder offer carries its supplement. Until it fits a saved menu, only its extras are priced.
-  const unitPrice = placedPrice?.(line) ?? "0.00";
+  const { product } = line;
+  const priceId = product.variantId ?? product.productId ?? product.id;
+  const unitPrice = placedPrice?.(line) ?? product.productPrices?.[priceId] ?? "0.00";
   return lineGross({ ...line, product: { ...line.product, unitPrice } });
 }

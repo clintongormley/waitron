@@ -17,6 +17,7 @@ import { assertOffPublishedMenus } from "./delete.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import {
+  applyLiveFields,
   buildMenuDocument,
   buildMenuDocuments,
   documentOffers,
@@ -160,6 +161,30 @@ const publish = (menuId: string = f.lunch) =>
   );
 const copied = async () => (await build()).document.setMenus?.[f.daily];
 const fromLive = async () => (await live())!.document.setMenus?.[f.daily];
+
+it("serves the product and variant prices separately from the set-menu supplements", async () => {
+  await place();
+  const { document } = await build();
+  const copy = document.setMenus![f.daily]!;
+  const state = await app((tx) => applyLiveFields(tx, [document], undefined, [copy]));
+  expect(state.setMenuOffers.get(copy)).toEqual([
+    expect.objectContaining({
+      productId: f.soup,
+      unitPrice: "0.00",
+      productPrices: { [f.soup]: "7.00" },
+    }),
+    expect.objectContaining({
+      productId: f.sirloin,
+      unitPrice: "5.00",
+      productPrices: { [f.sirloin]: "18.00" },
+    }),
+    expect.objectContaining({
+      productId: f.wine,
+      variants: [expect.objectContaining({ id: f.glass, unitPrice: "1.50" })],
+      productPrices: { [f.wine]: "4.00", [f.glass]: "4.50" },
+    }),
+  ]);
+});
 
 it("freezes surcharges and keeps ordinary offers and prices separate", async () => {
   await place();

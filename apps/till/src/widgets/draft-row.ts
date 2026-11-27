@@ -129,10 +129,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
   const { line, index } = view;
   const name = lineProductName(line.product);
   const quantity = isCounted(line) ? quantityText(line.quantity) : quantityLabel(line);
-  const price =
-    line.setMenuId !== undefined && view.setMenuPrice === undefined
-      ? t("set_menu.price_after_send")
-      : formatMoney(view.price, currentLocale());
+  const price = formatMoney(view.price, currentLocale());
   const more = [
     ...(line.extras ?? []).map((extra, i) => {
       const own = view.extraNutrition(extra);
