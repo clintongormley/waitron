@@ -7,6 +7,8 @@ import forge from "node-forge";
 import { describe, expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import {
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_AUTHORITY,
   OPENSSL_SIGNED_FINGERPRINT,
   RC2_SIGNED_CANDIDATE,
   RC4_CANDIDATE,
@@ -79,6 +81,43 @@ describe("rewriting old encryption in the opener", () => {
     expect(await openCertificate(rc2, RC2_SIGNED_CANDIDATE.passphrase)).toEqual({
       ok: false,
       reason: "old_encryption",
+    });
+  });
+
+  it("returns a rewritten file whose base64 is larger than 8 KiB", async () => {
+    const p12 = forge.pkcs12.pkcs12FromAsn1(
+      forge.asn1.fromDer(rc2.toString("binary")),
+      RC2_SIGNED_CANDIDATE.passphrase,
+    );
+    const shrouded = forge.pki.oids.pkcs8ShroudedKeyBag!;
+    const key = p12.getBags({ bagType: shrouded })[shrouded]![0]!.key!;
+    const [leaf] = p12.getBags({ bagType: forge.pki.oids.certBag! })[forge.pki.oids.certBag!]!;
+    const extra = Array<forge.pki.Certificate>(5).fill(
+      forge.pki.certificateFromPem(OPENSSL_AUTHORITY.caPem),
+    );
+    const { passphrase } = MAC_ACCENTED_CANDIDATE;
+    // As macOS writes it: the passphrase's UTF-8 bytes taken one character each.
+    const macSpelling = Buffer.from(passphrase, "utf8").toString("latin1");
+    const file = Buffer.from(
+      forge.asn1
+        .toDer(
+          forge.pkcs12.toPkcs12Asn1(key, [leaf!.cert!, ...extra], macSpelling, {
+            algorithm: "3des",
+          }),
+        )
+        .getBytes(),
+      "binary",
+    );
+    const opened = await openCertificate(file, passphrase, { rewriteOld: true });
+    if (!opened.ok || !("rewritten" in opened) || opened.rewritten === undefined) {
+      throw new Error(`not rewritten: ${JSON.stringify(opened)}`);
+    }
+    expect(opened.rewritten.toString("base64").length).toBeGreaterThan(8192);
+    expect(opened.rewritten.length).toBeLessThanOrEqual(CERTIFICATE_MAX_BYTES);
+    expect(opened.details.fingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
+    expect(openCertificateFile(opened.rewritten, passphrase)).toEqual({
+      ok: true,
+      details: opened.details,
     });
   });
 
