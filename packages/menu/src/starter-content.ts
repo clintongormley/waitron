@@ -36,3 +36,7 @@ export const STARTER_UNIT_NAMES = {
 export const STARTER_MENU_NAMES = {
   Menu: { es: "Carta" },
 } as const satisfies StaffNames;
+
+export const STARTER_CUSTOMER_MENU_STYLE_NAMES = {
+  Default: { es: "Predeterminado" },
+} as const satisfies StaffNames;

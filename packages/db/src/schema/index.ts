@@ -34,6 +34,7 @@ export * from "./kitchen-print-jobs.js";
 export * from "./ticket-item-moves.js";
 export * from "./drawer-entries.js";
 export * from "./drawer-opens.js";
+export * from "./menu/customer-styles.js";
 export * from "./menus.js";
 export * from "./purchase-invoices.js";
 export * from "./device-profiles.js";
