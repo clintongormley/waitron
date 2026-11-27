@@ -230,7 +230,7 @@ export class MenuStructureTable extends LitElement {
       }
       wt-data-table[wrap-to-fit]::part(tree-cell) {
         display: grid;
-        grid-template-columns: var(--tree-arrow-width) minmax(0, 1fr);
+        grid-template-columns: var(--structure-arrow-slot) minmax(0, 1fr);
       }
       wt-data-table[wrap-to-fit]::part(folder-cell),
       wt-data-table[wrap-to-fit]::part(product-cell),
@@ -1180,7 +1180,8 @@ export class MenuStructureTable extends LitElement {
   #nameSpan(row: Row) {
     const parts = ["name"];
     if (row.node.ref.kind === "section") parts.push("section-name");
-    if (row.readOnly && !row.variant) parts.push("read-only");
+    if (row.readOnly) parts.push("read-only");
+    if (row.node.ref.kind === "product") parts.push("structure-product-name");
     return html`<span
       part=${parts.join(" ")}
       data-test="name"
@@ -1256,30 +1257,27 @@ export class MenuStructureTable extends LitElement {
       );
     }
     const path = searchRoot ? this.#sectionPath(row) : "";
-    const inlineCount = node.ref.kind === "section" && !node.includedMenuId && !searchRoot;
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
-      >${
-        searchRoot
-          ? html`<span part="search-name-line"
-              >${this.#nameSpan(row)}${path === "" ? nothing : html`<span part="search-path">${path}</span>`}</span
-            >`
-          : inlineCount
-            ? html`<span part="structure-section-label"
-                >${this.#nameSpan(row)}${this.#nameNotes(row)}</span
+      ><span part="structure-row-label"
+        >${
+          searchRoot
+            ? html`<span part="search-name-line"
+                >${this.#nameSpan(row)}${path === "" ? nothing : html`<span part="search-path">${path}</span>`}</span
               >`
             : this.#nameSpan(row)
-      }${
-        node.includedMenuId && !row.readOnly
-          ? html`<span part="note" data-test=${`folder-setting-${key}`}
-              >${t(
-                (node.folder ?? FOLLOWING_FOLDER).showAsFolder
-                  ? "menus.include_as_folder"
-                  : "menus.include_direct",
-              )}</span
-            >`
-          : nothing
-      }${inlineCount ? nothing : this.#nameNotes(row)}${refusal}</span
+        }${
+          node.includedMenuId && !row.readOnly
+            ? html`<span part="note" data-test=${`folder-setting-${key}`}
+                >${t(
+                  (node.folder ?? FOLLOWING_FOLDER).showAsFolder
+                    ? "menus.include_as_folder"
+                    : "menus.include_direct",
+                )}</span
+              >`
+            : nothing
+        }${this.#nameNotes(row)}</span
+      >${refusal}</span
     >`;
     return menuTreeCell(node.ref.kind, this.#swatch(row), stack);
   }

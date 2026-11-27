@@ -3,8 +3,9 @@ import { countOf } from "./count-text.js";
 
 export const structureRowStyles = css`
   wt-data-table {
-    --tree-arrow-width: var(--wt-space-5);
+    --tree-arrow-width: calc(var(--wt-space-4) + var(--wt-space-1));
     --structure-arrow-offset: var(--wt-space-4);
+    --structure-arrow-slot: calc(var(--tree-arrow-width) - var(--structure-arrow-offset));
     --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
     --structure-grip-width: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
@@ -39,12 +40,11 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-indent) {
     justify-content: start;
-    position: relative;
-    inset-inline-start: calc(-1 * var(--structure-arrow-offset));
+    margin-inline-start: calc(-1 * var(--structure-arrow-offset));
   }
   wt-data-table::part(structure-root-toggle) {
     inline-size: var(--wt-tap-min);
-    margin-inline-end: calc(var(--tree-arrow-width) - var(--wt-tap-min));
+    margin-inline-end: calc(var(--structure-arrow-slot) - var(--wt-tap-min));
   }
   :host([reordering]) wt-data-table::part(structure-root-toggle),
   wt-data-table[data-selecting]::part(structure-root-toggle) {
@@ -63,7 +63,7 @@ export const structureRowStyles = css`
   wt-data-table::part(tree-heading),
   wt-data-table[narrow]::part(tree-heading) {
     margin-inline-start: calc(
-      var(--tree-arrow-width) + var(--structure-media-size) + var(--structure-media-gap)
+      var(--structure-arrow-slot) + var(--structure-media-size) + var(--structure-media-gap)
     );
   }
   wt-data-table::part(thumb-frame),
@@ -108,13 +108,13 @@ export const structureRowStyles = css`
   wt-data-table[narrow]::part(narrow-usual-price) {
     display: inline;
   }
-  wt-data-table::part(structure-section-label) {
+  wt-data-table::part(structure-row-label) {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     column-gap: var(--wt-space-2);
   }
-  wt-data-table[narrow]::part(structure-section-label) {
+  wt-data-table[narrow]::part(structure-row-label) {
     flex-direction: column;
   }
   wt-data-table::part(section-name) {
@@ -122,6 +122,9 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(read-only) {
     color: var(--wt-color-text-muted);
+  }
+  wt-data-table::part(read-only structure-product-name) {
+    color: var(--wt-color-text);
   }
   wt-data-table::part(structure-unavailable),
   wt-data-table::part(structure-clash) {

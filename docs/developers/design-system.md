@@ -2227,7 +2227,9 @@ selection checkboxes, outside tree indentation. Name that column with `rowContro
 Products lines the photo or colour square, visible columns and row controls up with the first
 line of the name. Structure uses `rowControlsAlign="center"` for its name-and-count stacks.
 The top-level section arrow sits beside its grip. The menu's own arrow sits over its empty grip slot.
-Each level steps in 18 px on desktop and 12 px at phone width. Counts sit beside the menu and section names and move below them when the table narrows.
+Each level steps in 18 px on desktop and 12 px at phone width. The picture follows the arrow.
+Included products and their variants use regular ink. Counts and the included-menu note sit beside
+the name on desktop and below it on phones.
 In Select mode, the header's native
 checkbox and each row's checkbox line up. Grip and checkbox sit side by side in the wide Products
 Tree and stack at phone width. Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.

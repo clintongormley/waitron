@@ -678,18 +678,32 @@ it("keeps an included menu's contents in place and offers Open, Edit and Remove 
   expect(edits).toEqual([]);
 });
 
-it("draws variants inside an included menu in regular ink", async () => {
-  const lager = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
-  const el = await mount({ nodes: [wines()], products: [lager] });
-  await toggle(el, "included-wine");
-  await toggle(el, "included-wine/wine-lager");
-  const dish = row(el, "included-wine/wine-lager")!.querySelector('[data-test="name"]')!;
-  const variant = row(el, "included-wine/wine-lager/v-regular")!.querySelector(
-    '[data-test="name"]',
-  )!;
-  expect(getComputedStyle(variant).color).toBe(getComputedStyle(table(el)).color);
-  expect(getComputedStyle(dish).color).not.toBe(getComputedStyle(variant).color);
-});
+it.each([1280, 390])(
+  "shows included product names in regular ink and lays out their notes at %i px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const lager = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
+    const el = await mount({ nodes: [wines()], products: [lager] });
+    await toggle(el, "included-wine");
+    await toggle(el, "included-wine/wine-lager");
+    const dish = row(el, "included-wine/wine-lager")!.querySelector('[data-test="name"]')!;
+    const variant = row(el, "included-wine/wine-lager/v-regular")!.querySelector(
+      '[data-test="name"]',
+    )!;
+    expect(getComputedStyle(variant).color).toBe(getComputedStyle(table(el)).color);
+    expect(getComputedStyle(dish).color).toBe(getComputedStyle(variant).color);
+    await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
+    for (const key of ["included-wine", "included-wine/wine-lager"]) {
+      const tr = row(el, key)!;
+      const name = tr.querySelector('[data-test="name"]')!.getBoundingClientRect();
+      for (const note of tr.querySelectorAll('[part~="note"]')) {
+        const words = note.getBoundingClientRect();
+        if (width === 390) expect(words.top, key).toBeGreaterThanOrEqual(name.bottom - 1);
+        else expect(words.left, key).toBeGreaterThan(name.right);
+      }
+    }
+  },
+);
 
 it("offers Remove for a set menu and removes that placement", async () => {
   const el = await mount({
@@ -1155,12 +1169,15 @@ it("puts the menu arrow over the grip column and the section arrow immediately a
   const arrow = (key: string) => {
     const range = document.createRange();
     range.selectNodeContents(row(el, key)!.querySelector(".tree-arrow, .tree-toggle")!);
-    return middle(range);
+    return range;
   };
   const handle = middle(grip(el, "m-drinks"));
-  expect(arrow("root")).toBeCloseTo(handle, -1);
-  expect(arrow("m-drinks") - handle).toBeGreaterThan(15);
-  expect(arrow("m-drinks") - handle).toBeLessThanOrEqual(35);
+  const section = arrow("m-drinks");
+  expect(middle(arrow("root"))).toBeCloseTo(handle, -1);
+  expect(middle(section) - handle).toBeGreaterThan(15);
+  expect(middle(section) - handle).toBeLessThanOrEqual(35);
+  const picture = pieces(el, "m-drinks").media!;
+  expect(picture.left - section.getBoundingClientRect().right).toBeLessThanOrEqual(14);
 });
 
 it.each(["browse", "reorder", "select"])(
