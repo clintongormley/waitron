@@ -6212,7 +6212,7 @@ it.each([
   expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
 });
 
-it("keeps the current Print Queue after an older page fails and lets staff retry", async () => {
+it("keeps the current Print Queue after an older page fails and clears the warning on retry", async () => {
   const delivered = Array.from({ length: 100 }, (_, i) => ({
     ...jobs[1]!,
     id: `recent-${i}`,
@@ -6258,6 +6258,7 @@ it("keeps the current Print Queue after an older page fails and lets staff retry
     showOlder([older]);
   }
   await vi.waitFor(() => expect(q(el, "[data-test=resend-job-older]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
   expect(q(el, "[data-test=resend-job-recent-0]")).toBeNull();
   expect(listRecentJobs).toHaveBeenLastCalledWith(1);
   expect(jobsTable.activeElement).toBe(search);
