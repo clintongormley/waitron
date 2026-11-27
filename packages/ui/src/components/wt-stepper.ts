@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, svg } from "lit";
+import { LitElement, type PropertyValues, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange } from "../interactive.js";
@@ -105,6 +105,8 @@ export class WtStepper extends LitElement {
   /** Names the bin, given `label`; with none, − is disabled at `min` and there is no bin. */
   @property({ attribute: false }) removeLabel: ((label: string) => string) | null = null;
 
+  #focused: Element | null = null;
+
   get #atMin(): boolean {
     return this.value <= this.min;
   }
@@ -135,6 +137,29 @@ export class WtStepper extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    super.willUpdate(changed);
+    this.#focused = (this.renderRoot as ShadowRoot).activeElement;
+  }
+
+  // − and the bin are different buttons, so the one holding focus can be drawn away. Focus goes to
+  // +, never to the bin, where a held Enter would remove; with + disabled, to the group meanwhile.
+  protected override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    const focused = this.#focused;
+    this.#focused = null;
+    if (focused === null || focused.isConnected) return;
+    const plus = this.renderRoot.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
+    if (!plus.disabled) {
+      plus.focus();
+      return;
+    }
+    const group = this.renderRoot.querySelector<HTMLElement>('[role="group"]')!;
+    group.tabIndex = -1;
+    group.addEventListener("blur", () => group.removeAttribute("tabindex"), { once: true });
+    group.focus();
   }
 
   override render() {

@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-stepper.js";
 
@@ -341,4 +342,56 @@ test("a bin click straight after the count rises past min, before the redraw, se
   await el.updateComplete;
   expect(seen).toEqual([]);
   expect(bin(el)).toBeNull();
+});
+
+test("Enter on − that brings the bin leaves focus on +, so a second Enter adds and removes nothing", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="2" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const seen = removals(el);
+  const steps = changes(el);
+  const { minus, plus } = parts(el);
+  minus.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(bin(el)).not.toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(plus);
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(steps).toEqual([1, 2]);
+  expect(el.shadowRoot!.activeElement).toBe(plus);
+});
+
+test("Enter on + that takes away the bin keeps focus on +", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="1" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const { plus } = parts(el);
+  plus.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(bin(el)).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(plus);
+});
+
+test("with + disabled at max, Enter on − that brings the bin moves focus to the group, which Enter does not remove from", async () => {
+  const el = (await mount(
+    '<wt-stepper label="Burger" value="2" min="1" max="1"></wt-stepper>',
+  )) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const seen = removals(el);
+  const { minus, plus, group } = parts(el);
+  expect(plus.disabled).toBe(true);
+  minus.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(bin(el)).not.toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(group);
+  await userEvent.keyboard("{Enter}");
+  expect(seen).toEqual([]);
+  // The group is focusable only while it holds focus.
+  bin(el)!.focus();
+  expect(group.hasAttribute("tabindex")).toBe(false);
 });
