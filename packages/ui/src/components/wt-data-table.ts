@@ -786,7 +786,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           > td[data-selection-cell] > .row-controls > input[part="row-checkbox"]:checked
         )
         td {
-        background: color-mix(in srgb, var(--wt-color-primary) 12%, var(--wt-color-surface));
+        background: var(--wt-color-row-selected);
       }
 
       .tree-cell {
