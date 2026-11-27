@@ -202,5 +202,8 @@ export const sentRowStyles = [
       background: var(--wt-color-surface-sunken);
       color: var(--wt-color-text);
     }
+    .companion .row-more {
+      color: inherit;
+    }
   `,
 ];
