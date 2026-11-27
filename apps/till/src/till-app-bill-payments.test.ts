@@ -4958,6 +4958,31 @@ describe("till-app: a partly paid order at the counter", () => {
     await press(el, "[data-pay-confirm]");
   }
 
+  async function foundCounterBill(overrides: Record<string, unknown>): Promise<TillApp> {
+    const row = billRow({
+      workingOrderId: "wo-1",
+      orderNumber: 5,
+      label: "Ana",
+      tables: [],
+      total: "120.00",
+      paid: "50.00",
+      stillOwed: "70.00",
+    });
+    const el = await retrieved({
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage([row])),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
+      getFindBill: vi.fn().mockResolvedValue(row),
+      ...overrides,
+    });
+    emit(shell(el), "find-bill");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", { row });
+    await flush(el);
+    expect(dialog(el)?.quiet).toBe(false);
+    return el;
+  }
+
   it("lists the dish a saved raise added among the items Pay offers (A1208)", async () => {
     const draughtBeer = {
       id: "cana",
@@ -5632,7 +5657,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(dialog(el)).not.toBeNull();
   });
 
-  it("sends no guests line on the rest of a counter order paid with the guests field untouched", async () => {
+  it("sends no guests line when paying the rest from Find bill with the guests field untouched", async () => {
     const takeBillPayment = vi
       .fn()
       .mockResolvedValue(
@@ -5642,9 +5667,8 @@ describe("till-app: a partly paid order at the counter", () => {
           invoiceOf("120.00"),
         ),
       );
-    const el = await retrieved({ takeBillPayment });
-    payRest(el)!.click();
-    await flush(el);
+    const el = await foundCounterBill({ takeBillPayment });
+    await type(el, "amount", "70");
     await type(el, "tendered", "70");
     await press(el, "[data-pay-continue]");
     const field = inDialog(el, '[name="guests"]') as unknown as { value: string } | null;
@@ -5703,11 +5727,10 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(listReads);
   });
 
-  it("sends a payment that got no answer again under the same complete request after the guests count changed", async () => {
+  it("retries the same Counter payment from Find bill after the guests count changed", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const el = await retrieved({ takeBillPayment });
-    payRest(el)!.click();
-    await flush(el);
+    const el = await foundCounterBill({ takeBillPayment });
+    await type(el, "amount", "70");
     await type(el, "tendered", "70");
     await takeBillPaymentFromDialog(el);
     await expect
@@ -5715,14 +5738,7 @@ describe("till-app: a partly paid order at the counter", () => {
       .toBe(t("bill_pay.unconfirmed"));
     const first = takeBillPayment.mock.calls.length;
 
-    const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await stepper.updateComplete;
-    const input = stepper.shadowRoot!.querySelector("input")!;
-    input.value = "3";
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await flush(el);
+    await typeGuests(el, "3");
     takeBillPayment.mockResolvedValueOnce(
       takenOf(
         { applied: "70.00", tendered: "70.00" },
@@ -5740,6 +5756,7 @@ describe("till-app: a partly paid order at the counter", () => {
         .map((request) => request.guestCount),
     ).toEqual(Array(first).fill(null));
     expect(sent()[first]).toHaveProperty("guestCount", null);
+    expect(sent()[first]).toEqual(sent()[0]);
   });
 
   it("asks no guests and sends no guestCount key on a counter order with a full invoice chosen", async () => {
