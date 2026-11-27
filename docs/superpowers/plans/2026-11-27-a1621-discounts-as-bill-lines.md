@@ -1259,7 +1259,10 @@ discount given after a part payment that would take the bill below its money is 
   total and the invoice both come to 4.47, and a further 4.48 off is cut down to the 4.47 left,
   never refused. Today's
   comp window shows 4.48 here while the invoice files 4.47, and refuses a further 4.48 with
-  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`).
+  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`). The same file's two bills
+  where splitting bound portions would refile their extras higher ("keeps a bound pair at one
+  price…", "leaves a bound dish as it is…") run through the comp window too: no discount raises
+  the invoice.
 
 **Changed test checks** (about 30; each listed in the pull request): the whole-bill groups of
 `adjustments-apply.test.ts` (`:813` "a bill discount with a weighed line", `:875`, `:928`, and the
