@@ -11,6 +11,8 @@ const billsQuery: BillsQuery = {
   zoneId: "zone-1",
   staffId: "staff-1",
   state: "part-paid",
+  owed: true,
+  counter: true,
 };
 const transactionsQuery: TransactionsQuery = {
   q: "T1/12 ",
@@ -18,7 +20,7 @@ const transactionsQuery: TransactionsQuery = {
   sort: { key: "invoice", direction: "descending" },
   dates: { preset: "custom", from: "2026-10-01", to: "2026-10-15" },
   method: "card",
-  type: "full-invoice",
+  type: "corrective",
   staffId: "staff-2",
 };
 
@@ -43,6 +45,8 @@ describe("Find a bill client", () => {
       zoneId: "zone-1",
       staffId: "staff-1",
       state: "part-paid",
+      owed: "true",
+      counter: "true",
     });
     expect(init).toEqual({ method: "GET", credentials: "include", signal });
   });
@@ -78,7 +82,7 @@ describe("Find a bill client", () => {
       from: "2026-10-01",
       to: "2026-10-15",
       method: "card",
-      type: "full-invoice",
+      type: "corrective",
       staffId: "staff-2",
     });
     expect(fetchStub.mock.calls[0]![1]).toEqual({ method: "GET", credentials: "include", signal });

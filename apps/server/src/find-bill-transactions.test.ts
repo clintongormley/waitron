@@ -14,6 +14,7 @@ import {
   tenders,
   refunds,
   workingOrders,
+  floorZones,
   parties,
   withFoldedPersonChanges,
 } from "@waitron/db";
@@ -25,6 +26,9 @@ import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import { readFindTransactions, resolveTransactionScope } from "./find-bill-transactions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inTx, seatedWith } from "./testing/bill-venue.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
   collect,
   credit,
@@ -118,6 +122,35 @@ async function saleOf(orderId: string) {
     tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, orderId)),
   );
   return row!.id;
+}
+
+async function returned(saleId: string, values: Partial<typeof refunds.$inferInsert> = {}) {
+  return inTx(venue, async (tx) => {
+    const [tender] = await tx.select().from(tenders).where(eq(tenders.saleId, saleId));
+    const [row] = await tx
+      .insert(refunds)
+      .values({
+        saleId,
+        tenderId: tender!.id,
+        submissionId: randomUUID(),
+        fingerprint: randomUUID(),
+        appliedAmount: 200,
+        tipAmount: 30,
+        reason: "Customer returned",
+        authorizedBy: venue.supervisorId,
+        requestedBy: venue.supervisorId,
+        source: "device",
+        deviceId: venue.deviceId,
+        nodeId: venue.cfg.nodeId,
+        method: "cash",
+        state: "completed",
+        createdAt: AT,
+        completedAt: "2026-10-16T09:00:00.000Z",
+        ...values,
+      })
+      .returning();
+    return row!;
+  });
 }
 
 describe("Find Transactions SQL paging", () => {
@@ -501,7 +534,7 @@ describe("Find Transactions SQL paging", () => {
     }
   });
 
-  it("uses every original order's zone for corrections and multi-sale substitutions", async () => {
+  it("uses every original order's zone for corrections and multi-sale substitutions, and names no order for several", async () => {
     const counter = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const own = await invoice({ workingOrderId: counter });
@@ -522,9 +555,11 @@ describe("Find Transactions SQL paging", () => {
     expect(new Set(result.rows.map((r) => r.saleId))).toEqual(new Set([own, unzoned]));
     expect(result.total).toBe(2);
     expect(result.openCount).toBe(1);
-    expect((await list()).rows.find((r) => r.saleId === substitute)!.scopeOrderIds).toEqual(
-      [counter, party.tabId].sort(),
-    );
+    expect((await list()).rows.find((r) => r.saleId === substitute)).toMatchObject({
+      scopeOrderIds: [counter, party.tabId].sort(),
+      orderNumber: null,
+      zoneName: null,
+    });
     expect(await inTx(venue, (tx) => resolveTransactionScope(tx, correction))).toEqual({
       workingOrderIds: [party.tabId],
     });
@@ -539,7 +574,7 @@ describe("Find Transactions SQL paging", () => {
     ).toEqual([unzoned]);
   });
 
-  it("scopes an advance to the bill its payment is on, not the bill it was taken on", async () => {
+  it("scopes an advance to the bill its payment is on, not the bill it was taken on, and names that bill's order", async () => {
     const counter = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const advance = await invoice();
@@ -578,6 +613,18 @@ describe("Find Transactions SQL paging", () => {
         (r) => r.saleId,
       ),
     ).toContain(advance);
+    const [facts] = await inTx(venue, (tx) =>
+      tx
+        .select({ number: workingOrders.orderNumber, zone: floorZones.name })
+        .from(workingOrders)
+        .innerJoin(floorZones, eq(floorZones.id, venue.counterZone))
+        .where(eq(workingOrders.id, counter)),
+    );
+    expect((await list()).rows.find((r) => r.saleId === advance)).toMatchObject({
+      workingOrderId: null,
+      orderNumber: facts!.number,
+      zoneName: facts!.zone,
+    });
   });
 
   it("retains the saved name of a historical operator who was suspended", async () => {
@@ -600,34 +647,6 @@ describe("Find Transactions SQL paging", () => {
 });
 
 describe("completed post-invoice refund Transactions", () => {
-  async function returned(saleId: string, values: Partial<typeof refunds.$inferInsert> = {}) {
-    return inTx(venue, async (tx) => {
-      const [tender] = await tx.select().from(tenders).where(eq(tenders.saleId, saleId));
-      const [row] = await tx
-        .insert(refunds)
-        .values({
-          saleId,
-          tenderId: tender!.id,
-          submissionId: randomUUID(),
-          fingerprint: randomUUID(),
-          appliedAmount: 200,
-          tipAmount: 30,
-          reason: "Customer returned",
-          authorizedBy: venue.supervisorId,
-          requestedBy: venue.supervisorId,
-          source: "device",
-          deviceId: venue.deviceId,
-          nodeId: venue.cfg.nodeId,
-          method: "cash",
-          state: "completed",
-          createdAt: AT,
-          completedAt: "2026-10-16T09:00:00.000Z",
-          ...values,
-        })
-        .returning();
-      return row!;
-    });
-  }
   it("shows completed money once with its original invoice, completion date and returning staff", async () => {
     const saleId = await invoice({ counterpartyLegalName: "Cliente Norte" });
     const refund = await returned(saleId);
@@ -638,6 +657,8 @@ describe("completed post-invoice refund Transactions", () => {
       refundId: refund.id,
       saleId,
       workingOrderId: null,
+      orderNumber: null,
+      zoneName: null,
       scopeOrderIds: [],
       issuedAt: "2026-10-16T09:00:00.000Z",
       invoiceNumber: "A/900001",
@@ -647,6 +668,7 @@ describe("completed post-invoice refund Transactions", () => {
       methods: [{ method: "cash", last4: null }],
       staff: { id: venue.supervisorId, name: "Sophia" },
       amount: "-2.30",
+      amountMatch: null,
     });
     expect(result.rows[1]).toMatchObject({
       transactionId: `sale:${saleId}`,
@@ -793,5 +815,218 @@ describe("completed post-invoice refund Transactions", () => {
         (r) => r.transactionId,
       ),
     ).toEqual([`refund:${ids[0]}`, `sale:${saleId}`]);
+  });
+});
+
+describe("Find Transactions amount search", () => {
+  it("finds a sale by its total or one card payment with its tip, never one cent off", async () => {
+    const order = await parked(venue, "Tarta");
+    const split = await invoice({ workingOrderId: order, total: 4000 }, false);
+    await tender(split, "card", { amount: 2200, tipAmount: 200 });
+    await tender(split, "card", { amount: 2000 });
+    await settle(split);
+    const whole = await invoice({ total: 8052 });
+    expect((await list({ q: "80,52" })).rows).toMatchObject([
+      { saleId: whole, amount: "80.52", amountMatch: "amount" },
+    ]);
+    expect((await list({ q: "80,51" })).rows).toEqual([]);
+    expect((await list({ q: "80,53" })).rows).toEqual([]);
+    expect((await list({ q: "22,00" })).rows).toMatchObject([
+      { saleId: split, amount: "40.00", amountMatch: "payment" },
+    ]);
+    expect((await list({ q: "21,99" })).rows).toEqual([]);
+    expect((await list({ q: "40" })).rows).toMatchObject([
+      { saleId: split, amountMatch: "amount" },
+    ]);
+    expect((await list({ q: "12,5" })).rows).toEqual([]);
+    const twelveFifty = await invoice({ total: 1250 });
+    await invoice({ total: 125 });
+    expect((await list({ q: "12,5" })).rows.map((r) => r.saleId)).toEqual([twelveFifty]);
+    expect((await list()).rows.every((r) => r.amountMatch === null)).toBe(true);
+  });
+
+  it("finds a refund by what it gave back, with or without its sign", async () => {
+    const saleId = await invoice({ total: 2000 });
+    const refund = await returned(saleId, { appliedAmount: 800, tipAmount: 50, completedAt: AT });
+    for (const q of ["8,50", "−€8.50"])
+      expect((await list({ q })).rows).toMatchObject([
+        { refundId: refund.id, amount: "-8.50", amountMatch: "amount" },
+      ]);
+    expect((await list({ q: "8,00" })).rows).toEqual([]);
+    expect((await list({ q: "20,00" })).rows.map((r) => r.transactionId)).toEqual([
+      `sale:${saleId}`,
+    ]);
+  });
+
+  it("reads card digits with a leading zero as words, and 50 cents with one", async () => {
+    const order = await parked(venue, "Tarta");
+    const card = await invoice({ workingOrderId: order, invoiceNumber: 900_001 }, false);
+    await tender(card, "card");
+    await settle(card);
+    await attempt(order, card, "0412");
+    await invoice({ total: 412, invoiceNumber: 900_002 });
+    const fifty = await invoice({ total: 50, invoiceNumber: 900_003 });
+    expect((await list({ q: "0412" })).rows).toMatchObject([{ saleId: card, amountMatch: null }]);
+    expect((await list({ q: "0,50" })).rows.map((r) => r.saleId)).toEqual([fifty]);
+  });
+
+  it("lists bare digits' word matches before their amounts, and a written amount first", async () => {
+    const order = await parked(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ label: "Table 4" }).where(eq(workingOrders.id, order)),
+    );
+    const table = await invoice({ workingOrderId: order, invoiceNumber: 900_001 });
+    const four = await invoice({
+      total: 400,
+      invoiceNumber: 900_002,
+      issuedAt: "2026-10-15T13:00:00.000Z",
+    });
+    expect((await list({ q: "4" })).rows.map((r) => [r.saleId, r.amountMatch])).toEqual([
+      [table, null],
+      [four, "amount"],
+    ]);
+    expect((await list({ q: "4,00" })).rows.map((r) => r.saleId)[0]).toBe(four);
+    expect((await list({ q: "€4" })).rows.map((r) => r.saleId)[0]).toBe(four);
+  });
+
+  it("keeps an unsettled receipt, a voided sale and a hidden zone's sale of the amount out", async () => {
+    const paidOrder = await placedIssuedBill(venue, "Small beer");
+    expect((await collect(venue, paidOrder, "3.00")).status).toBe(200);
+    const paid = await saleOf(paidOrder);
+    const voidedOrder = await placedIssuedBill(venue, "Small beer");
+    await voidInvoice(venue, voidedOrder);
+    await invoice({ total: 300 }, false);
+    const party = await seatedWith(venue, "Tarta");
+    const hidden = await invoice({ workingOrderId: party.tabId, total: 300 });
+    const inCounter = (id: ReturnType<typeof sql>) =>
+      VENUE_SERVICE.orderInZones(id, [venue.counterZone]);
+    const seen = await inTx(venue, (tx) =>
+      readFindTransactions(tx, query({ q: "3,00" }), inCounter),
+    );
+    expect(seen.rows.map((r) => r.saleId)).toEqual([paid]);
+    expect(seen.total).toBe(1);
+    expect((await list({ q: "3,00" })).rows.map((r) => r.saleId).sort()).toEqual(
+      [paid, hidden].sort(),
+    );
+  });
+
+  it("still applies dates, staff, method and kind to amount matches", async () => {
+    const own = await invoice({ total: 700, operatorId: venue.supervisorId });
+    const other = await invoice({ total: 700, issuedAt: "2026-10-14T12:00:00.000Z" });
+    const ids = async (values: Record<string, string>) =>
+      (await list({ q: "7,00", ...values })).rows.map((r) => r.saleId);
+    expect(await ids({ staffId: venue.supervisorId })).toEqual([own]);
+    expect(await ids({ preset: "custom", from: "2026-10-14", to: "2026-10-14" })).toEqual([other]);
+    expect(await ids({ type: "full-invoice" })).toEqual([]);
+    expect(await ids({ method: "card" })).toEqual([]);
+  });
+
+  it("matches a payment of the chosen method only, under the method filter", async () => {
+    const order = await parked(venue, "Tarta");
+    const split = await invoice({ workingOrderId: order, total: 4000 }, false);
+    await tender(split, "card", { amount: 2200 });
+    await tender(split, "cash", { amount: 1800 });
+    await settle(split);
+    expect((await list({ q: "18,00" })).rows).toMatchObject([
+      { saleId: split, amountMatch: "payment" },
+    ]);
+    expect((await list({ q: "18,00", method: "card" })).rows).toEqual([]);
+    expect((await list({ q: "22,00", method: "card" })).rows).toMatchObject([
+      { saleId: split, amountMatch: "payment" },
+    ]);
+  });
+
+  it("asks for every corrective kind with corrective, beside the six other kinds", async () => {
+    const order = await placedIssuedBill(venue, "Small beer");
+    const original = await saleOf(order);
+    const replacement = await invoice({ correctsSaleId: original, replacesOriginal: true });
+    const correction = await invoice({ correctsSaleId: replacement, total: -121 });
+    const full = await invoice({ counterpartyTaxId: "B12345674", counterpartyLegalName: "SL" });
+    const fullCorrection = await invoice({
+      correctsSaleId: full,
+      counterpartyTaxId: "B12345674",
+      total: -121,
+    });
+    const sale = await invoice();
+    const refund = await returned(sale);
+    const kinds = async (type: string) => new Set((await list({ type })).rows.map((r) => r.saleId));
+    expect(await kinds("corrective")).toEqual(new Set([replacement, correction, fullCorrection]));
+    expect(await kinds("replacement")).toEqual(new Set([replacement]));
+    expect(await kinds("correction")).toEqual(new Set([correction]));
+    expect(await kinds("full-correction")).toEqual(new Set([fullCorrection]));
+    expect(await kinds("full-invoice")).toEqual(new Set([full]));
+    expect(await kinds("sale")).toEqual(new Set([sale]));
+    expect((await list({ type: "refund" })).rows.map((r) => r.transactionId)).toEqual([
+      `refund:${refund.id}`,
+    ]);
+  });
+
+  it("names a counter sale's order number and zone, and neither for a sale with no order", async () => {
+    const order = await placedIssuedBill(venue, "Small beer");
+    expect((await collect(venue, order, "3.00")).status).toBe(200);
+    const [facts] = await inTx(venue, (tx) =>
+      tx
+        .select({ number: workingOrders.orderNumber, zone: floorZones.name })
+        .from(workingOrders)
+        .innerJoin(floorZones, eq(floorZones.id, venue.counterZone))
+        .where(eq(workingOrders.id, order)),
+    );
+    const bare = await invoice();
+    const rows = (await list()).rows;
+    expect(rows.find((r) => r.workingOrderId === order)).toMatchObject({
+      orderNumber: facts!.number,
+      zoneName: facts!.zone,
+    });
+    expect(rows.find((r) => r.saleId === bare)).toMatchObject({
+      orderNumber: null,
+      zoneName: null,
+    });
+  });
+
+  async function paidCounterSale(orderNumber: number) {
+    const order = await parked(venue, "Small beer");
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ orderNumber }).where(eq(workingOrders.id, order)),
+    );
+    const deps = { ...venue, admission: testTradingAdmission() };
+    await placeOrder(deps, venue.cfg, order, venue.operatorId);
+    await issueOrderInvoice(deps, venue.cfg, order, venue.operatorId);
+    expect((await collect(venue, order, "3.00")).status).toBe(200);
+    return { order, saleId: await saleOf(order) };
+  }
+
+  it("finds a counter sale by its order number, and still by its invoice number", async () => {
+    const { saleId } = await paidCounterSale(4321);
+    const sale = (await list()).rows.find((r) => r.saleId === saleId)!;
+    expect(`${sale.invoiceNumber} ${sale.amount}`).not.toContain("4321");
+    expect((await list({ q: "4321" })).rows.map((r) => r.transactionId)).toEqual([
+      `sale:${saleId}`,
+    ]);
+    expect((await list({ q: sale.invoiceNumber })).rows.map((r) => r.transactionId)).toEqual([
+      `sale:${saleId}`,
+    ]);
+  });
+
+  it("gives a counter sale's correction the sale's order number and zone", async () => {
+    const { order, saleId } = await paidCounterSale(4321);
+    await credit(venue, order, "1.00", "-1.10");
+    const [zone] = await inTx(venue, (tx) =>
+      tx
+        .select({ name: floorZones.name })
+        .from(floorZones)
+        .where(eq(floorZones.id, venue.counterZone)),
+    );
+    const rows = (await list({ q: "4321" })).rows;
+    expect(rows.map((r) => r.type).sort()).toEqual(["correction", "sale"]);
+    expect(rows.find((r) => r.type === "correction")).toMatchObject({
+      workingOrderId: null,
+      scopeOrderIds: [order],
+      orderNumber: 4321,
+      zoneName: zone!.name,
+    });
+    expect(rows.find((r) => r.saleId === saleId)).toMatchObject({
+      orderNumber: 4321,
+      zoneName: zone!.name,
+    });
   });
 });

@@ -46,8 +46,8 @@ number under" the amount, and a refund has none of its own.
 2. **Rows and kinds.** `TransactionRow` (`apps/server/src/find-bill-types.ts:57-71`; the till's copy,
    `apps/till/src/api/find-bill-types.ts:55`) gains `orderNumber` and `zoneName`, so a counter sale
    reads "Bar · No. 44". `type=corrective` (`packages/orders-sales/src/find-bill-query.ts:98-105`)
-   means `correction`, `full-correction` or `replacement`; the five values accepted today stay.
-3. **Owed bills.** `/api/bills` gains `owed=true`: a receipt printed, the bill placed, not settled,
+   means `correction`, `full-correction` or `replacement`; the six values accepted today stay.
+3. **Owed bills.** `/api/bills` gains `owed=true`: the invoice issued, the bill placed, not settled,
    not voided, something still owing (`owing_cents`, `apps/server/src/find-bill-bills.ts:108`), and
    an unpaid departure recorded or the party closed (`packages/db/src/schema/parties.ts:35`). Not
    `collectionStatus`: it is null once any payment was received (lines 105–107), so a part-paid
@@ -62,7 +62,7 @@ Tests first, `apps/server/src/find-bill-transactions.test.ts`: every form above 
 "0412" (words only, finds T-0412) and "0,50"; "12,5" finds 12.50, not 1.25; a refund by "8,50" and
 "−€8.50"; a split guest's card payment with its tip; one cent off is not found; "4" orders Table 4
 before €4.00, "4,00" the reverse; an unsettled receipt, a voided sale and a hidden zone's sale of
-that amount stay out; dates, staff and kind still apply; `corrective` and the five old kinds; a
+that amount stay out; dates, staff and kind still apply; `corrective` and the six old kinds; a
 counter row's number and zone. `find-bill-bills.test.ts`: owed, including a part-paid bill left
 unpaid and a party closed with money owing, and not a seated table's printed bill.
 `packages/orders-sales/src/find-bill-query.test.ts`: the new parameters.

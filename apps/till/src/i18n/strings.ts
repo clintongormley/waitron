@@ -867,7 +867,7 @@ export const en = {
   "find_page.none": "No results",
   "find_page.search": "Search",
   "find_page.bill_search": "Name or table",
-  "find_page.transaction_search": "Invoice number, name, table or card digits",
+  "find_page.transaction_search": "Invoice or order number, name, table, card digits or amount",
   "find_page.filters": "Filters",
   "find_page.filtered": "Filtered",
   "find_page.clear_all": "Clear all",
@@ -3347,7 +3347,8 @@ export const es: Record<StringKey, string> = {
   "find_page.none": "Sin resultados",
   "find_page.search": "Buscar",
   "find_page.bill_search": "Nombre o mesa",
-  "find_page.transaction_search": "Número de factura, nombre, mesa o dígitos de tarjeta",
+  "find_page.transaction_search":
+    "Número de factura o de pedido, nombre, mesa, dígitos de tarjeta o importe",
   "find_page.filters": "Filtros",
   "find_page.filtered": "Filtrado",
   "find_page.clear_all": "Borrar todos",

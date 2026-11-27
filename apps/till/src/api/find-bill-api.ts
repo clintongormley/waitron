@@ -49,6 +49,8 @@ function findBillParams(query: BillsQuery | TransactionsQuery): string {
   } else {
     if (query.zoneId !== undefined) params.set("zoneId", query.zoneId);
     if (query.state !== undefined) params.set("state", query.state);
+    if (query.owed === true) params.set("owed", "true");
+    if (query.counter === true) params.set("counter", "true");
   }
   return params.toString();
 }

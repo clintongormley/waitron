@@ -1775,7 +1775,9 @@ post-invoice Refund action belongs to Part 2. The approved page contract is:
   when, invoice number, type, table or name, method (card with its last four digits), staff,
   amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
   card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,
-  and Refund.
+  and Refund. (2026-11-27, R2a of the [Find a bill plan](../superpowers/plans/2026-11-27-o-r2-find-a-bill.md):
+  search also reads the order number and an amount, and `/api/transactions`'s `type` accepts
+  `corrective`.)
 - **The same table as everywhere else** (owner): `wt-data-table`'s toolbar, search, Filters panel
   and Customise. The date range is new: a quick list (Today, Yesterday, This business day, Last 7
   days, This month) plus From and To, as the first control in the Filters panel (its

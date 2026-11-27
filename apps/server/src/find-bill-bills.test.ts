@@ -1189,3 +1189,103 @@ describe("Find a bill counts an advance given back as the Pay window does", () =
     await expectAsPayWindow(billId, "0.00");
   });
 });
+
+describe("Find a bill's owed and counter bills", () => {
+  const ids = async (values: Record<string, string>) =>
+    new Set((await list(values)).rows.map((r) => r.workingOrderId));
+  async function printedAtTable(...names: string[]) {
+    const party = await seatedWith(venue, ...names);
+    await inTx(venue, async (tx) =>
+      endMeal(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        party.partyId,
+        {
+          billId: party.tabId,
+          expectedPartyRevision: await partyRevision(store.db, party.partyId),
+          expectedEdits: await closingEditsForTest(store.db, party.partyId),
+          submissionId: randomUUID(),
+          printAnyway: true,
+        },
+        venue.operatorId,
+        null,
+      ),
+    );
+    return party;
+  }
+
+  it("owes a bill left unpaid, part-paid or not, and not a seated table's printed bill", async () => {
+    const left = await departed(venue, "Tarta");
+    const partPaid = await seatedWith(venue, "Red wine bottle");
+    await contribute(partPaid.tabId, "5.00");
+    const departure = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/parties/${partPaid.partyId}/unpaid-departure`,
+      {
+        billId: partPaid.tabId,
+        expectedPartyRevision: await partyRevision(store.db, partPaid.partyId),
+        reason: "Left without paying",
+      },
+    );
+    expect(departure.status, JSON.stringify(departure.json)).toBe(200);
+    const printed = await printedAtTable("Tarta");
+    const presented = await placedIssuedBill(venue, "Small beer");
+    await seatedWith(venue, "Octopus");
+    await parked(venue, "Small beer");
+
+    expect(await ids({ owed: "true" })).toEqual(new Set([left.tabId, partPaid.tabId]));
+    expect(
+      (await list({ owed: "true" })).rows.find((r) => r.workingOrderId === partPaid.tabId),
+    ).toMatchObject({ state: "part-paid", collectionStatus: null, stillOwed: "25.00" });
+    expect((await ids({})).has(printed.tabId)).toBe(true);
+    expect((await ids({})).has(presented)).toBe(true);
+  });
+
+  it("stops owing a bill left unpaid once a correction gives back all it owed", async () => {
+    const left = await departed(venue, "Tarta");
+    expect(await ids({ owed: "true" })).toEqual(new Set([left.tabId]));
+    await credit(venue, left.tabId, "16.36", "-18.00");
+    expect(await inTx(venue, (tx) => readFindBill(tx, left.tabId))).toMatchObject({
+      orderStatus: "placed",
+      stillOwed: "0.00",
+    });
+    expect(await ids({ owed: "true" })).toEqual(new Set());
+  });
+
+  it("stops owing a bill left unpaid once its receipt is cancelled through the till", async () => {
+    const left = await departed(venue, "Tarta");
+    expect(await ids({ owed: "true" })).toEqual(new Set([left.tabId]));
+    const cancelled = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/working-orders/${left.tabId}/cancel`,
+      { reason: "Wrong table" },
+    );
+    expect(cancelled).toEqual({ status: 200, json: { filed: "cancellation" } });
+    expect(await ids({ owed: "true" })).toEqual(new Set());
+  });
+
+  it("lists every counter order, held, presented or paid and waiting, and with owed both kinds", async () => {
+    const held = await parked(venue, "Small beer");
+    const presented = await placedIssuedBill(venue, "Small beer");
+    const waiting = await placedIssuedBill(venue, "Croquettes");
+    expect((await collect(venue, waiting, "10.00")).status).toBe(200);
+    const seated = await seatedWith(venue, "Tarta");
+    const left = await departed(venue, "Octopus");
+
+    expect(await ids({ counter: "true" })).toEqual(new Set([held, presented, waiting]));
+    expect(await ids({ counter: "true", owed: "true" })).toEqual(
+      new Set([held, presented, waiting, left.tabId]),
+    );
+    expect((await ids({})).has(seated.tabId)).toBe(true);
+  });
+});

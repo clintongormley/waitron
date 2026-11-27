@@ -60,13 +60,17 @@ function base(
   };
 }
 export function parseBillsQuery(params: URLSearchParams): BillsQuery {
-  checkKeys(params, [...common, "zoneId", "state"]);
+  checkKeys(params, [...common, "zoneId", "state", "owed", "counter"]);
   const zoneId = uuid(params, "zoneId");
   const state = choice(params, "state", ["unpaid", "held", "part-paid", "paid-not-handed-over"]);
+  const owed = choice(params, "owed", ["true"]);
+  const counter = choice(params, "counter", ["true"]);
   return {
     ...base(params, billSorts, "openedAt"),
     ...(zoneId === undefined ? {} : { zoneId }),
     ...(state === undefined ? {} : { state }),
+    ...(owed === undefined ? {} : { owed: true }),
+    ...(counter === undefined ? {} : { counter: true }),
   };
 }
 export function parseTransactionsQuery(params: URLSearchParams): TransactionsQuery {
@@ -102,6 +106,7 @@ export function parseTransactionsQuery(params: URLSearchParams): TransactionsQue
     "full-correction",
     "replacement",
     "refund",
+    "corrective",
   ]);
   return {
     ...base(params, transactionSorts, "when"),

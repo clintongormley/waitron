@@ -8,11 +8,19 @@ export type BillState = "unpaid" | "held" | "part-paid" | "paid-not-handed-over"
 export type TransactionType =
   "sale" | "full-invoice" | "correction" | "full-correction" | "replacement" | "refund";
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
-export type BillsQuery = FindBillQuery & { zoneId?: string; state?: BillState };
+/** `owed` and `counter` together ask for the bills either one names. */
+export type BillsQuery = FindBillQuery & {
+  zoneId?: string;
+  state?: BillState;
+  owed?: true;
+  counter?: true;
+};
+/** `corrective` asks for every `correction`, `full-correction` and `replacement`. */
+export type TransactionKind = TransactionType | "corrective";
 export type TransactionsQuery = FindBillQuery & {
   dates: FindBillDates;
   method?: TenderMethod;
-  type?: TransactionType;
+  type?: TransactionKind;
 };
 export type FindBillPage<Row> = {
   rows: Row[];
@@ -57,6 +65,8 @@ export interface TransactionRow {
   refundId: string | null;
   saleId: string;
   workingOrderId: string | null;
+  orderNumber: number | null;
+  zoneName: string | null;
   scopeOrderIds: string[];
   issuedAt: string;
   invoiceNumber: string;
@@ -66,5 +76,6 @@ export interface TransactionRow {
   methods: { method: TenderMethod; last4: string | null }[];
   staff: { id: string; name: string | null } | null;
   amount: string;
+  amountMatch: "amount" | "payment" | null;
 }
 export type TransactionsPage = FindBillPage<TransactionRow> & { dates: DateWindow };

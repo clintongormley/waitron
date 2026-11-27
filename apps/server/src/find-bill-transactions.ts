@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
-import { AppError, rawCentsToDecimal } from "@waitron/shared";
+import { AppError, rawCentsToDecimal, stringToCents } from "@waitron/shared";
 import { findBillsRelation } from "./find-bill-bills.js";
 import { resolveFindBillDates } from "./find-bill-dates.js";
 import type {
@@ -9,8 +9,29 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
+
+/**
+ * The amount a search names, in cents, or null when it names none. `strong` when it was written as
+ * money, with a separator or a €, so its amount matches come before its word matches.
+ */
+export function amountSearchCents(q: string): { cents: number; strong: boolean } | null {
+  const parts = /^([-−]?)(€?)([-−]?)(\d+(?:[.,]\d{1,2})?)(€?)$/.exec(q.replace(/\s+/g, ""));
+  if (parts === null) return null;
+  const [, signBefore, euroBefore, signAfter, digits, euroAfter] = parts;
+  if ((signBefore !== "" && signAfter !== "") || (euroBefore !== "" && euroAfter !== ""))
+    return null;
+  let cents: number;
+  try {
+    cents = stringToCents(digits!.replace(",", "."));
+  } catch (error) {
+    if (error instanceof AppError) return null;
+    throw error;
+  }
+  return { cents, strong: euroBefore !== "" || euroAfter !== "" || /[.,]/.test(digits!) };
+}
 
 function scopeRelation(saleId?: string | SQL): SQL {
   return sql`with recursive invoice_scope(sale_id, source_sale_id) as (
@@ -55,7 +76,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
       and ((t.bill_payment_id is not null and p.bill_payment_id = t.bill_payment_id)
         or (t.bill_payment_id is null and p.bill_payment_id is null and p.sale_id = t.sale_id))
   ), order_labels as (
-    select so.sale_id, wo.id as order_id, wo.label, p.name as party_name,
+    select so.sale_id, wo.id as order_id, wo.order_number, wo.label, p.name as party_name,
       coalesce((select group_concat(j.value, ', ') from json_each(p.table_names) j),
         (select group_concat(d.label, ', ') from party_tables pt join dining_tables d on d.id = pt.table_id
           where pt.party_id = wo.party_id), dt.label, wo.delivery_table_label) as table_names
@@ -70,13 +91,13 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
         when s.corrects_sale_id is not null then 'correction'
         when s.counterparty_tax_id is not null then 'full-invoice' else 'sale' end as type,
       s.counterparty_legal_name as customer_name, s.operator_id, person.display_name as staff_name,
-      s.total as amount_cents,
+      s.total as amount_cents, own.order_number, own_zone.name as zone_name,
       (select json_group_array(so.order_id) from
         (select order_id from scope_orders where sale_id = s.id order by order_id) so) as scope_order_ids,
       (select group_concat(o.name, ', ') from
         (select distinct coalesce(nullif(label,''),party_name,table_names) as name
           from order_labels where sale_id = s.id order by name) o) as table_name,
-      (select group_concat(coalesce(o.label,'') || ' ' || coalesce(o.party_name,'') || ' ' || coalesce(o.table_names,''), ' ')
+      (select group_concat(o.order_number || ' ' || coalesce(o.label,'') || ' ' || coalesce(o.party_name,'') || ' ' || coalesce(o.table_names,''), ' ')
         from order_labels o where o.sale_id = s.id) as order_search,
       (select json_group_array(json_object('method',m.method,'last4',m.last4)) from
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as methods,
@@ -87,6 +108,10 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
         or exists(select 1 from sale_settlements ss where ss.sale_id = s.id)) as listed
     from sales s join invoice_series sr on sr.id = s.series_id
     left join persons person on person.id = s.operator_id
+    left join working_orders own on own.id = coalesce(s.working_order_id,
+      (select case when count(*) = 1 then min(so.order_id) end from scope_orders so
+        where so.sale_id = s.id))
+    left join floor_zones own_zone on own_zone.id = ${VENUE_SERVICE.orderZoneIdSql(sql`own.id`)}
     where ${scopeCondition(inZones)}
       and not exists(select 1 from sale_voids v where v.sale_id = s.id)
   ), refund_rows as (
@@ -102,7 +127,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
     union all
     select r.id, i.working_order_id, r.completed_at, i.series_code, i.number, i.invoice_number,
       'refund', i.customer_name, r.requested_by, person.display_name,
-      -(r.applied_amount + r.tip_amount), i.scope_order_ids, i.table_name, i.order_search,
+      -(r.applied_amount + r.tip_amount), i.order_number, i.zone_name, i.scope_order_ids, i.table_name, i.order_search,
       json_array(json_object('method',r.method,'last4',r.last4)),
       r.method || coalesce(r.last4,''), r.last4, i.listed, i.id, r.id
     from refund_rows r join invoices i on i.id = r.invoice_id
@@ -119,7 +144,9 @@ function filtered(query: TransactionsQuery, dates: DateWindow): SQL {
     clauses.push(
       sql`exists(select 1 from json_each(r.methods) m where json_extract(m.value,'$.method') = ${query.method})`,
     );
-  if (query.type !== undefined) clauses.push(sql`r.type = ${query.type}`);
+  if (query.type === "corrective")
+    clauses.push(sql`r.type in ('correction', 'full-correction', 'replacement')`);
+  else if (query.type !== undefined) clauses.push(sql`r.type = ${query.type}`);
   if (query.staffId !== undefined) clauses.push(sql`r.operator_id = ${query.staffId}`);
   return sql.join(clauses, sql` and `);
 }
@@ -146,6 +173,9 @@ type RawTransaction = {
   operator_id: string | null;
   staff_name: string | null;
   amount_cents: string;
+  order_number: number | null;
+  zone_name: string | null;
+  amount_match: TransactionRow["amountMatch"];
   scope_order_ids: string;
   methods: string;
 };
@@ -156,9 +186,28 @@ export async function readFindTransactions(
   inZones?: OrderZoneCondition,
 ): Promise<TransactionsPage> {
   const dates = resolveFindBillDates(await readVenueClock(tx), query.dates, new Date());
-  const ranked = sql`${findTransactionsRelation(inZones)}, ranked as materialized (
-    select r.*, ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q},r.invoice_number,r.customer_name,r.order_search,r.card_search)`} as search_rank from transactions r
-  )`;
+  const amount = amountSearchCents(query.q);
+  const amountMatch =
+    amount === null
+      ? sql`null`
+      : sql`case when abs(r.amount_cents) = ${amount.cents} then 'amount'
+          when r.refund_id is null and exists(select 1 from tenders t
+            where t.sale_id = r.sale_id and t.amount = ${amount.cents}
+              ${query.method === undefined ? sql`` : sql`and t.method = ${query.method}`}) then 'payment' end`;
+  const words =
+    query.q === ""
+      ? sql`0`
+      : sql`waitron_search_rank(${query.q},r.invoice_number,r.customer_name,r.order_search,r.card_search)`;
+  // Rank keys are never negative, so -1 puts amount matches first; 1e18 puts them after every word.
+  const rank =
+    amount === null
+      ? sql`m.word_rank`
+      : amount.strong
+        ? sql`case when m.amount_match is not null then -1 else m.word_rank end`
+        : sql`coalesce(m.word_rank, case when m.amount_match is not null then 1e18 end)`;
+  const ranked = sql`${findTransactionsRelation(inZones)}, matched as (
+    select r.*, ${words} as word_rank, ${amountMatch} as amount_match from transactions r
+  ), ranked as materialized (select m.*, ${rank} as search_rank from matched m)`;
   const where = filtered(query, dates);
   const { rows: counts } = await tx.execute<{ total: number }>(
     sql`${ranked} select count(*) as total from ranked r where ${where}`,
@@ -170,7 +219,8 @@ export async function readFindTransactions(
   const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;
   const { rows } = await tx.execute<RawTransaction>(sql`${ranked}
     select r.id,r.sale_id,r.refund_id,r.working_order_id,r.issued_at,r.invoice_number,r.type,r.table_name,r.customer_name,
-      r.operator_id,r.staff_name,cast(r.amount_cents as text) as amount_cents,r.scope_order_ids,r.methods
+      r.operator_id,r.staff_name,cast(r.amount_cents as text) as amount_cents,r.order_number,r.zone_name,
+      r.amount_match,r.scope_order_ids,r.methods
     from ranked r where ${where} order by r.search_rank, ${key} is null, ${key} ${direction},
       ${query.sort.key === "invoice" ? sql`r.number ${direction},` : sql``} r.id desc
     limit ${50} offset ${query.page * 50}`);
@@ -180,6 +230,8 @@ export async function readFindTransactions(
       refundId: row.refund_id,
       saleId: row.sale_id,
       workingOrderId: row.working_order_id,
+      orderNumber: row.order_number,
+      zoneName: row.zone_name,
       scopeOrderIds: JSON.parse(row.scope_order_ids) as string[],
       issuedAt: row.issued_at,
       invoiceNumber: row.invoice_number,
@@ -189,6 +241,7 @@ export async function readFindTransactions(
       methods: JSON.parse(row.methods) as TransactionRow["methods"],
       staff: row.operator_id === null ? null : { id: row.operator_id, name: row.staff_name },
       amount: rawCentsToDecimal(row.amount_cents),
+      amountMatch: row.amount_match,
     })),
     total: counts[0]!.total,
     openCount: open[0]!.total,
