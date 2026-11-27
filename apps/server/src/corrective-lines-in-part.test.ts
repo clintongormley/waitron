@@ -125,6 +125,102 @@ async function inPart(correctiveId: string) {
 
 const both = (names: string[]) => ({ answered: names, receipt: names, emailed: names });
 
+/** A full invoice to Bar Sol holding `lines`, paid in cash: its sale's filed rows. */
+async function paidFullInvoice(lines: { menuItemId: string; quantity: string }[], amount: string) {
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await inTx(venue, (tx) => addTabRound(tx, venue.cfg, bill.tabId, lines));
+  await fullInvoice(venue, bill.tabId, BAR_SOL);
+  await cashContribution(venue, bill.tabId, amount);
+  return filedOf(bill.tabId);
+}
+
+type Printed = { quantity: string; unitPrice?: string; inPart: boolean };
+/** How the receipt and the emailed document print the corrective's one row. */
+async function printedRow(correctiveId: string): Promise<{ receipt: Printed; emailed: Printed }> {
+  const shown = (line: {
+    quantity: string;
+    net?: { unitPrice: string };
+    givenBackInPart?: true;
+  }): Printed => ({
+    quantity: line.quantity,
+    ...(line.net === undefined ? {} : { unitPrice: line.net.unitPrice }),
+    inPart: line.givenBackInPart === true,
+  });
+  const receipt = await inTx(venue, (tx) =>
+    readTransactionReceipt(venue.backend, tx, venue.cfg, correctiveId),
+  );
+  const emailed = await inTx(venue, (tx) =>
+    readReceiptEmailDocument(venue.backend, tx, venue.cfg, correctiveId),
+  );
+  expect(receipt.lines).toHaveLength(1);
+  expect(emailed.result.lines).toHaveLength(1);
+  return { receipt: shown(receipt.lines[0]!), emailed: shown(emailed.result.lines[0]!) };
+}
+
+const onBoth = (printed: Printed) => ({ receipt: printed, emailed: printed });
+
+describe("whole dishes given back from a full invoice's row of three burgers at 12.00", () => {
+  const threeBurgers = async () => {
+    const filed = await paidFullInvoice(
+      [{ menuItemId: venue.item("Burger"), quantity: "3" }],
+      "36.00",
+    );
+    expect(filed.rows[0]).toMatchObject({ quantity: 3000, lineGross: 3600, unitPrice: 1091 });
+    return filed;
+  };
+
+  it("as one burger's money prints -1 at the burger's price", async () => {
+    const { saleId, rows } = await threeBurgers();
+    const correctiveId = await giveBack(saleId, "12.00", [rows[0]!.id]);
+    expect(await inPart(correctiveId)).toEqual(both([]));
+    expect(await printedRow(correctiveId)).toEqual(
+      onBoth({ quantity: "-1", unitPrice: "10.91", inPart: false }),
+    );
+  });
+
+  it("as two burgers' money prints -2 at the burger's price", async () => {
+    const { saleId, rows } = await threeBurgers();
+    const correctiveId = await giveBack(saleId, "24.00", [rows[0]!.id]);
+    expect(await printedRow(correctiveId)).toEqual(
+      onBoth({ quantity: "-2", unitPrice: "10.91", inPart: false }),
+    );
+  });
+
+  it("as all three burgers' money prints -3, the whole row", async () => {
+    const { saleId, rows } = await threeBurgers();
+    const correctiveId = await giveBack(saleId, "36.00", [rows[0]!.id]);
+    expect(await printedRow(correctiveId)).toEqual(
+      onBoth({ quantity: "-3", unitPrice: "10.91", inPart: false }),
+    );
+  });
+
+  it("as half of one burger's money is in part", async () => {
+    const { saleId, rows } = await threeBurgers();
+    const correctiveId = await giveBack(saleId, "6.00", [rows[0]!.id]);
+    expect(await inPart(correctiveId)).toEqual(both(["Burger"]));
+    expect((await printedRow(correctiveId)).receipt.inPart).toBe(true);
+  });
+
+  it("as one burger and a cent is in part", async () => {
+    const { saleId, rows } = await threeBurgers();
+    const correctiveId = await giveBack(saleId, "12.01", [rows[0]!.id]);
+    expect(await inPart(correctiveId)).toEqual(both(["Burger"]));
+  });
+});
+
+describe("a dish on its own row given back whole", () => {
+  it("prints -1 at its price", async () => {
+    const { saleId, rows } = await paidFullInvoice(
+      [{ menuItemId: venue.item("Burger"), quantity: "1" }],
+      "12.00",
+    );
+    const correctiveId = await giveBack(saleId, "12.00", [rows[0]!.id]);
+    expect(await printedRow(correctiveId)).toEqual(
+      onBoth({ quantity: "-1", unitPrice: "10.91", inPart: false }),
+    );
+  });
+});
+
 describe("a corrective row given back", () => {
   it("as 6.82 of a paella of one is in part", async () => {
     const { saleId, rows } = await paidBill(
@@ -134,13 +230,15 @@ describe("a corrective row given back", () => {
     expect(await inPart(await giveBack(saleId, "6.82", [rows[0]!.id]))).toEqual(both(["Paella"]));
   });
 
-  it("as one burger's money of a row of three is in part", async () => {
+  it("as one burger's money of a row of three is whole", async () => {
     const { saleId, rows } = await paidBill(
       [{ menuItemId: venue.item("Burger"), quantity: "3" }],
       "36.00",
     );
     expect(rows[0]).toMatchObject({ quantity: 3000, lineGross: 3600 });
-    expect(await inPart(await giveBack(saleId, "12.00", [rows[0]!.id]))).toEqual(both(["Burger"]));
+    const correctiveId = await giveBack(saleId, "12.00", [rows[0]!.id]);
+    expect(await inPart(correctiveId)).toEqual(both([]));
+    expect(await printedRow(correctiveId)).toEqual(onBoth({ quantity: "-1", inPart: false }));
   });
 
   it("as two halves of one paella is in part, each time", async () => {
@@ -161,6 +259,12 @@ describe("a corrective row given back", () => {
     );
     expect(rows[0]).toMatchObject({ quantity: 350, lineGross: 182 });
     expect(await inPart(await giveBack(saleId, "1.82", [rows[0]!.id]))).toEqual(both([]));
+  });
+
+  it("as one kilo's money of 2 kg at 5.20/kg is in part", async () => {
+    const { saleId, rows } = await paidBill([{ menuItemId: cheeseItem, quantity: "2" }], "10.40");
+    expect(rows[0]).toMatchObject({ quantity: 2000, lineGross: 1040 });
+    expect(await inPart(await giveBack(saleId, "5.20", [rows[0]!.id]))).toEqual(both(["Cheese"]));
   });
 
   // The lemonade's filed gross, 1.92, is all its set menu's part; giving back all of it negates
