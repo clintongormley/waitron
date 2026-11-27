@@ -278,7 +278,6 @@ import type {
   PayRequest,
   PayTaken,
   PayWay,
-  RefundNotice,
 } from "./widgets/bill-pay-dialog.js";
 import type { ReaderStopControl } from "./widgets/card-waiting.js";
 import "./widgets/bill-refund-dialog.js";
@@ -356,6 +355,8 @@ import {
   replaceCardAllocation,
   sameCardAllocation,
   tablePayContext,
+  type BillPaying,
+  type PayingOrder,
   type TablePayQuote,
   type TablePayQuoteRequest,
 } from "./state/table-pay-quote.js";
@@ -1503,19 +1504,6 @@ interface Adjusting {
   busy: boolean;
 }
 
-/** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
- * visit, or the counter's stored order in the basket, whose `visit` is the operator session. */
-interface PayingOrder {
-  surface: "table" | "counter";
-  billId: string;
-  visit: number;
-  /** The bill's receipt was issued before the window opened, so the payment settling it issues none. */
-  printed?: boolean;
-  /** A bill Find bill pays without loading it into a screen: the edit state its row was read with,
-   * sent in place of the basket's; undefined when the row carried none. */
-  found?: { expectedEdit: BillEditExpected | null | undefined };
-}
-
 /** The presented bill's sheet, open on `billId`. */
 interface PresentedPaying {
   id: number;
@@ -1556,25 +1544,6 @@ interface PendingReread {
   pending: Map<string, PayTaken>;
   timer: ReturnType<typeof setInterval>;
   out: boolean;
-}
-
-/** The bill payment dialog: the order it pays, and what the server last answered it. */
-interface BillPaying extends PayingOrder {
-  id: number;
-  way: PayWay;
-  amount: string;
-  lines: PayLine[];
-  balance: BillBalance | null;
-  asked: PayRequest | null;
-  preview: AllocationPreview | null;
-  quote?: TablePayQuote;
-  expectedEdit: BillEditExpected | null;
-  refusal: PayRefusal | null;
-  taken: PayTaken | null;
-  refunded: RefundNotice | null;
-  /** The printed bill this window paid from was credited and reopened as the bill it is now on. */
-  credited?: BillNotice;
-  busy: boolean;
 }
 
 /** The window asking before a bill is closed as a deferred payment: the bill row it shows, read

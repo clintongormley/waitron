@@ -1072,10 +1072,9 @@ queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artícu
 concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
 si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
-rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
-cuenta. Si no pueden volver, por ejemplo porque esta cuenta se imprimió o se cobró mientras la
-tarjeta estaba en curso, se quedan en una cuenta propia, para cobrarlos allí: en una mesa aparece
-en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
+rechaza o pulsas **Cancelar cobro**, comprueba si los platos están en esta cuenta antes de volver a
+cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa o desde
+**Pedidos aparcados** en Mostrador. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
 anula el ticket y reabre la cuenta. En un pedido de mostrador ya enviado a cocina y aún sin
