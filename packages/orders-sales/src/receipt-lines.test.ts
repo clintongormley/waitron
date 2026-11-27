@@ -320,6 +320,19 @@ describe("mergeIdenticalGroups", () => {
     ]);
   });
 
+  it("never joins rows whose only difference is an extra given back in part", () => {
+    const dish = row("Burger", "1", "10.00", { givenBackInPart: true });
+    const cheese = row("Cheese", "1", "1.00", { parentLineNo: 1 });
+    const partCheese = { ...cheese, givenBackInPart: true as const };
+    expect(printed([dish, partCheese, { ...dish }, { ...partCheese, parentLineNo: 3 }])).toEqual([
+      ["Burger", "2", "20.00", ["Cheese", "2", "2.00"]],
+    ]);
+    expect(printed([dish, partCheese, { ...dish }, { ...cheese, parentLineNo: 3 }])).toEqual([
+      ["Burger", "1", "10.00", ["Cheese", "1", "1.00"]],
+      ["Burger", "1", "10.00", ["Cheese", "1", "1.00"]],
+    ]);
+  });
+
   it("A803 portion grouping: rows at one unit price group whatever each row's count", () => {
     expect(printed([row("Beer", "2", "3.00"), row("Beer", "1", "1.50")])).toEqual([
       ["Beer", "3", "4.50"],
