@@ -286,6 +286,54 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     expect(Math.abs(one.price.right - (one.inner - one.space))).toBeLessThanOrEqual(0.5);
   });
 
+  it("an opened row whose period ended keeps an opened row's tick inset and shows the amber stripe inside its box", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: croquettes, quantity: "1" },
+      { product: bravas, quantity: "1" },
+      { product: dish("olives", "Olives"), quantity: "1" },
+    ]);
+    store.setEndedPeriods([
+      undefined,
+      { menuId: "lunch", periodName: "Lunch" },
+      { menuId: "lunch", periodName: "Lunch" },
+    ]);
+    const { el } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
+    const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+    await basket.updateComplete;
+    const entry = (index: number) =>
+      basket
+        .shadowRoot!.querySelector(`[data-draft-row="${index}"]`)!
+        .closest<HTMLElement>(".entry")!;
+    const open = async (index: number) => {
+      await userEvent.click(
+        basket.shadowRoot!.querySelector<HTMLElement>(`[data-draft-row="${index}"]`)!,
+      );
+      await el.updateComplete;
+      await basket.updateComplete;
+      const box = entry(index);
+      expect(box.hasAttribute("data-open")).toBe(true);
+      const style = getComputedStyle(box);
+      return {
+        inset:
+          box.querySelector(".draft-row-lead")!.getBoundingClientRect().left -
+          (box.getBoundingClientRect().left + Number.parseFloat(style.borderLeftWidth)),
+        shadow: style.boxShadow,
+      };
+    };
+    const closedEnded = getComputedStyle(entry(2));
+    expect(entry(2).classList.contains("period-ended-entry")).toBe(true);
+    const amber = closedEnded.borderLeftColor;
+    const stripe = closedEnded.borderLeftWidth;
+    expect(Number.parseFloat(stripe)).toBeGreaterThan(0);
+    const plain = await open(0);
+    const ended = await open(1);
+    expect(Math.abs(ended.inset - plain.inset)).toBeLessThanOrEqual(0.5);
+    expect(plain.shadow).not.toContain(amber);
+    expect(ended.shadow).toContain(amber);
+    expect(ended.shadow).toContain(`${stripe} 0px 0px 0px inset`);
+  });
+
   it("a disabled row has no violations", async () => {
     const { el, host } = await mount(theme, [{ product: croquettes, quantity: "1" }], {
       orderInFlight: true,

@@ -234,6 +234,12 @@ export const draftRowStyles = css`
     background: var(--wt-color-surface);
     box-shadow: none;
   }
+  /* The box's border replaces a period-ended row's amber edge and its padding; the stripe is drawn
+     inside the box instead, so the tick keeps every opened row's inset. */
+  :host .order-lines > .entry.draft-row.period-ended-entry[data-open] {
+    padding-inline-start: 0;
+    box-shadow: inset var(--wt-space-1) 0 0 var(--wt-color-warning);
+  }
   :host .order-lines > .entry.draft-row[data-draft-dragging] {
     outline: 2px solid var(--wt-color-primary);
     outline-offset: -2px;
