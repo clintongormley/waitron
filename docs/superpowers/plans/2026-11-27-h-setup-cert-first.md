@@ -1,47 +1,51 @@
 # Setup reads the AEAT certificate before the venue details
 
-An administrator starting a live venue that files with AEAT chooses its certificate before entering
-the venue details. The certificate fills the tax number and legal name. The number is read-only
-when present. The administrator can correct the name that will appear on receipts. Queue
-`SETUP-CERT-FIRST-2`, cleared for planning by the watcher on 27 November at 13:04 after #4489 landed.
+On fresh live AEAT setup, choose the certificate before entering the venue details. The certificate
+fills the tax number when present. You can correct the legal name printed on receipts. The queue item
+is SETUP-CERT-FIRST-2. The watcher cleared planning on 27 November at 13:04, after #4489 landed.
+Claude's 27 November plan review removed a proposed location step. Implementation awaits watcher
+clearance and the owner lands the product PR.
 
-1. **Read the file using the existing setup checks.** In
-   `packages/fiscal-verifactu/src/provisioning-secret.ts` and `slot.ts`, share the reader and
-   date checks between a new optional `provisioningSecret.inspect(raw)` in
-   `packages/fiscal/src/contribution.ts` and the existing `validate(raw, { taxId })`. Inspection
-   returns only `{ taxId: string | null, legalName: string | null }` from subject
-   `organizationIdentifier` and `O`; the taxpayer comparison stays in validation. In
-   `apps/server/src/setup-api.ts` mount a small `setup-certificate-inspection.ts` behind the
-   setup guards. Its same-origin HTTPS JSON POST `/setup-api/certificate/inspect` caps the request
-   at the reader's input limit, derives the regime from the selected country and province just as
-   `setup-provision-input.ts` does, and uses the optional seat for production only. Use existing
-   setup errors. Send no secrets in the reply or logs. This reads the file locally and makes no setup
-   reservation, credential, or AEAT request. Keep the full fiscal test and provision checks.
-2. **Put the certificate before the venue form.** In `apps/setup/src/setup-app.ts` and `events.ts`,
-   insert a short location step for a fresh live production setup. Use the country and province
-   choices and jurisdiction rules already in `screens/venue-screen.ts`. On AEAT territory the
-   path is location, certificate, venue, existing claim, fiscal test. Other territories go from
-   location to typed details. Add `api/client.ts`'s `inspectCertificate` and reuse
-   `screens/cert-screen.ts` for early checking and existing later replacement. Settle the child
-   draft on success and keep the result in the wizard's in-memory draft. Ignore a reply if its file,
-   passphrase, or screen changed. The venue screen uses the existing field primitive and explains the
-   locked number beneath it. Missing number or name stays editable. Use wizard Back to change
-   location or certificate before claim; a different location or replacement cannot inherit the
-   previous certificate's values. An address suggestion that changes jurisdiction sends the
-   operator back through the location choice before claim. Keep Demo, Preparation, development,
-   certificate-free imports and recovery on their current entry paths. A resumed or frozen attempt
-   keeps its saved details and today's replacement check; use the existing abandon-and-replace flow
-   to change taxpayer. Do not persist the inspection reply, file or passphrase in new storage.
-3. **Verify from the two entry points.** First fail and then pass the new cases in
-   `apps/server/src/setup-certificate.test.ts` (real file, missing subject fields, bad passphrase,
-   no writes, and existing later mismatch refusal) and `apps/setup/src/setup-app-cert-first.test.ts`
-   (real wizard navigation, editable name, read-only number, Back/replacement and stale reply,
-   manual path without a number, other territory, import and frozen resume). Run the changed
-   certificate, venue, first-setup and unsaved changes suites, plus the queue's unchanged fiscal and
-   menu guards. Update `apps/setup/src/i18n/strings/venue.ts`, setup help and both
-   `apps/server/src/guide/{en,es}/aeat-certificate.md` guides. Review the screens in English and
-   Spanish, light and dark, phone and desktop. Send the pictures to the watcher before the owner
-   lands it. Reconcile A1571's open Mac and certificate-type branches before pushing.
+1. **Open the certificate locally.** Add optional `provisioningSecret.inspect(raw)` in
+   `packages/fiscal/src/contribution.ts`. Wire it in `packages/fiscal-verifactu/src/slot.ts` and share
+   the file and date checks in `provisioning-secret.ts` with `validateSetupAeatCert`, which still
+   compares the tax number at fiscal test and provision. Inspection returns only the current
+   reader's subject tax number and organisation name as `{ taxId, legalName }`, each nullable.
+   In `apps/server/src/setup-api.ts` mount `setup-certificate-inspection.ts` for a same-origin HTTPS
+   JSON POST to `/setup-api/certificate/inspect`. Use `sentFromThisOrigin`, `isSecure`, a 256 KiB
+   `bodyLimit` and the existing `too_large` certificate refusal. Use the existing
+   `venueFiscalSelection` for the supplied territorial id and require the inspection seat for
+   production. Follow `join/start` for the first-setup hold check without holding the coordinator
+   during inspection, and allow one read at a time as the fiscal test does. Return no secrets,
+   set no-store and keep the returned identity out of logs. Opening the file creates no reservation
+   or credential and makes no AEAT request.
+2. **Use admin → certificate → venue on fresh live setup.** In `apps/setup/src/setup-app.ts`, route
+   Start empty and Enter new setup details through the existing `screens/cert-screen.ts`. ES-common
+   is the only supported territory offered in this wizard today. Keep the venue's existing territory
+   selection and refusals. Demo, Preparation, development, configuration imports and recovery
+   use their existing paths. Use `api/client.ts` for inspection and discard a reply if the file,
+   passphrase or screen changes. Keep source details in a private wizard field outside `ProvisionBody`;
+   clear it on mode change and when the wizard accepts the frozen venue. Check the returned number
+   with the current country validator before leaving Certificate and explain an invalid number at
+   the file field. In `screens/venue-screen.ts`, show a valid supplied number read-only and explain
+   the lock below it. Missing subject fields stay typed.
+   Back from Venue opens Certificate before claim. Checking the same source details preserves a
+   corrected name. A different identity replaces the old defaults and clears any old derived value
+   for a field the new file omits.
+3. **Continue from the saved details after claim.** In `#afterFirstOwner`, a certificate held in
+   memory leads to Fiscal test. When a reload or another browser carries on without it, the
+   certificate step changes only `aeatCert` and the full test still compares the frozen number.
+   That same path handles replacements after claim. Replacing the taxpayer follows the existing
+   abandon-and-replace route. The browser keeps the certificate only in the existing in-memory draft.
+4. **Verify before and after.** In `apps/server/src/setup-certificate.test.ts` test real files, missing
+   subject fields, wrong passphrase, HTTPS/origin and size refusals, no setup write, and the existing
+   later mismatch. In `apps/setup/src/setup-app-cert-first.test.ts` test the native number field,
+   editable name, same and different certificate on Back, stale reply, missing or invalid number,
+   manual/import paths and frozen resume. Run the existing certificate, venue, first-setup and draft
+   checks plus the unchanged fiscal and menu gates. Update `apps/setup/src/i18n/strings/venue.ts`
+   and the `apps/server/src/guide/{en,es}/aeat-certificate.md` twins. Show the watcher the English and
+   Spanish screens in both themes at phone and desktop widths. Reconcile the A1571 Mac reader and
+   certificate-type changes with Lane C's branch before pushing.
 
-Estimate: 390–490 product lines and 210–270 test lines in one PR. No changes to allocation, recovery
-copies, fiscal record construction, or certificate policy.
+Estimate: 260–340 product lines and 180–240 test lines, one PR. The scope is the wizard and local
+certificate inspection. Allocation, fiscal records, recovery copies and certificate policy are outside it.
