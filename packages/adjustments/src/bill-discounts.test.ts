@@ -4,7 +4,9 @@ import {
   workOutBillDiscounts,
   type BillDiscountLine,
   type BillDiscountTarget,
+  type BillDiscountRow,
   type PendingBillDiscount,
+  type WorkedBill,
   type WorkedBillDiscount,
 } from "./bill-discounts.js";
 
@@ -98,6 +100,33 @@ function rowsOf(discount: WorkedBillDiscount): Record<string, string[]> {
       rows.map(({ quantity, unit }) => `${quantity}@${unit}`),
     ]),
   );
+}
+
+/**
+ * Replays each discount's rows over the bill and fails when one raises a row's price, or when
+ * what it says it takes differs from what the bill's total actually drops by.
+ */
+function expectHonest(lines: readonly BillDiscountLine[], result: WorkedBill): void {
+  const rowsNow = new Map(
+    lines.map(({ id, lineNo, quantity, unit, lineTotal }) => [
+      id,
+      [{ id, lineNo, quantity, unit, total: lineTotal }] as BillDiscountRow[],
+    ]),
+  );
+  const billTotal = () =>
+    [...rowsNow.values()].flat().reduce((sum, { total: rowTotal }) => sum + rowTotal, 0);
+  const start = billTotal();
+  for (const discount of result.discounts) {
+    const before = billTotal();
+    for (const { lineId, rows } of discount.lines) {
+      const old = new Map(rowsNow.get(lineId)!.map((row) => [row.id, row.unit]));
+      const highest = Math.max(...old.values());
+      for (const row of rows) expect(row.unit).toBeLessThanOrEqual(old.get(row.id) ?? highest);
+      rowsNow.set(lineId, rows);
+    }
+    expect(discount.takes).toBe(before - billTotal());
+  }
+  expect(result.takes).toBe(start - billTotal());
 }
 
 describe("workOutBillDiscounts: spec 7.3's worked examples", () => {
@@ -212,6 +241,36 @@ describe("workOutBillDiscounts: the order discounts are worked out in", () => {
     expect(worked(result, "ten")).toMatchObject({ holds: "yes", takes: 0, lines: [] });
   });
 
+  it("keeps the order given between Free and a discount on another line", () => {
+    const lines = [line("burger", 1, 1000), extra("chips", 2, "burger", 200)];
+    const result = workOutBillDiscounts(lines, [
+      free("free", on("burger"), 2),
+      amount("share", on("chips"), 100, 1, "bill_share"),
+    ]);
+    expect(result.discounts.map(({ id }) => id)).toEqual(["share", "free"]);
+    expect(worked(result, "share")).toMatchObject({ holds: "yes", takes: 100 });
+    expect(worked(result, "free").takes).toBe(1100);
+    expectHonest(lines, result);
+  });
+
+  it("brings Free forward only to its own line's first discount", () => {
+    const result = workOutBillDiscounts(
+      [line("steak", 1, 1000), line("wine", 2, 800)],
+      [
+        free("free", on("steak"), 3),
+        percent("wine", on("wine"), 1000, 2),
+        percent("ten", on("steak"), 1000, 1),
+      ],
+    );
+    expect(result.discounts.map(({ id }) => id)).toEqual(["free", "ten", "wine"]);
+
+    const twice = workOutBillDiscounts(
+      [line("steak", 1, 1000)],
+      [free("second", on("steak"), 2), free("first", on("steak"), 1)],
+    );
+    expect(twice.discounts.map(({ id }) => id)).toEqual(["first", "second"]);
+  });
+
   it("works two discounts on one dish out in the order they were given", () => {
     const result = workOutBillDiscounts(
       [line("steak", 1, 1000)],
@@ -299,6 +358,14 @@ describe("workOutBillDiscounts: what a set-menu discount covers", () => {
     expect(rowsOf(worked(result, "big"))).toEqual({ burger: ["1000@0"], chips: ["1000@0"] });
   });
 
+  it("cuts a bill's amount down to nothing on a bill with no lines", () => {
+    const result = workOutBillDiscounts([], [amount("one", bill, 100, 1)]);
+    expect(result).toEqual({
+      discounts: [{ id: "one", holds: "cut_down", takes: 0, lines: [] }],
+      takes: 0,
+    });
+  });
+
   it("cuts a bill's amount down to the bill", () => {
     const result = workOutBillDiscounts(
       [line("wine", 1, 800, { unitPrecision: null })],
@@ -318,6 +385,21 @@ describe("workOutBillDiscounts: weighed lines and shares of a bill", () => {
     expect(worked(result, "three")).toMatchObject({ holds: "yes", takes: 2 });
     expect(result.takes).toBe(2);
     expect(rowsOf(worked(result, "three"))).toEqual({ ham: ["2000@299"] });
+  });
+
+  it("makes a line Free at a zero price even when its total was already nothing", () => {
+    const result = workOutBillDiscounts(
+      [line("salt", 1, 1, { quantity: 100, unitPrecision: 3 })],
+      [free("free", on("salt"), 1)],
+    );
+    expect(worked(result, "free")).toEqual({
+      id: "free",
+      holds: "yes",
+      takes: 0,
+      lines: [
+        { lineId: "salt", rows: [{ id: "salt", lineNo: 1, quantity: 100, unit: 0, total: 0 }] },
+      ],
+    });
   });
 
   it("lets an extra take the cent its weighed dish cannot", () => {
@@ -409,6 +491,32 @@ describe("workOutBillDiscounts: a line an earlier discount split", () => {
     ]);
   });
 
+  it("gives the cent a cheaper part cannot take to a part that can", () => {
+    // 2.02 off four 1.00 beers leaves two at 0.50 and two at 0.49: 1.98 is all that is left.
+    const lines = [line("beer", 1, 100, { quantity: 4000 })];
+    const result = workOutBillDiscounts(lines, [
+      amount("first", on("beer"), 202, 1),
+      amount("rest", on("beer"), 198, 2),
+    ]);
+    expect(rowsOf(worked(result, "first"))).toEqual({ beer: ["2000@50", "2000@49"] });
+    expect(worked(result, "rest")).toMatchObject({ holds: "yes", takes: 198 });
+    expect(rowsOf(worked(result, "rest"))).toEqual({ beer: ["2000@0", "2000@0"] });
+    expectHonest(lines, result);
+  });
+
+  it("takes every part to zero when an amount is larger than what the line costs", () => {
+    // 3.98 off four 1.00 beers leaves two at 0.01 and two free.
+    const lines = [line("beer", 1, 100, { quantity: 4000 })];
+    const result = workOutBillDiscounts(lines, [
+      amount("first", on("beer"), 398, 1),
+      amount("three", on("beer"), 3, 2),
+    ]);
+    expect(rowsOf(worked(result, "first"))).toEqual({ beer: ["2000@1", "2000@0"] });
+    expect(worked(result, "three")).toMatchObject({ holds: "cut_down", takes: 2 });
+    expect(rowsOf(worked(result, "three"))).toEqual({ beer: ["2000@0", "2000@0"] });
+    expectHonest(lines, result);
+  });
+
   it("lets the bill's discount cover every part", () => {
     const result = workOutBillDiscounts(beers(), [
       amount("cent", on("beer"), 1, 1),
@@ -444,6 +552,96 @@ describe("workOutBillDiscounts: bound portions", () => {
       [amount("one", bill, 1, 1)],
     );
     expect(rowsOf(worked(result, "one"))).toEqual({ p2: ["1000@999"] });
+  });
+
+  it("files bound portions apart once a dish's own discount leaves them at different prices", () => {
+    const pair = () => [portion("p1", 1, 0), portion("p2", 2, 1)];
+    const half = workOutBillDiscounts(pair(), [
+      percent("half", on("p1"), 5000, 1),
+      percent("ten", bill, 1000, 2),
+    ]);
+    expect(worked(half, "ten").takes).toBe(150);
+    expect(rowsOf(worked(half, "ten"))).toEqual({ p1: ["1000@450"], p2: ["1000@900"] });
+    expectHonest(pair(), half);
+
+    const freed = workOutBillDiscounts(pair(), [
+      free("free", on("p2"), 1),
+      amount("one", bill, 100, 2),
+    ]);
+    expect(worked(freed, "one")).toMatchObject({ holds: "yes", takes: 100 });
+    expect(rowsOf(worked(freed, "one"))).toEqual({ p1: ["1000@900"] });
+    expectHonest(pair(), freed);
+
+    const five = workOutBillDiscounts(pair(), [
+      amount("five", on("p1"), 500, 1),
+      percent("ten", bill, 1000, 2),
+    ]);
+    expect(rowsOf(worked(five, "ten"))).toEqual({ p1: ["1000@450"], p2: ["1000@900"] });
+    expectHonest(pair(), five);
+  });
+
+  it("files bound portions apart once their extras are at different prices", () => {
+    const lines = [
+      portion("d1", 1, 0),
+      portion("d2", 2, 1),
+      line("e1", 3, 100, { parentLineId: "d1", portion: { group: "sauce", ordinal: 0 } }),
+      line("e2", 4, 100, { parentLineId: "d2", portion: { group: "sauce", ordinal: 0 } }),
+    ];
+    const result = workOutBillDiscounts(lines, [
+      free("free", on("e1"), 1),
+      amount("three", bill, 3, 2),
+    ]);
+    // As two rows of 10.00 each takes 0.01 and the tie for the third goes to the earlier line;
+    // as one row of 20.00 it would take all three, 9.99 and 9.98.
+    expect(rowsOf(worked(result, "three"))).toEqual({ d1: ["1000@998"], d2: ["1000@999"] });
+    expectHonest(lines, result);
+  });
+
+  it("files each extra of bound portions with the matching extra of the other portions", () => {
+    const side = (id: string, lineNo: number, parent: string, group: string, unit: number) =>
+      line(id, lineNo, unit, { parentLineId: parent, portion: { group, ordinal: 0 } });
+    const lines = [
+      portion("d1", 1, 0),
+      portion("d2", 2, 1),
+      side("s1", 3, "d1", "sauce", 100),
+      side("b1", 4, "d1", "bread", 50),
+      side("b2", 5, "d2", "bread", 50),
+      side("s2", 6, "d2", "sauce", 100),
+    ];
+    const result = workOutBillDiscounts(lines, [percent("ten", bill, 1000, 1)]);
+    expect(rowsOf(worked(result, "ten"))).toEqual({
+      d1: ["1000@900"],
+      d2: ["1000@900"],
+      s1: ["1000@90"],
+      b1: ["1000@45"],
+      b2: ["1000@45"],
+      s2: ["1000@90"],
+    });
+    expectHonest(lines, result);
+  });
+
+  it("files every other line of a bill holding bound portions as a row of its own", () => {
+    const lines = [
+      portion("p1", 1, 0),
+      portion("p2", 2, 1),
+      line("beer", 3, 1003, { quantity: 3000, unitPrecision: null }),
+      line("wine", 4, 800),
+      extra("lime", 5, "wine", 50),
+    ];
+    const result = workOutBillDiscounts(lines, [
+      amount("cent", on("beer"), 1, 1),
+      amount("hundred", bill, 100, 2),
+    ]);
+    // Over 20.00, 20.06, 10.02, 8.00 and 0.50: shares 0.34, 0.34, 0.17, 0.14 and 0.01.
+    expect(worked(result, "hundred").takes).toBe(100);
+    expect(rowsOf(worked(result, "hundred"))).toEqual({
+      p1: ["1000@983"],
+      p2: ["1000@983"],
+      beer: ["2000@986", "1000@985"],
+      wine: ["1000@786"],
+      lime: ["1000@49"],
+    });
+    expectHonest(lines, result);
   });
 
   it("files bound portions' extras in their dishes' order, whatever their own line numbers", () => {
