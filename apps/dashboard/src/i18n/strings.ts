@@ -8880,7 +8880,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.override_cleared": "{name}: ya no tiene precio propio en esta carta",
   "menu_preview.allergens_count_one": "1 producto con alérgenos sin revisar",
   "menu_preview.allergens_count": "{count} productos con alérgenos sin revisar",
-  "menu_preview.allergens_extra_on": "{name} (extra de {dishes})",
+  "menu_preview.allergens_extra_on": "{name} (extra para {dishes})",
   "menu_preview.shortcuts_count_one": "1 acceso directo de inicio sin destino",
   "menu_preview.shortcuts_count": "{count} accesos directos de inicio sin destino",
   "menu_preview.portions_count_one": "1 extra con una porción por revisar",
