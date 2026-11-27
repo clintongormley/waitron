@@ -1,5 +1,5 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
-import { closePartyTables } from "./parties.js";
+import { closePartyTables } from "./party-close.js";
 import { deleteZone } from "@waitron/venue-service";
 import { floorDeletionFor } from "./floor-delete.js";
 import { createTable } from "./testing/live-table.js";

@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, diningTables } from "@waitron/db";
 import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { leaveForClearing, markTableCleared } from "./parties.js";
+import { leaveForClearing, markTableCleared } from "./party-close.js";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import {
   floorRow,

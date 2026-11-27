@@ -40,7 +40,7 @@ export function owing(bill: Pick<PartyBill, "status">): boolean {
 
 /** The bill Finish table's refusal names: one owing money first, then one paid over its total,
  * then an open bill with nothing to pay on it, which may hold no dish, and Finish does not wait for
- * a bill with no dish (`billOwes`, apps/server/src/parties.ts); within each, a bill other than
+ * a bill with no dish (`billOwes`, apps/server/src/party-close.ts); within each, a bill other than
  * `shownId` first, as the bill on screen is charged below. */
 export function finishBlocker(
   bills: readonly PartyBill[],

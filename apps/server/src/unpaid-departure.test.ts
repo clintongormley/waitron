@@ -5,11 +5,8 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import {
-  closingEditsForTest,
-  readBillsOfParties,
-  billOwes,
-} from "./testing/party-close-fixture.js";
+import { closingEditsForTest, readBillsOfParties } from "./testing/party-close-fixture.js";
+import { billOwes } from "./party-close.js";
 import { addGroupedTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";

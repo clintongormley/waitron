@@ -2561,7 +2561,7 @@ at their own recorded place. `floor-catch-up.test.ts` exercises these cases at t
 the resulting map. Mark moved and Back to its saved place accept occupied places.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
-(`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery
+(`closePartyTables`, `apps/server/src/party-close.ts`). Permanent removal releases order delivery
 references and calls each module's `TableRemoval` seat before deleting the table
 (`apps/server/src/table-removal.ts`). Boot supplies these contributions from modules with an applied
 schema version above zero, including switched-off modules; never-installed modules are left out.
@@ -2629,7 +2629,7 @@ was issued with. The closing party's `table_names`, the orders list and its tabl
 names.
 
 Back to its saved place puts a table at its reset row's place; on a table that needs moving it is
-Mark moved (`backToSaved`, `apps/server/src/floor-today-store.ts`). Back takes the table out of
+Mark moved (`backToSaved`, `apps/server/src/floor-today-edits.ts`). Back takes the table out of
 its merge first: in a merge of three the partners stay where they stand, and in a merge of two the
 partner goes back to where it stood before the merge.
 

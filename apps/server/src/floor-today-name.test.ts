@@ -9,16 +9,15 @@ import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
 import { nameToday, sameName } from "./floor-today-name.js";
 import { splitOff } from "./floor-today-split-group.js";
+import { ensureToday, resetZone } from "./floor-today-store.js";
 import {
   backToSaved,
-  ensureToday,
   moveToday,
   putBackToday,
-  resetZone,
   rotateToday,
   seatsToday,
   takeOffToday,
-} from "./floor-today-store.js";
+} from "./floor-today-edits.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable, partyRevision } from "./testing/party-close-fixture.js";
 import { moveGuests, splitTable } from "./testing/table-action-fixture.js";

@@ -1,7 +1,8 @@
 import type { Database, Transaction } from "@waitron/db";
 import type { BillEditExpected } from "../order-drafts.js";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
-import { closeParty as close, finishTable as finish, partyFamily } from "../parties.js";
+import { partyFamily } from "../parties.js";
+import { closeParty as close, finishTable as finish } from "../party-close.js";
 export * from "../parties.js";
 
 export async function closingEditsForTest(tx: Transaction, partyId: string) {
