@@ -192,6 +192,8 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           }
           await pressed(el, "[data-quiet-pay-tip]");
           const tipField = el.shadowRoot!.querySelector('wt-input[name="cardTip"]')!;
+          const remove = el.shadowRoot!.querySelector("[data-clear-card-tip]")!;
+          expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(true);
           const tipFieldTop = tipField.getBoundingClientRect().top;
           await typed(el, "cardTip", locale === "en" ? "87.32" : "87,32");
           expect(tipField.getBoundingClientRect().top).toBe(tipFieldTop);
@@ -237,6 +239,22 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           await page.screenshot({
             path: `__screenshots__/quiet-pay-q1-${locale}-${theme}-${width}x${height}.png`,
           });
+          if (width === 390) {
+            const edit = editTip.shadowRoot!.querySelector("button")!;
+            expect(edit.getAttribute("aria-expanded")).toBe("false");
+            await pressed(el, "[data-quiet-pay-tip]");
+            expect(edit.getAttribute("aria-expanded")).toBe("true");
+            const label = locale === "en" ? "Remove tip" : "Quitar propina";
+            const remove = page.getByRole("button", { name: label, exact: true });
+            expect(
+              root.querySelector("[data-clear-card-tip]")!.getBoundingClientRect().height,
+            ).toBeGreaterThanOrEqual(24);
+            await expectNoA11yViolations(host);
+            await remove.click({ timeout: 2000 });
+            await el.updateComplete;
+            expect(root.activeElement).toBe(editTip);
+            expect(edit.getAttribute("aria-expanded")).toBe("false");
+          }
           if (height === 390) {
             const body = root
               .querySelector("wt-full-screen-panel")!
