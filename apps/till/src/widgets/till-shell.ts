@@ -33,6 +33,8 @@ import {
   floorMoreSheet,
   floorOperatorLine,
   measureFloorControls,
+  restoreFloorZoneFocus,
+  type FloorKitchenRow,
 } from "./floor-bar.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -531,6 +533,8 @@ export class TillShell extends LitElement {
   @property({ type: Number }) waitingCount = 0;
   @property({ attribute: false }) activeOrderList: "parked" | "waiting" | null = null;
   @property({ type: Boolean }) testingKitchen = false;
+  @property({ attribute: false }) floorKitchenRows: readonly FloorKitchenRow[] = [];
+  @property({ attribute: false }) floorKitchenOpen = false;
   @property() operatorName = "";
   /** Names the venue's logo for a screen reader. */
   @property() legalName = "";
@@ -867,10 +871,8 @@ export class TillShell extends LitElement {
     open.hide();
     void this.#settled().then(() => {
       if (this.narrowFloor) return;
-      if (open.hasAttribute("data-floor-zone-chooser")) {
-        const floor = this.querySelector("till-floor-screen");
-        void floor?.updateComplete.then(() => floor.focusZoneToolbar());
-      } else this.renderRoot.querySelector<WtRowActions>('.head [data-test="more-menu"]')?.focus();
+      if (open.hasAttribute("data-floor-zone-chooser")) void restoreFloorZoneFocus(this);
+      else this.renderRoot.querySelector<WtRowActions>('.head [data-test="more-menu"]')?.focus();
     });
   }
 
@@ -1442,7 +1444,6 @@ export class TillShell extends LitElement {
           "floor.menu_device",
           html`
             ${floorDeviceRows(this.#chooser("segmented"), this.#helpSwitch(), html`${items.equipment}${items.profile}${this.#themeChoices()}`)}
-            ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
             ${this.#reportOption(true)}${this.#aboutOption(true)}
             ${floorMoreRow(t("shell.logout"), () => this.#emit("logout"), { className: "logout" })}
             ${this.#poweredBy()}
@@ -1665,7 +1666,7 @@ export class TillShell extends LitElement {
   }
 
   override render(): TemplateResult {
-    const hasDrill = this.drillNodes?.length > 0;
+    const hasDrill = this.floorKitchenOpen || this.drillNodes?.length > 0;
     const floor = this.querySelector<TillFloorScreen>(":scope > till-floor-screen");
     const bottomFloor = this.narrowFloor && !hasDrill && !this.#barless() ? floor : null;
     if (floor) floor.useFloorFooter = Boolean(bottomFloor);
@@ -1686,7 +1687,7 @@ export class TillShell extends LitElement {
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts(counterLabel) : nothing}
         ${
-          this.#barless() || bottomFloor
+          this.#barless() || bottomFloor || this.floorKitchenOpen
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
                   ${this.canChooseDevice ? html`<wt-button data-switch-device variant="secondary" @click=${() => this.#emit("switch-device")}>${t("device.switch")}</wt-button>` : nothing}
@@ -1727,7 +1728,7 @@ export class TillShell extends LitElement {
             ? html`<div class="floor-controls">
                 ${bottomFloor.otherZoneLine()}
                 <footer data-floor-bar class="floor-bar">
-                  ${bottomFloor.footerControls(() => this.#emit("open-device-zones"))}${this.#floorMenu(bottomFloor)}
+                  ${bottomFloor.footerControls({ choose: () => this.#emit("open-device-zones"), kitchen: this.floorKitchenRows, openKitchen: (stationId) => this.#emit(stationId === undefined ? "show-expo" : "show-station", { stationId, fromFloorChooser: true }) })}${this.#floorMenu(bottomFloor)}
                 </footer>
               </div>`
             : nothing

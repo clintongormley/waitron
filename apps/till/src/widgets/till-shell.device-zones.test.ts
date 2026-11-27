@@ -511,6 +511,53 @@ it.each([
   },
 );
 
+it("walks from the last floor zone to the kitchen action with the arrow key", async () => {
+  setLocale("en-GB");
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      operatorName: "Ana",
+      affordances: ["expo"],
+      ...{ floorKitchenRows: [{ label: "Pass" }] },
+    });
+    const floor = document.createElement("till-floor-screen");
+    floor.zones = [
+      {
+        id: "room",
+        name: "Dining room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        closesAt: null,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ];
+    el.append(floor);
+    const chooser = await vi.waitFor(() => {
+      const menu = el.shadowRoot!.querySelector("[data-floor-zone-chooser]");
+      expect(menu).not.toBeNull();
+      return menu!;
+    });
+    const opened = vi.fn();
+    el.addEventListener("show-expo", opened);
+    await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
+    chooser.querySelector<HTMLButtonElement>('[data-floor-zone="room"]')!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(
+      chooser.querySelector('[role="menuitem"]:focus wt-menu-row')?.getAttribute("label"),
+    ).toBe("Pass");
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toHaveBeenCalledOnce();
+    expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);

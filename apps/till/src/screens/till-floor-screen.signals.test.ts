@@ -336,6 +336,15 @@ describe("till-floor-screen: what each station has ready", () => {
     expect(opened).toEqual([{ stationId: "bar" }]);
   });
 
+  it("keeps the ready summary on a narrow floor without linking to stations", async () => {
+    const el = await mountFloor(floor.slice(0, 2), { canOpenStation: true, useFloorFooter: true });
+    expect(summary(el).map((row) => row.text)).toEqual([
+      "Bar: Table 2 ×3, Table 8 ×1",
+      "Kitchen: Table 8 ×2",
+    ]);
+    expect(el.shadowRoot!.querySelector("[data-open-station]")).toBeNull();
+  });
+
   it("offers no way into a station on a device without the station view", async () => {
     const el = await mountFloor(floor);
     expect(summary(el)).toHaveLength(2);

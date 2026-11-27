@@ -1,6 +1,9 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TillClockState } from "../api/attendance-api.js";
+import type { ResolvedKitchenScreen } from "../api/device-session-api.js";
+import type { WtRowActions } from "@waitron/ui/src/components/wt-row-actions.js";
+import type { ShellAffordance, TillShell } from "./till-shell.js";
 import type { TableState } from "../api/floor-api.js";
 import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -186,6 +189,16 @@ export const floorBarStyles = css`
   .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
     --wt-action-native-icon-color: var(--wt-color-primary);
     color: var(--wt-action-native-icon-color);
+  }
+  .floor-bar [data-floor-zone-chooser] [data-menu-heading] {
+    padding-block-start: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    letter-spacing: calc(var(--wt-font-size-sm) * 0.04);
+  }
+  .floor-bar [data-floor-kitchen-row] {
+    --wt-menu-row-height: calc(var(--wt-tap-min) + var(--wt-space-4));
+    --wt-menu-row-padding-start: calc(var(--wt-space-5) + var(--wt-space-6));
+    --wt-menu-row-label-size: var(--wt-floor-name-font-size);
+    --wt-font-weight-normal: var(--wt-font-weight-bold);
   }
   .floor-bar [data-open-device-zones] {
     min-block-size: var(--wt-menu-row-height);
@@ -421,6 +434,46 @@ export function measureFloorControls(controls: HTMLElement): number {
   return controls.getBoundingClientRect().height;
 }
 
+export interface FloorKitchenRow {
+  label: string;
+  stationId?: string;
+}
+
+export interface FloorChooserActions {
+  choose: () => void;
+  kitchen: readonly FloorKitchenRow[];
+  openKitchen: (stationId?: string) => void;
+}
+
+export function floorKitchenRows(
+  screen: ResolvedKitchenScreen | undefined,
+  affordances: readonly ShellAffordance[],
+): FloorKitchenRow[] {
+  if (!screen?.available) return [];
+  if (screen.kind === "station")
+    return affordances.includes("station")
+      ? screen.stations
+          .filter((station) => station.available)
+          .map(({ id, name }) => ({ label: name, stationId: id }))
+      : [];
+  return affordances.includes("expo")
+    ? [{ label: t(screen.kind === "pass_monitor" ? "floor.pass_monitor" : "expo.open") }]
+    : [];
+}
+
+export async function restoreFloorZoneFocus(shell: TillShell | null): Promise<void> {
+  await shell?.updateComplete;
+  const zoneChooser = shell?.shadowRoot?.querySelector<WtRowActions>("[data-floor-zone-chooser]");
+  if (zoneChooser) {
+    await zoneChooser.updateComplete;
+    zoneChooser.focus();
+  } else {
+    const floor = shell?.querySelector("till-floor-screen");
+    await floor?.updateComplete;
+    floor?.focusZoneToolbar();
+  }
+}
+
 export function floorZoneControls(
   tabs: readonly ZoneTab[],
   marks: Marks,
@@ -428,7 +481,7 @@ export function floorZoneControls(
   view: "map" | "list",
   select: (key: string) => void,
   toggle: () => void,
-  choose: () => void,
+  { choose, kitchen, openKitchen }: FloorChooserActions,
 ) {
   const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
   return html`<wt-row-actions
@@ -456,6 +509,25 @@ export function floorZoneControls(
             ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
           </button>`;
         })}
+        ${
+          kitchen.length === 0
+            ? nothing
+            : html` <div role="group" aria-label=${t("floor.kitchen_screens")}>
+                <div data-menu-heading aria-hidden="true">${t("floor.kitchen_screens")}</div>
+                ${kitchen.map(
+                  ({ label, stationId }) =>
+                    html`<button
+                      type="button"
+                      role="menuitem"
+                      data-row-choice
+                      data-floor-kitchen-row
+                      @click=${() => openKitchen(stationId)}
+                    >
+                      <wt-menu-row divider label=${label}></wt-menu-row>
+                    </button>`,
+                )}
+              </div>`
+        }
         <button
           type="button"
           role="menuitem"

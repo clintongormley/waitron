@@ -368,7 +368,7 @@ import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
-import { floorToastStyles } from "./widgets/floor-bar.js";
+import { floorKitchenRows, floorToastStyles, restoreFloorZoneFocus } from "./widgets/floor-bar.js";
 import "./screens/till-drawer-close.js";
 import "./screens/till-drawer-cash.js";
 import "./widgets/find-bill-dialog.js";
@@ -598,7 +598,7 @@ type SettlementDocument = {
   keepsBasket?: true;
 };
 
-type Drill = { kind: "table-order" | "ticket" | TillDestination };
+type Drill = { kind: "table-order" | "ticket" | TillDestination; fromFloorChooser?: boolean };
 
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
 const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
@@ -4004,7 +4004,7 @@ export class TillApp extends LitElement {
   /** The profiles the device may be switched to, the active one first, as the server last said. */
   @state() private approvedProfiles: ProfileChoice[] = [];
   @state() private activeProfileId = "";
-  @state() private profileKitchenScreen: KitchenScreenKind | null = null;
+  @state() private profileKitchenScreen: ResolvedKitchenScreen | undefined;
   @state() private profileOpen = false;
   @state() private profileNotice: ProfileNotice = null;
   @state() private profileBusy = false;
@@ -9842,14 +9842,13 @@ export class TillApp extends LitElement {
     return this.collectFlow ?? this.orderFlow;
   }
 
-  /** The floor's station summary names the station to open; the station screen reads it from the
-   * address when it mounts. */
-  #onShowStation(event: Event): void {
+  #onShowKitchen(kind: "station" | "expo", event: Event): void {
     if (!this.#inShell()) return;
     this.errorKey = undefined;
-    const stationId = (event as CustomEvent<{ stationId?: string } | undefined>).detail?.stationId;
-    this.#pushDrill({ kind: "station" });
-    if (stationId !== undefined && this.drill?.kind === "station")
+    const { stationId, fromFloorChooser = false } =
+      (event as CustomEvent<{ stationId?: string; fromFloorChooser?: boolean }>).detail ?? {};
+    this.#pushDrill({ kind, fromFloorChooser });
+    if (kind === "station" && stationId !== undefined && this.drill?.kind === "station")
       this.#writeUrl({ "till-station": stationId }, true);
   }
 
@@ -9878,12 +9877,6 @@ export class TillApp extends LitElement {
     this.#pauseLive();
     this.#live = undefined;
     await this.#boot();
-  }
-
-  #onShowExpo(): void {
-    if (!this.#inShell()) return;
-    this.errorKey = undefined;
-    this.#pushDrill({ kind: "expo" });
   }
 
   #saveCounterSetMenuCount = (menuId: string, count: number) =>
@@ -11558,7 +11551,7 @@ export class TillApp extends LitElement {
   #holdIdentity(identity: DeviceIdentity): void {
     this.approvedProfiles = identity.approvedProfiles ?? [];
     this.activeProfileId = identity.profileId ?? "";
-    this.profileKitchenScreen = identity.kitchenScreens?.[0]?.kind ?? null;
+    this.profileKitchenScreen = identity.kitchenScreens?.[0];
   }
 
   /** Reads the device again first, so the dialog offers the approvals as they stand now. */
@@ -23888,6 +23881,13 @@ export class TillApp extends LitElement {
     if (!this.#inShell()) return;
     const fromFindBill = this.drill?.kind === "find-bill";
     this.errorKey = undefined;
+    if (this.drill?.fromFloorChooser) {
+      this.#popDrill();
+      void this.updateComplete.then(() =>
+        restoreFloorZoneFocus(this.shadowRoot!.querySelector("till-shell")),
+      );
+      return;
+    }
     this.#setActiveTab(this.#homeScreen());
     void this.#loadStations();
     this.#popDrill();
@@ -24072,10 +24072,10 @@ export class TillApp extends LitElement {
       ...(["station", "expo", "schedule"] as const).filter(
         (screen) =>
           this.capabilities.includes(`show-${screen}`) &&
-          (screen !== "station" || this.profileKitchenScreen === "station") &&
+          (screen !== "station" || this.profileKitchenScreen?.kind === "station") &&
           (screen !== "expo" ||
-            this.profileKitchenScreen === "pass" ||
-            this.profileKitchenScreen === "pass_monitor") &&
+            this.profileKitchenScreen?.kind === "pass" ||
+            this.profileKitchenScreen?.kind === "pass_monitor") &&
           (screen !== "station" || this.formFactor !== "till" || this.#testingKitchen()),
       ),
       "find-bill",
@@ -24606,7 +24606,7 @@ export class TillApp extends LitElement {
           slot="drill"
           .live=${this.#live}
           .api=${this.api}
-          .backKey=${this.#homeScreen() === "counter" ? "station.back" : "action.back"}
+          .backKey=${!this.drill.fromFloorChooser && this.#homeScreen() === "counter" ? "station.back" : "action.back"}
           .canMoveStation=${this.capabilities.includes("take-orders")}
           .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .deviceMode=${this.deviceMode}
@@ -24619,7 +24619,7 @@ export class TillApp extends LitElement {
           slot="drill"
           .live=${this.#live}
           .api=${this.api}
-          .backKey=${this.#homeScreen() === "counter" ? "expo.back" : "action.back"}
+          .backKey=${!this.drill.fromFloorChooser && this.#homeScreen() === "counter" ? "expo.back" : "action.back"}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceId=${this.deviceId}
           .serverOrigin=${this.#serverOrigin()}
@@ -24841,13 +24841,13 @@ export class TillApp extends LitElement {
           this.#replaceBasket(() => this.#onPayWaitingOrder(event));
         }}
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
-        @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
+        @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowKitchen("station", event))}
         @enrolled=${() => void this.#onEnrolled()}
         @kitchen-screen-changed=${(event: CustomEvent<{ from?: KitchenScreenKind } | null>) =>
           void this.#boot(event.detail?.from)}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
-        @show-expo=${() => this.#requestLeave(() => this.#onShowExpo())}
+        @show-expo=${(event: Event) => this.#requestLeave(() => this.#onShowKitchen("expo", event))}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => this.#replaceBasket(() => this.#onRetrieveOrder(event))}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
@@ -25568,6 +25568,8 @@ export class TillApp extends LitElement {
                           .waitingCount=${this.counterWaiting.length}
                           .activeOrderList=${this.counterOrderList}
                           .testingKitchen=${this.#testingKitchen()}
+                          .floorKitchenRows=${floorKitchenRows(this.profileKitchenScreen, this.#affordanceList)}
+                          .floorKitchenOpen=${this.drill?.fromFloorChooser ?? false}
                           @show-counter-orders=${(
                             event: CustomEvent<{ kind: "parked" | "waiting" }>,
                           ) => {

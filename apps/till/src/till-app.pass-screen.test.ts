@@ -152,19 +152,32 @@ async function mountDisplay(kind: KitchenScreenKind, capabilities: CapabilityFla
 
 describe("A773 pass screen: app", () => {
   it.each([
-    ["station", ["show-station", "show-expo"], true, false],
-    ["pass", ["show-station", "show-expo"], false, true],
-    ["pass_monitor", ["show-station", "show-expo"], false, true],
-    [null, ["show-station", "show-expo"], false, false],
-    ["station", [], false, false],
-    ["pass", [], false, false],
-    ["pass_monitor", [], false, false],
+    ["station", ["show-station", "show-expo"], ["Grill", "Cold"]],
+    ["pass", ["show-station", "show-expo"], ["Pase"]],
+    ["pass_monitor", ["show-station", "show-expo"], ["Monitor del pase"]],
+    [null, ["show-station", "show-expo"], []],
+    ["station", [], []],
+    ["pass", [], []],
+    ["pass_monitor", [], []],
   ] as const)(
-    "offers only %s navigation allowed by capabilities %j",
-    async (kind, capabilities, stationShown, passShown) => {
+    "offers the narrow floor kitchen rows for %s with %j",
+    async (kind, capabilities, rows) => {
       const viewport = [innerWidth, innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));
       await page.viewport(390, 844);
+      const stations = [
+        { id: "grill", name: "Grill", displayOrder: 0, isDefault: true, active: true, open: true },
+        { id: "cold", name: "Cold", displayOrder: 1, isDefault: false, active: true, open: true },
+        {
+          id: "closed",
+          name: "Closed",
+          displayOrder: 2,
+          isDefault: false,
+          active: true,
+          open: true,
+        },
+      ];
+      const slots = stations.map(({ id, name }) => ({ id, name, available: id !== "closed" }));
       const api = stubApi({
         getTill: vi.fn().mockResolvedValue({
           ...till,
@@ -176,9 +189,34 @@ describe("A773 pass screen: app", () => {
           formFactor: "phone-portrait",
           name: "Handheld",
           kitchenScreens:
-            kind === null ? [] : [{ kind, available: true, stations: [], zones: null }],
+            kind === null
+              ? []
+              : [
+                  {
+                    kind,
+                    available: true,
+                    stations: slots,
+                    zones: null,
+                    showNonPassStations: true,
+                  },
+                ],
         }),
         getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room"])),
+        listZones: vi.fn().mockResolvedValue([
+          {
+            id: "room",
+            name: "Room",
+            displayOrder: 0,
+            active: true,
+            closed: false,
+            hasPlan: true,
+            layoutSetName: null,
+            layoutDue: null,
+            serviceMode: "table_tab",
+            closesAt: null,
+          },
+        ]),
+        listStations: vi.fn().mockResolvedValue(stations),
       });
       const { el } = await mountWidget<TillApp>("till-app", { api });
       await flush(el);
@@ -189,15 +227,42 @@ describe("A773 pass screen: app", () => {
       });
       await flush(el);
       const shell = el.shadowRoot!.querySelector("till-shell")!;
-      const menu = await vi.waitFor(() => {
-        const floorMenu = shell.shadowRoot!.querySelector("wt-row-actions.floor-menu");
-        expect(floorMenu).not.toBeNull();
-        return floorMenu!;
-      });
-      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      expect(Boolean(menu.querySelector(".station"))).toBe(stationShown);
-      expect(Boolean(menu.querySelector(".expo"))).toBe(passShown);
+      const chooser = () => shell.shadowRoot!.querySelector("[data-floor-zone-chooser]");
+      const trigger = () => chooser()?.shadowRoot?.querySelector("button");
+      await vi.waitFor(() => expect(trigger()).toBeInstanceOf(HTMLButtonElement));
+      const more = shell.shadowRoot!.querySelector("[data-floor-bar] .floor-menu")!;
+      await userEvent.click(trigger()!);
+      const kitchen = page.getByRole("group", { name: "Pantallas de cocina" });
+      expect(
+        kitchen
+          .elements()
+          .flatMap((group) =>
+            Array.from(group.querySelectorAll("wt-menu-row"), (row) => row.getAttribute("label")),
+          ),
+      ).toEqual(rows);
+      expect(more.querySelector(".station, .expo")).toBeNull();
+      if (rows.length === 0) return;
+      if (kind === "station") {
+        await kitchen.getByRole("menuitem", { name: "Cold", exact: true }).click();
+        await vi.waitFor(() => {
+          const screen = el.shadowRoot!.querySelector("till-station-screen");
+          expect(screen?.shadowRoot!.querySelector("till-station-queue")).toHaveProperty(
+            "stationId",
+            "cold",
+          );
+        });
+        expect(location.pathname).toMatch(/\/view\/station\/station\/cold$/u);
+      } else {
+        await kitchen.getByRole("menuitem", { name: rows[0], exact: true }).click();
+        await vi.waitFor(() =>
+          expect(boardOf(el)).toHaveProperty("mode", kind === "pass" ? "pass" : "monitor"),
+        );
+      }
+      expect(shell.shadowRoot!.querySelector(".head")).toBeNull();
+      await page.getByRole("button", { name: "Atrás", exact: true }).click();
+      await vi.waitFor(() => expect(trigger()?.matches(":focus")).toBe(true));
+      expect(location.pathname).not.toContain("/view/");
+      expect(chooser()?.textContent).toContain("Room");
     },
   );
 
