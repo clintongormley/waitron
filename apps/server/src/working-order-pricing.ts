@@ -70,6 +70,7 @@ import { routingOnce } from "./working-order-kitchen-fire.js";
 import {
   type EndedMenu,
   confirmLateDishes,
+  coversLateDishes,
   endedPeriodMakers,
   lateDishesQuestion,
 } from "./working-order-late-send.js";
@@ -601,7 +602,8 @@ export async function priceOrderLines(
   }
   confirmations.sort((a, b) => a.index - b.index);
   if (closedZone !== undefined) {
-    if (confirmations.length === 0) throw new AppError("service_zone.closed", closedZone);
+    if (confirmations.length === 0 || coversLateDishes(lateSend, confirmations))
+      throw new AppError("service_zone.closed", closedZone);
     const departmentId = service!.departmentId;
     const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
     throw new AppError("service_zone.closed", {

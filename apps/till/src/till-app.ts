@@ -5049,11 +5049,9 @@ export class TillApp extends LitElement {
     }
     if (changed.has("equipmentOpen")) this.#syncEquipmentNfc();
     if (
-      changed.has("errorKey") &&
-      typeof this.errorKey === "object" &&
-      "code" in this.errorKey &&
-      this.errorKey.code === "service_zone.closed" &&
-      this.#inShell()
+      this.#inShell() &&
+      ((changed.has("errorKey") && asRefusal(this.errorKey)?.refused === "service_zone.closed") ||
+        (changed.has("lateSendWindow") && this.lateSendWindow?.closedZone !== undefined))
     ) {
       const session = this.#operatorSession;
       void this.#loadFloorData(() => !this.isConnected || session !== this.#operatorSession);

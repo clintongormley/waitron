@@ -26103,12 +26103,17 @@ describe("closed floor zone refusals", () => {
     expect(floor(el)!.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
   });
 
-  it("reloads the zones after a seat refusal and retains its explanation", async () => {
+  it("reloads the zones when seating hits a closure and keeps the question open", async () => {
     const listZones = vi.fn().mockResolvedValue([floorZone]);
     const { el } = await mountApp({
       listZones,
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
-      seatTable: vi.fn().mockRejectedValue({ code: "service_zone.closed", zoneId: "z1" }),
+      seatTable: vi.fn().mockRejectedValue({
+        code: "service_zone.closed",
+        zoneId: "z1",
+        zoneName: "Terraza",
+        closesAt: "22:00",
+      }),
     });
     await toCounter(el);
     selectTab(el, "floor");
@@ -26121,10 +26126,13 @@ describe("closed floor zone refusals", () => {
     await flush(el);
     expect(currentApi.seatTable).toHaveBeenCalledWith(freeTable.id, 2);
     expect(floor(el)!.zones[0]).toMatchObject({ closed: true });
-    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-      codeMessage("service_zone.closed", "es"),
-    );
-    expect(tableOrder(el)).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("till-late-send-dialog")?.shadowRoot?.querySelector("wt-dialog")
+        ?.heading,
+    ).toBe("Terraza cerró a las 22:00");
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => tableOrder(el)).toBeNull();
+    expect(currentApi.seatTable).toHaveBeenCalledOnce();
   });
 });
 

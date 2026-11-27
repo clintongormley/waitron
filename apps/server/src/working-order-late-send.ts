@@ -35,6 +35,13 @@ export async function endedPeriodMakers(
 
 type LateDish = { menuId: string; menuItemId: string; periodName: string };
 
+export function coversLateDishes(
+  lateSend: LateSendConfirmation | undefined,
+  late: readonly LateDish[],
+): lateSend is LateSendConfirmation {
+  return lateSend !== undefined && late.every((dish) => lateSend.menuIds.has(dish.menuId));
+}
+
 export function lateDishesQuestion(
   departmentId: string,
   late: readonly LateDish[],
@@ -64,7 +71,7 @@ export async function confirmLateDishes(
   lineIds?: readonly string[],
 ): Promise<string> {
   const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
-  if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
+  if (!coversLateDishes(lateSend, late)) {
     throw new AppError(
       "menu_period.ended",
       lateDishesQuestion(departmentId, late, needsManager, lineIds),

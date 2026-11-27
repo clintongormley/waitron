@@ -56,7 +56,6 @@ export interface SubmitGroupsInput {
   billId?: string;
   /** Kept out of the replay fingerprint: a retry without it gets the recorded answer. */
   lateSend?: LateSendConfirmation;
-  zoneConfirmation?: ClosedZoneConfirmation;
 }
 
 export interface SubmittedGroups {
@@ -86,7 +85,6 @@ export async function submitGroups(
     operatorId,
     expectedEdit: observed,
     lateSend,
-    zoneConfirmation,
     ...body
   } = input;
   const expectedEdit = parseBillEditExpected(observed);
@@ -103,7 +101,7 @@ export async function submitGroups(
         tx,
         cfg,
         partyId,
-        { ...input, expectedEdit, lateSend, zoneConfirmation },
+        { ...input, expectedEdit, lateSend },
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
@@ -143,8 +141,9 @@ export async function submitGroups(
 
 export type PlaceGroupsInput = Pick<
   SubmitGroupsInput,
-  "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend" | "zoneConfirmation"
+  "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend"
 > & {
+  zoneConfirmation?: ClosedZoneConfirmation;
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
   sourceDraftLineIds?: readonly string[];

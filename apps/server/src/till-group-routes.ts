@@ -31,7 +31,6 @@ import {
   parseLineQuantities,
   requireLineIds,
   parseMoveTarget,
-  parseClosedZoneConfirmation,
 } from "./till-request-fields.js";
 import { run, runSubmitGroups, runBodyGroup } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
@@ -88,7 +87,6 @@ export function mountTillGroupRoutes(
         ...allergyCommand(body),
         expectedEdit: parseBillEditExpected(body.expectedEdit),
         groups: parseSubmittedGroups(body.groups),
-        zoneConfirmation: parseClosedZoneConfirmation(body.closedZoneId, personId),
         ...joinGroupOf(body),
         ...billOf(body),
       };
