@@ -1,3 +1,4 @@
+import "@waitron/customer-menu";
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import {
   contentLanguageDisplayName,
@@ -14,7 +15,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { MenuApi } from "../api/menu-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import "./customer-menu-page.js";
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
+
+const previewPhoto = (image: string) => liveMediaImage(image, "display");
 
 function editionOf(status: MenuStatus): number | null {
   return status.state === "unpublished" ? null : status.version;
@@ -44,10 +47,15 @@ export class MenuOnlinePreview extends LitElement {
       wt-combobox {
         inline-size: min(100%, 16ch);
       }
-      @container (width < 720px) {
-        .canvas:has(.computer) {
-          overflow: auto;
-          max-block-size: calc(100cqb - var(--wt-space-4));
+      @container online-editor (inline-size <= 760px) {
+        .computer {
+          min-inline-size: 720px;
+        }
+        @container (width < 720px) {
+          .canvas:has(.computer) {
+            overflow: auto;
+            max-block-size: calc(100cqb - var(--wt-space-4));
+          }
         }
       }
       .canvas:focus-visible {
@@ -57,9 +65,6 @@ export class MenuOnlinePreview extends LitElement {
       .phone {
         max-inline-size: 390px;
         margin-inline: auto;
-      }
-      .computer {
-        min-inline-size: 720px;
       }
     `,
   ];
@@ -173,12 +178,13 @@ export class MenuOnlinePreview extends LitElement {
       aria-label=${t("customer_menu.online_preview")}
       tabindex=${this.size === "computer" ? "0" : nothing}
     >
-      <dashboard-customer-menu-page
+      <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
         .photos=${this.photos}
+        .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}
-      ></dashboard-customer-menu-page>
+      ></customer-menu-page>
     </div>`;
   }
 

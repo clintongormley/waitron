@@ -10,13 +10,17 @@ import {
   type GuestMember,
   type PublicGuestMenu,
 } from "@waitron/shared";
-import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import { registerIcons } from "@waitron/ui/src/components/wt-icon.js";
+import { NUTRITION_ICONS } from "@waitron/ui/src/nutrition-icons.js";
+import { applyTokens } from "@waitron/ui/src/tokens/index.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, html, nothing, type TemplateResult } from "lit";
+import type { DirectiveResult } from "lit/directive.js";
+import { html as staticHtml, literal, type StaticValue } from "lit/static-html.js";
+import { customerMenuPageStyles } from "./customer-menu-page-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
 
@@ -96,14 +100,19 @@ function namedAllergenLabels(
   }));
 }
 
+function subheading(tag: StaticValue, text: string, language?: string) {
+  return staticHtml`<${tag} class="subheading" lang=${language ?? nothing}>${text}</${tag}>`;
+}
+
 function detailDeclarations(
+  tag: StaticValue,
   heading: string,
   labels: { icon: string; label: string; category?: string }[],
   language: string,
 ) {
   return labels.length
     ? html`<div lang=${language}>
-        <h3>${heading}</h3>
+        ${subheading(tag, heading)}
         <div class="declarations">
           ${labels.map(
             ({ icon: glyph, label, category }) =>
@@ -170,6 +179,7 @@ function choiceRow(
 }
 
 function detailContent(
+  tag: StaticValue,
   member: MenuEntry,
   words: Words,
   language: string,
@@ -187,25 +197,25 @@ function detailContent(
       ${filtered ? html`<p class="description" lang=${words.language}>${words.text.askAboutSetMenu}</p>` : nothing}
       ${member.lines.map(
         (line) =>
-          html`<h3>${courseLabel(line, language)}</h3>
-            ${
-              line.choices.length
-                ? html`<ul class="choices" role="list">
-                    ${line.choices.map((choice) =>
-                      choiceRow(
-                        choice.name,
-                        choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
-                        choice,
-                        words,
-                        excluded,
-                        true,
-                      ),
-                    )}
-                  </ul>`
-                : nothing
-            }`,
+          html`${subheading(tag, courseLabel(line, language))}
+          ${
+            line.choices.length
+              ? html`<ul class="choices" role="list">
+                  ${line.choices.map((choice) =>
+                    choiceRow(
+                      choice.name,
+                      choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
+                      choice,
+                      words,
+                      excluded,
+                      true,
+                    ),
+                  )}
+                </ul>`
+              : nothing
+          }`,
       )}
-      ${detailDeclarations(words.text.allergens!, allergens, words.language)}`;
+      ${detailDeclarations(tag, words.text.allergens!, allergens, words.language)}`;
   }
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
   const { allergens, diets } = declarationLabels(member, words);
@@ -217,7 +227,7 @@ function detailContent(
     ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
     ${
       member.variants.length
-        ? html`<h3 lang=${words.language}>${words.text.variants}</h3>
+        ? html`${subheading(tag, words.text.variants!, words.language)}
             <ul class="choices" role="list">
               ${member.variants.map((value) =>
                 choiceRow(
@@ -234,12 +244,12 @@ function detailContent(
     ${member.modifiers.map((group) => {
       if (group.kind === "options") {
         return group.labels.length
-          ? html`<h3>${group.name}</h3>
+          ? html`${subheading(tag, group.name)}
               <p class="description">${group.labels.join(" · ")}</p>`
           : nothing;
       }
       return group.items.length
-        ? html`<h3>${group.name}</h3>
+        ? html`${subheading(tag, group.name)}
             <ul class="choices" role="list">
               ${group.items.map((value) => {
                 const amount = Number(value.portion);
@@ -261,344 +271,32 @@ function detailContent(
             </ul>`
         : nothing;
     })}
-    ${detailDeclarations(words.text.allergens!, [...allergens, ...extraAllergens], words.language)}
-    ${detailDeclarations(words.text.diet!, diets, words.language)}
+    ${detailDeclarations(tag, words.text.allergens!, [...allergens, ...extraAllergens], words.language)}
+    ${detailDeclarations(tag, words.text.diet!, diets, words.language)}
     <p class="description" lang=${words.language}>${words.text.askAboutAllergens}</p>
   `;
 }
 
-function legend({ language, text }: Words) {
+function legend(tag: StaticValue, { language, text }: Words) {
   const key = (codes: readonly string[], prefix: string) =>
     html` <ul class="key">
       ${codes.map((code) => html`<li><wt-icon name=${`${prefix}-${code}`}></wt-icon>${text[code]}</li>`)}
     </ul>`;
   return html`<footer lang=${language}>
-    <h3>${text.key}</h3>
-    ${key(ALLERGEN_CODES, "allergen")}
-    <h3>${text.diet}</h3>
+    ${subheading(tag, text.key!)} ${key(ALLERGEN_CODES, "allergen")} ${subheading(tag, text.diet!)}
     ${key(DIETARY_LABELS, "diet")}
   </footer>`;
 }
 
-@customElement("dashboard-customer-menu-page")
+@customElement("customer-menu-page")
 export class CustomerMenuPage extends LitElement {
-  static override styles = [
-    baseStyles,
-    css`
-      :host {
-        display: block;
-        container-type: inline-size;
-      }
-      article {
-        --menu-padding: var(--wt-space-4);
-        background: var(--wt-color-bg);
-        color: var(--wt-color-text);
-        font-family: var(--wt-font-family);
-        font-size: var(--wt-font-size-md);
-        padding: var(--menu-padding);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-lg);
-        overflow-wrap: anywhere;
-      }
-      header {
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      header h2 {
-        margin: 0;
-        font-size: calc(1.65 * var(--wt-font-size-xl));
-      }
-      search {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-      .filter-button {
-        --wt-action-radius: var(--wt-radius-full);
-      }
-      .filter-fields {
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      .filter-actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-      .choice-caution {
-        grid-column: 1 / -1;
-        font-size: var(--wt-font-size-sm);
-      }
-      wt-input::part(field) {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-surface);
-      }
-      nav {
-        position: sticky;
-        inset-block-start: 0;
-        z-index: 1;
-        display: flex;
-        gap: var(--wt-space-4);
-        overflow-x: auto;
-        margin: var(--wt-space-2) 0 var(--wt-space-4);
-        border-block-end: 1px solid var(--wt-color-border);
-        background: var(--wt-color-bg);
-      }
-      nav a {
-        flex: none;
-        max-inline-size: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        padding-block: var(--wt-space-3);
-        border-block-end: 3px solid transparent;
-        color: var(--wt-color-text-muted);
-        text-decoration: none;
-      }
-      nav a[aria-current] {
-        border-block-end-color: var(--wt-color-primary);
-        color: var(--wt-color-primary-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      @media (forced-colors: active) {
-        nav a {
-          border-block-end-color: Canvas;
-        }
-        nav a[aria-current] {
-          border-block-end-color: Highlight;
-        }
-      }
-      nav a:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: calc(-1 * var(--wt-focus-offset));
-      }
-      .no-results {
-        margin-block-start: calc(var(--wt-space-2) + var(--wt-space-3));
-      }
-      header + [role="status"] + .members {
-        margin-block-start: var(--wt-space-4);
-      }
-      h2,
-      .section-title {
-        margin: 0 0 var(--wt-space-4);
-        color: var(--wt-color-primary-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .section-title {
-        font-size: calc(1.4 * var(--wt-font-size-lg));
-      }
-      h3 {
-        font-size: var(--wt-font-size-lg);
-      }
-      section section > .section-title {
-        font-size: var(--wt-font-size-md);
-      }
-      .members {
-        display: grid;
-        gap: var(--wt-space-5);
-      }
-      section,
-      .set-menu {
-        grid-column: 1 / -1;
-      }
-      .set-menu {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-4);
-        border: 1px solid var(--wt-color-primary);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .set-menu .set-price {
-        white-space: nowrap;
-      }
-      .dish {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-content: start;
-        align-items: start;
-        gap: var(--wt-space-3);
-      }
-      .entry-name,
-      .set-price {
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .entry-name {
-        background: transparent;
-        border: 0;
-        padding: 0;
-        font-family: inherit;
-        color: var(--wt-color-primary-text);
-        text-align: start;
-        cursor: pointer;
-      }
-      .entry-name:hover,
-      .entry-name:focus-visible {
-        text-decoration: underline;
-      }
-      .entry-name:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      .back {
-        --wt-action-text: var(--wt-color-primary-text);
-        --wt-action-radius: var(--wt-radius-full);
-      }
-      .back[variant="ghost"] {
-        /* Align the inset chevron with the title and leave room inside the hover outline. */
-        --wt-button-padding-inline: var(--wt-space-2);
-        margin-inline-start: calc(-1 * var(--wt-space-3));
-      }
-      img {
-        display: block;
-        inline-size: min(84px, 24cqi);
-        aspect-ratio: 1;
-        object-fit: cover;
-        border-radius: var(--wt-radius-md);
-      }
-      :host([photos="small"]) .dish img {
-        inline-size: min(60px, 18cqi);
-        aspect-ratio: 1;
-      }
-      .detail-lead:has(img) {
-        position: relative;
-        margin-block-start: calc(-1 * var(--menu-padding));
-        margin-inline: calc(-1 * var(--menu-padding));
-        margin-block-end: var(--wt-space-4);
-      }
-      .detail-lead:has(img) .back {
-        position: absolute;
-        inset-block-start: var(--menu-padding);
-        inset-inline-start: var(--menu-padding);
-      }
-      .detail-lead img {
-        inline-size: 100%;
-        max-block-size: 320px;
-        aspect-ratio: 4 / 3;
-        border-radius: calc(var(--wt-radius-lg) - 1px) calc(var(--wt-radius-lg) - 1px) 0 0;
-      }
-      :host([photos="small"]) .detail-lead img {
-        max-block-size: 160px;
-      }
-      .detail h2 {
-        font-size: calc(1.4 * var(--wt-font-size-xl));
-        margin-block-end: var(--wt-space-1);
-      }
-      .detail .set-price {
-        margin: 0;
-      }
-      .detail h3 {
-        margin: var(--wt-space-4) 0 var(--wt-space-2);
-        color: var(--wt-color-primary-text);
-      }
-      .description,
-      .declarations,
-      .dish .declarations wt-icon {
-        color: var(--wt-color-text-muted);
-      }
-      .description,
-      .price,
-      .choices {
-        margin: var(--wt-space-1) 0 0;
-      }
-      .declarations,
-      .declarations > span,
-      .key li {
-        display: inline-flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: var(--wt-space-1);
-      }
-      .detail .declarations {
-        column-gap: var(--wt-space-2);
-      }
-      .detail div.declarations {
-        column-gap: var(--wt-space-4);
-      }
-      .detail .declarations wt-icon[name^="allergen-"] {
-        color: inherit;
-      }
-      .choices .declarations {
-        margin-inline-start: var(--wt-space-1);
-        vertical-align: text-bottom;
-      }
-      .choices {
-        padding: 0;
-        list-style: none;
-      }
-      .choices li {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: var(--wt-space-3);
-        padding-block: var(--wt-space-2);
-        border-block-end: 1px solid var(--wt-color-border);
-      }
-      .choices .description {
-        grid-column: 1;
-      }
-      .choice-price {
-        text-align: end;
-      }
-      footer {
-        border-block-start: 1px solid var(--wt-color-border);
-        margin-block-start: var(--wt-space-5);
-        padding-block-start: var(--wt-space-3);
-      }
-      .key {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2) var(--wt-space-4);
-        padding: 0;
-      }
-      @container (min-width: 640px) {
-        article {
-          --menu-padding: var(--wt-space-6);
-        }
-        header {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
-          align-items: center;
-        }
-        .members {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-        .dish {
-          grid-template-columns: minmax(0, 1fr);
-        }
-        .dish-heading {
-          display: flex;
-          flex-wrap: wrap;
-          column-gap: var(--wt-space-2);
-          align-items: baseline;
-        }
-        .dish-name {
-          flex: 1 1 50%;
-        }
-        .dish-heading > .price {
-          margin-block-start: 0;
-          margin-inline-start: auto;
-          font-size: var(--wt-font-size-lg);
-          text-align: end;
-        }
-        .dish-heading > .description {
-          flex-basis: 100%;
-          order: 1;
-        }
-        img {
-          grid-row: 1;
-          inline-size: 100%;
-          aspect-ratio: 4 / 3;
-        }
-      }
-    `,
-  ];
+  static override styles = customerMenuPageStyles;
 
   @property({ attribute: false }) menu?: PublicGuestMenu;
+  @property({ type: Boolean, reflect: true }) standalone = false;
+  @property({ attribute: false }) photoSource?: (
+    image: string,
+  ) => string | DirectiveResult | undefined;
   @property({ reflect: true }) photos: CustomerMenuPhotoSize = "large";
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
@@ -701,7 +399,7 @@ export class CustomerMenuPage extends LitElement {
       left: scroller?.scrollLeft ?? 0,
     };
     await this.updateComplete;
-    const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2")!;
+    const heading = this.renderRoot.querySelector<HTMLElement>(".detail .menu-title")!;
     if (scroller) {
       const edge = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
       scroller.scrollTop += heading.parentElement!.getBoundingClientRect().top - edge;
@@ -801,10 +499,18 @@ export class CustomerMenuPage extends LitElement {
     </wt-dialog>`;
   }
 
+  #photo(reference: string | null) {
+    if (this.photos !== "none" && reference && MEDIA_FILENAME.test(reference))
+      return this.photoSource?.(reference);
+    return undefined;
+  }
+
   protected override render() {
     const menu = this.menu;
     if (!menu) return nothing;
     const detail = this.detail;
+    const titleTag = this.standalone ? literal`h1` : literal`h2`;
+    const subtitleTag = this.standalone ? literal`h2` : literal`h3`;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const query = this.query.trim().toLocaleLowerCase(menu.language);
     const { entries: visible, dishes } = filterCustomerMenu(
@@ -862,12 +568,9 @@ export class CustomerMenuPage extends LitElement {
                 <strong class="set-price">${money(member.price)}</strong>
               </div>`;
             case "product": {
-              const image =
-                this.photos !== "none" && member.image && MEDIA_FILENAME.test(member.image)
-                  ? member.image
-                  : null;
-              const eager = firstPhoto && image !== null;
-              if (image !== null) firstPhoto = false;
+              const image = this.#photo(member.image);
+              const eager = firstPhoto && image !== undefined;
+              if (image !== undefined) firstPhoto = false;
               return html`<div class="dish">
                 <div>
                   <div class="dish-heading">
@@ -880,10 +583,10 @@ export class CustomerMenuPage extends LitElement {
                   </div>
                 </div>
                 ${
-                  image === null
+                  image === undefined
                     ? nothing
                     : html`<img
-                        src=${liveMediaImage(image, "display")}
+                        src=${image}
                         alt=""
                         loading=${eager ? nothing : "lazy"}
                         fetchpriority=${eager ? "high" : nothing}
@@ -895,14 +598,13 @@ export class CustomerMenuPage extends LitElement {
         })}
       </div>`;
     const photo = detail?.member.kind === "product" ? detail.member.image : null;
-    const detailImage =
-      this.photos !== "none" && photo && MEDIA_FILENAME.test(photo) ? photo : null;
+    const detailImage = this.#photo(photo);
     return html`<article lang=${menu.language} data-theme=${this.theme}>
       ${
         detail
           ? html`<div class="detail" data-detail>
               <div class="detail-lead">
-                ${detailImage ? html`<img src=${liveMediaImage(detailImage, "display")} alt="" />` : nothing}
+                ${detailImage ? html`<img src=${detailImage} alt="" />` : nothing}
                 <wt-button
                   class="back"
                   variant=${detailImage ? "secondary" : "ghost"}
@@ -913,18 +615,22 @@ export class CustomerMenuPage extends LitElement {
                   >${words.text.menu}</wt-button
                 >
               </div>
-              <h2 tabindex="-1">${detail.member.name}</h2>
-              ${detailContent(detail.member, words, menu.language, this.excluded, filtered)}
+              ${staticHtml`<${titleTag} class="menu-title" tabindex="-1">${detail.member.name}</${titleTag}>`}
+              ${detailContent(subtitleTag, detail.member, words, menu.language, this.excluded, filtered)}
             </div>`
           : nothing
       }
       <div ?hidden=${detail !== undefined}>
         <header>
-          <h2>${menu.name}</h2>
+          <div class="title-row">
+            ${staticHtml`<${titleTag} class="menu-title">${menu.name}</${titleTag}>`}
+            <slot name="header-actions"></slot>
+          </div>
           <search lang=${words.language}>
             <wt-input
               name="dish-search"
               type="search"
+              variant="outlined"
               hide-label
               label=${words.text.searchDishes!}
               placeholder=${words.text.searchDishes!}
@@ -963,7 +669,8 @@ export class CustomerMenuPage extends LitElement {
         <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
           ${noResults ? emptyMessage : nothing}
         </div>
-        ${members(visible, 3)} ${legend(words)} ${this.#filterDialog(words)}
+        ${members(visible, this.standalone ? 2 : 3)} ${legend(subtitleTag, words)}
+        ${this.#filterDialog(words)}
       </div>
     </article>`;
   }
@@ -971,6 +678,6 @@ export class CustomerMenuPage extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-customer-menu-page": CustomerMenuPage;
+    "customer-menu-page": CustomerMenuPage;
   }
 }

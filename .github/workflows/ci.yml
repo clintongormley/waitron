@@ -83,6 +83,7 @@ jobs:
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       setup: ${{ steps.gates.outputs.setup }}
+      customer_menu: ${{ steps.gates.outputs.customer_menu }}
       venue_service: ${{ steps.gates.outputs.venue_service }}
       server: ${{ steps.gates.outputs.server }}
       fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
@@ -391,6 +392,7 @@ jobs:
             {"id":"test-till","count":7,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.till == 'true' }}},
             {"id":"test-dashboard","count":6,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.dashboard == 'true' }}},
             {"id":"test-setup","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.setup == 'true' }}},
+            {"id":"test-customer-menu","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.customer_menu == 'true' }}},
             {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.venue_service == 'true' }}},
             {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.adjustments == 'true' }}},
             {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.staffing == 'true' }}},
@@ -730,6 +732,7 @@ jobs:
       - run: pnpm --filter @waitron/dashboard build
       - run: pnpm --filter @waitron/setup build
       - run: pnpm --filter @waitron/till build
+      - run: pnpm --filter @waitron/customer-menu build
 
       - name: Resolve installed Playwright version
         id: playwright-version
@@ -767,6 +770,10 @@ jobs:
           else
             echo "::notice::Skipping built setup browser check: apps/setup/test/bundle-smoke.mjs is absent from the checked-out head."
           fi
+
+      - name: Open the built customer menu
+        timeout-minutes: 2
+        run: timeout 90 pnpm --filter @waitron/customer-menu exec node test/bundle-smoke.mjs
 
       # sharp's native addon cannot be bundled and esbuild does not refuse to try: without
       # `--external:sharp` the build passes and the bundle is a syntax error (bundled sharp declares
@@ -2774,6 +2781,91 @@ jobs:
           node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/setup" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
+  test-customer-menu:
+    timeout-minutes: 10
+    needs: changes
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.customer_menu == 'true')
+    runs-on: ${{ (github.run_attempt == 1 && 1 <= fromJSON(needs.changes.outputs.server_jobs || '{}')['test-customer-menu'] || github.run_attempt != 1 && github.run_attempt == needs.changes.outputs.server_route_attempt && needs.changes.outputs.server_route == 'server') && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-customer-menu-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/customer-menu exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        id: browser-cache
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
+
+      - run: pnpm --filter @waitron/customer-menu exec playwright install chromium
+
+      - name: Run the customer menu shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/customer-menu" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/customer-menu" test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+            --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+
   # Venue service combines server-side configuration tests with a Chromium dashboard project.
   # Its runners install Chromium and keep browser execution out of the light package bins.
   test-venue-service:
@@ -3966,6 +4058,7 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"
+          set -- "$@" --filter "!@waitron/customer-menu"
           set -- "$@" --filter "!@waitron/venue-service"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
@@ -4087,6 +4180,7 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"
+          set -- "$@" --filter "!@waitron/customer-menu"
           set -- "$@" --filter "!@waitron/venue-service"
           set -- "$@" --filter "!@waitron/server"
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
@@ -4491,6 +4585,7 @@ jobs:
       - test-dashboard-merge
       - test-webkit-startup
       - test-setup
+      - test-customer-menu
       - test-venue-service
       - test-venue-service-merge
       - test-bookings

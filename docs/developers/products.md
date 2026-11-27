@@ -1043,7 +1043,8 @@ This sent-order/history exception follows the owner's 11-November decision 6 in
 
 ### Published declarations
 
-**Allergies and diets** in Customer menu reads the published declarations. Choose whole allergen
+**Allergies and diets** reads the published declarations in the dashboard's Customer menu
+preview and the standalone customer-menu app. Choose whole allergen
 groups to exclude and one diet to match. A dish with variants needs a reviewed variant that passes
 all exclusions. A dish is also hidden if its main declaration is unreviewed or an extra served by
 default declares a selected allergen or lacks review. The diet filter uses the dish's own labels

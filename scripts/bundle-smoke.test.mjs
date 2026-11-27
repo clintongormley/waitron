@@ -40,6 +40,7 @@ it("selects real build scripts for every shipped application without tolerating 
     "apps/dashboard",
     "apps/setup",
     "apps/till",
+    "apps/customer-menu",
   ].map((path) => JSON.parse(readFileSync(new URL(`${path}/package.json`, root), "utf8")));
   expect(builds.map(({ name }) => name)).toEqual(applications.map(({ name }) => name));
   for (const application of applications) {
@@ -62,6 +63,17 @@ it("requires installing Chromium and opening the built setup page, with failures
   expect(existsSync(new URL("apps/setup/test/bundle-smoke.mjs", root))).toBe(true);
   expect(open).toMatch(
     /^ {12}timeout 90 pnpm --filter @waitron\/setup exec node test\/bundle-smoke\.mjs$/m,
+  );
+});
+
+it("requires opening the built customer menu and fails when its smoke check fails", () => {
+  const step = steps.find((candidate) =>
+    candidate.startsWith("name: Open the built customer menu"),
+  );
+  mandatory(step);
+  expect(existsSync(new URL("apps/customer-menu/test/bundle-smoke.mjs", root))).toBe(true);
+  expect(step).toMatch(
+    /^ {8}run: timeout 90 pnpm --filter @waitron\/customer-menu exec node test\/bundle-smoke\.mjs$/m,
   );
 });
 

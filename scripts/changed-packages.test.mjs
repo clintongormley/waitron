@@ -802,6 +802,12 @@ describe("the CLI", () => {
     );
   });
 
+  it("selects the customer menu browser package when its source changes", () => {
+    expect(run("apps/customer-menu/src/main.ts\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/customer-menu\nroot=false\ndeploy=false\n",
+    );
+  });
+
   it("selects the server, whose CI test job runs scripts/setup-litestream.mjs", () => {
     expect(run("scripts/setup-litestream.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
