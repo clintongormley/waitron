@@ -42,9 +42,9 @@ export const en = {
   "permission.schedule.manage.help":
     "Plan and publish the rota, manage job roles and their holders, and handle swaps and absences. Change staff scheduling details in Users too.",
   "permission.workforce.correct.help":
-    "Review attendance questions and propose, approve or decline working-time corrections. Approving your own time also needs Approve your own working time.",
+    "Review attendance questions, propose or respond to changes, and approve finished days. Approving your own time also needs Approve your own working time.",
   "permission.workforce.self_approve.help":
-    "Approve your own working-time corrections without another person’s approval. You also need Correct working time.",
+    "Approve your own finished days and changes to your hours. You also need Correct working time.",
   "permission.menu.manage.help":
     "Edit products, menus, modifiers and product images. Publish menus.",
   "permission.venue.view.help":
@@ -4914,9 +4914,9 @@ export const es: Record<StringKey, string> = {
   "permission.schedule.manage.help":
     "Planifica y publica el cuadrante, gestiona puestos y sus titulares, y tramita cambios de turno y ausencias. También cambia los datos de planificación del personal en Usuarios.",
   "permission.workforce.correct.help":
-    "Revisa las incidencias de presencia y propone, aprueba o rechaza correcciones del registro horario. Para aprobar tu propio horario también necesitas Aprobar tus propias horas.",
+    "Revisa las incidencias de presencia, propón cambios o responde a ellos y aprueba los días terminados. Para aprobar tus propias horas también necesitas Aprobar tus propias horas.",
   "permission.workforce.self_approve.help":
-    "Aprueba las correcciones de tu propio registro horario sin la aprobación de otra persona. También necesitas Corregir horas trabajadas.",
+    "Aprueba tus propios días terminados y los cambios en tus horas. También necesitas Corregir horas trabajadas.",
   "permission.menu.manage.help":
     "Edita productos, cartas, modificadores e imágenes de productos. Publica cartas.",
   "permission.venue.view.help":

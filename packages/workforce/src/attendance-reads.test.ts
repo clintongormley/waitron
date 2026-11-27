@@ -148,11 +148,15 @@ it("returns an empty own inbox and one compatible subject revision for day and i
   expect((await day()).revision).toBe(value.revision);
   expect(await queue()).toEqual({ items: [], finishedDays: [] });
 });
-it("keeps the start date of an overnight shift out of bulk approval while its break is proposed", async () => {
+it("holds the overnight shift and leaves the following shift available while a break is proposed", async () => {
   const common = { nodeId, personId, offsetMinutes: 60, origin };
   await run((tx) => backend.clockIn(tx, { ...common, at: "2026-01-05T21:00:00Z" }));
   await run((tx) => backend.clockOut(tx, { ...common, at: "2026-01-06T04:00:00Z" }));
-  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-05" }]);
+  await shift(personId, "2026-01-06", 60);
+  expect((await queue()).finishedDays).toMatchObject([
+    { personId, date: "2026-01-06" },
+    { personId, date: "2026-01-05" },
+  ]);
   await send(
     {
       action: "propose",
@@ -166,7 +170,28 @@ it("keeps the start date of an overnight shift out of bulk approval while its br
     manager,
     manager,
   );
-  expect((await queue()).finishedDays).toEqual([]);
+  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-06" }]);
+});
+it("refuses the same day twice before appending any approvals", async () => {
+  await shift();
+  const { date, digest } = (await queue()).finishedDays[0]!;
+  const target = { personId, date, digest };
+  const before = await readRecordedEntries(suite.db, { personId });
+  await expect(
+    run((tx) =>
+      api.approveAttendanceDays(tx, {
+        days: [target, target],
+        actorPersonId: manager,
+        nodeId,
+        origin,
+        now,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "attendance.invalid",
+    params: { reason: "duplicate_approval_day" },
+  });
+  expect(await readRecordedEntries(suite.db, { personId })).toEqual(before);
 });
 it("gives the inbox the venue's zone and no place list", async () => {
   await suite.db.run(

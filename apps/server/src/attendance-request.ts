@@ -164,16 +164,12 @@ export function parseAttendanceDayApprovals(value: unknown): AttendanceDayApprov
   const body = object(value, "days");
   keys(body, ["days"], "days");
   if (!Array.isArray(body.days) || body.days.length === 0) invalid("days");
-  const seen = new Set<string>();
   return body.days.map((raw: unknown) => {
     const day = object(raw, "days");
     keys(day, ["personId", "date", "digest"], "days");
     const personId = uuid(day.personId, "personId");
     const date = requirePeriod(day.date, "date");
     if (typeof day.digest !== "string" || !/^[0-9A-F]{64}$/.test(day.digest)) invalid("digest");
-    const key = `${personId}/${date}`;
-    if (seen.has(key)) invalid("days");
-    seen.add(key);
     return { personId, date, digest: day.digest };
   });
 }

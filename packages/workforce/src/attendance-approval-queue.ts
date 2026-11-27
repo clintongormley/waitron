@@ -14,10 +14,7 @@ import "./errors.js";
 async function readManagerQueue(tx: Transaction) {
   const entries = await readRecordedEntries(tx, {});
   const commands = await tx.select().from(attendanceAnswers);
-  const items = projectCorrectionItems(
-    entries.filter((entry) => entry.entryKind !== "day_approval"),
-    commands,
-  ).filter(
+  const items = projectCorrectionItems(entries, commands).filter(
     (item) =>
       item.status === "waiting-manager" ||
       item.status === "waiting-worker" ||
@@ -30,20 +27,23 @@ async function readManagerQueue(tx: Transaction) {
       Map.groupBy(entries, (entry) => entry.personId),
       ([personId, own]) => {
         const openChanges = pendingByPerson.get(personId)?.flatMap((item) => item.history) ?? [];
-        const changedDates = new Set(openChanges.map(entryDate));
-        const changedRoots = new Set(openChanges.map((entry) => recordRoot(entry, byId).entryId));
         const days = approvalsForPerson(own);
+        if (openChanges.length === 0) return [personId, days];
+        const dateByRoot = new Map<string, string>();
         for (const [date, { times }] of days) {
-          if (
-            changedDates.has(date) ||
-            times.some((time) => changedRoots.has(recordRoot(time, byId).entryId)) ||
-            // A missing time after midnight may have no existing entry to link it to the shift.
-            openChanges.some(
-              ({ eventAt }) => eventAt >= times[0]!.eventAt && eventAt <= times.at(-1)!.eventAt,
-            )
-          ) {
-            days.delete(date);
-          }
+          for (const time of times) dateByRoot.set(recordRoot(time, byId).entryId, date);
+        }
+        const workDays = [...days];
+        for (const entry of openChanges) {
+          const linkedDate = dateByRoot.get(recordRoot(entry, byId).entryId);
+          // A missing time can fall inside an overnight shift without being linked to an entry.
+          const enclosingDate =
+            linkedDate ??
+            workDays.find(
+              ([, { times }]) =>
+                entry.eventAt >= times[0]!.eventAt && entry.eventAt <= times.at(-1)!.eventAt,
+            )?.[0];
+          days.delete(enclosingDate ?? entryDate(entry));
         }
         return [personId, days];
       },
@@ -92,7 +92,12 @@ export async function approveAttendanceDays(
     throw new AppError("attendance.not_permitted", { personId: actorPersonId });
 
   const { days } = await readManagerQueue(tx);
+  const seen = new Set<string>();
   const confirmed = input.days.map(({ personId, date, digest }) => {
+    const key = `${personId}/${date}`;
+    if (seen.has(key))
+      throw new AppError("attendance.invalid", { reason: "duplicate_approval_day" });
+    seen.add(key);
     const day = days.get(personId)?.get(date);
     if (day?.approval.digest !== digest) throw new AppError("attendance.state_changed", {});
     return day;
