@@ -47,6 +47,7 @@ export { parseDecimalInput, formatDecimalInput, decimalMark } from "@waitron/ui-
 export { WtTextarea } from "./components/wt-textarea.js";
 export { WtPriceInput } from "./components/wt-price-input.js";
 export { WtNumberStepper } from "./components/wt-number-stepper.js";
+export { WtStepper } from "./components/wt-stepper.js";
 export { WtFormActions, formMessage, formMessageStyles } from "./components/wt-form-actions.js";
 export { WtFormErrorSummary } from "./components/wt-form-error-summary.js";
 export { WtHelpTooltip } from "./components/wt-help-tooltip.js";
