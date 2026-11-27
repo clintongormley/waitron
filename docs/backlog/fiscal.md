@@ -872,18 +872,10 @@ its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-
   40-bit RC2, which the box's Node cannot open, and setup's and the dialog's own export guides send
   Mac users to Keychain Access. The refusal says to export again with AES; whether Keychain Access
   offers that was not checked. Either the box opens RC2 files or the Mac guide names a way that works.
-- **AEAT's refusal of a certificate is shown as "failed for an unexpected reason".** AEAT answers
-  HTTP 302 to its page `erro4011.html` ("401", certificate not verified), or `erro4033.html` when no
-  certificate arrived. `mtlsFetch` follows the redirect, the library cannot read the page, and
-  `classify` in `certificate-check.ts` falls through to `check_failed`. Keep the redirect and say that
-  AEAT did not accept the certificate.
 - **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
   certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
   unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's
   policy, or at least start on representative (owner, 2026-11-25: "each owner has their own cert").
-- **The sentence "AEAT refused this certificate for {taxpayerNif} ({codigo})" can be built** (the
-  plan's decision 11). AEAT's number arrives in the SOAP fault's `faultstring`, as `Codigo[4112].`
-  followed by its text, with HTTP 200 and `faultcode` `env:Client`.
 - **Opening a Firefox export takes about 0.9 of the opener's 2 seconds** on an idle i5-6400T box, so
   a slower or busy box may answer `unavailable` for a sound file.
 

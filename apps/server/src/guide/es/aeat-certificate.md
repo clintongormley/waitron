@@ -14,6 +14,9 @@ Corrige la contraseña o elige otro archivo, pulsa **Siguiente** y repite la pru
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un
 cifrado moderno. Las instrucciones de exportación están en la pantalla del certificado.
 
+Si la prueba fiscal dice que la AEAT no ha aceptado el certificado, pulsa **Volver**, elige otro
+certificado y repite la prueba.
+
 Si se rechaza el certificado al terminar una configuración interrumpida, corrígelo primero. Después
 se te pedirá que confirmes de nuevo que eres quien inició la configuración antes de continuar.
 

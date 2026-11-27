@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { credentialRevision, getCredential, loadKeyRing } from "@waitron/credentials";
+import {
+  credentialRevision,
+  getCredential,
+  loadKeyRing,
+  putCredential,
+} from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -362,6 +367,41 @@ describe("the fiscal readiness rejection reader", () => {
 
   it("does not manufacture details when no rejection was saved", async () => {
     await seedPendingEnvios(suite.db, { count: 1 });
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
+  });
+
+  async function vaultAndMark(markedRevision?: string): Promise<void> {
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    const revision = await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, ring, {
+        personId: null,
+        purpose: "fiscal.aeat",
+        value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+      });
+      return credentialRevision(tx, { purpose: "fiscal.aeat" });
+    });
+    await suite.db.execute(sql`
+      insert into verifactu_sending_state
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
+      values (1, '2026-10-24T22:30:00.000Z', 0, ${markedRevision ?? revision},
+        '2026-10-24T22:30:00.000Z')
+    `);
+  }
+
+  it("names AEAT's refusal of the certificate the vault holds", async () => {
+    await seedPendingEnvios(suite.db, { count: 1 });
+    await vaultAndMark();
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([
+      { code: "fiscal.certificate_not_accepted", message: null },
+    ]);
+  });
+
+  it("ignores a refusal of a certificate the vault no longer holds", async () => {
+    await seedPendingEnvios(suite.db, { count: 1 });
+    await vaultAndMark("an-earlier-revision");
     expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
   });
 });

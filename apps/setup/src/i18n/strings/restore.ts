@@ -191,6 +191,8 @@ export const restoreEn = {
   "fiscal_test.accepted": "AEAT accepted the test submission.",
   "fiscal_test.rejected":
     "AEAT rejected the test submission. Correct the certificate or restaurant details, then try again.",
+  "fiscal_test.certificate_not_accepted":
+    "AEAT did not accept this certificate. Select Back to choose another certificate, then run the fiscal test again.",
   "fiscal_test.uncertain":
     "The result is uncertain. Wait a moment and retry; Waitron will keep the same test record.",
   "fiscal_test.back": "Back",
@@ -401,6 +403,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "fiscal_test.accepted": "La AEAT ha aceptado el envío de prueba.",
   "fiscal_test.rejected":
     "La AEAT ha rechazado el envío de prueba. Corrige el certificado o los datos del restaurante e inténtalo de nuevo.",
+  "fiscal_test.certificate_not_accepted":
+    "La AEAT no ha aceptado este certificado. Pulsa Volver para elegir otro certificado y repite la prueba fiscal.",
   "fiscal_test.uncertain":
     "El resultado no es seguro. Espera un momento y vuelve a intentarlo; Waitron conservará el mismo registro de prueba.",
   "fiscal_test.back": "Volver",

@@ -7,6 +7,8 @@ import { dispatchFiscalTestRequested, dispatchSetupGoto } from "../events.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
+const CERTIFICATE_NOT_ACCEPTED = "fiscal.certificate_not_accepted";
+
 @customElement("setup-fiscal-test-screen")
 export class SetupFiscalTestScreen extends LitElement {
   static override styles = [
@@ -47,8 +49,19 @@ export class SetupFiscalTestScreen extends LitElement {
           ? html`<p class="success" role="status">${t("fiscal_test.accepted")}</p>`
           : this.status === "rejected"
             ? html`<div class="error" role="alert">
-                <p>${t("fiscal_test.rejected")}</p>
-                ${this.rejections.map(({ code, message }) => html`<p>${code}${code && message ? ": " : ""}${message}</p>`)}
+                <p>
+                  ${t(
+                    this.rejections.some(({ code }) => code === CERTIFICATE_NOT_ACCEPTED)
+                      ? "fiscal_test.certificate_not_accepted"
+                      : "fiscal_test.rejected",
+                  )}
+                </p>
+                ${this.rejections
+                  .filter(({ code }) => code !== CERTIFICATE_NOT_ACCEPTED)
+                  .map(
+                    ({ code, message }) =>
+                      html`<p>${code}${code && message ? ": " : ""}${message}</p>`,
+                  )}
               </div>`
             : this.status === "uncertain"
               ? html`<p class="error" role="alert">${t("fiscal_test.uncertain")}</p>`

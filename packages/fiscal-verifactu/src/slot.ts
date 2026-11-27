@@ -1,5 +1,6 @@
 import { eq, isNull, ne, or } from "drizzle-orm";
 import { tableExists } from "@waitron/db";
+import { credentialRevision } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
@@ -8,6 +9,7 @@ import { VerifactuBackend } from "./backend.js";
 import { runningIdentity } from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
+import { certificateRefusedAt } from "./certificate-refusal.js";
 import { queueReminders, currentReminderInstall, wordReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
@@ -56,15 +58,23 @@ export const FISCAL_SLOT: FiscalContribution = {
       .limit(1);
     return rows.length > 0;
   },
-  readinessRejections: (db) =>
-    db
+  readinessRejections: async (db) => {
+    const refused = await certificateRefusedAt(
+      db,
+      await credentialRevision(db, { purpose: "fiscal.aeat" }),
+    );
+    const rejected = await db
       .select({
         code: verifactuSubmissions.codigoError,
         message: verifactuSubmissions.mensajeError,
       })
       .from(verifactuSubmissions)
       .where(eq(verifactuSubmissions.estado, "rechazado"))
-      .orderBy(verifactuSubmissions.registroId),
+      .orderBy(verifactuSubmissions.registroId);
+    return refused === null
+      ? rejected
+      : [{ code: "fiscal.certificate_not_accepted", message: null }, ...rejected];
+  },
   makeBackend: (deps) => makeVerifactuBackend(deps),
   refuseSettings: (environment) => {
     runningIdentity(environment);

@@ -1,11 +1,16 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
+import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
+import { withTransaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { enabledModules } from "@waitron/module";
 import { drain } from "@waitron/fiscal-verifactu";
 import { venueFiscalSelection, type VenueRequest } from "@waitron/provisioning";
 import type { RegistroAlta, RegistroAnulacion, VerifactuClient } from "@waitron/verifactu";
+import { createClient } from "@waitron/verifactu";
 import { createFakeAeat, keyOf } from "@waitron/verifactu/testing";
 import { ALL_MODULES } from "./modules.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
@@ -94,6 +99,83 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
   expect(result).toEqual({
     status: "rejected",
     rejections: [{ code: "1161", message: "Valor incorrecto" }],
+  });
+});
+
+it("reports a sample whose certificate AEAT refused as rejected, naming the certificate refusal", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-certificate-"));
+  dirs.push(stateDir);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
+  const modules = enabledModules(ALL_MODULES, selected.config);
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+  const now = new Date(Date.now() + 60_000);
+  // What mtlsFetch throws when AEAT redirects the certificate to its refusal page.
+  const refused = createClient({
+    endpoint: "https://example.test/soap",
+    fetch: async () => {
+      throw new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" });
+    },
+  });
+
+  const result = await submitFiscalReadiness({
+    stateDir,
+    modules,
+    venue,
+    contribution: {
+      ...selected.contribution!,
+      activationReadiness: "accepted-test-submission" as const,
+      provisioningSecret: {
+        required: () => true,
+        validate: () => {},
+        seal: ({ db }) =>
+          withTransaction(db, async (tx) => {
+            await putCredential(tx, ring, {
+              personId: null,
+              purpose: "fiscal.aeat",
+              value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+            });
+          }),
+      },
+      drain: ({ db, environment, skipRetryMs }, at) =>
+        drain(
+          {
+            db,
+            environment,
+            skipRetryMs,
+            resolveClient: async () => ({
+              ...refused,
+              certificateRevision: await withTransaction(db, (tx) =>
+                credentialRevision(tx, { purpose: "fiscal.aeat" }),
+              ),
+            }),
+          },
+          at,
+        ),
+    },
+    secret: undefined,
+    ring,
+    readinessInput: {
+      requirement: "accepted-test-submission",
+      fiscalModule: selected.contribution!.id,
+      country: venue.country,
+      taxId: venue.taxId,
+      legalName: venue.legalName,
+      fiscalTerritory: venue.fiscalTerritory,
+      submissionTarget: null,
+      certificateFingerprint: null,
+      certificateKind: null,
+      moduleVersions: { core: 1 },
+      applicationVersion: "0.0.0",
+    },
+    now: () => now,
+  });
+
+  expect(result).toEqual({
+    status: "rejected",
+    rejections: [{ code: "fiscal.certificate_not_accepted", message: null }],
   });
 });
 
