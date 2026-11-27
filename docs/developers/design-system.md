@@ -6193,7 +6193,7 @@ its price formatting. Search matches displayed dish and set-menu names. Top-leve
 remain visible while scrolling and underline the current section. The canvas has its own theme
 root so the dashboard theme does not set the customer page’s colours.
 Dish and set-menu names open details inside the canvas. The heading takes focus on open.
-Back to menu restores the search, scroll position and focus on the name that opened the details.
+The **Menu** button restores the search, scroll position and focus on the name that opened the details.
 
 The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
