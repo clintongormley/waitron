@@ -1,5 +1,10 @@
 import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
+import {
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_SIGNED_FINGERPRINT,
+} from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
+import { openCertificateFile } from "@waitron/fiscal-verifactu/src/certificate-file.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,6 +157,31 @@ beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
     await tx.delete(venueCredentials);
   });
+});
+
+it("seals a Mac export so plain Node opens it while the readiness check reads the file as sent", async () => {
+  const aeatCert = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+  const checked: unknown[] = [];
+  const made = mount({
+    assertFiscalReady: async ({ secret }) => {
+      checked.push(secret);
+    },
+  });
+  const response = await post(made.app, { ...body(), aeatCert, email });
+  expect(response.status).toBe(200);
+  expect(checked).toEqual([aeatCert]);
+  const sealed = (await withTransaction(suite.db, (tx) =>
+    tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
+  )) as typeof aeatCert;
+  expect(sealed).toEqual({ ...aeatCert, pfxBase64: expect.any(String) });
+  expect(
+    openCertificateFile(Buffer.from(sealed.pfxBase64, "base64"), sealed.passphrase),
+  ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
+  expect(
+    await suite.db.all<{ fingerprint: string }>(
+      sql`select fingerprint from verifactu_certificates where node_id=${result.nodeId}`,
+    ),
+  ).toEqual([{ fingerprint: OPENSSL_SIGNED_FINGERPRINT }]);
 });
 
 describe("setup provision email credential", () => {

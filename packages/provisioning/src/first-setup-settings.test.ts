@@ -4,6 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { parseFirstSetupSettings } from "./first-setup-settings.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
+import { RC2_SIGNED_CANDIDATE } from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 
 const contribution = venueFiscalSelection(ALL_MODULES, "ES-common").contribution!;
 const candidate = makeAuthority().issue({ passphrase: "SYNTHETIC-cert" });
@@ -39,6 +40,12 @@ describe("first setup publication settings", () => {
         from: "owner@example.test",
       },
     });
+  });
+
+  it("accepts a Mac export and keeps the file as sent", async () => {
+    const aeatCert = { ...RC2_SIGNED_CANDIDATE, certKind: "sello" };
+    const settings = await parseFirstSetupSettings(contribution, "production", { aeatCert, email });
+    expect(settings.aeatCert).toBe(aeatCert);
   });
 
   it.each([

@@ -29,6 +29,11 @@ import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 import { moveFakeClock, STOPPED_DURING_WAIT, stopDuringWait } from "../test/settle-wait.js";
+import {
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_SIGNED_FINGERPRINT,
+} from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
+import { openCertificateFile } from "@waitron/fiscal-verifactu/src/certificate-file.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -1108,6 +1113,29 @@ it.each(["certificate", "build", "key"] as const)(
     expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   },
 );
+
+it("the production venue command seals a Mac export from its settings file so plain Node opens it", async () => {
+  const mac = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+  const f = await productionFixture(true, mac);
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
+  const { withTransaction } = await import("@waitron/db");
+  const { sql } = await import("drizzle-orm");
+  const sealed = (await withTransaction(venue.db, (tx) =>
+    tryGetCredential(tx, loadKeyRing(f.env), { purpose: "fiscal.aeat" }),
+  )) as typeof mac;
+  expect(sealed).toEqual({ ...mac, pfxBase64: expect.any(String) });
+  expect(
+    openCertificateFile(Buffer.from(sealed.pfxBase64, "base64"), mac.passphrase),
+  ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
+  expect(
+    (
+      await venue.db.execute<{ fingerprint: string }>(
+        sql`select fingerprint from verifactu_certificates`,
+      )
+    ).rows,
+  ).toEqual([{ fingerprint: OPENSSL_SIGNED_FINGERPRINT }]);
+});
 
 it("production activation seals the checked settings snapshot if its source file changes before readiness", async () => {
   const f = await productionFixture(true);

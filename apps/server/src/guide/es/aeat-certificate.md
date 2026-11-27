@@ -7,8 +7,8 @@ contraseña que usaste al exportarlo. Demo y Preparación no piden este certific
 
 La configuración comprueba el archivo antes de ejecutar la prueba fiscal o crear el local. Una
 contraseña incorrecta se explica bajo **Contraseña del certificado**. Si el archivo no se puede
-abrir, usa el antiguo cifrado RC2, no incluye la clave privada, ha caducado, aún no es válido o es
-de otro NIF, la explicación aparece bajo **Archivo del certificado**.
+abrir, usa un cifrado antiguo, no incluye la clave privada, ha caducado, aún no es válido o es de
+otro NIF, la explicación aparece bajo **Archivo del certificado**.
 
 Corrige la contraseña o elige otro archivo, pulsa **Siguiente** y repite la prueba fiscal. Si falta
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un

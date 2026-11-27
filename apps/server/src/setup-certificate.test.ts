@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
-import { RC2_CANDIDATE } from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
+import { RC4_CANDIDATE } from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 import { mountSetup } from "./setup-api.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { request } from "../test/first-fiscal.js";
@@ -87,7 +87,7 @@ it.each([false, true])(
       [body(good.pfx, "SYNTHETIC-wrong-passphrase"), "passphrase", "passphrase_wrong"],
       [body(Buffer.from("SYNTHETIC-non-certificate")), "pfxBase64", "unreadable"],
       [body(noKey.pfx), "pfxBase64", "no_private_key"],
-      [{ ...RC2_CANDIDATE, certKind: "sello" }, "pfxBase64", "old_encryption"],
+      [{ ...RC4_CANDIDATE, certKind: "sello" }, "pfxBase64", "old_encryption"],
       [body(expired.pfx), "pfxBase64", "expired"],
       [body(future.pfx), "pfxBase64", "not_yet_valid"],
     ] as const) {

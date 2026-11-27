@@ -115,7 +115,8 @@ not following redirects, then showed AEAT's raw answers and added the controls. 
 - **Exports, with throwaway certificates.** macOS (`security export` and the `SecItemExport` API; the
   Keychain Access app itself was not clicked through): RC2 for the certificate, refused as
   `old_encryption`, in `node:26-slim` too. Firefox 160.0.1 (its own export code): AES, opens. Windows:
-  not run.
+  not run. *(Dated note, 2026-11-27: A1571 PR 2 rewrites such a file once when it is installed
+  through the dashboard or setup, so it is accepted.)*
 - **An accented password** opens a Firefox export, and passes the password check on a file from the
   macOS API. The `security` command stores it misencoded, so a file made that way is refused as a wrong
   password.

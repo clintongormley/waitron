@@ -349,7 +349,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "E6 old encryption",
       { outcome: "refused", reason: "old_encryption", field: "file" },
       "file",
-      "This file uses an old encryption. Export it again with current encryption (AES).",
+      "This file uses an old encryption. Export it again with current encryption.",
     ],
     [
       "unreadable",

@@ -6,9 +6,9 @@ you used when exporting it. Demo and Preparation do not ask for this certificate
 ## Correct a refused file {#refusals}
 
 Setup checks the file before running the fiscal test or provisioning the venue. A wrong passphrase
-is explained under **Certificate passphrase**. A file that cannot be opened, uses old RC2
-encryption, has no private key, has expired, is not valid yet or is for another tax ID is
-explained under **Certificate file**.
+is explained under **Certificate passphrase**. A file that cannot be opened, uses old encryption,
+has no private key, has expired, is not valid yet or is for another tax ID is explained under
+**Certificate file**.
 
 Correct the passphrase or choose a replacement file, then select **Next** and run the fiscal test
 again. For a file with no private key or old encryption, export the certificate again with its
