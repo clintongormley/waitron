@@ -96,7 +96,7 @@ async function place(input: ArchiveEntry[]) {
 async function seal(input: ArchiveEntry[]) {
   return {
     sealed: await encryptArtifactAsync(packArchive(input), "private-archive-key-sentinel"),
-    recoveryKey: "private-archive-key-sentinel",
+    archiveKey: "private-archive-key-sentinel",
   };
 }
 
@@ -301,9 +301,20 @@ Jg==
       pass,
     );
   });
+  it("refuses a wrong saved box key even when the archive key could open the sealed row", async () => {
+    const input = set(
+      entries(),
+      "backup.env",
+      "WAITRON_BACKUP_RECOVERY_KEY=wrong-private-key-sentinel\n",
+    );
+    expect(await verifyBackupStateSecrets(input, source, now, await seal(entries()))).toEqual({
+      status: "unavailable",
+      reason: "decryption_unavailable",
+    });
+  });
   it("a wrong key for selected-node state stays unavailable", async () => {
     const sealedState = await seal(entries());
-    sealedState.recoveryKey = "wrong-private-key-sentinel";
+    sealedState.archiveKey = "wrong-private-key-sentinel";
     expect(await verifyBackupStateSecrets(entries(), source, now, sealedState)).toEqual({
       status: "unavailable",
       reason: "decryption_unavailable",
@@ -450,7 +461,7 @@ it("does not classify an unreadable sealed frame as a wrong key", async () => {
   expect(
     await verifyBackupStateSecrets(entries(), source, now, {
       sealed: Buffer.from("private-frame-sentinel"),
-      recoveryKey: "private-key-sentinel",
+      archiveKey: "private-key-sentinel",
     }),
   ).toEqual(invalid);
 });
@@ -462,7 +473,7 @@ it("refuses authenticated plaintext that is not an archive", async () => {
   expect(
     await verifyBackupStateSecrets(entries(), source, now, {
       sealed,
-      recoveryKey: "private-key-sentinel",
+      archiveKey: "private-key-sentinel",
     }),
   ).toEqual(invalid);
 });

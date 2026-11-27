@@ -59,7 +59,7 @@ export async function verifyBackupStateSecrets(
   entries: readonly ArchiveEntry[],
   source: { nodeId: string },
   now: Date,
-  sealedState?: { sealed: Uint8Array; recoveryKey: string },
+  sealedState?: { sealed: Uint8Array; archiveKey: string },
 ): Promise<StateResult> {
   if (!Number.isFinite(now.getTime())) return UNAVAILABLE;
   const byName = new Map<string, ArchiveEntry>();
@@ -87,8 +87,9 @@ export async function verifyBackupStateSecrets(
     if (!isAppError(error)) throw error;
     return UNAVAILABLE;
   }
+  let boxRecoveryKey: string | undefined;
   try {
-    loadRecoveryKey(env);
+    boxRecoveryKey = loadRecoveryKey(env);
   } catch (error) {
     if (!isAppError(error) && !(error instanceof SyntaxError)) throw error;
     return UNSUPPORTED;
@@ -117,7 +118,10 @@ export async function verifyBackupStateSecrets(
   if (sealedState !== undefined) {
     let plaintext: Uint8Array;
     try {
-      plaintext = await decryptArtifactAsync(sealedState.sealed, sealedState.recoveryKey);
+      plaintext = await decryptArtifactAsync(
+        sealedState.sealed,
+        boxRecoveryKey ?? sealedState.archiveKey,
+      );
     } catch (error) {
       if (!isAppError(error)) throw error;
       return error.code === "recovery.passphrase_invalid"

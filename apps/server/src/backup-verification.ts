@@ -261,7 +261,7 @@ export async function verifyBackupArtifact(
         compatibility === "invalid" ? "archive_invalid" : "target_incompatible",
       );
     const { node } = await readCopyNode(before.query, validated.secretEntries);
-    let sealedState: { sealed: Uint8Array; recoveryKey: string } | undefined;
+    let sealedState: { sealed: Uint8Array; archiveKey: string } | undefined;
     let hasSealedState = false;
     for await (const row of before.query.rows(
       "select name from sqlite_schema where type='table' and name='node_sealed_state'",
@@ -273,7 +273,7 @@ export async function verifyBackupArtifact(
         [node.nodeId],
       )) {
         if (!(row.sealed instanceof Uint8Array)) refuse("invalid", "secret_invalid");
-        sealedState = { sealed: row.sealed, recoveryKey: delivered.secret };
+        sealedState = { sealed: row.sealed, archiveKey: delivered.secret };
       }
     }
     const secrets = await verifyBackupStateSecrets(
