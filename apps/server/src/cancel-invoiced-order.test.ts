@@ -501,10 +501,10 @@ describe("cancelling a placed order whose invoice was issued", () => {
         venue.app,
         venue.cookie,
         "GET",
-        `/api/bills/lookup?q=${original.invoiceNumber}`,
+        `/api/bills?owed=true&q=${encodeURIComponent(original.invoiceNumber)}`,
       );
       expect(listed.status).toBe(200);
-      return (listed.json as { bills: { workingOrderId: string }[] }).bills.map(
+      return (listed.json as { rows: { workingOrderId: string }[] }).rows.map(
         (row) => row.workingOrderId,
       );
     };

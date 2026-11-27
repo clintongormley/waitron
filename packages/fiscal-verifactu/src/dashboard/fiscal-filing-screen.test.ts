@@ -1522,11 +1522,11 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     for (const [language, words] of [
       [
         "en",
-        "Replacement issued. To print its original, open it on a till in Find a bill, on the Transactions tab, and choose Reprint. Later prints are copies.",
+        "Replacement issued. To print its original, open it on a till in Find a bill and choose Reprint. Later prints are copies.",
       ],
       [
         "es",
-        "Rectificativo emitido. Para imprimir su original, ábrelo en una caja en Buscar cuenta, en la pestaña Transacciones, y elige Reimprimir. Las impresiones siguientes son copias.",
+        "Rectificativo emitido. Para imprimir su original, ábrelo en una caja en Buscar cuenta y elige Reimprimir. Las impresiones siguientes son copias.",
       ],
     ] as const) {
       setLocale(language);

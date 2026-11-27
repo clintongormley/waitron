@@ -21,12 +21,11 @@ const locale = currentLocale();
 afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
-  sessionStorage.removeItem("waitron.find-bill.bills");
   sessionStorage.removeItem("waitron.find-bill.transactions");
 });
 describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
   it.each(["en-GB", "es-ES"])(
-    "Bills, Transactions, empty, error and phone filters in %s",
+    "unpaid bills, counter orders, sales, empty, error and phone filters in %s",
     async (language) => {
       setLocale(language);
       await page.viewport(390, 844);
@@ -40,16 +39,25 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
             : json(
                 url.pathname === "/api/bills"
                   ? listPage(
-                      state === "empty"
-                        ? []
-                        : [
-                            billRow({
-                              label: "A very long group name that must not widen the phone page",
-                            }),
-                          ],
-                      state === "empty" ? 0 : 125,
+                      [
+                        billRow({
+                          label: "A very long group name that must not widen the phone page",
+                        }),
+                        billRow({
+                          workingOrderId: "bill-owed",
+                          partyId: "party-1",
+                          departedAt: "2026-10-15T21:30:00Z",
+                        }),
+                      ],
+                      2,
                     )
-                  : { ...listPage([transactionRow()]), dates: resolvedDates },
+                  : {
+                      ...listPage(
+                        state === "empty" ? [] : [transactionRow()],
+                        state === "empty" ? 0 : 125,
+                      ),
+                      dates: resolvedDates,
+                    },
               ),
       );
       const { el, host } = await mountWidget<TillFindBillScreen>(
@@ -57,10 +65,14 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
         { api, active: true },
         theme,
       );
-      const grid = () =>
-        el.shadowRoot!.querySelector<WtDataTable<unknown>>('wt-data-table[data-tab="bills"]')!;
+      const grid = () => el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
       await vi.waitFor(() => expect(grid()?.rows).toHaveLength(1));
-      expect(grid().shadowRoot!.textContent).toContain("25");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector('[data-owed] [data-bill="bill-owed"]')).not.toBeNull(),
+      );
+      expect(
+        el.shadowRoot!.querySelector('[data-counter-orders] [data-bill="bill-1"]'),
+      ).not.toBeNull();
       expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
       await expectNoA11yViolations(host);
       await userEvent.click(
@@ -75,17 +87,8 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
       );
       await expectNoA11yViolations(host);
       await userEvent.keyboard("{Escape}");
-      await userEvent.click(
-        el
-          .shadowRoot!.querySelector("wt-tabs")!
-          .shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
-      );
-      const transactions = el.shadowRoot!.querySelector<WtDataTable<unknown>>(
-        'wt-data-table[data-tab="transactions"]',
-      )!;
-      await vi.waitFor(() => expect(transactions.rows).toHaveLength(1));
+      const transactions = grid();
       expect(transactions.shadowRoot!.textContent).toContain("0091");
-      await expectNoA11yViolations(host);
       await userEvent.click(
         transactions.shadowRoot!.querySelector<HTMLElement>(
           `[aria-label="${language === "en-GB" ? "Filters 1" : "Filtros 1"}"]`,
@@ -114,21 +117,23 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
       await vi.waitFor(() =>
         expect(transactions.shadowRoot!.querySelector('[aria-expanded="true"]')).toBeNull(),
       );
-      await userEvent.click(
-        el
-          .shadowRoot!.querySelector("wt-tabs")!
-          .shadowRoot!.querySelector<HTMLElement>('[data-key="bills"]')!,
+      transactions.querySelector('[name="dates"]')!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "today" },
+          bubbles: true,
+          composed: true,
+        }),
       );
-      await vi.waitFor(() => expect(grid().loading).toBe(false));
+      await vi.waitFor(() => expect(grid().rows).toHaveLength(1));
       state = "empty";
-      grid().chooseFilter("state", ["held"]);
+      grid().chooseFilter("method", ["cash"]);
       await vi.waitFor(() =>
         expect(grid().emptyMessage && grid().rows.length === 0 && !grid().loading).toBe(true),
       );
       expect(grid().shadowRoot!.querySelector('input[type="search"]')).not.toBeNull();
       await expectNoA11yViolations(host);
       state = "error";
-      grid().chooseFilter("state", ["part-paid"]);
+      grid().chooseFilter("method", ["card"]);
       await vi.waitFor(() => expect(grid().errorMessage).not.toBe(""));
       await expectNoA11yViolations(host);
     },

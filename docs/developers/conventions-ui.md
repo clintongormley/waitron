@@ -2172,11 +2172,6 @@ moved course or category is read again", and on the server by "menuState and lis
 the same live fields, and both move when a dish changes course"
 (`packages/venue-service/src/operations.test.ts`).
 
-A table opened from Find a bill does not show the order screen while it loads: the screen appears
-when the open completes, because `#onFindBillOpen` abandons the open once Find a bill stops
-showing. Pinned by "a bill opened from Find a bill shows no loading line, and Back during its read
-stops it" in the same file.
-
 **The start read.** `GET /api/till` answers `completeTillSetup` (`apps/server/src/till-setup.ts`) plus
 `servers` and `membership`, and `setupRevision`, a hash of every field but those two (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,

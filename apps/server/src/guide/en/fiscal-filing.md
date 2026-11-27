@@ -40,7 +40,7 @@ When AEAT refused a record for its operation description, the case shows AEAT's 
 description: correct it there and choose **Send the correction**. When AEAT refused a simplified
 invoice because its date was in the future, give the day the sale really happened and choose
 **Send the replacement**: Waitron issues a replacement corrective receipt, dated today. It does not
-print by itself: on a till, open it in **Find a bill**, on the **Transactions** tab, and choose
+print by itself: on a till, open it in **Find a bill** and choose
 **Reprint**. That first print is the original; later prints are copies. Only an administrator can
 send either; anyone else can sign in as one from the case.
 

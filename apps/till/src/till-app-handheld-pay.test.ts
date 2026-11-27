@@ -7206,20 +7206,6 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     expect(text(back)).toBe(name === "a till with counter zones" ? "Back to counter" : "Back");
   });
 
-  it.each(devices)("on %s, a presented TABLE bill still opens its table", async (_, device) => {
-    const row = billRow({
-      workingOrderId: "wo-4",
-      orderStatus: "placed",
-      partyId: "v1",
-      collectionStatus: null,
-      state: "unpaid",
-    });
-    const el = await openRow(row, device);
-    await vi.waitFor(() => expect(tableOrder(el)).not.toBeNull());
-    expect(findDialog(el)).toBeNull();
-    expect(api.collectOrder).not.toHaveBeenCalled();
-  });
-
   it("on a till with counter zones, it loads into the counter as before, with no collecting dialog", async () => {
     const el = await openRow(presentedCounter, {});
     await vi.waitFor(() => expect(api.retrievePlacedOrder).toHaveBeenCalledTimes(1));

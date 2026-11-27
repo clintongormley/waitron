@@ -45,12 +45,10 @@ export const transactionRow = (patch: Partial<TransactionRow> = {}): Transaction
 });
 export const billOptions = {
   timeZone: "Europe/Madrid",
-  zones: [{ id: "zone-1", name: "Terrace" }],
-  billStaff: [{ id: "staff-1", name: "Alex" }],
   transactionStaff: [{ id: "staff-2", name: "Former worker" }],
 };
 export function listPage(rows: unknown[] = [billRow()], total = 51, page = 0) {
-  return { rows, total, page, pageSize: 50, openCount: 51 };
+  return { rows, total, page, pageSize: 50 };
 }
 export const resolvedDates = {
   startAt: "2026-10-14T22:00:00.000Z",

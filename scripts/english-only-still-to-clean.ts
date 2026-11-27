@@ -198,7 +198,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/backup-verification.authority.test.ts",
   "apps/server/src/backup-verification.installed.test.ts",
   "apps/server/src/bill-identities.test.ts",
-  "apps/server/src/bill-lookup-api.test.ts",
   "apps/server/src/bill-payments-api.test.ts",
   "apps/server/src/bill-payments.issue-clock.test.ts",
   "apps/server/src/bill-payments.signed-in.test.ts",

@@ -3867,7 +3867,7 @@ When changing a shared fixture, find its server consumers with
 The Find a bill routes and readers remain in the server. When changing the parser, also run
 the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
 and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
-the shared search limit, also run the server's `orders-api`, `tax-office-list`, `bill-lookup-api`,
+the shared search limit, also run the server's `orders-api`, `tax-office-list`,
 `report-api.returned-invoices` and `bill-payments` suites for their search-length cases.
 
 When changing bill allocation, also run the server payment, receipt and advance suites named in

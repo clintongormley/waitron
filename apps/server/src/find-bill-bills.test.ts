@@ -491,7 +491,7 @@ describe("Find Bills SQL paging", () => {
     const shown: string[] = [];
     for (let page = 0; page < 3; page++) {
       const result = await list({ page: String(page) });
-      expect(result).toMatchObject({ total: 101, page, pageSize: 50, openCount: 101 });
+      expect(result).toMatchObject({ total: 101, page, pageSize: 50 });
       expect(result.rows.map((row) => row.workingOrderId)).toEqual(
         wanted.slice(page * 50, page * 50 + 50),
       );
@@ -501,7 +501,6 @@ describe("Find Bills SQL paging", () => {
     expect(await list({ page: "3", q: "paginacion" })).toMatchObject({
       rows: [],
       total: 101,
-      openCount: 101,
       page: 3,
     });
     await inTx(venue, async (tx) => {
@@ -536,10 +535,9 @@ describe("Find Bills SQL paging", () => {
       execute.mockRestore();
     });
   });
-  it("reports empty filtered totals without hiding the accessible open count", async () => {
+  it("reports empty filtered totals", async () => {
     await named("Visible");
-    expect(await list({ q: "missing" })).toMatchObject({ rows: [], total: 0, openCount: 1 });
-    expect(await list({ state: "part-paid" })).toMatchObject({ rows: [], total: 0, openCount: 1 });
+    expect(await list({ q: "missing" })).toMatchObject({ rows: [], total: 0 });
   });
   it("includes open and placed bills and paid counter orders awaiting handover", async () => {
     const held = await parked(venue, "Small beer");
@@ -597,7 +595,6 @@ describe("Find Bills SQL paging", () => {
 
     const found = await list();
     expect(found.rows.map((r) => r.workingOrderId)).toEqual([paid]);
-    expect(found.openCount).toBe(1);
   });
   it("derives net applied payments, tips and completed refunds from the same balance facts", async () => {
     const id = (await seatedWith(venue, "Tarta")).tabId;
@@ -701,7 +698,7 @@ describe("Find Bills SQL paging", () => {
       code: "working_order.not_found",
     });
   });
-  it("filters zone, any credited staff and state before counts, with no-zone allowed controls", async () => {
+  it("filters any credited staff before counts, with no-zone allowed controls", async () => {
     const own = await parked(venue, "Small beer", "Tarta");
     const other = await parkedBy(venue, venue.supervisorId, "Octopus");
     await parkedBy(venue, venue.operatorId, "Small beer");
@@ -746,15 +743,12 @@ describe("Find Bills SQL paging", () => {
         .where(eq(workingOrderLines.id, line!.id)),
     );
     expect(
-      (await list({ zoneId: venue.counterZone, staffId: venue.supervisorId, state: "held" })).rows
-        .map((r) => r.workingOrderId)
-        .sort(),
-    ).toEqual([own, other].sort());
+      (await list({ staffId: venue.supervisorId })).rows.map((r) => r.workingOrderId).sort(),
+    ).toEqual([own, other, placed, party.tabId].sort());
     await inTx(venue, async (tx) => {
       const scope = (orderId: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(orderId, []);
       expect(await readFindBills(tx, query(), scope)).toMatchObject({
         total: 1,
-        openCount: 1,
         rows: [{ workingOrderId: unzoned, zoneId: null }],
       });
       await expect(readFindBill(tx, own, scope)).rejects.toMatchObject({
@@ -812,7 +806,7 @@ describe("Find Bills SQL paging", () => {
       inside,
     ]);
     expect((await list({ q: "CAFÉ " })).rows.map((r) => r.workingOrderId)).toEqual([exact]);
-    expect(await list({ q: "!!!" })).toMatchObject({ rows: [], total: 0, openCount: 3 });
+    expect(await list({ q: "!!!" })).toMatchObject({ rows: [], total: 0 });
     expect(await list({ q: "' OR 1=1 --" })).toMatchObject({ rows: [], total: 0 });
     const row = await inTx(venue, (tx) => readFindBill(tx, exact));
     expect(
@@ -989,7 +983,7 @@ describe("Find Bills SQL paging", () => {
       ).toEqual(descending);
     }
   });
-  it("sorts and filters distinct recorded zones while keeping no-zone rows last", async () => {
+  it("sorts distinct recorded zones while keeping no-zone rows last", async () => {
     const counter = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const noZone = await inTx(venue, (tx) =>
@@ -1009,11 +1003,6 @@ describe("Find Bills SQL paging", () => {
     expect(
       (await list({ sort: "zone", direction: "descending" })).rows.map((row) => row.workingOrderId),
     ).toEqual([counter, party.tabId, noZone!.id]);
-    expect(await list({ zoneId: venue.zoneId })).toMatchObject({
-      total: 1,
-      openCount: 3,
-      rows: [{ workingOrderId: party.tabId }],
-    });
   });
   it("keeps original issued totals but reads corrected debt and departed receipt identity", async () => {
     const id = await placedIssuedBill(venue, "Small beer");

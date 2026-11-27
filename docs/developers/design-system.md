@@ -6339,10 +6339,10 @@ Language, Settings, About Waitron and Log out, then, while a venue logo is in us
 `wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. The Stations entry appears
 only under Testing on Demo or Preparation installs with the existing station permission. Live tills
 keep Stations off their navigation; prep station displays retain their own fixed primary screen. Find a
-bill opens Bills and Transactions. Its Back returns to the device's home screen without replacing
+bill opens the finished sales, with unpaid bills and counter orders above them. Its Back returns to the device's home screen without replacing
 the basket, and reads "Back to counter" only where that home is Counter; elsewhere it reads "Back".
 The Pass, the station screen and My schedule label their Back the same way. A transaction receipt
-keeps the page's tab, query and server page for its own Back action. On a device with no Counter (a
+keeps the page's query and server page for its own Back action. On a device with no Counter (a
 handheld, or a till with no counter zones) a presented counter bill opens Find a bill's collecting
 dialog on what it owes, and a parked one opens the pay window, on the whole bill on a handheld
 while none of it is paid and otherwise on an amount, emptying the basket when that window closes or

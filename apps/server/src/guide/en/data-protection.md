@@ -495,7 +495,7 @@ what the dashboard can show you.
   `sign-in.json` file lists the person's sign-ins on each device, from when to when, and their
   dashboard sign-ins. See [Download another person's data](staff.md#person-data).
 - On **Orders**, **View details** lists the receipt copies printed from **Orders** or from the
-  till's **Transactions** tab, with who printed each. For a full invoice it also lists each time the
+  till's **Find a bill**, with who printed each. For a full invoice it also lists each time the
   invoice was printed or emailed, with who asked for it when someone did, and who downloaded its
   PDF. If you have permission to email invoices, you can see the address for each email attempt.
 - No screen shows who opened the cash drawer. Recent openings are among the jobs in **Print Queue**,

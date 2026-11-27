@@ -173,7 +173,6 @@
   "src/bill-editing.test.ts": 1.5,
   "src/bill-editing.transitions.test.ts": 1.9,
   "src/bill-identities.test.ts": 6,
-  "src/bill-lookup-api.test.ts": 5.5,
   "src/bill-payments-api.test.ts": 15,
   "src/bill-payments-loop.test.ts": 4.2,
   "src/bill-payments.card.test.ts": 5.7,

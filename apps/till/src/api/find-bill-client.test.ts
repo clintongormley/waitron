@@ -8,9 +8,7 @@ const billsQuery: BillsQuery = {
   q: "0091 & Ruiz ",
   page: 1,
   sort: { key: "total", direction: "ascending" },
-  zoneId: "zone-1",
   staffId: "staff-1",
-  state: "part-paid",
   owed: true,
   counter: true,
 };
@@ -26,7 +24,7 @@ const transactionsQuery: TransactionsQuery = {
 
 describe("Find a bill client", () => {
   it("sends the Bills server query without losing trailing spaces or leading zero digits", async () => {
-    const result = { rows: [], page: 1, pageSize: 50, total: 0, openCount: 19 };
+    const result = { rows: [], page: 1, pageSize: 50, total: 0 };
     const fetchStub = vi
       .fn<typeof fetch>()
       .mockImplementation(() => Promise.resolve(response(result)));
@@ -42,9 +40,7 @@ describe("Find a bill client", () => {
       page: "1",
       sort: "total",
       direction: "ascending",
-      zoneId: "zone-1",
       staffId: "staff-1",
-      state: "part-paid",
       owed: "true",
       counter: "true",
     });
@@ -56,7 +52,6 @@ describe("Find a bill client", () => {
       total: 200,
       page: 2,
       pageSize: 50,
-      openCount: 7,
       dates: {
         startAt: "2026-09-30T22:00:00.000Z",
         endAt: "2026-10-15T22:00:00.000Z",
@@ -91,9 +86,7 @@ describe("Find a bill client", () => {
     const fetchStub = vi
       .fn<typeof fetch>()
       .mockImplementation(() =>
-        Promise.resolve(
-          response({ rows: [], page: 0, pageSize: 50, total: 0, openCount: 0, dates: null }),
-        ),
+        Promise.resolve(response({ rows: [], page: 0, pageSize: 50, total: 0, dates: null })),
       );
     const api = new TillApi("", fetchStub);
     expect(api.listTransactions).toBeTypeOf("function");
@@ -140,9 +133,7 @@ describe("Find a bill client", () => {
       collectionStatus: null,
     };
     const choices = {
-      zones: [{ id: "zone-1", name: "Counter" }],
       timeZone: "Europe/Madrid",
-      billStaff: [{ id: "staff-1", name: "Ana" }],
       transactionStaff: [],
     };
     const fetchStub = vi

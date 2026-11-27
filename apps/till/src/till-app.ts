@@ -9021,30 +9021,7 @@ export class TillApp extends LitElement {
         return;
       }
       if (row.partyId !== null) {
-        const floorRead = await this.#loadFloorData(() => !current());
-        if (!current()) return;
-        const table = this.tables.find((candidate) => candidate.party?.id === row.partyId);
-        if (table === undefined) {
-          this.errorKey = floorRead ? "held.stale" : "held.open_failed";
-          return;
-        }
-        const opening = this.#orderVisit + 1;
-        // Not shown at once: this page abandons the open once it is no longer showing.
-        await this.#onOpenTable(
-          new CustomEvent("open-table", { detail: { tableId: table.id, seated: true } }),
-          () => !current(),
-          false,
-        );
-        if (
-          session === this.#operatorSession &&
-          this.#orderVisit === opening &&
-          this.orderParty?.id === row.partyId
-        ) {
-          if (this.#tableOrderTabKey() !== undefined) this.#popDrill();
-          await this.#onSwitchBill(
-            new CustomEvent("switch-bill", { detail: { workingOrderId: row.workingOrderId } }),
-          );
-        }
+        this.errorKey = "held.stale";
         return;
       }
       if (row.state === "paid-not-handed-over") {
@@ -12970,11 +12947,7 @@ export class TillApp extends LitElement {
 
   /** A free table seats a party with the guest count given; a seated one resumes its party on the
    * bill the floor names, checked against the party's bills ({@link #followBillsRead}). */
-  async #onOpenTable(
-    event: Event,
-    left: () => boolean = () => false,
-    showAtOnce = true,
-  ): Promise<void> {
+  async #onOpenTable(event: Event): Promise<void> {
     const detail = (event as CustomEvent<{ tableId: string; seated: boolean }>).detail;
     const seatingDraft =
       !detail.seated && detail.tableId === this.activeTableId && this.orderParty === null;
@@ -12982,11 +12955,11 @@ export class TillApp extends LitElement {
       await this.leave.coordinator.request({
         scopes: [this.#partylessOwner],
         reason: "navigation",
-        proceed: () => this.#openTableFromEvent(event, left, showAtOnce),
+        proceed: () => this.#openTableFromEvent(event),
       });
       return;
     }
-    await this.#openTableFromEvent(event, left, showAtOnce);
+    await this.#openTableFromEvent(event);
   }
 
   /** Takes the draft off the screen and lets its save answer in the background. Its own `onRefused`
@@ -13055,12 +13028,8 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #openTableFromEvent(
-    event: Event,
-    left: () => boolean = () => false,
-    showAtOnce = true,
-  ): Promise<void> {
-    if (!this.#inShell() || left()) return;
+  async #openTableFromEvent(event: Event): Promise<void> {
+    if (!this.#inShell()) return;
     const {
       tableId,
       seated,
@@ -13093,7 +13062,7 @@ export class TillApp extends LitElement {
       : undefined;
     const offerRequest = ++this.#tableOfferRequest;
     const visit = ++this.#orderVisit;
-    const abandoned = () => left() || this.#orderVisit !== visit;
+    const abandoned = () => this.#orderVisit !== visit;
     this.#moveStationOpening = null;
     this.#makeAtOpening = null;
     this.movingStation = null;
@@ -13101,7 +13070,7 @@ export class TillApp extends LitElement {
     this.#clearErrorKeepingLateChange();
     this.#tableOpensPending++;
     const session = this.#operatorSession;
-    if (showAtOnce) this.#showOrderScreen(tableId);
+    this.#showOrderScreen(tableId);
     try {
       const leaving = this.#draftSync;
       if (
@@ -13118,7 +13087,7 @@ export class TillApp extends LitElement {
         withTableIds,
         abandoned,
         carried,
-        showAtOnce,
+        true,
         fromBar,
         billId,
       );

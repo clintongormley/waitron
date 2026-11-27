@@ -13,10 +13,11 @@ import {
 } from "../widgets/test-helpers.js";
 import {
   billOptions,
-  billRow,
   findBillApi,
   json,
   listPage,
+  resolvedDates,
+  transactionRow,
 } from "../../test/find-bill-fixtures.js";
 import type { TillApi } from "../api/client.js";
 import type { TillProduct } from "../api/menu-api.js";
@@ -36,7 +37,6 @@ afterEach(async () => {
   stop = undefined;
   cleanupWidgets();
   setLocale(locale);
-  sessionStorage.removeItem("waitron.find-bill.bills");
   sessionStorage.removeItem("waitron.find-bill.transactions");
   document.documentElement.style.removeProperty("--wt-keyboard-inset");
   document.documentElement.style.removeProperty("--wt-keyboard-top");
@@ -79,20 +79,24 @@ function expectFieldAtTopWithRowBelow(field: HTMLElement, row: HTMLElement): voi
   expect(rowBox.bottom, seen).toBeLessThanOrEqual(VISIBLE);
 }
 
-it("Find a bill's search moves to the top of what the keyboard leaves, with a bill below it", async () => {
+it("Find a bill's search moves to the top of what the keyboard leaves, with a sale below it", async () => {
   await pageAt(PAGE.width, PAGE.height);
   setLocale("en-GB");
   const source = findBillApi(async (url) =>
-    json(url.pathname.endsWith("options") ? billOptions : listPage([billRow()])),
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage([])
+          : { ...listPage([transactionRow()]), dates: resolvedDates },
+    ),
   );
   const { el } = await mountWidget<HTMLElement & { api: TillApi; active: boolean }>(
     "till-find-bill-screen",
     { api: source.api, active: true },
   );
   const table = await vi.waitFor(() => {
-    const found = el.shadowRoot!.querySelector<WtDataTable<unknown>>(
-      'wt-data-table[data-tab="bills"]',
-    );
+    const found = el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table");
     expect(found?.loading).toBe(false);
     expect(found?.rows.length).toBeGreaterThan(0);
     return found!;

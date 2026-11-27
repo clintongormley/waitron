@@ -248,12 +248,12 @@ describe("Find Transactions SQL paging", () => {
     const wanted = [...ids].sort().reverse();
     for (let page = 0; page < 3; page++) {
       const result = await list({ page: String(page) });
-      expect(result).toMatchObject({ total: 101, page, pageSize: 50, openCount: 1, dates: null });
+      expect(result).toMatchObject({ total: 101, page, pageSize: 50, dates: null });
       expect(result.rows.map((r) => r.saleId)).toEqual(wanted.slice(page * 50, page * 50 + 50));
       expect(result.rows.every((r) => r.amount === "12.10")).toBe(true);
     }
-    expect(await list({ page: "3" })).toMatchObject({ rows: [], total: 101, openCount: 1 });
-    expect(await list({ q: "nobody" })).toMatchObject({ rows: [], total: 0, openCount: 1 });
+    expect(await list({ page: "3" })).toMatchObject({ rows: [], total: 101 });
+    expect(await list({ q: "nobody" })).toMatchObject({ rows: [], total: 0 });
     await inTx(venue, async (tx) => {
       const execute = vi.spyOn(tx, "execute");
       const result = await readFindTransactions(tx, query({ page: "1" }));
@@ -554,7 +554,6 @@ describe("Find Transactions SQL paging", () => {
     const result = await inTx(venue, (tx) => readFindTransactions(tx, query(), condition));
     expect(new Set(result.rows.map((r) => r.saleId))).toEqual(new Set([own, unzoned]));
     expect(result.total).toBe(2);
-    expect(result.openCount).toBe(1);
     expect((await list()).rows.find((r) => r.saleId === substitute)).toMatchObject({
       scopeOrderIds: [counter, party.tabId].sort(),
       orderNumber: null,

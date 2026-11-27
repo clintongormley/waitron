@@ -20,7 +20,6 @@ import { mountPartyAllergyApi } from "./party-allergy-api.js";
 import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
 import { mountMealEndApi } from "./meal-end-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
-import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { mountFindBillApi } from "./find-bill-api.js";
 import { mountTransactionReceiptApi } from "./transaction-receipt-api.js";
@@ -143,7 +142,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
   mountFloorTodayApi(app, deps, log, run);
-  mountBillLookupApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);
   mountFindBillApi(app, deps, log, run);
   mountTransactionReceiptApi(app, deps, log, run);
