@@ -162,28 +162,33 @@ describe("Table and bill actions", () => {
   });
 
   it("keeps the table name above the guest count and party name", async () => {
-    const el = await mountScreen({
-      party: { ...twoTables, displayName: "Garcia", name: "Garcia" },
-      activeTableId: "t5",
-    });
-    const sheet = partyMenu(el);
-    const trigger = sheet.shadowRoot!.querySelector("button")!;
-    expect(trigger.getAttribute("aria-label")).toBe("Table 5");
-    expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 5");
-    expect(textOf(sheet.nextElementSibling!)).toBe("3 guests · Garcia");
-    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen({
+        party: { ...twoTables, displayName: "Garcia", name: "Garcia" },
+        activeTableId: "t5",
+      });
+      const sheet = partyMenu(el);
+      const trigger = sheet.shadowRoot!.querySelector("button")!;
+      expect(trigger.getAttribute("aria-label")).toBe("Table 5");
+      expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 5");
+      expect(textOf(sheet.nextElementSibling!)).toBe("3 guests · Garcia");
+      expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 
-    await userEvent.click(trigger);
-    await commands.parkPointer();
-    await expect.element(page.getByRole("dialog", { name: "Table 5" })).toBeVisible();
-    const title = sheet.querySelector('[slot="trigger"]')!;
-    expect(getComputedStyle(title).backgroundColor).toBe("rgb(210, 239, 251)");
-    const icon = title.querySelector("wt-icon")!;
-    expect(getComputedStyle(icon).color).toBe(getComputedStyle(title).color);
-    expect(title.getBoundingClientRect().left).toBeGreaterThan(0);
-    await userEvent.keyboard("{Escape}");
-    expect(focusOnMenu(el, sheet)).toBe(true);
-    await expect.poll(() => getComputedStyle(title).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      await userEvent.click(trigger);
+      await commands.parkPointer();
+      await expect.element(page.getByRole("dialog", { name: "Table 5" })).toBeVisible();
+      const title = sheet.querySelector('[slot="trigger"]')!;
+      expect(getComputedStyle(title).backgroundColor).toBe("rgb(210, 239, 251)");
+      const icon = title.querySelector("wt-icon")!;
+      expect(getComputedStyle(icon).color).toBe(getComputedStyle(title).color);
+      expect(title.getBoundingClientRect().left).toBeGreaterThan(0);
+      await userEvent.keyboard("{Escape}");
+      expect(focusOnMenu(el, sheet)).toBe(true);
+      await expect.poll(() => getComputedStyle(title).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 
   it("keeps the menu inside the order column as the display changes width", async () => {
@@ -215,11 +220,13 @@ describe("Table and bill actions", () => {
   });
 
   it("opens table actions under the saved name of a joined table group", async () => {
-    const el = await mountScreen();
-    el.tables = el.tables.map((row) => ({
+    const el = await mountScreen({
+      party: { ...twoTables, name: "Terrace long", displayName: "Terrace long" },
+    });
+    el.tables = el.tables.map((row, index) => ({
       ...row,
       today: {
-        placement: null,
+        placement: { x: 2 * index, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
         seats: null,
         fixed: false,
         takenOff: false,
@@ -233,6 +240,7 @@ describe("Table and bill actions", () => {
     const sheet = partyMenu(el);
     const trigger = sheet.shadowRoot!.querySelector("button")!;
     expect(trigger.getAttribute("aria-label")).toBe("Terrace long");
+    expect(textOf(sheet.nextElementSibling!)).toBe("3 guests");
     await userEvent.click(trigger);
     await expect.element(page.getByRole("dialog", { name: "Terrace long" })).toBeVisible();
   });
@@ -298,6 +306,7 @@ describe("Table and bill actions", () => {
       const label = sheet
         .querySelector("wt-menu-row:has(wt-switch)")!
         .shadowRoot!.querySelector(".label")!;
+      expect(getComputedStyle(label).cursor).toBe("pointer");
       await userEvent.click(label);
       expect(events).toEqual([{ requested: !requested }]);
       expect(sheet.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);

@@ -95,6 +95,8 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
                 ${row("guests", "table.action_guests", party.guestCount)}
                 ${row("name", "table.action_name", party.name)}
                 <wt-menu-row
+                  class="bill-request-row"
+                  ?data-actionable=${!commandBusy}
                   label=${t("signal.bill_requested")}
                   divider
                   @click=${(event: MouseEvent) => {
@@ -108,13 +110,8 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
                     label=${t("signal.bill_requested")}
                     .checked=${live(requested)}
                     .disabled=${commandBusy}
-                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                      if (commandBusy) return;
-                      (event.currentTarget as HTMLElement)
-                        .closest("wt-row-actions")
-                        ?.hide({ restoreFocus: true });
-                      options.requestBill(event.detail.checked);
-                    }}
+                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
+                      requestBill(event.currentTarget as HTMLElement, event.detail.checked)}
                   ></wt-switch>
                 </wt-menu-row>`
         }
@@ -174,6 +171,12 @@ export const tablePartyMenuStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
     overflow-wrap: anywhere;
+  }
+  .bill-request-row[data-actionable] {
+    cursor: pointer;
+  }
+  .bill-request-row[data-actionable]:is(:hover, :active) {
+    background: var(--wt-color-field-fill);
   }
   .party-menu [data-finish-table] {
     margin: var(--wt-space-2) var(--wt-space-4) var(--wt-space-5);
