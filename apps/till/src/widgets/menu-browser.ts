@@ -1138,7 +1138,7 @@ export class TillMenuBrowser extends LitElement {
         ${this.#grid([this.#setMenuTile(undefined, true)])}
       </section>`;
     }
-    const showContent = view !== nothing || this.placeRequest !== undefined;
+    const showContent = view !== nothing;
     if (!showContent && !this.hasMenuPicker) return nothing;
     return html`
       ${

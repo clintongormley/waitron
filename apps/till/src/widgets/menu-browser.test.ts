@@ -464,8 +464,11 @@ describe("set-menu folders", () => {
       if (!variants) return dish;
       const offeredModifiers = tableBurger.offeredModifiers!.map((list) =>
         list.kind === "options"
-          ? list
-          : { ...list, items: list.items.map((item) => ({ ...item, available: true })) },
+          ? { ...list, publishedDefaultLabelId: list.defaultLabelId }
+          : {
+              ...list,
+              items: list.items.map((item) => ({ ...item, image: null, available: true })),
+            },
       );
       const withChoices = { ...dish, offeredModifiers };
       const rare = {
@@ -513,7 +516,7 @@ describe("set-menu folders", () => {
       expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
     });
 
-    it("keeps a folder dish’s choices when its open picker receives an offer correction", async () => {
+    it("adds a folder dish with its choices from a corrected offer", async () => {
       const { el, store, tapDish } = await mountCorrectedFolder(declared({}, true), true);
       await tapDish();
       const picker = root(el).querySelector("till-modifier-picker")!;

@@ -615,7 +615,7 @@ To move a set menu to another bill, open **Move dishes** and select the set menu
 with it.
 
 At the **Counter**, choose **Take away**, then add the dishes from any folder: the bill groups
-them into set menus as it does at a table. To add dishes later, tap the parked order under **Open orders**.
+them into set menus. To add dishes later, tap the parked order under **Open orders**.
 
 ## Give a table a short name {#short-names}
 
