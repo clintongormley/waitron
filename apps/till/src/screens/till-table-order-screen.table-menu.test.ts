@@ -352,7 +352,7 @@ describe("Table and bill actions", () => {
 
     await userEvent.click(trigger);
     expect(control.checked).toBe(true);
-    await userEvent.click(sheet.querySelector("wt-switch")!.shadowRoot!.querySelector(".thumb")!);
+    await userEvent.click(control);
     expect(focusOnMenu(el, sheet)).toBe(true);
     expect(events).toEqual([{ requested: false }]);
     expect(popup.matches(":popover-open")).toBe(false);
