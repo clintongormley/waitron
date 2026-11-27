@@ -30,7 +30,7 @@ export class TillCounterFloor extends LitElement {
         padding: var(--wt-space-3) var(--wt-space-4) calc(var(--wt-space-3) / 2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-semibold);
+        font-weight: var(--wt-font-weight-bold);
         text-transform: uppercase;
       }
       .new-order {
