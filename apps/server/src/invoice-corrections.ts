@@ -50,6 +50,7 @@ import {
   type CorrectionLegs,
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
+  waitsForRecordsCheck,
 } from "./invoice-correction-legs.js";
 import { linkCorrectionToCancels } from "./cancelled-lines.js";
 import { optionalDocument } from "./optional-document.js";
@@ -101,8 +102,10 @@ export interface InvoiceCorrectionView {
   legs: TenderRefundView[];
   /** What /file would file now: `previewCorrectionAmounts` for the money back over the
    * correction's lineIds, or the code it refused with, the refusal's `reason` when it gave one, and
-   * whether /close may end the correction keeping its refunds; null while a leg is pending, nothing
-   * is back, or the correction has ended. */
+   * whether /close may end the correction keeping its refunds; on a full invoice whose filing
+   * could go ahead, `invoice_correction.chain_unsound`, not closable, while the box's invoice
+   * records need checking (`waitsForRecordsCheck`); null while a leg is pending, nothing is back,
+   * or the correction has ended. */
   fileNow:
     | { gross: string; vatBreakdown: SplitLine[] }
     | { refusal: string; reason?: string; closable: boolean }
@@ -691,6 +694,8 @@ async function fileNowFor(
       closable: filing.closable,
     };
   }
+  if (await waitsForRecordsCheck(tx, { backend, nodeId: cfg.nodeId }, filing))
+    return { refusal: "invoice_correction.chain_unsound", closable: false };
   return { gross: filing.gross, vatBreakdown: splitOf(filing) };
 }
 

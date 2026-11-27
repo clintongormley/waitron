@@ -383,6 +383,22 @@ describe("links of a corrective given back over two payments", () => {
     expect(correctivesOf(saleId)).toEqual([]);
   });
 
+  it("while the box's records need checking, the money under way waits for them on a full invoice", async () => {
+    const { saleId } = await cashLegBack();
+    expect((await readView(saleId)).underWay!.fileNow).toMatchObject({ gross: "10.00" });
+    recordsNeedChecking();
+    expect((await readView(saleId)).underWay!.fileNow).toEqual({
+      refusal: "invoice_correction.chain_unsound",
+      closable: false,
+    });
+  });
+
+  it("on a receipt, the money under way still answers what it would file while the box's records need checking", async () => {
+    const { saleId } = await readerLegBack(false);
+    recordsNeedChecking();
+    expect((await readView(saleId)).underWay!.fileNow).toMatchObject({ gross: "10.00" });
+  });
+
   it("while the box's records need checking, still answers a resend of a leg already sent", async () => {
     const { saleId, correctionId } = await cashLegBack();
     const lost = randomUUID();
