@@ -1657,7 +1657,11 @@ test("a dropdown draws its resting label at a text field's label size and its ch
   empty.options = TAGS;
   type Input = HTMLElement & { updateComplete: Promise<unknown> };
   const [emptyInput, filledInput] = [...host.querySelectorAll<Input>("wt-input")];
-  await Promise.all([empty.updateComplete, emptyInput!.updateComplete, filledInput!.updateComplete]);
+  await Promise.all([
+    empty.updateComplete,
+    emptyInput!.updateComplete,
+    filledInput!.updateComplete,
+  ]);
   const inputLabel = emptyInput!.shadowRoot!.querySelector(".field-label")!;
   const inputValue = filledInput!.shadowRoot!.querySelector("input")!;
   expect(emptyInput!.shadowRoot!.querySelector(".field")!.getAttribute("data-label")).toBe("rest");
@@ -1683,7 +1687,10 @@ test("a dropdown draws its resting label at a text field's label size and its ch
 
 test("an empty dropdown's chevron is centred on the box with its resting label, and a filled one's on its value", async () => {
   const empty = await mountWith('<wt-combobox label="Province (optional)"></wt-combobox>');
-  host.insertAdjacentHTML("beforeend", '<wt-combobox label="Province" value="vegan"></wt-combobox>');
+  host.insertAdjacentHTML(
+    "beforeend",
+    '<wt-combobox label="Province" value="vegan"></wt-combobox>',
+  );
   const filled = host.querySelector<WtCombobox>("wt-combobox[value]")!;
   filled.options = TAGS;
   await filled.updateComplete;
