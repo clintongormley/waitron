@@ -188,6 +188,28 @@ it("asks again when the bill changed while a payment action was busy", async () 
   expect(reads).toMatchObject([{ context: "changed bill" }]);
 });
 
+it("keeps the receipt guest field while checking a changed card tip", async () => {
+  const el = await mount({
+    quiet: true,
+    way: "whole",
+    asksGuests: true,
+    receiptGuests: 4,
+    cardReader: "simulator",
+  });
+  await showCardQuote(el, "120.00");
+  const guests = () =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]');
+  expect(guests()?.value).toBe("4");
+
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "2");
+
+  expect(guests()?.value).toBe("4");
+  expect(
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-quiet-pay-card]")?.disabled,
+  ).toBe(true);
+});
+
 it("leaves a tip entered for another card machine out of the opening amount when only that machine can take cards", async () => {
   const el = await mount({ quiet: true, way: "whole", handheld: true, takesManualCard: true });
   await click(el, "[data-quiet-pay-manual]");

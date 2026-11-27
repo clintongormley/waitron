@@ -245,8 +245,8 @@ Use **Refresh printers** when none are listed, or **Cancel** to leave without pr
 ## Payment slips {#reader-slips}
 
 If the payer wants a slip, choose **Print payment slip** after you take their payment by cash,
-**Other card machine** or card reader. For a part payment, print it from the confirmation before
-taking the next payment. After the final payment, use **Customer document**. The button appears
+**Other card machine** or card reader. For a part payment, print the slip before taking the next
+payment. After the final payment, use **Customer document**. The button appears
 when your device has a payment slip printer. A reader set to print its own slip handles that payment.
 A slip shows the payment and how it was made. For
 **Other card machine**, it includes the machine and operation number you entered.
@@ -1052,15 +1052,16 @@ whether to return all the change, leave all of it as a tip, or leave an amount. 
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
 **Card and reader.** At a table, use the contactless icon to open **Reader and printer**;
-use **Change** or scan its Waitron label if you are holding another one. At the Counter, choose
-from the card readers when a list is offered. Check the reader and the total before confirming.
+use **Change** or scan its Waitron label if you are holding another one. Check the amount on
+**Charge** before pressing it. At the Counter, choose from the card readers when a list is
+offered. Check the reader and the total on the confirmation.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the table’s Pay screen.
 To take it off before starting the payment, choose **Edit tip**, then **Remove tip**. For a
 separate card machine, enter the tip with the other payment details. At the Counter, enter
-**Tip on the card (optional)** before continuing. The confirmation separates **Paid off the bill**,
-**Tip** and **Charged on the card**.
+**Tip on the card (optional)** before continuing. The Counter confirmation separates
+**Paid off the bill**, **Tip** and **Charged on the card**.
 An amount above what is still due becomes a tip, so check the full card charge with the guest before
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
 tip. If the venue does not take tips, use the amount the refusal says can be charged.

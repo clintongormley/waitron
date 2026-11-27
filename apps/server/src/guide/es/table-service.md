@@ -261,8 +261,8 @@ o **Cancelar** para salir sin imprimir.
 ## Justificantes de pago {#reader-slips}
 
 Si quien paga quiere justificante, elige **Imprimir justificante de pago** después de cobrar en
-efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, imprímelo desde
-la confirmación antes de cobrar el siguiente. Tras el último pago, usa **Documento para el cliente**.
+efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, imprime el
+justificante antes de cobrar el siguiente. Tras el último pago, usa **Documento para el cliente**.
 El botón aparece cuando tu dispositivo tiene impresora de justificantes. Si el lector imprime su
 propio justificante, el lector se encarga de ese pago. El justificante muestra el
 pago y cómo se hizo. Con **Otro datáfono**, incluye el datáfono y el número de operación que indicaste.
@@ -1111,14 +1111,16 @@ acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina 
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
 **Tarjeta y lector.** En una mesa, usa el icono sin contacto para abrir **Lector e impresora**. Usa
-**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En Mostrador, elige el lector
-cuando se ofrezca una lista. Comprueba el lector y el total antes de
-confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
+**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. Revisa el importe del botón
+**Cobrar** antes de pulsarlo. En Mostrador, elige el lector cuando se ofrezca una lista y comprueba
+el lector y el total en la confirmación. Para usar otra máquina, sigue
+[Usar otro datáfono](table-service.md#outside-card).
 
 Si el local acepta propinas y Waitron controla el lector, pulsa **Introducir propina** en Cobrar.
 Para retirar la propina antes de iniciar el pago, pulsa **Editar propina** y luego **Quitar propina**.
-Con otro datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena **Propina con tarjeta (opcional)**
-antes de continuar. La confirmación separa **Se descuenta de la cuenta**,
+Con otro datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena
+**Propina con tarjeta (opcional)** antes de continuar. La confirmación de Mostrador separa
+**Se descuenta de la cuenta**,
 **Propina** y **Se cobra en la tarjeta**.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
 completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta

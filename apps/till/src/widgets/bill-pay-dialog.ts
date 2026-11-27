@@ -1030,8 +1030,12 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #receiptQuote(): AllocationPreview | null {
-    const quote = this.#openingQuote();
-    return this.preview ?? quote?.preview ?? quote?.cash ?? null;
+    if (this.preview !== null || this.quietEntry) return this.preview;
+    const quote = this.checkedQuote;
+    return quote?.request.context === this.quoteContext &&
+      JSON.stringify(quote.request.asked.choice) === JSON.stringify(this.#choice())
+      ? (quote.preview ?? quote.cash)
+      : null;
   }
 
   override updated(): void {
@@ -1085,12 +1089,12 @@ export class TillBillPayDialog extends LitElement {
     const quote = this.#openingQuote();
     const checked = this.quietEntry ? null : quote?.preview;
     const cashChecked = this.quietEntry ? null : quote?.cash;
-    const receipt = checked ?? cashChecked ?? null;
+    const receipt = this.#receiptQuote();
     const guests = receipt !== null && this.#guestsShown(receipt);
     const ownReceipt = receipt !== null && this.#ownReceiptAsked(receipt);
     const receiptIncomplete =
       (ownReceipt && this.ownReceipt === null) || (guests && this.#guestsInvalid());
-    const base = receipt?.applied ?? this.#quietAmount();
+    const base = checked?.applied ?? cashChecked?.applied ?? this.#quietAmount();
     const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
     const acceptsTip = this.quietEntry ? this.method !== "cash" : card;
     const tip =
@@ -2200,7 +2204,7 @@ export class TillBillPayDialog extends LitElement {
       this.asksGuests &&
       !paysOnNewBill(preview) &&
       this.balance !== null &&
-      ((this.asked?.choice.kind ?? this.#openingQuote()?.request.asked.choice.kind) === "whole" ||
+      ((this.asked?.choice.kind ?? this.#choice().kind) === "whole" ||
         compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
     );
   }
@@ -2212,8 +2216,7 @@ export class TillBillPayDialog extends LitElement {
       !paysOnNewBill(preview) &&
       !this.confirmationLocked &&
       this.balance !== null &&
-      (this.asked?.choice.kind ?? this.#openingQuote()?.request.asked.choice.kind ?? "whole") !==
-        "whole" &&
+      (this.asked?.choice.kind ?? this.#choice().kind) !== "whole" &&
       compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) < 0
     );
   }

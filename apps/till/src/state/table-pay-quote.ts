@@ -51,7 +51,8 @@ export async function readTablePayQuote(
       return { preview: await previewPayment(api, billId, asked, edit), refusal: null };
     } catch (error) {
       const refusal = itemsRefusal(refusalOf(error));
-      return { preview: null, refusal: refusal.code === "network" ? { code: "unread" } : refusal };
+      const unread = refusal.code === "network" || refusal.code === "server.internal";
+      return { preview: null, refusal: unread ? { code: "unread" } : refusal };
     }
   };
   const { asked, card, cash } = request;

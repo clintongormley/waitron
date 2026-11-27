@@ -331,6 +331,28 @@ describe("till-app: paying a table from a handheld", () => {
     expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
   });
 
+  it("says to reopen Pay when the checked amount could not be read", async () => {
+    const previewBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal", status: 503 })
+      .mockResolvedValue(wholeCard);
+    const { el } = await mountApp(onPhone({ previewBillPayment }));
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+
+    await expect.poll(() => inDialog(el, "wt-form-actions")?.error).toBe(t("bill_pay.read_failed"));
+    expect(inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(true);
+    expect(inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(true);
+    expect(sent()).toEqual([]);
+
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    await pressPaySheet(el, order);
+    await expect.poll(() => inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(false);
+    expect(previewBillPayment).toHaveBeenCalledTimes(2);
+    expect(sent()).toEqual([]);
+  });
+
   it("ignores a late quote for the previous choice and leaves draft and kitchen work to Charge", async () => {
     let answerWhole!: (value: AllocationPreview) => void;
     const whole = new Promise<AllocationPreview>((resolve) => (answerWhole = resolve));

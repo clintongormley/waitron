@@ -22954,15 +22954,6 @@ export class TillApp extends LitElement {
     await this.#rereadBillPaying(that.id, billId);
   }
 
-  /**
-   * The server's answer to a payment. When it issued an invoice, the dialog closes and the ticket
-   * shows, except for Pay for items at the Counter. A card the reader did not charge records
-   * nothing: the confirmation stays, saying so, to be tried again as a new payment (for Pay for
-   * items, the form). Otherwise the dialog says the payment was taken, or for a card still at the
-   * reader that it is in progress, and the bill is read again. Pay for items answers the new bill's
-   * balance, which is never shown as the paid-from bill's. An answer after a logout has closed the
-   * dialog changes nothing.
-   */
   async #onBillPaid(
     open: BillPaying,
     result: BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance },
