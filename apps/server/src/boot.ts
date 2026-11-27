@@ -439,7 +439,6 @@ import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
 import {
   declarationRoot,
-  type DeclarationPagesDeps,
   type KeptDeclarations,
   mountDeclarationPages,
 } from "./declaration-pages.js";
@@ -461,7 +460,7 @@ import { dailyReportMail } from "./daily-report-mail.js";
 import { monthlyHoursReminderMail } from "./monthly-hours-reminder.js";
 import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
-import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
+import { listBoxIpv4 } from "./box-reach.js";
 import {
   ensureBoxSecrets,
   caCertPath,
@@ -477,7 +476,7 @@ import {
   readBucketTerm,
   runFirstStart,
 } from "./rebuild-first-start.js";
-import { buildLandingApp } from "./landing-app.js";
+import { landingHostFor, startLandingListener } from "./landing-listener.js";
 import { closeListener } from "./close-listener.js";
 import { adminShutdownDuties } from "./admin-shutdown-duties.js";
 import { clearShutdownMark, hasShutdownMark } from "./admin-shutdown-hold.js";
@@ -741,88 +740,6 @@ export function startTradingListener(
   log: Logger,
 ): ReturnType<typeof serve> {
   return startListening({ ...config, tls: resolveTradingTls(config) }, app, now, log);
-}
-
-/**
- * Bind the plain-HTTP trust/landing listener on `config.landingPort`, beside the HTTPS one. A phone
- * opening the HTTPS origin on an untrusted self-signed leaf hits the certificate interstitial before
- * any of our JS runs, so the "trust the CA" page must be served over plain HTTP. It never redirects
- * and sends no HSTS — both would strand the phone back on the interstitial.
- *
- * Public bootstrap may precede a usable leaf; operator TLS and port 0 still disable this listener.
- *
- * Takes only the fields it reads so the recovery entrypoint, which never runs `loadConfig`, can build
- * one (`node-entry.ts`).
- */
-export type LandingListenerConfig = Pick<
-  ServerConfig,
-  "landingPort" | "httpHost" | "stateDir" | "httpPort" | "boxAddresses" | "tls"
-> & {
-  connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps;
-  notSetUp?: boolean;
-};
-
-/** A spare's landing pages are for its own screen only. */
-function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingListenerConfig {
-  return spare ? { ...config, httpHost: "127.0.0.1" } : config;
-}
-
-export function startLandingListener(
-  config: LandingListenerConfig,
-  log: Logger,
-  declarationPages: DeclarationPagesDeps = {},
-  venueNameState?: () => VenueNameState,
-): { close(): Promise<void> } | undefined {
-  if (
-    config.landingPort === 0 ||
-    config.tls !== undefined ||
-    (config.connection === undefined && mintedBoxLeaf(config.stateDir) === undefined)
-  ) {
-    return undefined;
-  }
-  const reachNow = () =>
-    buildReachInfo({
-      hostname: BOX_HOSTNAME,
-      port: config.httpPort,
-      secure: true,
-      listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
-    });
-  const app = buildLandingApp({
-    stateDir: config.stateDir,
-    reachUrls: () => {
-      const reach = reachNow();
-      return [reach.hostnameUrl, ...reach.ipUrls];
-    },
-    httpsUrl: reachNow().hostnameUrl,
-    log,
-    connection: config.connection,
-    landingPort: config.landingPort,
-    connectionHostnames: BOX_LEAF_HOSTNAMES,
-    declarationPages,
-    venueNameState,
-    notSetUp: config.notSetUp,
-  });
-  const server = serve(
-    buildServeOptions(
-      { fetch: app.fetch, port: config.landingPort, hostname: config.httpHost },
-      undefined,
-    ),
-    (info) => log("info", "landing.listening", { port: info.port }),
-  );
-  // Unlike the main listener, a landing bind failure must not take the box down: it is a convenience
-  // surface, and a low port may need a privilege a dev host lacks. Without a handler Node would crash
-  // the process on the unhandled 'error'.
-  server.on("error", (error: NodeJS.ErrnoException) => {
-    log("warn", "landing.listen_failed", {
-      port: config.landingPort,
-      /* v8 ignore start */
-      code: error.code ?? "unknown",
-      /* v8 ignore stop */
-    });
-  });
-  return {
-    close: () => closeListener(server),
-  };
 }
 
 /**
