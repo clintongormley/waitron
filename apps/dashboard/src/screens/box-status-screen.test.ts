@@ -164,10 +164,12 @@ it("requires confirmation before switching off with an unchecked backup", async 
   });
   const unchecked = health({ shutdown: { phase: "ready", available: true, checked: false } });
   const getBoxHealth = vi.fn().mockResolvedValue(paused);
-  const resolveBoxShutdown = vi.fn(async () => {
-    getBoxHealth.mockResolvedValue(unchecked);
-    return unchecked.shutdown;
-  });
+  const resolveBoxShutdown = vi
+    .fn(async () => {
+      getBoxHealth.mockResolvedValue(unchecked);
+      return unchecked.shutdown;
+    })
+    .mockRejectedValueOnce({ code: "management.request_invalid" });
   const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
   el.canCheckClock = true;
   await el.updateComplete;
@@ -179,15 +181,26 @@ it("requires confirmation before switching off with an unchecked backup", async 
   expect(anyway).not.toBeNull();
   await userEvent.click(anyway!);
   const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  expect(text(confirm.closest("wt-dialog"))).toContain("you may have to use an older backup");
+  const dialog = confirm.closest("wt-dialog")!;
+  expect(text(dialog)).toContain("you may have to use an older backup");
   expect(resolveBoxShutdown).not.toHaveBeenCalled();
   await userEvent.click(confirm);
-  await vi.waitFor(() => expect(resolveBoxShutdown).toHaveBeenCalledWith("shut-down-anyway"));
+  await vi.waitFor(() =>
+    expect(dialog.querySelector("wt-form-actions")!.error).toBe(
+      codeMessage("management.request_invalid"),
+    ),
+  );
+  expect(dialog.open).toBe(true);
+  expect(text(q(el, '[data-test="box-shutdown-status"]'))).toContain(
+    "Waitron could not verify the saved backup.",
+  );
+  await userEvent.click(confirm);
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(
       "You can switch off the box now. A restore may need an older backup.",
     ),
   );
+  expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
 });
 
 it("mentions both restore keys before pausing work for a downloadable backup", async () => {
@@ -262,6 +275,109 @@ it("lists clocked-in staff before confirmation and offers the recovery pack with
   el.canMakeRecoveryPack = true;
   await el.updateComplete;
   expect(pack()).not.toBeNull();
+});
+
+it("lets an administrator retry loading clocked-in staff after a refusal", async () => {
+  const getBoxShutdownStaff = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "management.request_invalid" })
+    .mockResolvedValueOnce([{ displayName: "Kitchen lead", state: "working" }]);
+  const { el } = await mount(
+    stubApi({ getBoxShutdownStaff }, health({ shutdown: { phase: "idle", available: true } })),
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  const open = q(el, '[data-test="box-shutdown"]')!;
+  const dialog = q(el, '[data-test="box-shutdown-confirm"]')!.closest("wt-dialog")!;
+  await userEvent.click(open);
+  await expect
+    .poll(() => text(q(el, ".box-restart [role=alert]")))
+    .toBe(codeMessage("management.request_invalid"));
+  expect(dialog.open).toBe(false);
+  await userEvent.click(open);
+  await expect.poll(() => dialog.open).toBe(true);
+  expect(text(dialog)).toContain("Kitchen lead");
+  expect(q(el, ".box-restart [role=alert]")).toBeNull();
+});
+
+it("keeps the paused shutdown actionable after a refused retry", async () => {
+  const paused = { phase: "paused", available: true, errorCode: "backup.archive_invalid" } as const;
+  const checking = { phase: "checking", available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown: paused }));
+  const resolveBoxShutdown = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "management.request_invalid" })
+    .mockImplementationOnce(async () => {
+      getBoxHealth.mockResolvedValue(health({ shutdown: checking }));
+      return checking;
+    });
+  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  const retry = q(el, '[data-test="box-shutdown-retry"]')!;
+  await userEvent.click(retry);
+  await expect
+    .poll(() => text(q(el, ".box-restart [role=alert]")))
+    .toBe(codeMessage("management.request_invalid"));
+  await userEvent.click(retry);
+  await expect
+    .poll(() => text(q(el, '[data-test="box-shutdown-status"]')))
+    .toBe(t("box_status.shutdown.checking"));
+  expect(resolveBoxShutdown.mock.calls).toEqual([["retry"], ["retry"]]);
+  expect(q(el, ".box-restart [role=alert]")).toBeNull();
+});
+
+it.each([
+  { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
+  { phase: "checking", available: false },
+] as const)("cancels a $phase shutdown and offers Shut down again", async (shutdown) => {
+  const idle = { phase: "idle", available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown }));
+  const cancelBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: idle }));
+    return idle;
+  });
+  const { el } = await mount(stubApi({ getBoxHealth, cancelBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown-cancel"]')!);
+  await expect.poll(() => q(el, '[data-test="box-shutdown"]')).not.toBeNull();
+  expect(cancelBoxShutdown).toHaveBeenCalledOnce();
+});
+
+it("offers no shutdown check without an available backup", async () => {
+  const getBoxHealth = vi.fn().mockResolvedValue(
+    health({
+      shutdown: { phase: "idle", available: false },
+    }),
+  );
+  const { el } = await mount(stubApi({ getBoxHealth }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  expect(q(el, '[data-test="box-shutdown-status"]')).toBeNull();
+  expect(q(el, '[data-test="box-shutdown"]')).toBeNull();
+});
+
+it("closes the shutdown confirmation on Escape without starting a check", async () => {
+  const startBoxShutdown = vi.fn();
+  const { el } = await mount(
+    stubApi({ startBoxShutdown }, health({ shutdown: { phase: "idle", available: true } })),
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  const open = q(el, '[data-test="box-shutdown"]')!;
+  await userEvent.click(open);
+  const dialog = q(el, '[data-test="box-shutdown-confirm"]')!.closest("wt-dialog")!;
+  await expect.poll(() => dialog.open).toBe(true);
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(dialog.open).toBe(false);
+  expect(startBoxShutdown).not.toHaveBeenCalled();
+  await userEvent.click(open);
+  await expect.poll(() => dialog.open).toBe(true);
 });
 
 const size = (bytes: number) => formatBytes(bytes, currentLocale());

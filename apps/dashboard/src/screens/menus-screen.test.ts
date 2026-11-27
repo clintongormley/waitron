@@ -46,6 +46,7 @@ import type {
 } from "../api/menu-api.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
+import type { ProductEditor } from "../widgets/product-editor.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -5687,6 +5688,168 @@ describe("the Structure tree", () => {
     expect(tabs.querySelector('[slot="actions"]')).toBeNull();
   });
 
+  it.each(["answer", "refusal"])(
+    "keeps the other menu open after a departed product lookup (%s)",
+    async (outcome) => {
+      const burger = products.find(({ id }) => id === "p-burger")!;
+      const value = { ...burger, parentId: null, inherited: null };
+      const lookup = deferred<typeof value>();
+      const read = vi.fn().mockReturnValueOnce(lookup.promise).mockResolvedValue(value);
+      const client = api({
+        getProductEditor: read,
+        listUnits: vi.fn().mockResolvedValue([burger.unit]),
+        listCourses: vi.fn().mockResolvedValue([]),
+        listExtraLists: vi.fn().mockResolvedValue([]),
+        listOptionLists: vi.fn().mockResolvedValue([]),
+      });
+      const el = await mountLunch(client);
+      el.canEditProducts = true;
+      await el.updateComplete;
+      await rowAction(el, "m-burger", "edit-product");
+      await vi.waitFor(() => expect(read).toHaveBeenCalledExactlyOnceWith("p-burger"));
+      await visit(el, DINNER_PATH, "Dinner Menu");
+      if (outcome === "answer") lookup.resolve(value);
+      else lookup.reject({ code: "connection.failed" });
+      await new Promise(requestAnimationFrame);
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(q<ProductEditor>(el, "dashboard-product-editor")?.open ?? false).toBe(false);
+      expect(q(el, '[data-test="structure-write-error"]')).toBeNull();
+      await visit(el, LUNCH_PATH, "Lunch Menu");
+      await rowAction(el, "m-burger", "edit-product");
+      await vi.waitFor(() =>
+        expect(q<ProductEditor>(el, "dashboard-product-editor")?.open).toBe(true),
+      );
+    },
+  );
+
+  const relatedChoices = [
+    [
+      "unit",
+      "listUnits",
+      "createUnit",
+      "dashboard-unit-form",
+      "units",
+      {
+        staffName: "Portion",
+        staffAbbreviation: "pt",
+        name: { en: "Portion" },
+        abbreviation: { en: "pt" },
+        precision: 0,
+      },
+    ],
+    [
+      "extras",
+      "listExtraLists",
+      "createExtraList",
+      "dashboard-extra-list-form",
+      "extraLists",
+      {
+        name: "Sides",
+        customerName: null,
+        kitchenName: null,
+        active: true,
+        minPicks: 0,
+        maxPicks: null,
+        items: [],
+      },
+    ],
+    [
+      "options",
+      "listOptionLists",
+      "createOptionList",
+      "dashboard-option-list-form",
+      "optionLists",
+      {
+        name: "Preparation",
+        customerName: null,
+        kitchenName: null,
+        active: true,
+        defaultLabelId: null,
+        labels: [],
+      },
+    ],
+    [
+      "courses",
+      "listCourses",
+      "createCourse",
+      "dashboard-course-list",
+      "courses",
+      { name: "Dessert", displayOrder: 1, active: true },
+    ],
+  ] as const;
+  it.each(
+    relatedChoices.flatMap(([kind, ...example]) => [
+      [kind, false, ...example] as const,
+      [kind, true, ...example] as const,
+    ]),
+  )(
+    "reloads the %s choices for the editor that asked (departed: %s)",
+    async (kind, departed, list, create, selector, field, value) => {
+      const burger = products.find(({ id }) => id === "p-burger")!;
+      const saved = { ...value, id: "new-choice" };
+      const read = vi.fn().mockResolvedValue([]);
+      const client = api({
+        getProductEditor: vi.fn().mockResolvedValue({ ...burger, parentId: null, inherited: null }),
+        listUnits: vi.fn().mockResolvedValue([burger.unit]),
+        listCourses: vi.fn().mockResolvedValue([]),
+        listExtraLists: vi.fn().mockResolvedValue([]),
+        listOptionLists: vi.fn().mockResolvedValue([]),
+        [list]: read,
+        [create]: vi.fn(async () => {
+          read.mockResolvedValue([saved]);
+          return saved;
+        }),
+      });
+      const el = await mountLunch(client);
+      el.canEditProducts = true;
+      await el.updateComplete;
+      await rowAction(el, "m-burger", "edit-product");
+      const editor = () => q<ProductEditor>(el, "dashboard-product-editor")!;
+      await vi.waitFor(() => expect(editor()?.open).toBe(true));
+      emit(editor(), "wt-create-related", { kind });
+      await el.updateComplete;
+      const form = q(el, selector)!;
+      expect(form).not.toBeNull();
+      const reloading = deferred<(typeof saved)[]>();
+      const requested = deferred<void>();
+      const reload = () => {
+        requested.resolve();
+        return reloading.promise;
+      };
+      if (kind === "courses") {
+        await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+        read.mockImplementationOnce(reload);
+        emit(form, "course-added", { id: saved.id });
+        await userEvent.click(q(el, '[data-test="courses-done"]')!);
+      } else {
+        client[create].mockImplementationOnce(async () => {
+          read.mockImplementationOnce(reload);
+          return saved;
+        });
+        emit(form, "wt-submit", { value, body: value });
+      }
+      await requested.promise;
+      if (departed) {
+        await visit(el, DINNER_PATH, "Dinner Menu");
+        await visit(el, LUNCH_PATH, "Lunch Menu");
+        await rowAction(el, "m-burger", "edit-product");
+        await vi.waitFor(() => expect(editor()?.open).toBe(true));
+        reloading.resolve([saved]);
+        await new Promise(requestAnimationFrame);
+        expect(editor()[field]).toEqual([]);
+        return;
+      }
+      reloading.resolve([saved]);
+      await vi.waitFor(() => expect(editor()[field]).toEqual([saved]));
+      const draft = editor().currentValue;
+      expect(draft.name).toBe("Burger");
+      if (kind === "courses") expect(draft.courseId).toBe(saved.id);
+      else if (kind === "unit") expect(draft.unitId).toBe(saved.id);
+      else expect(draft.modifiers).toContainEqual({ kind, id: saved.id });
+    },
+  );
+
   it("fits a phone: the tab does not scroll sideways and every row's ⋮ is on screen (390 px)", async () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -8527,6 +8690,61 @@ describe("review fix: inclusion target and validation", () => {
     }
     return picker;
   }
+
+  it.each(["structure", "prices"] as const)(
+    "keeps the last complete inclusion and the draft when its %s read is refused",
+    async (refused) => {
+      const live = new LiveData();
+      const client = includeApi({ liveData: live });
+      const getStructure = client.getMenuStructure.getMockImplementation()! as (
+        id: string,
+      ) => Promise<MenuStructure>;
+      const getPrices = client.priceRows.getMockImplementation()!;
+      let state = "initial";
+      const source = () => ({
+        ...lunchWith([productNode("m-wine-lager", "p-lager")]),
+        root: {
+          ...lunchWith([]).root,
+          id: "wine-root",
+          internalName: state === "initial" ? "Wines" : "Cellar",
+        },
+        rootSectionId: "wine-root",
+      });
+      client.getMenuStructure.mockImplementation(async (id: string) => {
+        if (id !== "wine") return getStructure(id);
+        if (state === "refused" && refused === "structure") throw { code: "connection.failed" };
+        return source();
+      });
+      client.priceRows.mockImplementation(async (id: string) => {
+        if (id === "wine" && state === "refused" && refused === "prices")
+          throw { code: "connection.failed" };
+        return getPrices(id);
+      });
+      const el = await mountLunch(client);
+      await openInclude(el);
+      const included = () =>
+        structure(el).nodes.find(({ includedMenuId }) => includedMenuId === "wine");
+      await vi.waitFor(() => expect(included()?.children?.[0]?.memberId).toBe("m-wine-lager"));
+      const reads = client.getMenuRead.mock.calls.filter(([id]) => id === "wine").length;
+      state = "refused";
+      live.invalidate([{ type: "sections" }]);
+      await vi.waitFor(() =>
+        expect(
+          client.getMenuRead.mock.calls.filter(([id]) => id === "wine").length,
+        ).toBeGreaterThan(reads),
+      );
+      await new Promise(requestAnimationFrame);
+      expect(included()?.internalName).toBe("Wines");
+      expect(
+        q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="structure-save"]')!.disabled,
+      ).toBe(false);
+      state = "recovered";
+      live.invalidate([{ type: "sections" }]);
+      await vi.waitFor(() => expect(included()?.internalName).toBe("Cellar"));
+      expect(client.saveMenuStructure).not.toHaveBeenCalled();
+    },
+  );
+
   it("closes Include without a write when its original list disappears before selection", async () => {
     const live = new LiveData();
     const client = includeApi({ liveData: live });

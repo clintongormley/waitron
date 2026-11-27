@@ -545,6 +545,37 @@ describe("the Home page tab's shortcuts", () => {
 });
 
 describe("adding shortcuts on the Home page tab", () => {
+  it("holds a staged shortcut while the live structure loses and regains its product", async () => {
+    const liveData = new LiveData();
+    const client = api({
+      liveData,
+      getMenuHome: vi.fn().mockResolvedValue(homeWith("t-burger")),
+    });
+    const el = await mountHome(client);
+    await openAdd(el);
+    await choose(el, ["product:p-lager"]);
+    pressAdd(el);
+    const ref = { kind: "product", productId: "p-lager" };
+    const tile = () => preview(el)?.shortcuts?.find((shortcut) => shortcut.name === "Lager");
+    await vi.waitFor(() => expect(tile()?.reachable).toBe(true));
+    const memberId = tile()!.memberId;
+
+    const structure = structureOf("menu-lunch");
+    structure.nodes = [productNode("m-burger", "p-burger")];
+    client.getMenuStructure.mockResolvedValue(structure);
+    liveData.invalidate([{ type: "sections" }]);
+    await vi.waitFor(() =>
+      expect(tile()).toMatchObject({ memberId, ref, reachable: false, missingName: "Lager" }),
+    );
+
+    client.getMenuStructure.mockResolvedValue(structureOf("menu-lunch"));
+    liveData.invalidate([{ type: "sections" }]);
+    await vi.waitFor(() =>
+      expect(tile()).toMatchObject({ memberId, ref, reachable: true, missingName: null }),
+    );
+    expect(writeCalls(client)).toEqual([]);
+  });
+
   it("returns focus to Add shortcuts after staging products and sections", async () => {
     const client = api({ getMenuHome: vi.fn().mockResolvedValue(homeWith("t-burger")) });
     const el = await mountHome(client);

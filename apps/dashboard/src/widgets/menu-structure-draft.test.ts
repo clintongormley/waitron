@@ -82,6 +82,76 @@ it("preserves an explicit price with only an included placement, even while sold
   expect(draft.input().sections).toEqual([]);
 });
 
+it("leaves the arrangement alone if a selected member disappeared before a move", () => {
+  const draft = new MenuStructureDraft();
+  draft.accept(tree(product("first"), included), []);
+  const before = draft.input();
+
+  expect(
+    draft.move(
+      [
+        { listId: "root", memberId: "first" },
+        { listId: "root", memberId: "gone" },
+      ],
+      "root",
+    ),
+  ).toBe(false);
+  expect(draft.input()).toEqual(before);
+  expect(draft.dirty).toBe(false);
+});
+
+it("moves a dish into a new empty section without changing an included menu", () => {
+  const draft = new MenuStructureDraft();
+  draft.accept(
+    tree(
+      product("first"),
+      included,
+      {
+        memberId: "sides-row",
+        ref: { kind: "section", sectionId: "sides" },
+        internalName: "Sides",
+      },
+      {
+        memberId: "drinks-row",
+        ref: { kind: "section", sectionId: "drinks" },
+        internalName: "Drinks",
+      },
+    ),
+    [],
+  );
+  expect(draft.move([{ listId: "root", memberId: "first" }], "drinks")).toBe(true);
+  expect(
+    draft.input().sections.map(({ id, members }) => [id, members.map(({ id }) => id)]),
+  ).toEqual([
+    ["sides", []],
+    ["drinks", ["first"]],
+  ]);
+  expect(draft.structure?.nodes.find(({ memberId }) => memberId === "include")).toEqual(included);
+});
+
+it("keeps equivalent price edits clean and changes only the edited variant", () => {
+  const draft = new MenuStructureDraft();
+  draft.accept(tree(product("first")), [
+    {
+      ...coffee("4.00"),
+      override: null,
+      variants: [
+        { variantId: "small", price: "4.00", available: true },
+        { variantId: "large", price: "5.00", available: true },
+      ],
+    },
+  ]);
+
+  draft.setPrice("coffee", "small", " 4.0 ");
+  expect(draft.priceChanged("coffee", "small")).toBe(false);
+  expect(draft.dirty).toBe(false);
+  draft.setPrice("coffee", "small", "4.25");
+  expect(draft.input().prices).toEqual([
+    { productId: "coffee", variantId: "small", price: "4.25" },
+    { productId: "coffee", variantId: "large", price: "5.00" },
+  ]);
+});
+
 it("omits the price only when its last placement is removed and restores it if re-added", () => {
   const draft = new MenuStructureDraft();
   draft.accept(tree(included, product("outside")), [coffee("4.00")]);

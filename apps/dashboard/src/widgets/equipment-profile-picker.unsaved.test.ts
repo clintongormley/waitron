@@ -2,6 +2,8 @@ import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LeaveController, type WtDialog } from "@waitron/ui";
+import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./equipment-profile-picker.js";
 
@@ -28,6 +30,29 @@ class EquipmentProfilesApp extends LitElement {
 }
 customElements.define("test-equipment-profiles-app", EquipmentProfilesApp);
 afterEach(cleanupWidgets);
+
+it("retries a refused profile load and explains an empty choice list", async () => {
+  const load = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "management.request_invalid" })
+    .mockResolvedValueOnce([]);
+  const save = vi.fn();
+  const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-equipment-profile-picker"]>(
+    "dashboard-equipment-profile-picker",
+    { assignment: { kind: "reader", name: "Restored card reader", load, save } },
+  );
+  const actions = () => el.shadowRoot!.querySelector("wt-form-actions")!;
+  await expect.poll(() => actions().error).toBe(codeMessage("management.request_invalid"));
+  const retry = actions().querySelector('wt-button[variant="primary"]')!;
+  expect(retry.textContent?.trim()).toBe(t("equipment_profiles.retry"));
+  await userEvent.click(retry);
+  await expect.poll(() => el.shadowRoot!.textContent).toContain(t("equipment_profiles.empty"));
+  expect(actions().error).toBe("");
+  expect(actions().querySelector('[data-test="save-equipment-profiles"]')).toHaveProperty(
+    "disabled",
+    true,
+  );
+});
 
 it("keeps changed ticks after a refusal and protects them until a retry succeeds", async () => {
   const { el } = await mountWidget<EquipmentProfilesApp>("test-equipment-profiles-app", {});

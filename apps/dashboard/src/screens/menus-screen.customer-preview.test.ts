@@ -479,6 +479,31 @@ describe("the customer menu Online preview", () => {
     }
   });
 
+  it("shows the unit for a price range and prioritises the first dish photo", async () => {
+    const answer = published();
+    if (answer.state !== "published") throw new Error("Expected a published menu");
+    const section = answer.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected a section");
+    const [first, second] = section.members;
+    if (first?.kind !== "product" || second?.kind !== "product")
+      throw new Error("Expected two dishes");
+    first.unit = "kg";
+    second.image = `${"b".repeat(64)}.webp`;
+
+    const { el } = await open(() => Response.json(answer));
+    await vi.waitFor(() => {
+      const dishes = customerPage(el)?.shadowRoot?.querySelectorAll(".dish");
+      expect(dishes).toHaveLength(2);
+      expect(dishes![0]!.textContent?.replace(/\s+/g, "")).toContain("€6.50–€8.50/kg");
+      const firstPhoto = dishes![0]!.querySelector("img");
+      const secondPhoto = dishes![1]!.querySelector("img");
+      expect(firstPhoto?.getAttribute("fetchpriority")).toBe("high");
+      expect(firstPhoto?.hasAttribute("loading")).toBe(false);
+      expect(secondPhoto?.getAttribute("loading")).toBe("lazy");
+      expect(secondPhoto?.hasAttribute("fetchpriority")).toBe(false);
+    });
+  });
+
   it("updates the open preview when a menu gets its first or next published edition", async () => {
     let edition: MenuStatus = { state: "unpublished", clashes: 0 };
     const readPreview = vi.fn(() =>

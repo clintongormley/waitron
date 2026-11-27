@@ -1,9 +1,9 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
-import { LeaveController, NavigationGuard, registerIcons } from "@waitron/ui";
+import { LeaveController, NavigationGuard, registerIcons, type WtPriceInput } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, Product } from "../api/client.js";
 import type { MenuReadPart, MenuStructureNode } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
@@ -32,7 +32,11 @@ class StructureMoveLeaveApp extends LitElement {
 customElements.define("structure-move-leave-test-app", StructureMoveLeaveApp);
 
 /** A menu holding Burger at its top level and an empty Drinks section. */
-function client(save: () => Promise<unknown> = async () => ({ dropped: [] }), current = false) {
+function client(
+  save: () => Promise<unknown> = async () => ({ dropped: [] }),
+  current = false,
+  variants: Product["variants"] = [],
+) {
   const nodes: MenuStructureNode[] = [
     { memberId: "m-burger", ref: { kind: "product", productId: "p-burger" } },
     {
@@ -85,7 +89,7 @@ function client(save: () => Promise<unknown> = async () => ({ dropped: [] }), cu
         available: true,
         unitPrice: "8.00",
         modifiers: [],
-        variants: [],
+        variants,
       },
     ],
     listCategories: async () => [],
@@ -224,29 +228,35 @@ it("stages the move and keeps its member id in the one Structure save", async ()
   expect((await question(app)).open).toBe(false);
 });
 
-it("keeps the arrangement and allows retry when Structure Save is refused", async () => {
-  const api = client(async () => {
-    throw { code: "menu_section.member_duplicate" };
-  });
-  const { app, screen, window, destination } = await mount(api);
-  await chooseOption(destination(), "s-drinks");
-  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
-  await vi.waitFor(() => expect(window().open).toBe(false));
-  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    '[data-test="structure-save"]',
-  )!;
-  save.click();
-  await vi.waitFor(() =>
-    expect(save.closest("wt-form-actions")!.error).toContain(
-      codeMessage("menu_section.member_duplicate"),
-    ),
-  );
-  expect(save.disabled).toBe(false);
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  save.click();
-  await vi.waitFor(() => expect(api.saveMenuStructure).toHaveBeenCalledTimes(2));
-  expect(api.saveMenuStructure.mock.calls[1]).toEqual(api.saveMenuStructure.mock.calls[0]);
-});
+it.each([undefined, "prices.1.price", "rootMembers.1.ref", "sections.1.internalName"])(
+  "keeps the arrangement and allows retry when a Structure Save refusal has no visible field (%s)",
+  async (field) => {
+    const api = client(async () => {
+      throw {
+        code: "menu_section.member_duplicate",
+        ...(field === undefined ? {} : { params: { field } }),
+      };
+    });
+    const { app, screen, window, destination } = await mount(api);
+    await chooseOption(destination(), "s-drinks");
+    window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+    await vi.waitFor(() => expect(window().open).toBe(false));
+    const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="structure-save"]',
+    )!;
+    save.click();
+    await vi.waitFor(() =>
+      expect(save.closest("wt-form-actions")!.error).toContain(
+        codeMessage("menu_section.member_duplicate"),
+      ),
+    );
+    expect(save.disabled).toBe(false);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    save.click();
+    await vi.waitFor(() => expect(api.saveMenuStructure).toHaveBeenCalledTimes(2));
+    expect(api.saveMenuStructure.mock.calls[1]).toEqual(api.saveMenuStructure.mock.calls[0]);
+  },
+);
 
 it("asks before cancelling, and restores the saved placement only after Discard", async () => {
   const api = client();
@@ -295,10 +305,91 @@ it("stages an explicit price and the movement in the same Save", async () => {
   );
 });
 
-it("marks and focuses the price identified by a refused Save", async () => {
-  const api = client(async () => {
-    throw { code: "product.invalid", params: { field: "prices.0.price" } };
-  });
+it.each([false, true])(
+  "shows a refused price at Save or at its field (hidden: %s)",
+  async (hidden) => {
+    let refuse!: (error: unknown) => void;
+    const pending = new Promise<never>((_, reject) => (refuse = reject));
+    const api = client(() => pending);
+    const { screen, window, destination } = await mount(api);
+    await chooseOption(destination(), "s-drinks");
+    window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+    await vi.waitFor(() => expect(window().open).toBe(false));
+    const table = screen
+      .shadowRoot!.querySelector("dashboard-menu-structure-table")!
+      .shadowRoot!.querySelector("wt-data-table")!;
+    const body = table.shadowRoot!;
+    const price = () => body.querySelector("wt-price-input")!;
+    await vi.waitFor(() => expect(price()).not.toBeNull());
+    await userEvent.fill(price().shadowRoot!.querySelector("input")!, "9.25");
+    const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="structure-save"]',
+    )!;
+    await userEvent.click(save);
+    await vi.waitFor(() => expect(api.saveMenuStructure).toHaveBeenCalledOnce());
+    if (hidden) {
+      onTestFinished(() => sessionStorage.removeItem("waitron.menu-structure.table"));
+      table.chooseFilter("available", ["no"]);
+      await vi.waitFor(() => expect(price()).toBeNull());
+    }
+    refuse({ code: "product.invalid", params: { field: "prices.0.price" } });
+    if (hidden) {
+      await vi.waitFor(() =>
+        expect(save.closest("wt-form-actions")!.error).toContain(codeMessage("product.invalid")),
+      );
+      table.chooseFilter("available", []);
+    }
+    await vi.waitFor(() => expect(price().error).toBe(codeMessage("product.invalid")));
+    if (hidden) expect(price().value).toBe("9.25");
+    else await vi.waitFor(() => expect(body.activeElement).toBe(price()));
+    expect(save.disabled).toBe(false);
+  },
+);
+
+it.each([false, true])(
+  "places a section refusal where it can be read (hidden: %s)",
+  async (hidden) => {
+    const code = "menu_section.member_duplicate";
+    const api = client(async () => {
+      throw { code, params: { field: "sections.0.internalName" } };
+    });
+    const { screen, window, destination } = await mount(api);
+    await chooseOption(destination(), "s-drinks");
+    window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+    await vi.waitFor(() => expect(window().open).toBe(false));
+    const table = screen
+      .shadowRoot!.querySelector("dashboard-menu-structure-table")!
+      .shadowRoot!.querySelector("wt-data-table")!;
+    const body = table.shadowRoot!;
+    const section = () => body.querySelector('tr[data-row-key="m-drinks"]');
+    if (hidden) {
+      onTestFinished(() => sessionStorage.removeItem("waitron.menu-structure.table"));
+      table.chooseFilter("available", ["no"]);
+      await vi.waitFor(() => expect(section()).toBeNull());
+    }
+    const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="structure-save"]',
+    )!;
+    await userEvent.click(save);
+    if (hidden) {
+      await vi.waitFor(() =>
+        expect(save.closest("wt-form-actions")!.error).toBe(codeMessage(code)),
+      );
+    } else {
+      await vi.waitFor(() =>
+        expect(section()?.querySelector('[role="alert"]')?.textContent).toBe(codeMessage(code)),
+      );
+      await vi.waitFor(() =>
+        expect(body.activeElement).toBe(section()!.querySelector("wt-row-actions")),
+      );
+      expect(save.closest("wt-form-actions")!.error).toBe("");
+    }
+    expect(save.disabled).toBe(false);
+  },
+);
+
+it("focuses an out-of-range structure price and reenables Save after a correction", async () => {
+  const api = client();
   const { screen, window, destination } = await mount(api);
   await chooseOption(destination(), "s-drinks");
   window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
@@ -306,16 +397,19 @@ it("marks and focuses the price identified by a refused Save", async () => {
   const body = screen
     .shadowRoot!.querySelector("dashboard-menu-structure-table")!
     .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
-  const price = () => body.querySelector("wt-price-input")!;
-  await vi.waitFor(() => expect(price()).not.toBeNull());
-  await userEvent.fill(price().shadowRoot!.querySelector("input")!, "9.25");
+  const price = body.querySelector("wt-price-input")!;
+  const input = price.shadowRoot!.querySelector("input")!;
   const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     '[data-test="structure-save"]',
   )!;
+  await userEvent.fill(input, "10000000000");
   await userEvent.click(save);
-  await vi.waitFor(() => expect(price().error).toBe(codeMessage("product.invalid")));
-  await vi.waitFor(() => expect(body.activeElement).toBe(price()));
-  expect(save.disabled).toBe(false);
+  await vi.waitFor(() => expect(price.error).toBe(t("editor.price_invalid")));
+  await vi.waitFor(() => expect(body.activeElement).toBe(price));
+  expect(api.saveMenuStructure).not.toHaveBeenCalled();
+  expect(save.disabled).toBe(true);
+  await userEvent.fill(input, "9.25");
+  await vi.waitFor(() => expect(save.disabled).toBe(false));
 });
 
 it("holds the tab until the manager accepts discarding the move", async () => {
@@ -344,19 +438,64 @@ it("holds the tab until the manager accepts discarding the move", async () => {
   }
 });
 
-it("names the member that Save dropped from the submitted arrangement", async () => {
-  const api = client(async () => ({ dropped: [{ memberId: "m-burger", reason: "deleted" }] }));
+it("names the row and variant price that Save dropped from the submitted arrangement", async () => {
+  const api = client(
+    async () => ({
+      dropped: [
+        { memberId: "m-burger", reason: "deleted" },
+        { productId: "p-burger", variantId: "large", reason: "deleted" },
+      ],
+    }),
+    false,
+    [
+      {
+        id: "large",
+        name: "Large portion",
+        active: true,
+        available: true,
+        unitPrice: "8.00",
+        customerName: null,
+        kitchenName: "LARGE BURGER",
+        image: null,
+        allergensInherited: true,
+        courseId: null,
+        effective: {
+          unitPrice: "8.00",
+          allergens: null,
+          vatClass: "general",
+          takeawayVatRate: "21.00",
+          primaryCategoryId: null,
+          courseId: null,
+        },
+      },
+    ],
+  );
   const { screen, window, destination } = await mount(api);
   await chooseOption(destination(), "s-drinks");
   window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
   await vi.waitFor(() => expect(window().open).toBe(false));
+  const tree = screen.shadowRoot!.querySelector("dashboard-menu-structure-table")!;
+  await tree.setExpanded("m-drinks/m-burger", true);
+  const field = tree
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<WtPriceInput>(
+      'tr[data-row-key="m-drinks/m-burger/large"] wt-price-input',
+    )!;
+  await field.updateComplete;
+  await userEvent.fill(field.shadowRoot!.querySelector("input")!, "9.25");
   await userEvent.click(
     screen.shadowRoot!.querySelector<HTMLElement>('[data-test="structure-save"]')!,
   );
   await vi.waitFor(() =>
     expect(
       screen.shadowRoot!.querySelector('[data-test="structure-dropped"]')?.textContent,
-    ).toContain("Burger"),
+    ).toContain("Burger, Burger › Large portion"),
+  );
+  expect(api.saveMenuStructure).toHaveBeenCalledExactlyOnceWith(
+    "menu",
+    expect.objectContaining({
+      prices: [{ productId: "p-burger", variantId: "large", price: "9.25" }],
+    }),
   );
 });
 

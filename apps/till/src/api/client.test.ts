@@ -204,6 +204,43 @@ describe("TillApi", () => {
       signal: controller.signal,
     });
   });
+  it("returns the problem report preview and passes through its cancellation signal", async () => {
+    const signal = new AbortController().signal;
+    const preview = {
+      available: true,
+      id: "preview",
+      attachment: '{"version":"1.2.3"}',
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+
+    await expect(new TillApi("", fetchStub).previewProblemReport(signal)).resolves.toEqual(preview);
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/problem-reports/preview", {
+      method: "GET",
+      credentials: "include",
+      signal,
+    });
+  });
+
+  it.each([
+    [undefined, undefined],
+    ["Printer jammed", '{"description":"Printer jammed"}'],
+  ])("sends the chosen report and optional description (%s)", async (description, body) => {
+    const signal = new AbortController().signal;
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ delivery: "queued" }));
+
+    await expect(
+      new TillApi("", fetchStub).sendProblemReport("draft/report 1", signal, description),
+    ).resolves.toEqual({ delivery: "queued" });
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
+      "/api/problem-reports/draft%2Freport%201/send",
+      {
+        method: "POST",
+        credentials: "include",
+        signal,
+        ...(body === undefined ? {} : { body, headers: { "content-type": "application/json" } }),
+      },
+    );
+  });
   it("reads a filed F1 ticket with GET and returns its recorded recipient and amounts", async () => {
     const ticket = {
       invoiceType: "F1",

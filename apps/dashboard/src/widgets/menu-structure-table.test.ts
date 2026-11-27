@@ -214,6 +214,67 @@ it("filters unavailable variants by their own availability and keeps their produ
   expect(menuItems(el, key)).toEqual([`edit-product-${key}`]);
 });
 
+it("shows only the variant whose price is set on this menu", async () => {
+  const burger = burgerWithVariants();
+  const lager = products[0]!;
+  const nodes = [
+    productNode("m-burger", burger.id),
+    drinksNode("m-drinks"),
+    productNode("m-gone", "p-gone"),
+  ];
+  const draft = new MenuStructureDraft();
+  draft.accept(
+    {
+      rootSectionId: "root",
+      root: { id: "root", internalName: "Lunch", names: {}, image: null, color: null, members: [] },
+      nodes,
+      includable: [],
+      placeableSetMenus: [],
+      includedBy: [],
+    },
+    [],
+  );
+  draft.setPrice(burger.id, "v-large", "4.00");
+  const catalog = [burger, lager];
+  const el = await mount({
+    nodes,
+    products: catalog,
+    pricing: { draft, offers: draft.offers(catalog, new Map()), errors: new Map() },
+  });
+
+  await el.setExpanded("m-burger", true);
+  table(el).chooseFilter("price", ["own"]);
+  await settle(el);
+  expect(shown(el)).toEqual(["m-burger", "m-burger/v-large"]);
+  expect(row(el, "m-burger/v-large")!.querySelector("wt-price-input")?.value).toBe("4.00");
+});
+
+it.each([
+  ["category", "drinks", ["m-lager", "m-rioja"]],
+  ["modifiers", "yes", ["m-lager"]],
+  ["modifiers", "no", ["m-burger", "m-burger/v-regular", "m-rioja"]],
+  ["variants", "yes", ["m-burger", "m-burger/v-regular"]],
+  ["variants", "no", ["m-lager", "m-rioja"]],
+] as const)("filters the Structure rows by %s = %s", async (key, value, visible) => {
+  const burger = burgerWithVariants();
+  burger.variants[1]!.active = false;
+  const catalog: Product[] = [
+    burger,
+    { ...products[0]!, categoryId: "drinks", modifiers: [{ kind: "extras", id: "extras" }] },
+    { ...products[3]!, categoryId: "drinks" },
+  ];
+  const el = await mount({
+    nodes: catalog.map(({ id }) => productNode(id.replace("p-", "m-"), id)),
+    products: catalog,
+    categories: [{ id: "drinks", parentId: null, name: "Drinks", color: null }],
+  });
+
+  await el.setExpanded("m-burger", true);
+  table(el).chooseFilter(key, [value]);
+  await settle(el);
+  expect(shown(el)).toEqual(visible);
+});
+
 it("leaves a phone row's checkbox in place of its grip when Select is on", async () => {
   await page.viewport(390, 844);
   const el = await mount();
