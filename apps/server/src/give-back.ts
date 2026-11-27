@@ -334,7 +334,8 @@ async function resendRights(
 
 /**
  * Gives `body` back on the receipt `saleId` (5.3), in the caller's one transaction: the plain
- * refunds of what cancels still owe, the extra, then one correction of the rest with its leg. In
+ * refunds of what cancels still owe (on a receipt), the extra, then one correction of the rest with
+ * its leg. In
  * cash the correction is filed here once all its money is back, and a refused filing undoes every
  * part; the drawer opens once, on the last cash write. On a separate terminal every refund is
  * recorded completed and the correction is left for the caller to file after commit. The rights

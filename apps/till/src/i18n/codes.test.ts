@@ -69,10 +69,10 @@ it("words a bill paid more than it comes to without promising Keep as tip where 
 
 it("words a refund that now has to be recorded on the receipt, in both languages", () => {
   expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
-    "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
+    "This money now has to be recorded on the receipt or invoice as it is refunded. Close this window and open Refund again to carry on.",
   );
   expect(codeMessage("tender.refund_needs_correction", "es")).toBe(
-    "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
+    "Este dinero ahora tiene que registrarse en el ticket o la factura al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   );
 });
 

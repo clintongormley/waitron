@@ -9,6 +9,9 @@ also has the box ask the card company about a refund that still waits (the watch
 D17's document names became **Corrective receipt** and **Replacement corrective receipt** (owner, 10:35).)
 (2026-11-25, later: all three PRs landed, #4257, #4300 and #4344. D16's `…/corrections` route is deleted by PR 0 of
 [2026-11-25-correct-full-invoice.md](2026-11-25-correct-full-invoice.md).)
+(2026-11-27: on a full invoice naming a customer, that plan's PR 2b puts a cancelled dish's money on
+the corrective, so where the correction waits that money waits with it; the case table below
+describes receipts.)
 Every `file:line` below was read on this branch; every result marked "run" came from the command
 named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part. Cleared by the
 watcher 2026-11-24 12:28 with every default; the owner said yes to O2's words (12:36, "yes to 1

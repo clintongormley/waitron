@@ -707,8 +707,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta devolución supera el valor de los platos cancelados",
   },
   "tender.refund_needs_correction": {
-    en: "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
-    es: "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
+    en: "This money now has to be recorded on the receipt or invoice as it is refunded. Close this window and open Refund again to carry on.",
+    es: "Este dinero ahora tiene que registrarse en el ticket o la factura al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   },
   "advance.full_invoice_unsupported": {
     en: "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",

@@ -671,4 +671,4 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
 });
 
 /** A still-charge cancel of the bill's Steak (its first line) with Refund ticked; its id. */
-const cancelSteak = (billId: string) => fixture.cancelLine(venue, billId, 1, voidReasonId);
+const cancelSteak = (billId: string) => fixture.refundableCancelFor(venue, billId, 1, voidReasonId);

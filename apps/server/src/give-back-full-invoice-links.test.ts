@@ -122,7 +122,7 @@ async function croquettesOnOneLine() {
 }
 
 const cancel = (billId: string, lineNo: number) =>
-  fixture.cancelLine(venue, billId, lineNo, voidReasonId);
+  fixture.refundableCancelFor(venue, billId, lineNo, voidReasonId);
 
 async function readView(saleId: string, cookie = adminCookie): Promise<GiveBackView> {
   const read = await send(venue.app, cookie, "GET", `/api/transactions/${saleId}/give-back`);

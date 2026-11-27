@@ -150,7 +150,7 @@ export const r1 = (total: number) => ({
 
 /** The administrator's still-charge cancel, with Refund ticked, of the bill's line `lineNo`, for
  * `reasonId`; its id. */
-export async function cancelLine(
+export async function refundableCancelFor(
   venue: BillVenue,
   billId: string,
   lineNo: number,
