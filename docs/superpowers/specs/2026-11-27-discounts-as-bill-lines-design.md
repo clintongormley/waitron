@@ -1,6 +1,6 @@
 # Discounts held on the bill until the invoice: design
 
-Status: owner decisions of 2026-11-27 recorded; awaiting the owner's read of this document
+Status: approved by the owner on 2026-11-27 ("sounds great, build it!", ~11:28 CET); section 14's four questions answered by the owner the same day (~11:58 CET)
 
 Decisions marked **owner** were made by the owner in conversation with the watcher on 27 November
 2026, about 11:00 to 11:30 CET, and are quoted where the words were relayed. Everything else is
@@ -248,8 +248,11 @@ transferred to a new bill, the 10% discount goes with them").
   (charged 0.00) no share at all.
 - **Into a bill that already exists** (Move dishes to another table, a merge): a percentage cannot
   be copied, or the whole destination bill would get it. The moved items' share is worked out as
-  an amount at the move and arrives as an amount on the whole destination bill (**watcher's
-  proposal**; owner's question Q4).
+  an amount at the move and arrives as an amount **on each moved item**, not on the destination
+  bill as a whole (**owner**, Q4: "to an existing bill with other items - calculate the amount and
+  apply it to the individual items that move"). Into a new bill, the whole-bill percentage is
+  carried over as a whole-bill percentage (**owner**: "to a new bill - carry over the 10% discount
+  on the bill").
 - A **card declined** in Pay for items puts the items back (`putItemsBack`,
   `apps/server/src/bill-payments.ts:2343`); their share of an amount goes back with them and the copied percentage is dropped (**builder's call**).
 
@@ -494,9 +497,23 @@ a percentage now covers dishes ordered after it was given, and a whole-bill amou
 with a cancelled dish. Both are the owner's. The golden huella test and `inmutabilidad` must pass
 unedited. The pieces touching the invoice paths take the full review and the owner lands them.
 
-## 14. Questions only the owner can answer
+## 14. Questions only the owner can answer: answered 2026-11-27
 
-Each changes what gets built; the document assumes the recommendation until answered.
+The owner's answers (~11:58 CET), which the rest of this document follows:
+
+- **Q1:** "yes": Free joins the model now.
+- **Q2:** settled by the owner's own words the same morning ("We remove the 10€ discount from the
+  bill, we recalculate the set menu grouping, then we reapply the 10€"): a whole-bill amount stays
+  whole when a dish is cancelled.
+- **Q3:** "agreed": no condition rule now; the check before the invoice leaves room for one.
+- **Q4:** "if we move items from a bill with a 10% discount on the bill to a new bill that already
+  contains other items, then we don't want to apply the 10% discount to those items. Instead: the
+  origin bill has a 10% discount against the bill, we move two items: to a new bill - carry over
+  the 10% discount on the bill; to an existing bill with other items - calculate the amount and
+  apply it to the individual items that move." So the share is an amount on each moved item
+  (section 6.4), not an amount on the destination bill.
+
+The questions as they were put:
 
 - **Q1. Free.** "We'll leave 100% comps for later": does Free join this model now, or stay as
   today, written into the price at once? Example: Free on a burger, then Chips are added. Joined
