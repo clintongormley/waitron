@@ -4,6 +4,7 @@ import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
 import { openingKeyFor } from "./backup-file-key.js";
+import { asMasterKey } from "./setup-request-fields.js";
 import type { Logger } from "./logger.js";
 import type { SetupDeps } from "./setup-api-deps.js";
 import { readFirstFiscalBody } from "./setup-first-fiscal-api.js";
@@ -193,7 +194,7 @@ export function mountRecoveryPreparationApi(
         const eventId = text(body.eventId, "eventId", 256);
         const raw = exact(body.source, ["kind", "masterKey", "environment"]);
         if (raw.kind !== "archive") invalid("body");
-        const masterKey = text(raw.masterKey, "masterKey", 4096);
+        const masterKey = asMasterKey(raw.masterKey, "masterKey");
         const checkedEnvironment = environment(raw.environment);
         return c.json(
           await deps.stageRecovery(eventId, {
@@ -246,7 +247,7 @@ export function mountRecoveryPreparationApi(
       if (rawSource?.kind === "archive") {
         const raw = exact(rawSource, ["kind", "masterKey", "environment"]);
         if (artifact === undefined) invalid("artifact");
-        const masterKey = text(raw.masterKey, "masterKey", 4096);
+        const masterKey = asMasterKey(raw.masterKey, "masterKey");
         const checkedEnvironment = environment(raw.environment);
         source = {
           kind: "archive",

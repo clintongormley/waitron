@@ -48,6 +48,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { ModuleOperationHost } from "@waitron/module";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { MAX_MASTER_KEY_BYTES } from "./setup-request-fields.js";
 import {
   assertArchiveNotAhead,
   lockRestoreTarget,
@@ -116,7 +117,6 @@ const STREAM_ENTRIES = "entries";
 const STREAM_PLACEMENT = "placement.db";
 const SETUP_OPERATION = SETUP_OPERATION_FILE;
 const NODE_KEY = "node-key";
-const MAX_NODE_KEY_BYTES = 4096;
 const STAGED_KEY_LENGTH = 64;
 
 async function flushPath(path: string): Promise<void> {
@@ -149,7 +149,7 @@ function stagedForm(value: unknown): string {
 }
 
 function stagedAuthority(value: unknown): Buffer {
-  if (typeof value !== "string" || Buffer.byteLength(value) > MAX_NODE_KEY_BYTES)
+  if (typeof value !== "string" || Buffer.byteLength(value) > MAX_MASTER_KEY_BYTES)
     return invalidNodeKey();
   try {
     return authorityKey(decodeMasterKeyCode(value));
