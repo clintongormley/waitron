@@ -1868,16 +1868,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return { el, screen, dialog };
   }
 
-  /** Opens a dish's window from Sent, showing Sent's dishes first when they are folded away. */
+  /** Opens a dish's window from Sent. */
   async function openSentWindow(el: TillApp, screen: TillTableOrderScreen, lineId: string) {
     const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
-    const info = () => panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`);
-    if (info() === null) {
-      panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!.click();
-      await panel.updateComplete;
-    }
-    info()!.click();
+    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!.click();
     await flush(el);
     const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
     await expect.poll(() => dialog.open).toBe(true);

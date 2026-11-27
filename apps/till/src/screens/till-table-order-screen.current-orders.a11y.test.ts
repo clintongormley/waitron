@@ -1,6 +1,5 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { userEvent } from "vitest/browser";
 import { chooseSentServing, sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import "./till-table-order-screen.js";
@@ -32,14 +31,7 @@ describe.each(["light", "dark"] as const)("Sent service a11y (%s theme)", (theme
       },
       theme,
     );
-    const panel = await sentPanelFor(mounted.el);
-    for (const selector of ["[data-sent-toggle]", "[data-held-toggle]", "[data-served-toggle]"]) {
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
-      if (toggle?.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
-    }
+    await sentPanelFor(mounted.el);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await mounted.el.updateComplete;
     return mounted;

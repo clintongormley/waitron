@@ -331,8 +331,8 @@ it.each(["first", "last"] as const)(
     await el.updateComplete;
     const source = destination === "first" ? "new:2" : "new:1";
     const gap = destination === "first" ? "new:1" : "end";
-    // The sent rows above no longer fold away, so the end gap can start under the sticky draft
-    // bar: bring it into view, as staff would, and drop only where it is the element hit.
+    // The sent rows above can push the end gap under the sticky draft bar: bring it into view,
+    // as staff would, and drop only where it is the element hit.
     const target = q(el, `[data-draft-gap="${gap}"]`);
     target.scrollIntoView({ block: "center" });
     const { x, y } = point(target);

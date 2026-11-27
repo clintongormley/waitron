@@ -408,8 +408,8 @@ async function expectBarWholeAboveFoot(el: TillTableOrderScreen, host: HTMLEleme
   };
 
   expectBarAboveFoot("on opening");
-  // The sent list no longer folds, so it can be taller than the window: what must not sit under
-  // the bar is where it starts, its first heading with that group's Serve all.
+  // The sent list can be taller than the window: what must not sit under the bar is where it
+  // starts, its first heading with that group's Serve all.
   const firstHeading = root
     .querySelector<TillSentOrders>("till-sent-orders")!
     .shadowRoot!.querySelector("[data-sent-section] wt-course-heading")!

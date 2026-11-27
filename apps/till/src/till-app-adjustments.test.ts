@@ -2394,8 +2394,6 @@ describe("till-app: service cancellation consent", () => {
       await showView(order, "order", { ifShown: true });
       const sent = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await sent.updateComplete;
-      await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-      await sent.updateComplete;
       await userEvent.click(
         sent.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
       );
@@ -5310,14 +5308,14 @@ it.each([
     if (width < 1280) await showView(order, "order");
     const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
-    const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
     const title = document.createRange();
-    title.selectNodeContents(toggle.firstElementChild!);
-    expect(title.getClientRects(), "the Sent heading stays on one line").toHaveLength(1);
-    if (toggle.getAttribute("aria-expanded") === "false") {
-      await userEvent.click(toggle);
-      await panel.updateComplete;
-    }
+    title.selectNodeContents(panel.shadowRoot!.querySelector("[data-section-title]")!);
+    const boxes = [...title.getClientRects()];
+    const tops = boxes.map((box) => box.top);
+    expect(
+      Math.max(...tops) - Math.min(...tops),
+      "the sent heading stays on one line",
+    ).toBeLessThan(Math.min(...boxes.map((box) => box.height)));
     await userEvent.click(
       panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
     );

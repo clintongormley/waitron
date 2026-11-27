@@ -270,7 +270,7 @@ it("retains Fire's server quantity when the structured read has the same line wi
   );
 });
 
-it("forwards due Snooze and Clear snooze once without needing the Sent box opened", async () => {
+it("forwards due Snooze and Clear snooze once, with nothing in Sent to open first", async () => {
   const { el } = await sent();
   const snooze = collect(el, "snooze-group");
   await click(el, "[data-reminder-snooze]");
