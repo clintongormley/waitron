@@ -162,6 +162,7 @@ import {
   tabLineGross,
 } from "../state/adjust-target.js";
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
+import { orderLayoutStyles } from "./table-order-layout.js";
 import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
 import "../widgets/table-status.js";
@@ -685,6 +686,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   static override styles = [
+    orderLayoutStyles,
     priceWasStyles,
     billControlStyles,
     tablePartyMenuStyles,
@@ -1171,49 +1173,6 @@ export class TillTableOrderScreen extends LitElement {
       .flag-kept {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .ordering {
-        flex: 1 1 auto;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-4);
-      }
-
-      .ordering.side-by-side {
-        flex-direction: row;
-        align-items: flex-start;
-      }
-
-      .browsing {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-        min-width: 0;
-      }
-
-      .side-by-side .browsing {
-        flex: 3 1 0;
-      }
-
-      .draft-pane {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-        min-width: 0;
-      }
-
-      .side-by-side .draft-pane {
-        flex: 2 1 0;
-        padding-inline-start: var(--wt-space-4);
-        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-      }
-
-      .browsing[hidden],
-      .draft-pane[hidden] {
-        display: none;
       }
 
       .draft-head {

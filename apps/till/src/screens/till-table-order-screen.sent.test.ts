@@ -63,6 +63,24 @@ it("places this bill's Sent panel before its New order on the table screen", asy
   expect(panel(el).shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
 });
 
+it("beside the menu, paints the sent section the page colour across the whole order column", async () => {
+  const { el } = await sent();
+  el.style.setProperty("--wt-color-bg", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+  const pane = find(el, "[data-draft-pane]");
+  const box = panel(el);
+  const paneStyle = getComputedStyle(pane);
+  expect(paneStyle.backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(box).backgroundColor).toBe("rgb(1, 2, 3)");
+  const column = pane.getBoundingClientRect();
+  const section = box.getBoundingClientRect();
+  expect(section.left).toBeCloseTo(column.left + parseFloat(paneStyle.borderInlineStartWidth), 1);
+  expect(section.right).toBeCloseTo(column.right, 1);
+  const heading = box.shadowRoot!.querySelector("wt-course-heading")!.getBoundingClientRect();
+  const title = find(el, "#draft-title").getBoundingClientRect();
+  expect(heading.left).toBeCloseTo(title.left, 1);
+});
+
 it("the draft already counts 330 ml as one item while keeping its quantity", async () => {
   const drink = {
     ...beer,
