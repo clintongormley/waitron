@@ -127,8 +127,8 @@ Backlog entry A1626, a separate build from A1624.
 periods end. From its closing minute it takes nothing new: no new guests are seated, an occupied
 table cannot add a dish or raise a quantity, a seated party cannot place a first order, and guests
 or bills cannot move in from another zone (a presented bill can). Paying, splitting, moving dishes
-between bills, a new empty bill, a note, and an extra on a dish already sent still work. Tables are
-not cleared. Receipt: `apps/server/src/till-api.zone-closed.test.ts`, 27 cases, all passing on
+between bills, a new empty bill, a note, and an extra on a dish already sent still work. Occupied
+tables stay occupied and their bills stay open. Receipt: `apps/server/src/till-api.zone-closed.test.ts`, 27 cases, all passing on
 `main` at `c6acae0136` on 2026-11-27. Keep open, on the till with a manager's PIN (the server asks
 for `venue.configure`, `apps/server/src/keep-open-api.ts`), moved that closing minute later for the
 day.
@@ -148,8 +148,8 @@ Taken off and Back to the plan).
   the station before sending", "Station agreed — send", "Don't send them"), with wording about the
   zone rather than a station. No manager's PIN. When both the zone has closed and the dish's period
   has ended, the person is asked once, naming both.
-- **What still works after closing is unchanged** (paying and the rest listed above), and nothing
-  is cleared.
+- **What still works after closing is unchanged** (paying and the rest listed above). Closing
+  never frees an occupied table or closes its bills; the "Clear the table" job is unrelated.
 - **A planned change to a day's hours** is made in the dashboard's Calendar, as a special day for
   that zone, as it can be today.
 - **Removed:** the till's Keep open button and dialog (`apps/till/src/widgets/keep-open.ts`,
