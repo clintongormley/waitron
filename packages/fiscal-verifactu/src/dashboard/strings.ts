@@ -79,6 +79,8 @@ const en = {
   "aeat_certificate.does_not_match": "does not match the business",
   "aeat_certificate.no_tax_id": "not shown on the certificate",
   "aeat_certificate.days_left": "{days} days left",
+  "aeat_certificate.not_accepted_on":
+    "AEAT did not accept this certificate on {date}. Install a new one.",
   "aeat_certificate.expires_tomorrow": "Expires tomorrow, {time}",
   "aeat_certificate.expires_today": "Expires today, {time}",
   "aeat_certificate.expired_on": "Expired on {date}",
@@ -477,6 +479,8 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.does_not_match": "no coincide con el negocio",
   "aeat_certificate.no_tax_id": "no figura en el certificado",
   "aeat_certificate.days_left": "quedan {days} días",
+  "aeat_certificate.not_accepted_on":
+    "La AEAT no aceptó este certificado el {date}. Instala uno nuevo.",
   "aeat_certificate.expires_tomorrow": "Caduca mañana a las {time}",
   "aeat_certificate.expires_today": "Caduca hoy a las {time}",
   "aeat_certificate.expired_on": "Caducó el {date}",

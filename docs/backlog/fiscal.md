@@ -877,10 +877,6 @@ its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-
   certificate arrived. `mtlsFetch` follows the redirect, the library cannot read the page, and
   `classify` in `certificate-check.ts` falls through to `check_failed`. Keep the redirect and say that
   AEAT did not accept the certificate.
-- **Nothing names the certificate when AEAT refuses the installed one before its expiry date.** FNMT
-  had revoked the session's refused certificate as superseded 17 days before it expired. A filing
-  answered that way is retried; the card still shows days left, and the alert is the general
-  `fiscal.submission_delayed`.
 - **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
   certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
   unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's

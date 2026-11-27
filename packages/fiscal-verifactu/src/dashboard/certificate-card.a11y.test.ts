@@ -52,6 +52,11 @@ const states: Array<[string, CertificateCardView, string]> = [
     view({ validUntil: "2026-10-24T23:30:00.000Z", daysLeft: -3, stage: "expired" }),
     "[data-test=certificate-status][data-stage=expired]",
   ],
+  [
+    "not accepted",
+    view({ notAcceptedAt: "2026-10-11T22:30:00.000Z" }),
+    "[data-test=certificate-status][data-stage=not-accepted]",
+  ],
   ["none installed", view(null), "[data-test=certificate-message]"],
   ["not filing", view({}, { filing: false }), "[data-test=certificate-message]"],
 ];

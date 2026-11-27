@@ -26,6 +26,8 @@ export interface CertificateCardView {
     source: "setup" | "dashboard";
     installedByName: string | null;
     lastAcceptedAt: string | null;
+    /** When AEAT first refused this certificate; absent while it has not. */
+    notAcceptedAt?: string;
   };
 }
 
