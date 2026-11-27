@@ -464,14 +464,14 @@ export function mountBackupRecoveryPackMakeApi(
       return;
     }
     if (bytes === null || !masterKeyMatches(bytes, waiting.checkValue)) invalid("unknown_pack");
-    // A request already gone would leave the box on a key whose pack never arrived.
-    if (signal.aborted) invalid("unknown_pack");
     await withTransaction(deps.db, async (tx) => {
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: token,
         permission: "system.manage",
       });
       if (waiting.personId !== authorizedBy) invalid("unknown_pack");
+      // A browser already gone would never learn that the box took the key.
+      if (signal.aborted) invalid("unknown_pack");
       await insertMasterKey(tx, {
         name: waiting.name,
         checkValue: waiting.checkValue,

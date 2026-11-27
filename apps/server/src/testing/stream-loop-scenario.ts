@@ -465,6 +465,16 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         expect(made.status).toBe(200);
         const pdf = new Uint8Array(await made.arrayBuffer());
         const pack = await readRecoveryPackPdf(pdf);
+        const confirmed = await fetch(
+          `${origin}/api/backup/recovery-pack/${made.headers.get("x-waitron-recovery-pack")}/received`,
+          {
+            ...via,
+            method: "POST",
+            headers,
+            body: JSON.stringify({ masterKey: made.headers.get("x-waitron-master-key") }),
+          },
+        );
+        expect(confirmed.status).toBe(204);
         const rotatedKey = recoveryKey;
         const rotatedGeneration = pointerA.pointer.body.generation;
         recoveryKey = (await readBackupSettings(dirsA.state))!.WAITRON_BACKUP_RECOVERY_KEY!;

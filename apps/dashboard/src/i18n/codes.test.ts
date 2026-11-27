@@ -925,7 +925,7 @@ it("names Print the recovery pack and Make a new master key, never an old action
   );
 });
 
-it("words the backup key change's refusals: a master key that is not the current one, and a key held too short", () => {
+it("words a master key that is not the current one, the backup key dialog's no-master-key line, and a backup key held too short", () => {
   expect(codeMessage("promotion.break_glass_invalid", "en")).toBe(
     "That is not the current master key. Check the recovery pack and type it again.",
   );

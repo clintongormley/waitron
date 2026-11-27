@@ -1215,7 +1215,7 @@ describe("the status route", () => {
     await olderPack(2, new Date("2026-10-02T09:00:00.000Z"), new Date("2026-10-02T10:00:00.000Z"));
     expect(await read(fixture())).toMatchObject({
       latest: { number: 2, received: true },
-      unreceived: { number: 1, holdsCurrentMasterKey: true },
+      unreceived: { number: 1, holdsCurrentMasterKey: true, offeredAtSetup: true },
       masterKey: { name, pack: 1 },
     });
   });

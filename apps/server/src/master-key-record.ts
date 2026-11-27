@@ -33,7 +33,7 @@ export async function checkTypedMasterKey(
 }
 
 /** Writes the key's public facts, never the key. */
-export async function insertNewMasterKey(
+async function insertNewMasterKey(
   tx: Transaction,
   key: NewMasterKey,
   madeAt: Date,

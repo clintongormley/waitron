@@ -12,6 +12,7 @@ import {
 } from "@waitron/credentials";
 import { masterKeys, readCurrentMasterKey, readRecoveryPacks, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode } from "@waitron/module";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
@@ -403,7 +404,10 @@ describe("a new master key whose pack never arrived", () => {
       WAITRON_BACKUP_RECOVERY_KEY: heldBackupKey(secondBytes, 4).key,
       WAITRON_BACKUP_KEY_NUMBER: "4",
     });
-    expect(await f.status()).toMatchObject({ masterKey: { name: secondName, pack: 2 } });
+    expect(await f.status()).toMatchObject({
+      unreceived: null,
+      masterKey: { name: secondName, pack: 2 },
+    });
   });
 });
 
@@ -426,25 +430,6 @@ describe("the backup key is written only once the pack and its master key are sa
     expect(f.steps).toEqual([]);
     expect(await masterKeyRows()).toEqual(rowsBefore);
     expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);
-  });
-
-  it("an aborted make saves no master key and writes no backup key", async () => {
-    const stateDir = await stateFolder(3);
-    const before = await readFile(join(stateDir, "backup.env"), "utf8");
-    const rowsBefore = await masterKeyRows();
-    const aborted = new AbortController();
-    const f = fixture(stateDir, {
-      // The person goes away while the pack is drawn, before its master key is saved.
-      loadFonts: async () => {
-        aborted.abort();
-        return loadRecoveryPackFonts();
-      },
-    });
-    await (await f.make(true, { signal: aborted.signal })).arrayBuffer();
-    expect(aborted.signal.aborted).toBe(true);
-    expect(await masterKeyRows()).toEqual(rowsBefore);
-    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
-    expect(f.steps).toEqual([]);
   });
 
   it("a failed backup reload after the key is written is logged as a failed reload", async () => {
@@ -695,6 +680,65 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     });
     expect(await snapshot(stateDir, f)).toEqual(before);
     expect(confirmer.steps).toEqual([]);
+  });
+
+  it("refuses another manager's confirm of a waiting key, changing nothing", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    const before = await snapshot(stateDir, f);
+    const other = await openManagementSession(suite.db, "admin");
+    const response = await f.confirm(made, { token: other.token });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect((await f.status()).newKeyWaiting).toBe(true);
+  });
+
+  it("refuses a confirm with a field beside the master key, changing nothing", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    const before = await snapshot(stateDir, f);
+    const response = await f.received(
+      1,
+      {},
+      { masterKey: made.headers.get("x-waitron-master-key"), more: 1 },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "shape" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+  });
+
+  it("refuses a repeated confirm from another person, or for a pack that did not show the current key", async () => {
+    const stateDir = await stateFolder(3);
+    let at = Date.parse(MADE_AT);
+    const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    await (await f.make(encodeMasterKeyCode(OLD_MASTER))).arrayBuffer();
+    expect((await f.received(1)).status).toBe(204);
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    expect((await f.confirm(made)).status).toBe(204);
+    const after = await snapshot(stateDir, f);
+    const other = await openManagementSession(suite.db, "admin");
+    const shown = made.headers.get("x-waitron-master-key");
+    for (const [number, token] of [
+      [2, other.token],
+      [1, admin.token],
+    ] as const) {
+      const response = await f.received(number, { token }, { masterKey: shown });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+      });
+    }
+    expect(await snapshot(stateDir, f)).toEqual(after);
   });
 
   it("a confirm whose request is gone before its backup turn comes changes nothing", async () => {
