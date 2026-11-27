@@ -6,7 +6,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -18,6 +17,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import type { GiveBackView } from "./give-back-read.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -125,11 +125,24 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
       status: 200,
       json: { parts: [{ kind: "correction", amount: "5.00", way: "cash", lineIds: [] }] },
     });
-    const waiting = vi
-      .spyOn(venue().backend, "correctionAdmissionFor")
-      .mockRejectedValue(new AppError("clock.unconfirmed", {}));
-    onTestFinished(() => waiting.mockRestore());
-    const reason = { code: "clock.unconfirmed", params: {} };
+    const [adjustment] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
+    const correctionId = await openedCorrection(
+      venue(),
+      saleId,
+      {
+        submissionId: randomUUID(),
+        gross: "5.00",
+        reasonId: adjustment!.id,
+        note: "Cold",
+        expectedSplit: await previewedSplit(venue(), saleId, { gross: "5.00" }),
+        override: { personId: venue().adminId, pin: "1234" },
+      },
+      venue().cookie,
+    );
+    const reason = {
+      code: "invoice_correction.already_open",
+      params: { saleId, correctionId },
+    };
     expect((await read(saleId)).json).toMatchObject({
       choices: { goodwill: { available: false, reason } },
     });

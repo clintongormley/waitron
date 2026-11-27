@@ -308,7 +308,7 @@ describe("Give money back on a full invoice", () => {
   });
 });
 
-describe("a fresh leg on an open give-back once its corrective cannot be filed", () => {
+describe("a fresh leg on an open give-back, whatever AEAT has said about the original", () => {
   /** A €25.00 goodwill give-back on the sale, pressed on `way`; the correction's id. */
   async function opened(saleId: string, way = "cash") {
     const body = await giveBody(saleId, ask("goodwill", "25.00", { way }));
