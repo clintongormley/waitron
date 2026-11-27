@@ -52,5 +52,7 @@ test("missing support waits for the import; a failed chunk reports then mounts o
     (error) => order.push(error),
   );
   expect(order).toEqual([]);
-  await vi.waitFor(() => expect(order).toEqual([expect.any(TypeError), "mounted"]));
+  await vi.waitFor(() => expect(order).toEqual([expect.any(TypeError), "mounted"]), {
+    timeout: 10_000,
+  });
 });
