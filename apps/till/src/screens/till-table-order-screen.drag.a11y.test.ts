@@ -14,7 +14,7 @@ declare module "vitest/browser" {
   interface BrowserCommands {
     touchGesture: (gesture: TouchGesture) => Promise<void>;
     parkTouch: () => Promise<void>;
-    holdDraftLine: (selector: string) => Promise<void>;
+    holdDraftLine: (selector: string, ready?: string) => Promise<void>;
   }
 }
 
@@ -75,7 +75,7 @@ describe.each(["en", "es"] as const)("unsent gestures %s", (locale) => {
         expect(activity).toBe(1);
         expect(
           [...el.shadowRoot!.querySelectorAll("[data-draft-select]")].map((control) =>
-            control.getAttribute("aria-pressed"),
+            control.getAttribute("aria-checked"),
           ),
         ).toEqual(["false", "false", "false"]);
         for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")) {
@@ -121,13 +121,13 @@ describe.each(["en", "es"] as const)("unsent gestures %s", (locale) => {
 it("a real held mouse press opens details without the release click selecting the row", async () => {
   const { el, draft } = await open("light");
   const lead = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
-  await commands.holdDraftLine('[data-draft-select="0"]');
+  await commands.holdDraftLine('[data-draft-select="0"]', '.draft-row:has([data-draft-row="0"])');
   const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((basket) =>
     basket.lineIndexes?.includes(0),
   )!;
   await basket.updateComplete;
   const picker = basket.shadowRoot!.querySelector<HTMLElement>("till-modifier-picker");
   expect(picker).not.toBeNull();
-  expect(lead.getAttribute("aria-pressed")).toBe("false");
+  expect(lead.getAttribute("aria-checked")).toBe("false");
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
 });

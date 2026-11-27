@@ -522,10 +522,13 @@ sent**. A dish on hold shows what is published now until you release it.
 
 Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
 juice sold by the ml, tap the dish, type the amount into its field or use the till keypad,
-then choose **Add**. For example, 250 ml goes on one line. Tap its amount before sending to edit
-it. **Mark served** marks the whole amount as served.
+then choose **Add**. For example, 250 ml goes on one line. Before sending, tap its amount at the
+counter, or its row at a table, to edit it. **Mark served** marks the whole amount as served.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
+
+At a table, tap a dish in **New order** to change how many, its options or its note. To take dishes
+off, tick their boxes and tap **Remove** in the bar under the order.
 
 At the counter, an order you park and open again shows its 2 × Burger as one row while none of it
 is paid.
@@ -567,7 +570,7 @@ with **Send all** above them while you have dishes to send. After you send every
 stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
 menu and the order sit side by side.
 
-On a phone or tablet, to move a dish in **New order**, press its name until the outline appears.
+On a phone or tablet, to move a dish in **New order**, press its row until the outline appears.
 Keep your finger down, drag to the heading of the group you want, then lift your finger.
 
 Use the **Menu** field beside **Search** to switch between the menus available now. Scroll past

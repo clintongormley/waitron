@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { CurrentOrderGroup } from "../api/kitchen-api.js";
 import type { TillCourse } from "../api/device-session-api.js";
 import type { OrderLine } from "./working-order.js";
-import { draftLayout, fireGroups, sendAllGroups, panelTotal } from "./draft-layout.js";
+import {
+  draftLayout,
+  draftLinePrice,
+  fireGroups,
+  sendAllGroups,
+  panelTotal,
+} from "./draft-layout.js";
 
 const courses: TillCourse[] = [
   { id: "starter", name: "Starters", displayOrder: 1, fireNowZoneIds: ["dining"] },
@@ -291,5 +297,32 @@ describe("set-menu amounts in the order panel", () => {
     });
     expect(panelTotal("28.00", [sirloin], () => "5.00")).toBe("33.25");
     expect(panelTotal("28.00", [sirloin], () => "0.00")).toBe("28.25");
+  });
+});
+
+describe("one draft line's price, as the panel total adds it", () => {
+  const sauce = { listId: "extras", productId: "sauce", name: "Sauce", quantity: 2, price: "0.25" };
+
+  it("prices a set-menu dish at its landing place's share, keeping its paid extras", () => {
+    const sirloin = line("sirloin", undefined, undefined, { setMenuId: "daily", extras: [sauce] });
+    expect(draftLinePrice(sirloin, () => "5.00").toString()).toBe("5.50");
+    expect(draftLinePrice(sirloin).toString()).toBe("0.50");
+  });
+
+  it("prices a weighed dish by its quantity", () => {
+    const fish = line("fish", undefined, undefined, {
+      quantity: "0.250",
+      product: { ...line("fish", undefined).product, unitPrice: "30.00", pricingUnit: "weight" },
+    });
+    expect(draftLinePrice(fish, () => "9.00").toString()).toBe("7.50");
+  });
+
+  it("adds an extra per dish, and an extra the menu no longer offers", () => {
+    const burger = line("burger", undefined, undefined, {
+      quantity: "3",
+      extras: [sauce],
+      notOfferedExtras: [{ ...sauce, productId: "gone", price: "1.00", quantity: 1 }],
+    });
+    expect(draftLinePrice(burger).toString()).toBe("7.50");
   });
 });

@@ -25,13 +25,21 @@ export function allergyGuestId(
   return tick?.guestId ?? null;
 }
 
+/** What {@link allergyMark} shows: who the line's allergy tick is for. */
+export function allergyGuestWho(
+  snapshot: PartyAllergySnapshot | null,
+  ref: { kind: "draft" | "working"; id: string },
+): string | undefined {
+  const id = allergyGuestId(snapshot, ref);
+  return snapshot?.guests.find((guest) => guest.id === id)?.who;
+}
+
 export function allergyMark(
   snapshot: PartyAllergySnapshot | null,
   ref: { kind: "draft" | "working"; id: string },
 ): TemplateResult | typeof nothing {
-  const id = allergyGuestId(snapshot, ref);
-  const guest = snapshot?.guests.find((guest) => guest.id === id);
-  return guest === undefined
+  const who = allergyGuestWho(snapshot, ref);
+  return who === undefined
     ? nothing
-    : html`<span class="allergy-tag" data-allergy-tag>${guest.who}</span>`;
+    : html`<span class="allergy-tag" data-allergy-tag>${who}</span>`;
 }

@@ -1164,7 +1164,7 @@ the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit abo
 floor the shell measures the toolbar for its sheets and the app's toasts
 (`apps/till/src/widgets/floor-bar.ts`).
 
-On the Order screen the New order's button bar (Move to…, Fire, Send all; `.draft-bar`,
+On the Order screen the New order's button bar (Move to… and Remove, then Fire and Send all; `.draft-bar`,
 `apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
 the menu and on the narrow screen's Order view alike, with a line along its top and the order pane's own
 colour behind it. While the bar's own place is below the foot of the till's scroll area, it stays
@@ -6500,6 +6500,25 @@ one row per portion: the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-ticket-moves.ts`).
 
+### The order's new rows (till)
+
+On a table's order, a dish not yet sent is one compact row (`apps/till/src/widgets/draft-row.ts`,
+drawn by `till-basket` with `compactRows`, which only the table order screen sets): a selection box
+in a `--wt-tap-min` square at the left (drawn 24 square, radius 6, a 2px `--wt-color-text-muted`
+border; ticked, the brand colour with a white `check`), then one button holding the quantity (`lg`,
+bold), the name (`lg`, medium), a muted `sm` second line of extras, each option's answer without its
+question (“Medium”), and the note, and the price (`md`) at the right, then the split control as a
+muted `chevron-down` on a row of more than one. The price is `draftLinePrice`
+(`apps/till/src/state/draft-layout.ts`), the same per-line rule the order total adds. The row added
+last is `--wt-color-surface-lifted`; on it an extra's diet badge keeps its `--wt-color-success`
+border but its text reads `--wt-color-text`, since the green text measures 4.13:1 on that surface in
+the light theme. A tap opens the dish's details; a press held until the whole row is outlined (2px
+of `--wt-color-primary` inside its edge) and then moved drags it; released without moving, it opens
+the details; Remove, Move to… and Fire in the draft bar act on the ticked rows. The selection box is
+a `checkbox` named by the dish, its quantity, its guest and its second line, with each answer after
+its question (“Doneness: Medium”), so rows of one dish that differ in any of those read differently.
+Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.
+
 ### The dish picker
 
 Move dishes… draws the bill's dishes through `till-portion-picker`
@@ -6774,7 +6793,7 @@ span after the drawn count put a space before the comma in Chromium's accessible
 ### The till's late-send mark and window
 
 An unsent dish whose period ended earlier the same business day carries "⚠ {period} ended"
-(`basket.period_ended`, `periodEndedMarker` in `apps/till/src/widgets/basket.ts`): the "⚠" hidden
+(`basket.period_ended`, `periodEndedMarker` in `apps/till/src/widgets/draft-row.ts`): the "⚠" hidden
 from screen readers, then the words, bold, `--wt-font-size-sm`, in `--wt-color-warning` on the
 line's own background, and a `--wt-space-1` bar in `--wt-color-warning` on the line's leading edge
 (`.period-ended-entry`). Colour and a symbol, never colour alone. It is a warning, not a block: it

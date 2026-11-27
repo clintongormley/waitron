@@ -367,7 +367,7 @@ async function act(el: TillApp, kind: "send-all" | "fire-selected"): Promise<voi
 
 async function tick(el: TillApp, name: string): Promise<void> {
   [...screen(el).querySelectorAll<HTMLElement>("[data-draft-select]")]
-    .find((button) => button.textContent!.includes(name))!
+    .find((button) => button.getAttribute("aria-label")!.includes(name))!
     .click();
   await flush(el);
 }

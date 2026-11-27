@@ -1441,6 +1441,7 @@ export const en = {
   "table.move_line": "Move to…",
   "table.move_new_group": "New group",
   "table.split_group_line": "Split quantity",
+  "table.select_line": "Select",
   // Per-line kitchen actions
   "table.change_dish": "Change dish",
   "table.change_dish_lower": "To take one off, use Void…",
@@ -3907,6 +3908,7 @@ export const es: Record<StringKey, string> = {
   "table.move_line": "Mover a…",
   "table.move_new_group": "Grupo nuevo",
   "table.split_group_line": "Separar cantidad",
+  "table.select_line": "Seleccionar",
   "table.change_dish": "Cambiar plato",
   "table.change_dish_lower": "Para quitar uno, usa Cancelar…",
   "table.change_dish_started": "{dish} ya se está preparando y no se puede cambiar.",

@@ -34,7 +34,14 @@ import {
   resetPage,
   servedMenus,
 } from "../widgets/test-helpers.js";
-import { openDraftLine, resized, showView } from "./till-table-order-screen.test-helpers.js";
+import {
+  draftRow,
+  draftRowLabel,
+  draftRows,
+  openDraftLine,
+  resized,
+  showView,
+} from "./till-table-order-screen.test-helpers.js";
 import { TillTableOrderScreen, type TableRelocationOpenDetail } from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -293,10 +300,10 @@ afterEach(cleanupWidgets);
 const draftAction = (el: TillTableOrderScreen, kind: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`);
 
-/** The draft line's selection toggle whose text names `name`. */
+/** The draft line's selection toggle whose name names `name`. */
 const draftToggle = (el: TillTableOrderScreen, name: string) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")].find((toggle) =>
-    toggle.textContent!.includes(name),
+    toggle.getAttribute("aria-label")!.includes(name),
   )!;
 
 async function saveDraftLine(el: TillTableOrderScreen): Promise<void> {
@@ -321,7 +328,7 @@ async function submitDraft(
   await saveDraftLine(el);
   if (kind === "fire-all") {
     for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await el.updateComplete;
@@ -1186,9 +1193,7 @@ describe("till-table-order-screen", () => {
     const sectionNames = (el: TillTableOrderScreen) =>
       [...el.shadowRoot!.querySelectorAll("[data-draft-section]")].map((section) => ({
         heading: section.querySelector(".draft-section-name")?.textContent?.trim() ?? null,
-        lines: [...section.querySelectorAll("[data-draft-select]")].map((toggle) =>
-          toggle.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim(),
-        ),
+        lines: draftRows(section).map(draftRowLabel),
       }));
 
     const actionKinds = (el: TillTableOrderScreen) =>
@@ -1265,7 +1270,7 @@ describe("till-table-order-screen", () => {
         const pressed = (name: string) => {
           const button = draftToggle(el, name);
           expect(button).toBeInstanceOf(HTMLButtonElement);
-          return button.getAttribute("aria-pressed");
+          return button.getAttribute("aria-checked");
         };
         expect(pressed("Beer")).toBe("true");
         expect(pressed("Croquetas")).toBe("false");
@@ -1735,7 +1740,7 @@ describe("till-table-order-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
     async function openFreshMove(el: TillTableOrderScreen, index = 0) {
       for (const selected of el.shadowRoot!.querySelectorAll<HTMLElement>(
-        '[data-draft-select][aria-pressed="true"]',
+        '[data-draft-select][aria-checked="true"]',
       )) {
         await userEvent.click(selected);
       }
@@ -1948,7 +1953,7 @@ describe("till-table-order-screen", () => {
       expect(dialog.open).toBe(false);
       await openFreshMove(el);
       expect(dialog.open).toBe(true);
-      expect(text(control(el, '[data-draft-select="0"]')!)).toContain("Steak ×2");
+      expect(draftRowLabel(draftRow(el, 0)!)).toBe("Steak ×2");
       const targets = [...dialog.querySelectorAll<HTMLElement>("[data-draft-move-to]")];
       expect(targets.map((target) => target.dataset.draftMoveTo)).toEqual([
         "fire",
@@ -1981,7 +1986,7 @@ describe("till-table-order-screen", () => {
         groups: groups.map((row) => (row.id === "g5" ? { ...row, summary: odd } : row)),
       });
       await openFreshMove(el);
-      expect(text(control(el, '[data-draft-select="0"]')!)).toContain(odd);
+      expect(draftRowLabel(draftRow(el, 0)!)).toBe(`${odd} ×2`);
       expect(text(control(el, '[data-draft-move-to="join:g5"]')!)).toBe("Joins Group 5");
     });
 
@@ -5749,15 +5754,15 @@ describe("A668 nutrition after table-order names", () => {
     ).not.toBeNull();
     await showView(el, "order", { scripted: true });
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-draft-select] .draft-line-name wt-icon[name="allergen-milk"]',
+      draftRows(el.shadowRoot!).filter(
+        (row) => row.querySelector('.draft-row-name wt-icon[name="allergen-milk"]') !== null,
       ),
-    ).not.toBeNull();
+    ).toHaveLength(1);
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-draft-select] .draft-line-name wt-icon[name="diet-no_meat"]',
+      draftRows(el.shadowRoot!).filter(
+        (row) => row.querySelector('.draft-row-name wt-icon[name="diet-no_meat"]') !== null,
       ),
-    ).not.toBeNull();
+    ).toHaveLength(1);
   });
 
   it("shows stored nutrition in Sent before Current orders has been read", async () => {

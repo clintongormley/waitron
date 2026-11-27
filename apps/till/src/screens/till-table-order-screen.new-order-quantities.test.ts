@@ -40,13 +40,13 @@ describe("New order quantities keep display separate from submission", () => {
             "[data-draft-sections] till-basket",
           )!;
           await basket.updateComplete;
-          const lead = el.shadowRoot!.querySelector<HTMLElement>(".draft-line-name")!;
-          const quantity = basket.shadowRoot!.querySelector<HTMLElement>(".qty")!;
+          const lead = basket.shadowRoot!.querySelector<HTMLElement>(
+            ".draft-row-name .product-name",
+          )!;
+          const quantity = basket.shadowRoot!.querySelector<HTMLElement>(".draft-row-qty")!;
           expect(lead.checkVisibility()).toBe(true);
           expect(quantity.checkVisibility()).toBe(true);
-          expect(lead.textContent).toBe(
-            locale === "es" ? "Jamón 1.5, 2 small 0,375 kg" : "Jamón 1.5, 2 small 0.375 kg",
-          );
+          expect(lead.textContent).toBe("Jamón 1.5, 2 small");
           expect(quantity.textContent).toBe(locale === "es" ? "0,375 kg" : "0.375 kg");
           expect(basket.shadowRoot!.textContent).toContain("Cut 1.5, 2 small");
           expect(draft.lines[0]!.quantity).toBe("0.375");
@@ -101,7 +101,7 @@ describe("New order quantities keep display separate from submission", () => {
           "[data-draft-sections] till-basket",
         )!;
         await basket.updateComplete;
-        expect(basket.shadowRoot!.querySelector(".qty")!.textContent).toBe(
+        expect(basket.shadowRoot!.querySelector(".draft-row-qty")!.textContent).toBe(
           (locale === "es" ? "0,350" : "0.350") +
             (abbreviation === "" ? " su" : ` ${abbreviation}`),
         );

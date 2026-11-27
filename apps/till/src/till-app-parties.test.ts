@@ -8166,7 +8166,7 @@ describe("till-app: submitting the draft", () => {
 
   async function toggle(el: TillApp, order: TillTableOrderScreen, name: string): Promise<void> {
     [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")]
-      .find((button) => button.textContent!.includes(name))!
+      .find((button) => button.getAttribute("aria-label")!.includes(name))!
       .click();
     await flush(el);
   }
@@ -8182,7 +8182,7 @@ describe("till-app: submitting the draft", () => {
 
   async function fireAll(el: TillApp, order: TillTableOrderScreen): Promise<void> {
     for (const tick of order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")) {
-      if (tick.getAttribute("aria-pressed") !== "true") tick.click();
+      if (tick.getAttribute("aria-checked") !== "true") tick.click();
     }
     await flush(el);
     await act(el, order, "fire-selected");

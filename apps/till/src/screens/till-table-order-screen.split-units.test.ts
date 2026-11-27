@@ -35,7 +35,8 @@ it("splits from a trailing chevron instead of a separate tool under the row", as
   const { el, draft } = await draftWithUnits();
   const control = split(el)!;
   expect(control.getAttribute("slot")).toBe("end-0");
-  expect(control.textContent!.trim()).toBe("›");
+  expect(control.textContent!.trim()).toBe("");
+  expect(control.querySelector('wt-icon[name="chevron-down"]')).not.toBeNull();
   expect(control.getAttribute("aria-label")).toBe("Split quantity · Beer");
   await userEvent.click(control);
   await el.updateComplete;
@@ -255,7 +256,7 @@ it("clears a partial family selection when folding so Fire cannot select extra u
   await el.updateComplete;
   expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-checked"),
   ).toBe("false");
 });
 
@@ -268,6 +269,6 @@ it("keeps the folded line selected when every expanded unit was ticked", async (
   await el.updateComplete;
   expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-checked"),
   ).toBe("true");
 });

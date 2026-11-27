@@ -32,6 +32,9 @@ import { WorkingOrderStore } from "./state/working-order.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import {
+  draftRow,
+  draftRowLabel,
+  draftRows,
   openDraftLine,
   resized,
   showView,
@@ -404,7 +407,7 @@ async function tap(el: TillApp, name: string): Promise<void> {
 
 async function toggle(el: TillApp, name: string): Promise<void> {
   [...tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")]
-    .find((button) => button.textContent!.includes(name))!
+    .find((button) => button.getAttribute("aria-label")!.includes(name))!
     .click();
   await flush(el);
 }
@@ -412,7 +415,7 @@ async function toggle(el: TillApp, name: string): Promise<void> {
 async function act(el: TillApp, kind: string): Promise<void> {
   if (kind === "fire-all") {
     for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await flush(el);
@@ -3823,7 +3826,7 @@ describe("till-app: how long a send may take", () => {
 
   async function confirmFireAll(el: TillApp): Promise<void> {
     for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await settle(el);
@@ -4831,12 +4834,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
       ?.shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
       ?.textContent?.replace(/\s+/g, " ")
       .trim();
-  const displayedLines = (el: TillApp) =>
-    [
-      ...tableOrder(el)!.shadowRoot!.querySelectorAll(
-        "[data-draft-select], span.draft-line-name[slot]",
-      ),
-    ].map((line) => line.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim());
+  const displayedLines = (el: TillApp) => draftRows(tableOrder(el)!.shadowRoot!).map(draftRowLabel);
   const saveWait = () => vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
   it("on Order, shows the server's draft there, says so, and sends nothing again", async () => {
@@ -6250,7 +6248,9 @@ describe("till-app: a draft line that cannot be sold now", () => {
   const screen = (el: TillApp) => tableOrder(el)!.shadowRoot!;
   const flagText = (el: TillApp) =>
     [...screen(el).querySelectorAll("till-basket")]
-      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll(".line .not-offered")])
+      .flatMap((basket) => [
+        ...basket.shadowRoot!.querySelectorAll("[data-draft-row] .draft-row-name .not-offered"),
+      ])
       .map((marker) => marker.textContent!.trim());
   const sentNames = (call = 0) =>
     server
@@ -8852,7 +8852,7 @@ describe("direct New order actions", () => {
         await showView(order, "order");
         await userEvent.click(
           [...root.querySelectorAll<HTMLElement>("[data-draft-select]")].find((row) =>
-            row.textContent!.includes("Steak"),
+            row.getAttribute("aria-label")!.includes("Steak"),
           )!,
         );
         const action = root.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!;
@@ -8933,7 +8933,7 @@ describe("direct New order actions", () => {
     await showView(tableOrder(el)!, "order");
     const tick = screen.querySelector<HTMLElement>("[data-draft-select]")!;
     await userEvent.click(tick);
-    expect(tick.getAttribute("aria-pressed")).toBe("true");
+    expect(tick.getAttribute("aria-checked")).toBe("true");
     await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
     const move = screen.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
     expect(move.open).toBe(true);
@@ -8944,7 +8944,7 @@ describe("direct New order actions", () => {
     await flush(el, 6);
 
     expect(draft(el).lines[0]).toBe(selected);
-    expect(screen.querySelector("[data-draft-select]")!.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.querySelector("[data-draft-select]")!.getAttribute("aria-checked")).toBe("true");
     expect(move.open).toBe(true);
     const closed = new Promise<void>((resolve) =>
       move.addEventListener("wt-close", () => resolve(), { once: true }),
@@ -9224,7 +9224,7 @@ describe("native app phone order view with mixed dish families", () => {
                 (group) => group.dataset.draftGroup,
               ),
             ).toEqual(["fire", "new:1"]);
-            expect(q('[data-draft-select="2"]').textContent).toContain(
+            expect(draftRow(order, 2)!.querySelector(".draft-row-qty")!.textContent).toContain(
               locale === "es" ? "0,375" : "0.375",
             );
             expect(draft(el).lines[1]!.extras).toEqual([
@@ -9237,7 +9237,7 @@ describe("native app phone order view with mixed dish families", () => {
             window.dispatchEvent(new Event("focus"));
             await expect.poll(() => api.listDrafts!.mock.calls.length).toBeGreaterThan(reads);
             await flush(el);
-            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            expect(q('[data-draft-select="0"]').getAttribute("aria-checked")).toBe("true");
             for (let index = 0; index < originalRows.length; index++)
               expect(draft(el).lines[index]).toBe(originalRows[index]);
             expect(draft(el).lines).toEqual(before);
@@ -9260,7 +9260,7 @@ describe("native app phone order view with mixed dish families", () => {
             });
             await showView(order, "order");
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
-            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            expect(q('[data-draft-select="0"]').getAttribute("aria-checked")).toBe("true");
             expect(draft(el).lines).toEqual(before);
             expect(api.submitDraft).not.toHaveBeenCalled();
           } finally {

@@ -5,6 +5,9 @@ import type { OrderLine } from "../state/working-order.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import {
   beer,
+  draftRow,
+  draftRowLabel,
+  draftRows,
   flan,
   mount,
   openDraftLine,
@@ -63,14 +66,12 @@ async function settled(el: TillTableOrderScreen): Promise<void> {
 
 /** The text of each shown draft row, as its basket renders it. */
 const rowTexts = (el: TillTableOrderScreen) =>
-  [...el.shadowRoot!.querySelectorAll("till-basket")].flatMap((basket) =>
-    [...basket.shadowRoot!.querySelectorAll(".line .name")].map((name) => {
-      const lead = name.querySelector("slot")!.assignedElements()[0];
-      const markers = [...name.querySelectorAll(".not-offered")].map((each) => each.textContent);
-      const shown = lead?.querySelector(".draft-line-name")?.textContent;
-      return [shown?.replace(/\s+/g, " ").trim(), ...markers].join(" | ");
-    }),
-  );
+  draftRows(el.shadowRoot!).map((row) => {
+    const markers = [...row.querySelectorAll(".draft-row-name .not-offered")].map(
+      (each) => each.textContent,
+    );
+    return [draftRowLabel(row), ...markers].join(" | ");
+  });
 const removeButton = (el: TillTableOrderScreen, index: number) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-flag-remove="${index}"]`);
 const keepButton = (el: TillTableOrderScreen, index: number) =>
@@ -258,9 +259,7 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-all");
 
-    expect(
-      el.shadowRoot!.querySelector('[data-draft-select="0"] .draft-line-name')!.textContent,
-    ).toContain("Beer ×2");
+    expect(draftRowLabel(draftRow(el, 0)!)).toBe("Beer ×2");
     expect(el.shadowRoot!.querySelector("[data-flag-warning]")).not.toBeNull();
   });
 
@@ -313,10 +312,10 @@ describe("till-table-order-screen: a dish no longer offered at all", () => {
     expect(el.shadowRoot!.querySelector("[data-view=order]")!.textContent!.trim()).toBe(
       `${t("table.view_order")} · 3`,
     );
-    const quantities = [...el.shadowRoot!.querySelectorAll("till-basket")].flatMap((basket) =>
-      [...basket.shadowRoot!.querySelectorAll(".qty:not(.stepper)")].map((qty) => qty.textContent),
-    );
-    expect(quantities).toEqual(["2"]);
-    expect(el.shadowRoot!.querySelector(".draft-line-name")?.textContent?.trim()).toBe("×2");
+    const shownRows = draftRows(el.shadowRoot!);
+    expect(
+      shownRows.map((row) => row.querySelector(".draft-row-qty")!.textContent!.trim()),
+    ).toEqual(["2", "1"]);
+    expect(draftRowLabel(shownRows[0]!).trim()).toBe("×2");
   });
 });

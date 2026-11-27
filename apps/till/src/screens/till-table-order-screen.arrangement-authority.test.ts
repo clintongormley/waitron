@@ -4,6 +4,7 @@ import type { WtRowActions } from "@waitron/ui";
 import type { BillEditExpected } from "../api/order-types.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
+import type { TillBasket } from "../widgets/basket.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
@@ -236,9 +237,18 @@ it("a changed ownership observation removes the pending drag highlight after ren
   const { el, draft } = await open();
   const activate = await prepare(el, "drag");
   const before = snapshot(draft);
+  const dragging = () =>
+    [
+      el.shadowRoot!,
+      ...[...el.shadowRoot!.querySelectorAll("till-basket")].map((b) => b.shadowRoot!),
+    ].flatMap((root) => [...root.querySelectorAll("[data-draft-dragging]")]);
+  await el.updateComplete;
+  expect(dragging()).not.toEqual([]);
   el.billEdit = { ...observation, editorVersion: 4 };
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-draft-dragging]")).toBeNull();
+  for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
+    await basket.updateComplete;
+  expect(dragging()).toEqual([]);
   activate();
   expect(draft.lines).toEqual(before);
 });

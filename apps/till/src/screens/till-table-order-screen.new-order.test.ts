@@ -1,11 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type { OrderGroup } from "../api/kitchen-api.js";
 import type { WtButton, WtDialog } from "@waitron/ui";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
+import type { TillBasket } from "../widgets/basket.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, flan, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  mount,
+  resized,
+  rows,
+  showView,
+  store,
+  tap,
+} from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 const held = (id: string, position: number, displayNumber: number): OrderGroup => ({
@@ -70,7 +80,7 @@ describe("New order: stored placement and selection", () => {
       await userEvent.click(tick(el, "fire")!);
       await el.updateComplete;
       expect(tick(el, "fire")!.getAttribute("aria-checked")).toBe("true");
-      expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(1);
+      expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(1);
     },
   );
   it("shows Fire now, numbered new groups and joins, sorting only inside their stored places", async () => {
@@ -152,7 +162,7 @@ describe("New order: stored placement and selection", () => {
     await el.updateComplete;
     expect(tick(el, "new:1")!.getAttribute("aria-checked")).toBe("true");
     expect(
-      [...root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')].map((row) =>
+      [...root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')].map((row) =>
         row.getAttribute("data-draft-select"),
       ),
     ).toEqual(["0", "1"]);
@@ -166,7 +176,7 @@ describe("New order: stored placement and selection", () => {
     expect(tick(el, "new:1")!.getAttribute("aria-checked")).toBe("true");
     await userEvent.click(tick(el, "new:1")!);
     await el.updateComplete;
-    expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(0);
   });
 
   it("removes unsent selection when the bill becomes read-only, keeping its arrangement visible", async () => {
@@ -183,7 +193,9 @@ describe("New order: stored placement and selection", () => {
     expect(group(el, "fire")).not.toBeNull();
     expect(root(el).querySelectorAll("[data-draft-group-select]")).toHaveLength(0);
     expect(root(el).querySelectorAll("[data-draft-select]")).toHaveLength(0);
-    expect(group(el, "fire")!.textContent).toContain("Beer");
+    const basket = group(el, "fire")!.querySelector<TillBasket>("till-basket")!;
+    await basket.updateComplete;
+    expect(basket.shadowRoot!.querySelector('[data-draft-row="0"]')!.textContent).toContain("Beer");
   });
 
   it("keeps Move to quiet until selected, and offers Fire now, every new slot, held targets and a new group", async () => {
@@ -423,5 +435,343 @@ describe("New order: stored placement and selection", () => {
     expect(root(el).querySelector<WtDialog>("[data-draft-move-dialog]")!.open).toBe(false);
     expect(draft.lines[0]!.place).toBeUndefined();
     expect(tick(el, "fire")!.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("New order: compact rows", () => {
+  beforeEach(async () => {
+    await page.viewport(1280, 1800);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function wide(over: Parameters<typeof mount>[0] = {}) {
+    const mounted = await mount(over);
+    mounted.el.style.width = "1280px";
+    await resized(mounted.el);
+    return mounted;
+  }
+  const basketOf = (el: TillTableOrderScreen, index: number) =>
+    [...root(el).querySelectorAll<TillBasket>("till-basket")].find((basket) =>
+      basket.lineIndexes?.includes(index),
+    )!;
+  async function rowOf(el: TillTableOrderScreen, index: number) {
+    await el.updateComplete;
+    const basket = basketOf(el, index);
+    await basket.updateComplete;
+    return basket.shadowRoot!.querySelector<HTMLButtonElement>(`[data-draft-row="${index}"]`)!;
+  }
+  const pickerOf = (el: TillTableOrderScreen, index: number) =>
+    basketOf(el, index).shadowRoot!.querySelector("till-modifier-picker");
+  function point(target: HTMLElement) {
+    const box = target.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(0);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+  function pointer(target: EventTarget, type: string, at: { x: number; y: number }) {
+    target.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 72,
+        pointerType: "touch",
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX: at.x,
+        clientY: at.y,
+      }),
+    );
+  }
+  async function hold(target: HTMLElement) {
+    const at = point(target);
+    vi.useFakeTimers();
+    pointer(target, "pointerdown", at);
+    await vi.advanceTimersByTimeAsync(500);
+    return at;
+  }
+
+  it("adds a second tap on one dish to its row, which reads 2", async () => {
+    const { el } = await wide();
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    expect(rows(el)).toEqual(["Beer ×2"]);
+    const row = await rowOf(el, 0);
+    expect(row.querySelector(".draft-row-qty")!.textContent!.trim()).toBe("2");
+    expect(
+      [...root(el).querySelectorAll<TillBasket>("till-basket")].flatMap((basket) => [
+        ...basket.shadowRoot!.querySelectorAll("[data-draft-row]"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("opens the dish's details once on a tap on its row", async () => {
+    const { el } = await wide();
+    store(el).addProduct(beer, "1");
+    const row = await rowOf(el, 0);
+    const open = vi.spyOn(basketOf(el, 0), "openLineDetails");
+    await userEvent.click(row);
+    await basketOf(el, 0).updateComplete;
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(pickerOf(el, 0)).not.toBeNull();
+  });
+
+  it("does nothing on a row while the order is sending", async () => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    draft.sending = true;
+    const row = await rowOf(el, 0);
+    expect(row.disabled).toBe(true);
+    row.click();
+    await basketOf(el, 0).updateComplete;
+    expect(pickerOf(el, 0)).toBeNull();
+  });
+
+  it("ticks and unticks the selection box, drawn as the selecting checkbox", async () => {
+    const { el } = await wide();
+    store(el).addProduct(beer, "1");
+    await rowOf(el, 0);
+    const select = root(el).querySelector<HTMLButtonElement>('[data-draft-select="0"]')!;
+    expect(select.slot).toBe("lead-0");
+    expect(select.classList.contains("draft-row-select")).toBe(true);
+    expect(select.getAttribute("aria-label")).toBe("Select · Beer ×1");
+    expect(select.textContent!.trim()).toBe("");
+    const box = select.querySelector<HTMLElement>(".draft-select-box")!;
+    const look = getComputedStyle(box);
+    const unticked = look.backgroundColor;
+    expect([look.width, look.height, look.borderTopWidth, look.borderTopLeftRadius]).toEqual([
+      "24px",
+      "24px",
+      "2px",
+      "6px",
+    ]);
+    const target = select.getBoundingClientRect();
+    expect([target.width, target.height].every((side) => side >= 44)).toBe(true);
+    const drawn = box.getBoundingClientRect();
+    expect(drawn.left - target.left).toBeCloseTo(target.right - drawn.right, 0);
+    expect(drawn.top - target.top).toBeCloseTo(target.bottom - drawn.bottom, 0);
+    expect(box.hasAttribute("data-ticked")).toBe(false);
+    expect(box.querySelector('wt-icon[name="check"]')).toBeNull();
+
+    await userEvent.click(select);
+    await el.updateComplete;
+    expect(select.getAttribute("aria-checked")).toBe("true");
+    const ticked = select.querySelector<HTMLElement>(".draft-select-box")!;
+    expect(ticked.hasAttribute("data-ticked")).toBe(true);
+    expect(ticked.querySelector('wt-icon[name="check"]')).not.toBeNull();
+    expect(getComputedStyle(ticked).backgroundColor).not.toBe(unticked);
+
+    await userEvent.click(select);
+    await el.updateComplete;
+    expect(select.getAttribute("aria-checked")).toBe("false");
+    expect(select.querySelector(".draft-select-box")!.hasAttribute("data-ticked")).toBe(false);
+  });
+
+  it("names each selection box by its dish's quantity and note, so two rows of one dish differ", async () => {
+    const draft = new DraftStore();
+    draft.loadFrom("draft", [
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+      { product: beer, quantity: "2", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "2", place: { kind: "new", slot: 2 }, note: "No ice" },
+    ]);
+    const { el } = await wide({ draftStore: draft });
+    await rowOf(el, 2);
+    const names = [...root(el).querySelectorAll("[data-draft-select]")].map((box) =>
+      box.getAttribute("aria-label"),
+    );
+    expect(names).toEqual(["Select · Beer ×1", "Select · Beer ×2", "Select · Beer ×2 · No ice"]);
+  });
+
+  it("outlines the whole held row, not its selection box, and still moves it when dragged", async () => {
+    const draft = new DraftStore();
+    draft.loadFrom("draft", [
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+      { product: flan, quantity: "1", place: { kind: "new", slot: 1 } },
+    ]);
+    const { el } = await wide({ draftStore: draft });
+    const row = await rowOf(el, 1);
+    const entry = row.closest<HTMLElement>(".entry")!;
+    const select = root(el).querySelector<HTMLElement>('[data-draft-select="1"]')!;
+    expect(getComputedStyle(entry).outlineStyle).toBe("none");
+    await hold(row);
+    await el.updateComplete;
+    await basketOf(el, 1).updateComplete;
+    expect(getComputedStyle(entry).outlineStyle).not.toBe("none");
+    expect(getComputedStyle(select).outlineStyle).toBe("none");
+    const at = point(group(el, "fire")!.querySelector<HTMLElement>("h3")!);
+    pointer(window, "pointermove", at);
+    await el.updateComplete;
+    pointer(window, "pointerup", at);
+    vi.useRealTimers();
+    await el.updateComplete;
+    expect(draft.lines[1]!.place).toEqual({ kind: "fire" });
+  });
+
+  it.each(["locked", "sending", "in flight on its basket"] as const)(
+    "opens no details on a tap that arrives once the order is %s, before it redraws",
+    async (state) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      const row = await rowOf(el, 0);
+      const basket = basketOf(el, 0);
+      const open = vi.spyOn(basket, "openLineDetails");
+      if (state === "locked") draft.lockEdits();
+      else if (state === "sending") draft.sending = true;
+      else basket.orderInFlight = true;
+      row.click();
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
+
+  it("moves a row pressed and dragged from the row itself, without opening its details", async () => {
+    const draft = new DraftStore();
+    draft.loadFrom("draft", [
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+      { product: flan, quantity: "1", place: { kind: "new", slot: 1 } },
+    ]);
+    const { el } = await wide({ draftStore: draft });
+    const row = await rowOf(el, 1);
+    const open = vi.spyOn(basketOf(el, 1), "openLineDetails");
+    await hold(row);
+    const at = point(group(el, "fire")!.querySelector<HTMLElement>("h3")!);
+    pointer(window, "pointermove", at);
+    await el.updateComplete;
+    pointer(window, "pointerup", at);
+    row.click();
+    vi.useRealTimers();
+    await el.updateComplete;
+    expect(draft.lines[1]!.place).toEqual({ kind: "fire" });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens the dish's details once on a long press of its row that does not move", async () => {
+    const { el } = await wide();
+    store(el).addProduct(beer, "1");
+    const row = await rowOf(el, 0);
+    const open = vi.spyOn(basketOf(el, 0), "openLineDetails");
+    const at = await hold(row);
+    pointer(window, "pointerup", at);
+    row.click();
+    vi.useRealTimers();
+    await basketOf(el, 0).updateComplete;
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(pickerOf(el, 0)).not.toBeNull();
+  });
+
+  const remove = (el: TillTableOrderScreen) =>
+    root(el).querySelector<WtButton>("[data-draft-remove]");
+  async function selectRow(el: TillTableOrderScreen, index: number) {
+    await rowOf(el, index);
+    await userEvent.click(root(el).querySelector<HTMLElement>(`[data-draft-select="${index}"]`)!);
+    await el.updateComplete;
+  }
+
+  it("removes every selected row from the draft bar, and only those", async () => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    draft.addProduct(flan, "1");
+    draft.addProduct(dish("Other"), "1");
+    await selectRow(el, 0);
+    await selectRow(el, 2);
+    expect(remove(el)!.disabled).toBe(false);
+    expect(remove(el)!.textContent!.trim()).toBe("Remove");
+    await userEvent.click(remove(el)!);
+    await el.updateComplete;
+    expect(draft.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+    expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(0);
+    expect(remove(el)!.disabled).toBe(true);
+  });
+
+  it("keeps Remove quiet and disabled while no row is selected", async () => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    await rowOf(el, 0);
+    expect(remove(el)!.disabled).toBe(true);
+    expect(remove(el)!.variant).toBe("secondary");
+    remove(el)!.click();
+    await el.updateComplete;
+    expect(draft.lines).toHaveLength(1);
+    await selectRow(el, 0);
+    expect(remove(el)!.variant).toBe("primary");
+  });
+
+  it.each(["sending", "command"])("removes nothing while %s", async (state) => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    await selectRow(el, 0);
+    const button = remove(el)!;
+    if (state === "sending") draft.sending = true;
+    else el.groupCommandBusy = true;
+    await el.updateComplete;
+    expect(button.disabled).toBe(true);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(draft.lines).toHaveLength(1);
+  });
+
+  it.each(["locked", "sending", "command"])(
+    "removes nothing on a click that arrives once %s starts, before the bar redraws",
+    async (state) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      await selectRow(el, 0);
+      const button = remove(el)!;
+      if (state === "locked") draft.lockEdits();
+      else if (state === "sending") draft.sending = true;
+      else el.groupCommandBusy = true;
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      expect(draft.lines).toHaveLength(1);
+      await el.updateComplete;
+      expect(root(el).activeElement).not.toBe(root(el).querySelector("#draft-title"));
+    },
+  );
+
+  it.each([
+    ["another dish remains", 2],
+    ["the last dish goes", 1],
+  ] as const)(
+    "puts focus on the order's heading after Remove by keyboard when %s",
+    async (_case, count) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      if (count === 2) draft.addProduct(flan, "1");
+      await selectRow(el, 0);
+      const button = remove(el)!;
+      await button.updateComplete;
+      button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+      await userEvent.keyboard("{Enter}");
+      expect(draft.lines).toHaveLength(count - 1);
+      await vi.waitFor(() =>
+        expect(root(el).activeElement).toBe(root(el).querySelector("#draft-title")),
+      );
+    },
+  );
+
+  it("scrolls the last-added row into view", async () => {
+    const { el } = await wide();
+    await tap(el, "Beer");
+    await rowOf(el, 0);
+    const scrolled: Element[] = [];
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      scrolled.push(this);
+    });
+    try {
+      await tap(el, "Flan");
+      const row = await rowOf(el, 1);
+      await vi.waitFor(() => expect(scrolled).toContain(row.closest(".entry")));
+      expect(row.closest(".entry")!.hasAttribute("data-last-added")).toBe(true);
+    } finally {
+      scroll.mockRestore();
+    }
   });
 });

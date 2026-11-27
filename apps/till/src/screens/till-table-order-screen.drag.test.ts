@@ -123,7 +123,12 @@ it("a held row shows that it is ready to drag before moving", async () => {
   const control = lead(el, 0);
   const at = await hold(control);
   await el.updateComplete;
-  expect(control.hasAttribute("data-draft-dragging")).toBe(true);
+  const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((basket) =>
+    basket.lineIndexes?.includes(0),
+  )!;
+  await basket.updateComplete;
+  const row = basket.shadowRoot!.querySelector('[data-draft-row="0"]')!.closest(".entry")!;
+  expect(row.hasAttribute("data-draft-dragging")).toBe(true);
   pointer(window, "pointercancel", at);
 });
 
@@ -218,9 +223,9 @@ it("a short swipe scrolls the nearest draft ancestor without selecting, opening 
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
   target.click();
   await el.updateComplete;
-  expect(target.getAttribute("aria-pressed")).toBe("false");
+  expect(target.getAttribute("aria-checked")).toBe("false");
   await userEvent.click(lead(el, 1));
-  expect(lead(el, 1).getAttribute("aria-pressed")).toBe("true");
+  expect(lead(el, 1).getAttribute("aria-checked")).toBe("true");
 });
 
 it.each(["busy", "sending", "locked"] as const)(
@@ -393,14 +398,14 @@ it("a stationary hold opens the existing line editor and does not select or move
   expect(picker.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Beer");
   target.click();
   await el.updateComplete;
-  expect(target.getAttribute("aria-pressed")).toBe("false");
+  expect(target.getAttribute("aria-checked")).toBe("false");
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
 });
 
 it("a short native tap still selects once and never moves or opens details", async () => {
   const { el, draft } = await open();
   await userEvent.click(lead(el, 0));
-  expect(lead(el, 0).getAttribute("aria-pressed")).toBe("true");
+  expect(lead(el, 0).getAttribute("aria-checked")).toBe("true");
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
   for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
     expect(basket.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();

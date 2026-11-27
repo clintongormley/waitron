@@ -32,8 +32,14 @@ import type {
   SelectedExtra,
   WorkingOrderStore,
 } from "../state/working-order.js";
-import type { BlockReason } from "../state/menu-refresh.js";
-import type { StringKey } from "../i18n/strings.js";
+import {
+  draftRow,
+  draftRowStyles,
+  lineMarks,
+  notOfferedMarker,
+  pickQuantityBadge,
+} from "./draft-row.js";
+import { draftLinePrice } from "../state/draft-layout.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
@@ -49,13 +55,8 @@ import type { Station, TabLine } from "../api/kitchen-api.js";
 import type { TillCourse } from "../api/device-session-api.js";
 import type { TillProduct } from "../api/menu-api.js";
 
-const QTY_BADGE = "×";
 /** How long an edit lock lasts before the basket says so, so a quick lock does not flicker. */
 const EDITS_PAUSED_NOTE_DELAY_MS = 500;
-
-function pickQuantityBadge(quantity: number): string {
-  return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
-}
 
 /** The stored dishes a basket line stands for: every member of a retrieved row of identical
  * portions, or its one dish. Null when the listing lacks one of them. */
@@ -70,36 +71,6 @@ function listedDishes(
 
 const lineIdsOf = (dishes: readonly TabLine[]) =>
   dishes.length > 1 ? { lineIds: dishes.map((dish) => dish.id) } : {};
-
-function notOfferedMarker() {
-  return html` <span class="not-offered">${t("basket.not_offered")}</span>`;
-}
-
-const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
-  period_ended: "basket.blocked.period_ended",
-  removed: "basket.blocked.removed",
-  variant_removed: "basket.blocked.removed",
-  not_sold_separately: "basket.blocked.not_sold_separately",
-  unavailable: "basket.blocked.unavailable",
-  extra_removed: "basket.blocked.extra",
-  extra_unavailable: "basket.blocked.extra",
-  unit_changed: "basket.blocked.unit",
-  choice_required: "basket.blocked.extra",
-  extras_limit: "basket.blocked.extra",
-};
-
-/** A line a menu change stops being paid until it is removed or replaced (D9). */
-function blockedMarker(reason: BlockReason) {
-  return html` <span class="not-offered">${t(BLOCKED_WORDS[reason])}</span>`;
-}
-
-/** An unsent dish whose period ended earlier today: a warning, not a block. */
-function periodEndedMarker(period: string) {
-  return html` <span class="period-ended" data-period-ended
-    ><span aria-hidden="true">⚠</span>
-    ${t("basket.period_ended").replace("{period}", () => period)}</span
-  >`;
-}
 
 /** A stored order's lines as the server listed them, and the revision they were read at. */
 export interface StoredLines {
@@ -452,6 +423,7 @@ export class TillBasket extends LitElement {
         gap: var(--wt-space-1) var(--wt-space-2);
       }
     `,
+    draftRowStyles,
   ];
 
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
@@ -467,6 +439,10 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean, reflect: true }) stacked = false;
   @property({ type: Boolean, reflect: true, attribute: "line-details" }) lineDetails = false;
+  /** Each unsent line as one compact row (`draft-row.ts`); sent lines keep the full row. */
+  @property({ type: Boolean }) compactRows = false;
+  /** The compact rows held ready to drag. */
+  @property({ attribute: false }) draggedLines?: readonly OrderLine[];
   @property({ type: Boolean }) readOnly = false;
   @property({ type: Boolean }) allowPickRemoval = false;
   @property({ attribute: false }) draftParent?: object;
@@ -895,6 +871,22 @@ export class TillBasket extends LitElement {
           const setMenuPrice = line.setMenuId === undefined ? undefined : this.placedPrice?.(line);
           const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
           const ended = line.blocked === undefined ? line.endedPeriod : undefined;
+          if (this.compactRows && !sent)
+            return draftRow({
+              line,
+              index,
+              price: draftLinePrice(line, this.placedPrice),
+              ...(setMenuPrice === undefined ? {} : { setMenuPrice }),
+              nutrition: this.#nutrition(line),
+              extraNutrition: (extra) => this.#extraOwnNutrition(line, extra),
+              lastAdded: this.store.lastAdded === line,
+              dragging: this.draggedLines?.includes(line) ?? false,
+              disabled: this.#rowBlocked(),
+              // A click can arrive before a lock or send has redrawn the row disabled.
+              open: () => {
+                if (!this.#rowBlocked()) this.openLineDetails(line);
+              },
+            });
           return html`
             <slot name=${`before-${index}`}></slot>
             <div class=${ended === undefined ? "entry" : "entry period-ended-entry"} part="entry">
@@ -938,17 +930,7 @@ export class TillBasket extends LitElement {
                       ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
                         >${this.#lineName(line)}</span
                       ></slot
-                    >${setMenuTag(setMenuPrice)}${this.#nutrition(line)}${
-                      line.notOffered ? notOfferedMarker() : nothing
-                    }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
-                      ended === undefined ? nothing : periodEndedMarker(ended.periodName)
-                    }${
-                      line.unavailableOnServer === true &&
-                      line.blocked === undefined &&
-                      line.notOffered === undefined
-                        ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
-                        : nothing
-                    }</span
+                    >${setMenuTag(setMenuPrice)}${this.#nutrition(line)}${lineMarks(line)}</span
                   >
                   ${this.#quantityCell(line, index, sent)}
                   ${this.#dishTotal(line, listed, line.setMenuId === undefined ? undefined : (setMenuPrice ?? "0.00"))}
@@ -1256,6 +1238,10 @@ export class TillBasket extends LitElement {
         </wt-button>
       </span>
     `;
+  }
+
+  #rowBlocked(): boolean {
+    return this.store.sending || this.store.editsLocked || this.orderInFlight;
   }
 
   /** The dish as listed, by the stored line it came from. */

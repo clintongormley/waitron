@@ -550,10 +550,14 @@ liberas.
 
 Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
 zumo vendido por ml, toca el plato, escribe la cantidad en su campo o usa el teclado de la caja
-y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Toca la cantidad antes de enviar
-para editarla. **Marcar servido** marca toda la cantidad como servida.
+y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Antes de enviar, toca la cantidad
+en el mostrador, o su fila en una mesa, para editarla. **Marcar servido** marca toda la cantidad
+como servida.
 
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
+
+En una mesa, toca un plato de **Nuevo pedido** para cambiar cuántos, sus opciones o su nota. Para
+quitar platos, marca sus casillas y toca **Quitar** en la barra bajo el pedido.
 
 En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola
 fila mientras no se haya pagado nada de él.
@@ -599,7 +603,7 @@ enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sal
 pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
 al otro.
 
-En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pulsado su nombre
+En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pulsada su fila
 hasta que aparezca el contorno. Sin levantar el dedo, arrástralo al título del grupo que quieras y
 suéltalo.
 

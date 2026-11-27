@@ -94,9 +94,52 @@ it("marks a fresh draft dish by its saved draft assignment rather than a sent di
   });
   el.style.width = "1280px";
   await resized(el);
+  const mark = el.shadowRoot!.querySelector('[slot="mark-0"]');
+  expect(mark?.assignedSlot?.closest("[data-draft-row]")).toBeTruthy();
+  expect(mark?.querySelector("[data-allergy-tag]")?.textContent).toBe("Blue shirt");
+});
+
+it("names each draft row's selection box by the guest it is for, so two rows of one dish differ", async () => {
+  await page.viewport(1280, 900);
+  const burger = {
+    id: "burger",
+    name: "Burger",
+    unitPrice: "9.00",
+    vatClass: "general" as const,
+    category: null,
+    allergens: null,
+  };
+  const draftStore = new DraftStore();
+  draftStore.appendLines([
+    { product: burger, quantity: "1", draftLineId: "same-id", noMerge: true },
+    { product: burger, quantity: "1", draftLineId: "other-id", noMerge: true },
+  ]);
+  const view = allergy();
+  view.snapshot.guests.push({
+    id: "other-guest",
+    position: 1,
+    who: "Red hat",
+    allergens: { eggs: {} },
+    note: null,
+  });
+  view.snapshot.ticks.push({
+    guestId: "other-guest",
+    draftLineId: "other-id",
+    workingLineId: null,
+  });
+  const { el } = await mount({
+    party,
+    draftStore,
+    allergyView: view,
+    billEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft", draftRevision: 1 },
+  });
+  el.style.width = "1280px";
+  await resized(el);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
-  ).toBe("Blue shirt");
+    [...el.shadowRoot!.querySelectorAll("[data-draft-select]")].map((box) =>
+      box.getAttribute("aria-label"),
+    ),
+  ).toEqual(["Select · Burger ×1 · Blue shirt", "Select · Burger ×1 · Red hat"]);
 });
 
 it.each([null, "none", "allergies"] as const)(
@@ -170,9 +213,9 @@ it("marks the saved draft and sent dish without borrowing a same-id working assi
   });
   el.style.width = "1280px";
   await resized(el);
-  expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
-  ).toBe("Blue shirt");
+  const mark = el.shadowRoot!.querySelector('[slot="mark-0"]');
+  expect(mark?.assignedSlot?.closest("[data-draft-row]")).toBeTruthy();
+  expect(mark?.querySelector("[data-allergy-tag]")?.textContent).toBe("Blue shirt");
   const sent = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await sent.updateComplete;
   await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
