@@ -1646,38 +1646,58 @@ function optionRows(el: WtCombobox): HTMLElement[] {
   return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
 }
 
-test("an empty dropdown's resting label is drawn at the size its chosen value is drawn at", async () => {
-  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
-  const { field, label, value } = fieldParts(el);
-  expect(field.getAttribute("data-label")).toBe("rest");
-  expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(value).fontSize);
+test("a dropdown draws its resting label at a text field's label size and its chosen value at a text field's value size", async () => {
+  const chosen = await mountWith('<wt-combobox label="Course" value="vegan"></wt-combobox>');
+  host.insertAdjacentHTML(
+    "beforeend",
+    '<wt-combobox label="Course"></wt-combobox>' +
+      '<wt-input label="Name"></wt-input><wt-input label="Name" value="Ana"></wt-input>',
+  );
+  const empty = host.querySelector<WtCombobox>("wt-combobox:not([value])")!;
+  empty.options = TAGS;
+  type Input = HTMLElement & { updateComplete: Promise<unknown> };
+  const [emptyInput, filledInput] = [...host.querySelectorAll<Input>("wt-input")];
+  await Promise.all([empty.updateComplete, emptyInput!.updateComplete, filledInput!.updateComplete]);
+  const inputLabel = emptyInput!.shadowRoot!.querySelector(".field-label")!;
+  const inputValue = filledInput!.shadowRoot!.querySelector("input")!;
+  expect(emptyInput!.shadowRoot!.querySelector(".field")!.getAttribute("data-label")).toBe("rest");
+  expect(fieldParts(empty).field.getAttribute("data-label")).toBe("rest");
+  const size = (el: Element) => getComputedStyle(el).fontSize;
+  const sizes = () => ({
+    restingLabel: size(fieldParts(empty).label!),
+    floatedLabel: size(fieldParts(chosen).label!),
+    value: size(fieldParts(chosen).value),
+  });
+  const expected = () => ({
+    restingLabel: size(inputLabel),
+    floatedLabel: size(filledInput!.shadowRoot!.querySelector(".field-label")!),
+    value: size(inputValue),
+  });
+  expect(expected().restingLabel).not.toBe(expected().value);
+  expect(sizes()).toEqual(expected());
   host.style.setProperty("--wt-font-size-md", "17px");
-  expect(getComputedStyle(value).fontSize).toBe("17px");
-  expect(getComputedStyle(label!).fontSize).toBe("17px");
+  host.style.setProperty("--wt-text-control-font-size", "19px");
+  expect(expected()).toMatchObject({ restingLabel: "17px", value: "19px" });
+  expect(sizes()).toEqual(expected());
 });
 
-test("a dropdown draws its chosen value and its resting label at the size a text field draws its value", async () => {
-  const chosen = await mountWith('<wt-combobox label="Course" value="vegan"></wt-combobox>');
-  const row = host;
-  row.insertAdjacentHTML(
-    "beforeend",
-    '<wt-combobox label="Course"></wt-combobox><wt-input label="Name" value="Ana"></wt-input>',
-  );
-  const empty = row.querySelector<WtCombobox>("wt-combobox:not([value])")!;
-  empty.options = TAGS;
-  const input = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>("wt-input")!;
-  await Promise.all([empty.updateComplete, input.updateComplete]);
-  const inputText = input.shadowRoot!.querySelector("input")!;
-  const sizes = () => ({
-    value: getComputedStyle(fieldParts(chosen).value).fontSize,
-    restingLabel: getComputedStyle(fieldParts(empty).label!).fontSize,
-  });
-  expect(fieldParts(empty).field.getAttribute("data-label")).toBe("rest");
-  const textSize = getComputedStyle(inputText).fontSize;
-  expect(sizes()).toEqual({ value: textSize, restingLabel: textSize });
-  row.style.setProperty("--wt-text-control-font-size", "19px");
-  expect(getComputedStyle(inputText).fontSize).toBe("19px");
-  expect(sizes()).toEqual({ value: "19px", restingLabel: "19px" });
+test("an empty dropdown's chevron is centred on the box with its resting label, and a filled one's on its value", async () => {
+  const empty = await mountWith('<wt-combobox label="Province (optional)"></wt-combobox>');
+  host.insertAdjacentHTML("beforeend", '<wt-combobox label="Province" value="vegan"></wt-combobox>');
+  const filled = host.querySelector<WtCombobox>("wt-combobox[value]")!;
+  filled.options = TAGS;
+  await filled.updateComplete;
+  const middle = (el: Element) => {
+    const box = el.getBoundingClientRect();
+    return box.top + box.height / 2;
+  };
+  const e = fieldParts(empty);
+  expect(e.field.getAttribute("data-label")).toBe("rest");
+  expect(Math.abs(middle(e.chevron) - middle(e.field))).toBeLessThanOrEqual(1);
+  expect(Math.abs(middle(e.chevron) - middle(e.label!))).toBeLessThanOrEqual(1);
+  const f = fieldParts(filled);
+  expect(Math.abs(middle(f.chevron) - middle(f.value))).toBeLessThanOrEqual(1);
+  expect(middle(f.chevron)).toBeGreaterThan(middle(f.field) + 4);
 });
 
 test("the trigger is the control of a filled field box, with the label resting while nothing is chosen", async () => {

@@ -101,11 +101,6 @@ export class WtCombobox extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
-      /* The trigger's value and the resting label inherit this, matching a text field's value. */
-      .field {
-        font-size: var(--wt-text-control-font-size);
-      }
-
       /* As wide as its text, not the box, so the trigger under the rest of the box takes the
          pointer; and stopped short of the chevron. */
       .field-label {
@@ -134,6 +129,12 @@ export class WtCombobox extends LitElement {
         gap: var(--wt-space-1);
         text-align: start;
         cursor: pointer;
+        font-size: var(--wt-text-control-font-size);
+      }
+
+      /* With no value under it, the chevron shares the resting label's line at the box's middle. */
+      .field[data-label="rest"]:not(:focus-within) .trigger {
+        padding-block: var(--wt-space-2);
       }
 
       :host([stable-width]) .trigger {
