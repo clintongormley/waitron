@@ -599,6 +599,45 @@ describe("opening a row near the window's foot", () => {
     },
   );
 
+  // Turned upright the other way, the till shows the menu, and Order opens at its top.
+  it("a box opened upright is brought back above the bar when the handheld turns sideways", async () => {
+    await page.viewport(390, 844);
+    const draft = new DraftStore();
+    draft.loadFrom(
+      "draft",
+      many.map((product) => ({ product, quantity: "2", place: { kind: "fire" } })),
+    );
+    const { el, host } = await mount({
+      products: many,
+      menus: menuOf(many),
+      draftStore: draft,
+      handheld: true,
+    });
+    host.style.width = "100vw";
+    host.style.height = "100vh";
+    host.style.overflowY = "auto";
+    await resized(el);
+    await showView(el, "order", { scripted: true });
+    await settled(el);
+    await resized(el);
+    host.scrollTop = 0;
+    await scrollSettled(host);
+    await lastShowing(el, host, 8);
+    await tapRow(el, 8);
+    await scrollSettled(host);
+    expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(barTop(el));
+    await page.viewport(844, 390);
+    await resized(el);
+    await settled(el);
+    await resized(el);
+    await scrollSettled(host);
+    expect(controls(el, 8)).not.toBeNull();
+    const box = row(el, 8).closest(".entry")!.getBoundingClientRect();
+    const top = barTop(el);
+    expectGapAboveBar(el, box, top);
+    expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+  });
+
   it("a row whose opened box already shows whole does not move the list", async () => {
     const { el, host } = await inWindow(1024, 768);
     await tapRow(el, 0);

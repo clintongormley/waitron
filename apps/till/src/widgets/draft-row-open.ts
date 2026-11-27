@@ -58,15 +58,20 @@ export class OpenDraftRow implements ReactiveController {
         ? undefined
         : { store, line, generation: store.loadGeneration };
     this.#host.requestUpdate();
-    // The basket sends the tap from itself.
-    if (this.#opened !== undefined)
-      void this.#reveal(event.composedPath()[0] as TillBasket, store, line);
+    if (this.#opened !== undefined) void this.reveal();
   };
 
-  /** Brings the opened box's foot above the bar at the scroll area's foot, which the row's
-   * `scroll-margin-block-end` measures. Where the box is taller than the area, its foot wins. */
-  async #reveal(basket: TillBasket, store: WorkingOrderStore, line: OrderLine): Promise<void> {
+  /** Brings the open row's box's foot above the bar at the scroll area's foot, which the row's
+   * `scroll-margin-block-end` measures, once drawn. Where the box is taller than the area, its foot
+   * wins. The screen calls it again when its layout changes, once the new bar is measured. */
+  async reveal(): Promise<void> {
+    if (this.#opened === undefined) return;
+    const { store, line } = this.#opened;
     await this.#host.updateComplete;
+    const basket = this.#host.shadowRoot
+      ?.querySelector(`[data-draft-open="${store.lines.indexOf(line)}"]`)
+      ?.closest<TillBasket>("till-basket");
+    if (basket == null) return;
     await basket.updateComplete;
     await basket.querySelector<WtStepper>("wt-stepper")?.updateComplete;
     if (this.line(store) !== line) return;

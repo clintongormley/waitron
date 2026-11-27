@@ -2055,7 +2055,21 @@ export class TillTableOrderScreen extends LitElement {
     void this.updateComplete.then(() => {
       this.#placeOrderPanels();
       this.#dispatch("order-pane-resized", {});
+      void this.#revealOpenRowAgain();
     });
+  }
+
+  /** Brings an open row back above the bar after the layout changes. The bar was measured when
+   * drawn, before its buttons were, and its watcher reports only after the next layout. */
+  async #revealOpenRowAgain(): Promise<void> {
+    const bar = this.#sizedBar;
+    await Promise.all(
+      [...(bar?.querySelectorAll("*") ?? [])].flatMap((node) =>
+        node instanceof LitElement ? [node.updateComplete] : [],
+      ),
+    );
+    if (bar?.isConnected) barSize(bar, bar.getBoundingClientRect().height);
+    await this.#openRow.reveal();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
