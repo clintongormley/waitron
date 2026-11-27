@@ -57,6 +57,8 @@ export interface TransactionRow {
   refundId: string | null;
   saleId: string;
   workingOrderId: string | null;
+  orderNumber: number | null;
+  zoneName: string | null;
   scopeOrderIds: string[];
   issuedAt: string;
   invoiceNumber: string;
@@ -66,5 +68,6 @@ export interface TransactionRow {
   methods: { method: TenderMethod; last4: string | null }[];
   staff: { id: string; name: string | null } | null;
   amount: string;
+  amountMatch: "amount" | "payment" | null;
 }
 export type TransactionsPage = FindBillPage<TransactionRow> & { dates: DateWindow };

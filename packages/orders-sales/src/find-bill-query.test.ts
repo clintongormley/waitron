@@ -121,6 +121,38 @@ describe("Find a bill query", () => {
       expect.objectContaining({ code: "management.request_invalid", params: { field } }),
     );
   });
+  it("reads owed and counter bills only as true, and corrective beside the five other kinds", () => {
+    expect(parseBillsQuery(new URLSearchParams({ owed: "true", counter: "true" }))).toMatchObject({
+      owed: true,
+      counter: true,
+    });
+    expect(parseBillsQuery(new URLSearchParams())).not.toHaveProperty("owed");
+    expect(parseBillsQuery(new URLSearchParams())).not.toHaveProperty("counter");
+    for (const query of ["owed=false", "owed=", "counter=1", "counter="])
+      expect(() => parseBillsQuery(new URLSearchParams(query))).toThrow(
+        expect.objectContaining({
+          code: "management.request_invalid",
+          params: { field: query.split("=")[0] },
+        }),
+      );
+    for (const query of ["owed=true", "counter=true"])
+      expect(() => parseTransactionsQuery(new URLSearchParams(query))).toThrow(
+        expect.objectContaining({
+          code: "management.request_invalid",
+          params: { field: query.split("=")[0] },
+        }),
+      );
+    for (const type of [
+      "sale",
+      "full-invoice",
+      "correction",
+      "full-correction",
+      "replacement",
+      "refund",
+      "corrective",
+    ])
+      expect(parseTransactionsQuery(new URLSearchParams({ type })).type).toBe(type);
+  });
   it.each(["openedAt", "tableName", "zone", "staff", "items", "total", "paid", "state"])(
     "accepts Bills sort %s",
     (sort) => {

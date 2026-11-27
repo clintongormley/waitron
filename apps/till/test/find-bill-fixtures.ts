@@ -29,6 +29,8 @@ export const transactionRow = (patch: Partial<TransactionRow> = {}): Transaction
   refundId: null,
   saleId: "sale-1",
   workingOrderId: null,
+  orderNumber: null,
+  zoneName: null,
   scopeOrderIds: [],
   issuedAt: "2026-10-15T12:00:00Z",
   invoiceNumber: "F/0012",
@@ -38,6 +40,7 @@ export const transactionRow = (patch: Partial<TransactionRow> = {}): Transaction
   methods: [{ method: "card", last4: "0091" }],
   staff: { id: "staff-1", name: "Alex" },
   amount: "25.10",
+  amountMatch: null,
   ...patch,
 });
 export const billOptions = {

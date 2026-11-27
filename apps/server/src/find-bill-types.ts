@@ -59,6 +59,8 @@ export interface TransactionRow {
   refundId: string | null;
   saleId: string;
   workingOrderId: string | null;
+  orderNumber: number | null;
+  zoneName: string | null;
   scopeOrderIds: string[];
   issuedAt: string;
   invoiceNumber: string;
@@ -68,5 +70,7 @@ export interface TransactionRow {
   methods: { method: TenderMethod; last4: string | null }[];
   staff: { id: string; name: string | null } | null;
   amount: string;
+  /** How the search's amount matched: the row's own amount, or one payment of a sale. */
+  amountMatch: "amount" | "payment" | null;
 }
 export type TransactionsPage = FindBillPage<TransactionRow> & { dates: DateWindow };
