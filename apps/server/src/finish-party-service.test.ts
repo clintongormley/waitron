@@ -29,7 +29,7 @@ import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import { saveDraft } from "./order-drafts.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./party-close.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";

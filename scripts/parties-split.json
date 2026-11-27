@@ -1,0 +1,68 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/parties.ts",
+      "targets": {
+        "apps/server/src/party-close.ts": [
+          "leaveForClearing",
+          "finishTable",
+          "handOverFinishedBills",
+          "requirePartyClosingEdits",
+          "closeParty",
+          "closePartyTables",
+          "readFamilyBills",
+          "billOwes",
+          "markTableCleared"
+        ]
+      },
+      "keep": [
+        "BillInvoiceDelivery",
+        "billInvoiceDelivery",
+        "storedBillRecipient",
+        "PartyBill",
+        "CommandScope",
+        "PartyCommand",
+        "seatTable",
+        "moduleCoreServices",
+        "insertPartyBill",
+        "notAbandonedInFamily",
+        "ensureFamilyBill",
+        "createPartyBill",
+        "partyZone",
+        "partyStateAndZone",
+        "partyFirstZones",
+        "setPartyName",
+        "setPartyGuestCount",
+        "requireBillOfParty",
+        "insertParty",
+        "openParty",
+        "partyOfOrder",
+        "partyRevisionOfOrder",
+        "memberTables",
+        "partiesHoldingOnly",
+        "leaveTables",
+        "holdersOf",
+        "holderOf",
+        "tableHeld",
+        "guardParty",
+        "partyRevision",
+        "checkAndBumpParty",
+        "checkPartyRevision",
+        "refuseMovedParty",
+        "bumpPartyRevision",
+        "partyFamily",
+        "readParty",
+        "requireOpenParty",
+        "readPartyBills",
+        "readDeferredBillIds",
+        "FamilyBill",
+        "readBillsOfParties",
+        "NOT_FINGERPRINTED",
+        "canonicalJson",
+        "fingerprint",
+        "runServiceCommand"
+      ]
+    }
+  ]
+}

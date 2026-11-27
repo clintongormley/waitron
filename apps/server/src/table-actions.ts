@@ -45,8 +45,6 @@ import { type Firer } from "./order-group-records.js";
 import {
   checkAndBumpParty,
   ensureFamilyBill,
-  closePartyTables,
-  leaveForClearing,
   leaveTables,
   memberTables,
   notAbandonedInFamily,
@@ -56,6 +54,7 @@ import {
   partyZone,
   requireBillOfParty,
 } from "./parties.js";
+import { closePartyTables, leaveForClearing } from "./party-close.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { OrderAttendance } from "./working-order-context.js";
 import type { ClosedZoneConfirmation } from "@waitron/module";

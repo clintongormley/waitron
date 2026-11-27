@@ -36,9 +36,8 @@ import {
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
+import { resetZone, catchUpZone, ensureToday } from "./floor-today-store.js";
 import {
-  resetZone,
-  catchUpZone,
   moveToday,
   rotateToday,
   takeOffToday,
@@ -46,8 +45,7 @@ import {
   seatsToday,
   backToSaved,
   placeSpareToday,
-  ensureToday,
-} from "./floor-today-store.js";
+} from "./floor-today-edits.js";
 import { listTables, listZones, updateZone } from "./tables.js";
 import { seatTable } from "./parties.js";
 import { jobOrigin } from "@waitron/shared";

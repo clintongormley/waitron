@@ -8,11 +8,11 @@ import { withMovedSlips } from "./moved-slips.js";
 import {
   checkAndBumpParty,
   holdersOf,
-  leaveForClearing,
   partiesHoldingOnly,
   partyRevision,
   refuseMovedParty,
 } from "./parties.js";
+import { leaveForClearing } from "./party-close.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 

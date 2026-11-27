@@ -18,16 +18,16 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
+import { resetZone } from "./floor-today-store.js";
 import {
   backToSaved,
   moveToday,
   placeSpareToday,
   putBackToday,
-  resetZone,
   rotateToday,
   seatsToday,
   takeOffToday,
-} from "./floor-today-store.js";
+} from "./floor-today-edits.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import {
   counterOrder,

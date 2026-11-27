@@ -45,16 +45,8 @@ import { releaseHeldWorkOf } from "./order-group-release.js";
 import { invalid } from "./bill-allocation.js";
 import { refuseBillHoldingMoney } from "./bill-payments.js";
 import type { OrderAttendance } from "./working-order-context.js";
-import {
-  billOwes,
-  finishTable,
-  partyFamily,
-  partyRevision,
-  readFamilyBills,
-  requireOpenParty,
-  requirePartyClosingEdits,
-  runServiceCommand,
-} from "./parties.js";
+import { partyFamily, partyRevision, requireOpenParty, runServiceCommand } from "./parties.js";
+import { billOwes, finishTable, readFamilyBills, requirePartyClosingEdits } from "./party-close.js";
 import { notSetMenuLine } from "./set-menu-bill.js";
 import "./errors.js";
 

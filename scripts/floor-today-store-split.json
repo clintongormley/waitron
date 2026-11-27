@@ -1,0 +1,64 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/floor-today-store.ts",
+      "targets": {
+        "apps/server/src/floor-today-reset-groups.ts": [
+          "stillToMove",
+          "readyToMove",
+          "ResetGroup",
+          "mergesOf",
+          "waitingTogether",
+          "mergedWith",
+          "resetAlias",
+          "ResetAlias",
+          "dueRow",
+          "pendingGroupMember",
+          "catchUpDue",
+          "placeTaken"
+        ],
+        "apps/server/src/floor-today-edits.ts": [
+          "moveToday",
+          "rotateToday",
+          "placeSpareToday",
+          "takeOffToday",
+          "putBackToday",
+          "seatsToday",
+          "backToSaved"
+        ]
+      },
+      "keep": [
+        "Placed",
+        "placementOf",
+        "placementColumns",
+        "targetRow",
+        "todayBusinessDay",
+        "ResetOnto",
+        "resetZone",
+        "resetZoneOn",
+        "updateLayout",
+        "dueOnto",
+        "ResetOptions",
+        "resetZoneFor",
+        "takenOffIn",
+        "copyParts",
+        "groupPart",
+        "zoneTables",
+        "CatchUp",
+        "catchUpZone",
+        "catchUpPass",
+        "todayValues",
+        "hideTable",
+        "spareLabels",
+        "setLabel",
+        "setNames",
+        "todayWork",
+        "todayReconciliationDue",
+        "ensureToday",
+        "layoutPlacesIn",
+        "refuseDeliveryPending"
+      ]
+    }
+  ]
+}

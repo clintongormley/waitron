@@ -46,11 +46,8 @@ import { boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { computeOverdueOrders } from "@waitron/reporting";
 import { attachPrinterToStation } from "./station-printers.js";
 import { replaceStationPrinters } from "./station-printers.js";
-import {
-  closingEditsForTest,
-  readBillsOfParties,
-  billOwes,
-} from "./testing/party-close-fixture.js";
+import { closingEditsForTest, readBillsOfParties } from "./testing/party-close-fixture.js";
+import { billOwes } from "./party-close.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { billShare } from "./testing/bill-payment-fixture.js";
 import { cashPayment } from "./testing/bill-venue.js";

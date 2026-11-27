@@ -10,7 +10,8 @@ import {
   todaySet,
   diningTables,
 } from "@waitron/db";
-import { moveToday, placeSpareToday, resetZone, rotateToday } from "./floor-today-store.js";
+import { resetZone } from "./floor-today-store.js";
+import { moveToday, placeSpareToday, rotateToday } from "./floor-today-edits.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";

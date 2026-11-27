@@ -311,6 +311,37 @@ export async function split(
   return split.billId;
 }
 
+export function partyTestHelpers(suite: HasDb) {
+  /** The party a table belongs to, while it belongs to one. */
+  async function partyForTable(
+    tx: Transaction,
+    tableId: string,
+  ): Promise<{ partyId: string; revision: number } | null> {
+    const [row] = await tx
+      .select({ partyId: parties.id, revision: parties.revision })
+      .from(partyTables)
+      .innerJoin(parties, eq(parties.id, partyTables.partyId))
+      .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
+    return row ?? null;
+  }
+
+  async function membershipsOf(partyId: string) {
+    return inTx(suite, (tx) =>
+      tx.select().from(partyTables).where(eq(partyTables.partyId, partyId)),
+    );
+  }
+
+  /** Joins a free table to the party, as the till's join does. */
+  async function join(cfg: DeviceRequestConfig, partyId: string, tableId: string): Promise<void> {
+    const command = await commandFor(suite, partyId);
+    await inTx(suite, (tx) =>
+      joinTables(tx, cfg, partyId, tableId, { ...command, otherPartyId: null }),
+    );
+  }
+
+  return { partyForTable, membershipsOf, join };
+}
+
 export async function nextMillisecond(): Promise<void> {
   const start = Date.now();
   while (Date.now() <= start) await new Promise((resolve) => setTimeout(resolve, 1));

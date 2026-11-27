@@ -21,7 +21,8 @@ import { pinnedAt } from "./issue-moment.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import type { Logger } from "./logger.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { billOwes, checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
+import { checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
+import { billOwes } from "./party-close.js";
 import { enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
 import {

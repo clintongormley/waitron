@@ -35,13 +35,13 @@ import {
   seatTable,
   holderOf,
   partyRevision,
-  markTableCleared,
   setPartyName,
   setPartyGuestCount,
   memberTables,
   createPartyBill,
   readPartyBills,
 } from "./parties.js";
+import { markTableCleared } from "./party-close.js";
 import {
   overrideToCheck,
   withPinCheckAhead,

@@ -17,7 +17,8 @@ import {
   sentRevision,
   zonesOf,
 } from "./floor-revision.js";
-import { ensureToday, moveToday, resetZone } from "./floor-today-store.js";
+import { ensureToday, resetZone } from "./floor-today-store.js";
+import { moveToday } from "./floor-today-edits.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
