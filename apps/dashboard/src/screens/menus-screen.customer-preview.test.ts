@@ -504,6 +504,26 @@ describe("the customer menu Online preview", () => {
     });
   });
 
+  it("shows a single dish price and names an allergen without a subtype", async () => {
+    const answer = published();
+    if (answer.state !== "published") throw new Error("Expected a published menu");
+    const section = answer.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected a section");
+    const dish = section.members[0]!;
+    if (dish.kind !== "product") throw new Error("Expected a dish");
+    Object.assign(dish, {
+      description: "",
+      price: { min: "6.50", max: "6.50" },
+      allergens: { milk: {} },
+    });
+
+    const { el } = await open(() => Response.json(answer));
+    await expect.element(page.getByRole("img", { name: "Milk", exact: true })).toBeVisible();
+    const row = customerPage(el)!.shadowRoot!.querySelector(".dish")!;
+    expect(row.querySelector(".price")?.textContent?.trim()).toBe("€6.50");
+    expect(row.querySelector(".description")).toBeNull();
+  });
+
   it("updates the open preview when a menu gets its first or next published edition", async () => {
     let edition: MenuStatus = { state: "unpublished", clashes: 0 };
     const readPreview = vi.fn(() =>

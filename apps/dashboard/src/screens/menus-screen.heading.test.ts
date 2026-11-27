@@ -585,6 +585,30 @@ describe("the menu editor's heading", () => {
     expect(style.color).toBe(resolved(el, "--wt-color-danger"));
   });
 
+  it("opens Structure at the clash filter from Home", async () => {
+    const client = api(async () => ({ ...CHANGED, clashes: 2 }));
+    client.getMenuHome = async () => ({
+      homeSectionId: "home-lunch",
+      shortcuts: [],
+      order: "home_first",
+    });
+    const el = await mount(client, "/menus/menu/menu-lunch/view/home");
+    await vi.waitFor(() => expect(q(el, '[data-test="home-settings"]')).not.toBeNull());
+    expect(clashWords(el)).not.toBeNull();
+    await userEvent.click(clashWords(el)!);
+
+    await vi.waitFor(() => {
+      expect(location.pathname).toBe(`${LUNCH_PATH}/filter/clashes`);
+      const table = q<HTMLElementTagNameMap["dashboard-menu-structure-table"]>(
+        el,
+        "dashboard-menu-structure-table",
+      );
+      expect(table?.shadowRoot?.querySelector("wt-data-table")?.filterValues("price")).toEqual([
+        "clashes",
+      ]);
+    });
+  });
+
   it("reapplies the clash filter after clearing it without discarding a draft", async () => {
     const el = await mount(api(async () => ({ ...CHANGED, clashes: 2 })));
     await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());

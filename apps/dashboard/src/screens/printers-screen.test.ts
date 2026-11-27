@@ -6212,14 +6212,19 @@ it.each([
   expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
 });
 
-it("opens an older finished job from Print Queue", async () => {
+it("keeps the current Print Queue after an older page fails and lets staff retry", async () => {
   const delivered = Array.from({ length: 100 }, (_, i) => ({
     ...jobs[1]!,
     id: `recent-${i}`,
     status: "done" as const,
   }));
   const older = { ...delivered[0]!, id: "older" };
-  const listRecentJobs = vi.fn().mockResolvedValueOnce(delivered).mockResolvedValue([older]);
+  const listRecentJobs = vi
+    .fn()
+    .mockResolvedValueOnce(delivered)
+    .mockRejectedValueOnce({ code: "server.internal" })
+    .mockResolvedValueOnce([older])
+    .mockResolvedValueOnce(delivered);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ listRecentJobs }),
   });
@@ -6227,8 +6232,21 @@ it("opens an older finished job from Print Queue", async () => {
   const olderJobs = q(el, "[data-test=older-print-jobs]");
   expect(olderJobs).not.toBeNull();
   olderJobs!.click();
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=printer-refresh-error]")).toContain(codeMessage("server.internal")),
+  );
+  expect(q(el, "[data-test=resend-job-recent-0]")).not.toBeNull();
+  expect(q(el, "[data-test=resend-job-older]")).toBeNull();
+
+  q(el, "[data-test=older-print-jobs]")!.click();
   await vi.waitFor(() => expect(q(el, "[data-test=resend-job-older]")).not.toBeNull());
+  expect(q(el, "[data-test=resend-job-recent-0]")).toBeNull();
   expect(listRecentJobs).toHaveBeenLastCalledWith(1);
+
+  q(el, "[data-test=newer-print-jobs]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=resend-job-recent-0]")).not.toBeNull());
+  expect(q(el, "[data-test=resend-job-older]")).toBeNull();
+  expect(listRecentJobs).toHaveBeenLastCalledWith();
 });
 
 it("shows office printer holds and allows viewing uncertain invoice pages", async () => {

@@ -3186,6 +3186,22 @@ it("removes just the chosen placement and offers editing and removal for a secti
   expect(rowOf(el, "m-fav/m-fav-lemonade")).not.toBeNull();
 });
 
+it("stages removing an empty section without asking to remove its contents", async () => {
+  const nodes = lunchNodes();
+  const client = api(
+    {},
+    nodes.map((row) => (row.memberId === "m-fav" ? { ...row, children: [] } : row)),
+  );
+  const el = await mountLunch(client);
+  expect(topLevelKeys(el)).toContain("m-fav");
+
+  await rowAction(el, "m-fav", "delete");
+
+  expect(topLevelKeys(el)).toEqual(["m-burger", "m-drinks"]);
+  expect(modal(el, "delete-section").open).toBe(false);
+  expect(writeCalls(client)).toEqual([]);
+});
+
 it("stages section details and confirms removing the nonempty section", async () => {
   const snapshot: MenuStructure = {
     rootSectionId: "root-lunch",
@@ -3564,6 +3580,28 @@ it("puts an unaddressed Structure refusal in the Save bar and keeps the draft re
   await vi.waitFor(() => expect(client.saveMenuStructure).toHaveBeenCalledTimes(2));
   expect(client.saveMenuStructure.mock.calls[1]).toEqual(client.saveMenuStructure.mock.calls[0]);
   expect(bar.error).toBe("");
+});
+
+it("names the product when its price can no longer be saved", async () => {
+  const client = api({
+    saveMenuStructure: vi.fn().mockResolvedValue({
+      dropped: [{ productId: "p-burger", reason: "deleted" }],
+    }),
+  });
+  const el = await mountLunch(client);
+  emit(structure(el), "wt-structure-price", { productId: "p-burger", value: "12.50" });
+  await el.updateComplete;
+  await saveStructure(el);
+
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="structure-dropped"]'))).toBe(
+      t("menus.structure_dropped").replace("{names}", "Burger"),
+    ),
+  );
+  expect(structureWrite(client).prices).toContainEqual({
+    productId: "p-burger",
+    price: "12.50",
+  });
 });
 
 it("reports a failed Structure refresh after an accepted Save as a load failure", async () => {
@@ -8830,6 +8868,31 @@ describe("review fix: menu details opening", () => {
     table(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="rename-${id}"]`)!.click();
     await el.updateComplete;
   }
+  it("lets the manager try Rename again after the menu details failed to load", async () => {
+    const client = api({
+      getMenuStructure: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValueOnce(details("lunch", "Lunch Menu")),
+    });
+    const el = await mount(client);
+    await rename(el, "menu-lunch");
+    await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).not.toBeNull());
+    expect(modal(el, "menu-form").open).toBe(false);
+
+    await click(el, "retry");
+    await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).toBeNull());
+    await rename(el, "menu-lunch");
+    await vi.waitFor(() =>
+      expect(modal(el, "menu-form").heading).toBe(
+        t("menus.rename_heading").replace("{name}", "Lunch Menu"),
+      ),
+    );
+    expect(
+      inModal<HTMLElementTagNameMap["wt-input"]>(el, "menu-form", '[name="internalName"]').value,
+    ).toBe("Lunch Menu");
+  });
+
   it("keeps B and its draft when A's earlier rename read answers last", async () => {
     const a = deferred<MenuStructure>();
     const b = deferred<MenuStructure>();
