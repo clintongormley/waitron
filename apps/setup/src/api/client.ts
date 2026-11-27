@@ -496,12 +496,12 @@ export class SetupApi {
   async selectEmergencyBackup(
     artifact: File,
     signIn: HandoverSignIn | undefined,
-    recoveryKey?: string,
+    masterKey?: string,
   ): Promise<void> {
     const body = new FormData();
     body.append(
       "request",
-      JSON.stringify({ signIn, ...(recoveryKey === undefined ? {} : { recoveryKey }) }),
+      JSON.stringify({ signIn, ...(masterKey === undefined ? {} : { masterKey }) }),
     );
     body.append("artifact", artifact);
     const fetchImpl = this.#fetchImpl;

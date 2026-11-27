@@ -10,6 +10,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-file-input.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import {
@@ -28,7 +29,11 @@ import {
   submitOnEnter,
   formMessageStyles,
   visuallyHiddenStyles,
+  type MasterKeyChangeDetail,
 } from "@waitron/ui";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import { formatDuration, isValidEmail, makeBrowserUuid } from "@waitron/shared";
 import {
   SetupApi,
@@ -259,8 +264,10 @@ export class SetupHandoverScreen extends LitElement {
   @state() private proceeded = false;
   @state() private backupOpen = false;
   @state() private backup?: File;
-  @state() private backupKey = "";
-  @state() private needsBackupKey = false;
+  /** The master key the chosen backup needs, named by the spare when its own key does not open it. */
+  @state() private backupKeyName?: string;
+  @state() private masterKey = "";
+  @state() private masterKeyRefused = false;
   @state() private backupRestarting = false;
   @state() private followRestarting = false;
   /** Waiting for the spare's followed copy to catch up, asking again every 2 seconds. */
@@ -505,8 +512,7 @@ export class SetupHandoverScreen extends LitElement {
     this.#resetSelection();
     this.password = this.code = "";
     this.#assertion = undefined;
-    this.backup = undefined;
-    this.backupKey = "";
+    this.#forgetBackup();
     this.backupRestarting = this.followRestarting = this.restarting = false;
     clearTimeout(this.#heldTimer);
     this.following = this.heldOffered = this.heldWaiting = this.heldChosen = false;
@@ -1013,9 +1019,7 @@ export class SetupHandoverScreen extends LitElement {
       return error?.params?.reason === "unsupported"
         ? "shell.restore.manifest_unsupported"
         : "shell.restore.manifest_invalid";
-    if (code === "handover.backup_key_missing") return "handover.emergency.backup_key_missing";
-    if (code === "backup.new_recovery_key_too_short")
-      return "handover.emergency.backup_key_too_short";
+    if (code === "promotion.break_glass_invalid") return "handover.fix";
     if (
       ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
         code ?? "",
@@ -1281,19 +1285,22 @@ export class SetupHandoverScreen extends LitElement {
     }
   }
   async #selectBackup(): Promise<void> {
-    if (this.busy || !this.backup || !this.#valid() || (this.needsBackupKey && !this.backupKey))
-      return;
+    if (this.busy || !this.backup || !this.#valid() || this.#awaitingMasterKey) return;
     this.#stopFollowing();
     this.busy = true;
     this.actionError = "";
     try {
       const backup = this.backup;
       await this.#step(
-        (signIn) => this.api.selectEmergencyBackup(backup, signIn, this.backupKey || undefined),
+        (signIn) =>
+          this.api.selectEmergencyBackup(
+            backup,
+            signIn,
+            this.backupKeyName === undefined ? undefined : this.masterKey,
+          ),
         "prompt",
       );
-      this.backup = undefined;
-      this.backupKey = "";
+      this.#forgetBackup();
       this.copyPreview = undefined;
       this.copyStep = "check";
       this.backupOpen = this.proceeded = false;
@@ -1306,12 +1313,34 @@ export class SetupHandoverScreen extends LitElement {
       this.backupRestarting = this.restarting = true;
       this.#restartPolling();
     } catch (cause) {
-      const code = (cause as { code?: string }).code;
-      if (code === "handover.backup_key_missing" || code === "recovery.passphrase_invalid")
-        this.needsBackupKey = true;
-      this.actionError = this.#emergencyError(cause);
+      const { code, params } = cause as { code?: string; params?: { keyName?: unknown } };
+      const keyName = typeof params?.keyName === "string" ? params.keyName : undefined;
+      if (code === "handover.backup_needs_master_key" && keyName !== undefined) {
+        this.backupKeyName = keyName;
+        this.actionError = "";
+      } else {
+        if (code === "promotion.break_glass_invalid" && keyName !== undefined) {
+          this.backupKeyName = keyName;
+          this.masterKeyRefused = true;
+        }
+        this.actionError = this.#emergencyError(cause);
+      }
       this.busy = false;
     }
+  }
+  get #awaitingMasterKey(): boolean {
+    return this.backupKeyName !== undefined && !this.masterKey;
+  }
+  #forgetBackup(): void {
+    this.backup = this.backupKeyName = undefined;
+    this.masterKey = "";
+    this.masterKeyRefused = false;
+  }
+  async #chooseAnotherBackup(): Promise<void> {
+    this.#forgetBackup();
+    this.actionError = "";
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>('[name="handover-backup"]')?.focus();
   }
   #validDeclaration(): boolean {
     return (
@@ -1682,10 +1711,21 @@ export class SetupHandoverScreen extends LitElement {
           this.backup
             ? html`<wt-button
                 data-test="emergency-backup"
-                .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)}
-                variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"}
+                .disabled=${this.busy || !this.#valid() || this.#awaitingMasterKey}
+                variant=${this.#valid() && !this.#awaitingMasterKey ? "primary" : "secondary"}
                 @click=${() => void this.#selectBackup()}
                 >${t("handover.emergency.use_backup")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          this.backup && this.backupKeyName !== undefined
+            ? html`<wt-button
+                data-test="choose-another-backup"
+                variant="secondary"
+                .disabled=${this.busy}
+                @click=${() => void this.#chooseAnotherBackup()}
+                >${t("handover.emergency.choose_another_file")}</wt-button
               >`
             : nothing
         }
@@ -1755,26 +1795,33 @@ export class SetupHandoverScreen extends LitElement {
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
           event.stopPropagation();
+          this.#forgetBackup();
           this.backup = event.detail.files[0];
           this.actionError = "";
         }}
       ></wt-file-input>
-      ${
-        this.needsBackupKey
-          ? html`<wt-input
-              name="handover-backup-key"
-              type="password"
-              label=${t("handover.emergency.backup_key")}
-              required
-              .value=${this.backupKey}
-              ?disabled=${this.busy}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                this.backupKey = event.detail.value;
-                this.actionError = "";
-              }}
-            ></wt-input>`
-          : nothing
-      }`;
+      ${this.backupKeyName === undefined ? nothing : this.#masterKeyField(this.backupKeyName)}`;
+  }
+  #masterKeyField(keyName: string) {
+    const words = MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
+    return html`<p data-test="backup-needs-master-key">
+        ${format("handover.emergency.backup_needs_master_key", { name: keyName })}
+      </p>
+      <wt-master-key-input
+        required
+        .keyName=${keyName}
+        .copy=${words}
+        .readPack=${loadRecoveryPackReader}
+        .maxPdfBytes=${MAX_PACK_PDF}
+        .error=${this.masterKeyRefused ? words.wrongKey(keyName) : ""}
+        ?disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+          event.stopPropagation();
+          this.masterKey = event.detail.masterKey ?? "";
+          this.masterKeyRefused = false;
+          this.actionError = "";
+        }}
+      ></wt-master-key-input>`;
   }
   #controlledLink() {
     const operationId = this.controlledOperationId;
