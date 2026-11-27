@@ -10,19 +10,22 @@ export function certificateNotAccepted(error: unknown): boolean {
   return firstCodeInCauseChain(error, (code) => code === NOT_ACCEPTED) !== null;
 }
 
-/** Keeps the first time while the refused fingerprint is unchanged. Updates only an existing row:
- * the failure transaction opens the technical incident, which creates it, first. */
+/** Keeps the first time while the refused fingerprint is unchanged. A row it creates opens the
+ * gate from `at`, as `openTechnicalIncident`'s does. */
 export async function markCertificateRefused(
   tx: Transaction,
   fingerprint: string,
-  now: Date,
+  at: Date,
 ): Promise<void> {
   await tx.execute(sql`
-    update verifactu_sending_state set
-      certificate_refused_at = case when certificate_refused_fingerprint = ${fingerprint}
-        then certificate_refused_at else ${now.toISOString()} end,
-      certificate_refused_fingerprint = ${fingerprint}
-    where id = 1
+    insert into verifactu_sending_state
+      (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+    values (1, ${at.toISOString()}, 0, ${fingerprint}, ${at.toISOString()})
+    on conflict (id) do update set
+      certificate_refused_at = case
+        when certificate_refused_fingerprint = excluded.certificate_refused_fingerprint
+        then certificate_refused_at else excluded.certificate_refused_at end,
+      certificate_refused_fingerprint = excluded.certificate_refused_fingerprint
   `);
 }
 

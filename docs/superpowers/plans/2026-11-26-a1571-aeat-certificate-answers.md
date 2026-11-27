@@ -46,9 +46,12 @@ so another number keeps today's raw-fault sentence.
 with `venue.db` as the vault's one certificate does) gains `certificate_refused_fingerprint` and
 `certificate_refused_at`. When a failure's cause chain carries the code, the drain takes the
 fingerprint of the certificate it sent with (the transport opens the decrypted file with
-`openCertificateFile`, which the install's opener runs too), and the failure transaction (after `openTechnicalIncident`, which creates the row) stores it
-and the pass's own `now`, keeping the first date while the fingerprint is unchanged; an accepted
-answer (`persistResponse`) clears both. The card and the new alert compare the stored fingerprint
+`openCertificateFile`, which the install's opener runs too), and the failure transaction stores it
+and the pass's own `now`, keeping the first date while the fingerprint is unchanged. When the
+database refuses that transaction, the drain keeps the fingerprint and date with the technical
+failure it already holds in memory and saves them when that failure is saved. A duplicate lookup
+refused the same way is marked in the transaction that saves the batch's other outcomes. Any other
+answer from AEAT clears both (`closeOnAnswer`). The card and the new alert compare the stored fingerprint
 with the latest install record's, so a new install hides the mark at once, a takeover's clocks
 cannot matter, and rotating the vault key, which re-encrypts the same certificate, keeps it. (The
 vault's credential revision was the first choice, and rotation changes it; 2026-11-27.) Card:

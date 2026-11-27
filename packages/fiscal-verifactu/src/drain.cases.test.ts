@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { createClient } from "@waitron/verifactu";
 import type { IDFactura, RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
@@ -21,10 +21,12 @@ import {
   type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
+import type { DrainClient } from "./aeat-transport.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
+import "./errors.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -1139,7 +1141,8 @@ describe("drain — a cancellation whose original was not accepted", () => {
 });
 
 describe("drain — a duplicate whose lookup fails", () => {
-  it("marks only that record unknown, saves every other line, its CSV and its case, and keeps its chain blocked", async () => {
+  /** A batch of a duplicate whose lookup will fail, a record AEAT accepts and one it refuses. */
+  async function mixedBatch() {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [duplicate] = seeded.registroIds;
@@ -1152,7 +1155,11 @@ describe("drain — a duplicate whose lookup fails", () => {
     const accepted = await seedSecondChain(suite.db, seeded, 5);
     const refused = await seedSecondChain(suite.db, seeded, 6);
     aeat.reject(refused.facturaKey, 1100, "Campo obligatorio ausente");
-    const real = aeat.client();
+    return { seeded, duplicate: duplicate!, accepted, refused, real: aeat.client() };
+  }
+
+  it("marks only that record unknown, saves every other line, its CSV and its case, and keeps its chain blocked", async () => {
+    const { seeded, duplicate, accepted, refused, real } = await mixedBatch();
     const lookupFails: VerifactuClient = {
       submit: (cabecera, registros) => real.submit(cabecera, registros),
       consultar: () => Promise.reject(new Error("AEAT unreachable")),
@@ -1163,7 +1170,7 @@ describe("drain — a duplicate whose lookup fails", () => {
     const csv = (await envioOf(accepted.registroId)).csv;
     expect(csv).toEqual(expect.any(String));
     const retryAt = new Date(SECOND.getTime() + backoffMs(2));
-    expect(await envioOf(duplicate!)).toEqual({
+    expect(await envioOf(duplicate)).toEqual({
       estado: "pendiente",
       csv: null,
       incidencia: true,
@@ -1199,9 +1206,60 @@ describe("drain — a duplicate whose lookup fails", () => {
     expect(wire.sent).toEqual([]);
     await drain(deps(wire.client), retryAt);
     expect(wire.sent).toEqual([[duplicate, successor.registroId]]);
-    expect((await envioOf(duplicate!)).estado).toBe("aceptado");
+    expect((await envioOf(duplicate)).estado).toBe("aceptado");
     expect((await envioOf(successor.registroId)).estado).toBe("aceptado");
   });
+
+  it("records AEAT's refusal of the certificate during the lookup beside the other lines' outcomes", async () => {
+    const { duplicate, accepted, refused, real } = await mixedBatch();
+    const lookupRefused: DrainClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: () =>
+        Promise.reject(new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" })),
+      certificateFingerprint: () => "AA:01",
+    };
+
+    await drain(deps(lookupRefused), SECOND);
+
+    expect((await envioOf(duplicate)).estado).toBe("pendiente");
+    expect((await envioOf(accepted.registroId)).estado).toBe("aceptado");
+    expect((await envioOf(refused.registroId)).estado).toBe("rechazado");
+    expect(await certificateMark()).toEqual([
+      { certificate_refused_fingerprint: "AA:01", certificate_refused_at: SECOND.toISOString() },
+    ]);
+  });
+
+  it("records the lookup's certificate refusal when the reply's transaction fails", async () => {
+    const { accepted, real } = await mixedBatch();
+    const lookupRefused: DrainClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: () =>
+        Promise.reject(new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" })),
+      certificateFingerprint: () => "AA:01",
+    };
+    await suite.db.execute(sql`
+      create trigger test_refuse_accept before update of estado on verifactu_submissions
+      when new.estado = 'aceptado'
+      begin select raise(abort, 'refused by test'); end
+    `);
+    try {
+      await drain(deps(lookupRefused), SECOND);
+    } finally {
+      await suite.db.execute(sql`drop trigger test_refuse_accept`);
+    }
+
+    expect((await envioOf(accepted.registroId)).estado).toBe("pendiente");
+    expect(await certificateMark()).toEqual([
+      { certificate_refused_fingerprint: "AA:01", certificate_refused_at: SECOND.toISOString() },
+    ]);
+  });
+
+  async function certificateMark() {
+    const { rows } = await suite.db.execute(sql`
+      select certificate_refused_fingerprint, certificate_refused_at from verifactu_sending_state
+    `);
+    return rows;
+  }
 });
 
 describe("drain — an unknown outcome blocks later claims on its chain", () => {

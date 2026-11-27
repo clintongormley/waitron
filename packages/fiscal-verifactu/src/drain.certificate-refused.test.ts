@@ -11,6 +11,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendPendingAlta, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { aeatClientResolver } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
+import { markCertificateRefused } from "./certificate-refusal.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
@@ -87,6 +88,48 @@ it("stores the refused certificate's fingerprint with the pass's time, keeping t
   await drain(t.deps, at(59));
   expect(await mark()).toEqual([
     { certificate_refused_fingerprint: "BB:02", certificate_refused_at: at(59).toISOString() },
+  ]);
+});
+
+it("keeps the first refusal's time when the database refused the transaction recording it", async () => {
+  await seedPendingEnvios(suite.db, { count: 1 });
+  const t = transport();
+  await suite.db.execute(sql`
+    create trigger refuse_sending_state before insert on verifactu_sending_state
+    begin select raise(abort, 'test metadata unavailable'); end
+  `);
+  try {
+    const refused = await drain(t.deps, at(1));
+    expect(refused.skipped).toHaveLength(1);
+    expect(await mark()).toEqual([]);
+  } finally {
+    await suite.db.execute(sql`drop trigger refuse_sending_state`);
+  }
+
+  await drain(t.deps, at(30));
+  expect(await mark()).toEqual([
+    { certificate_refused_fingerprint: "AA:01", certificate_refused_at: at(1).toISOString() },
+  ]);
+});
+
+it("creates the sending state when there is none yet", async () => {
+  await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", at(1)));
+  expect(
+    (
+      await suite.db.execute(sql`
+        select proximo_envio_en, tiempo_espera_seg, technical_incident_token,
+          certificate_refused_fingerprint, certificate_refused_at
+        from verifactu_sending_state
+      `)
+    ).rows,
+  ).toEqual([
+    {
+      proximo_envio_en: at(1).toISOString(),
+      tiempo_espera_seg: 0,
+      technical_incident_token: null,
+      certificate_refused_fingerprint: "AA:01",
+      certificate_refused_at: at(1).toISOString(),
+    },
   ]);
 });
 
