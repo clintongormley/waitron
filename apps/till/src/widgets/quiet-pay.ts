@@ -28,6 +28,10 @@ export const quietPayStyles = css`
     padding: var(--wt-space-3);
   }
 
+  .quiet-pay-controls > .guests {
+    margin-block-start: calc(var(--wt-space-4) + var(--wt-space-1));
+  }
+
   .quiet-pay-controls legend.help-anchor {
     margin-block-end: 0;
   }
@@ -93,6 +97,10 @@ export const quietPayStyles = css`
       + .quiet-pay-controls:has(> [data-pay-way]:first-child) {
       padding-block-start: var(--wt-space-1);
     }
+  }
+
+  [data-quiet-pay-tip] {
+    --wt-action-border-color: transparent;
   }
 
   [data-quiet-pay-breakdown] wt-button::part(button) {

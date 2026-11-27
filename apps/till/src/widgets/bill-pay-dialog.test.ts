@@ -120,6 +120,38 @@ it("starts full-screen Pay and charges the amount checked before the press", asy
   expect(payments).toEqual([{ quote: el.checkedQuote }]);
 });
 
+it("gives the Guests field space below the ways to pay on a phone", async () => {
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(414, 896));
+  const el = await mount({ quiet: true, way: "whole", asksGuests: true, receiptGuests: 4 });
+  await showCardQuote(el, "120.00");
+
+  const guests = root(el).querySelector('[name="guests"]')!.getBoundingClientRect();
+  const ways = root(el).querySelector(".quiet-pay-ways")!.getBoundingClientRect();
+  expect(guests.top - ways.bottom).toBe(20);
+  expect(guests.left).toBe(ways.left);
+});
+
+it("keeps Edit tip plain under the pointer and outlined on keyboard focus", async () => {
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(414, 896));
+  const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "12");
+  await click(el, "[data-quiet-pay-tip]");
+
+  const edit = root(el).querySelector("[data-quiet-pay-tip]")!.shadowRoot!.querySelector("button")!;
+  await userEvent.hover(edit);
+  expect.soft(getComputedStyle(edit).borderColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(edit).outlineStyle).toBe("none");
+
+  const remove = root(el).querySelector<HTMLElement>("[data-quiet-pay-remove-tip]")!;
+  remove.focus();
+  await userEvent.keyboard("{Tab}");
+  expect(edit.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(edit).outlineStyle).toBe("solid");
+});
+
 it("chooses an amount, then opens the existing cash entry before asking for a preview", async () => {
   const el = await mount({
     quiet: true,
