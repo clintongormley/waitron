@@ -75,7 +75,10 @@ beforeEach(() => {
 });
 afterEach(() => secureSocket.destroy());
 
-const certificate = makeCertificateAuthority().issue({ passphrase: "cert-secret" });
+const certificate = makeCertificateAuthority().issue({
+  passphrase: "cert-secret",
+  organizationIdentifier: "VATES-50000000R",
+});
 const CERT = {
   pfxBase64: certificate.pfx.toString("base64"),
   passphrase: "cert-secret",

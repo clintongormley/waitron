@@ -20,7 +20,10 @@ import { createSetupOperationStore } from "./setup-operation.js";
 
 const SETUP_STATE_DIR = useSetupStateDir();
 
-const certificate = makeCertificateAuthority().issue({ passphrase: "fiscal-fixture" });
+const certificate = makeCertificateAuthority().issue({
+  passphrase: "fiscal-fixture",
+  organizationIdentifier: "VATES-50000000R",
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

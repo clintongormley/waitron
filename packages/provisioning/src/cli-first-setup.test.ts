@@ -964,8 +964,12 @@ it("a venue database already holding another node's membership is refused at pub
 });
 
 const certificateAuthority = makeCertificateAuthority();
-const productionMaterial = certificateAuthority.issue({ passphrase: "SYNTHETIC-production-cert" });
-const replacementMaterial = certificateAuthority.issue({ passphrase: "SYNTHETIC-production-cert" });
+const forVenue = {
+  passphrase: "SYNTHETIC-production-cert",
+  organizationIdentifier: `VATES-${request.taxId}`,
+};
+const productionMaterial = certificateAuthority.issue(forVenue);
+const replacementMaterial = certificateAuthority.issue(forVenue);
 const productionCertificate = {
   pfxBase64: productionMaterial.pfx.toString("base64"),
   passphrase: "SYNTHETIC-production-cert",
@@ -1486,7 +1490,7 @@ it("the readiness option refuses an unowned command before opening the venue", a
 it("the production command records a readable certificate against the committed setup node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
   const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
-  const candidate = makeAuthority().issue();
+  const candidate = makeAuthority().issue({ organizationIdentifier: `VATES-${request.taxId}` });
   const certificate = {
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: candidate.passphrase,

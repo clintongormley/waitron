@@ -134,7 +134,7 @@ it("installs the staged master key and no box key after exact fiscal commit and 
 it("browser setup records a readable certificate against its committed node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
   const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
-  const candidate = makeAuthority().issue();
+  const candidate = makeAuthority().issue({ organizationIdentifier: "VATES-50000000R" });
   const f = await fixture({
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: candidate.passphrase,

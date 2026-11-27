@@ -152,7 +152,10 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
     const state = publicFirstSetupState((await host.store.read())!);
     const capability = setup.ownerAttempt.capability;
     await keepHourRecoveryDocument(host, { ...state, capability }, PASSWORD);
-    const issued = options.certificate === true ? makeAuthority().issue() : undefined;
+    const issued =
+      options.certificate === true
+        ? makeAuthority().issue({ organizationIdentifier: "VATES-50000000R" })
+        : undefined;
     const certificate =
       issued === undefined
         ? { synthetic: true }

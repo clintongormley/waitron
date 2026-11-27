@@ -347,7 +347,10 @@ function prepareBody(): Record<string, unknown> {
 
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
 // a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
-const CERTIFICATE = makeAuthority().issue({ passphrase: "cert-secret" });
+const CERTIFICATE = makeAuthority().issue({
+  passphrase: "cert-secret",
+  organizationIdentifier: "VATES-50000000R",
+});
 const CERT = {
   pfxBase64: CERTIFICATE.pfx.toString("base64"),
   passphrase: CERTIFICATE.passphrase,
