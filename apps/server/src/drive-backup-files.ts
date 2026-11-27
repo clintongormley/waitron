@@ -206,6 +206,34 @@ export async function resolveDriveFile(
   }
 }
 
+/** Runs `work`, which reads the drive file at `path` where it lies, and answers a read that a
+ * pulled stick broke as `restore.drive_file_unreadable`. An error naming another path, or one
+ * naming none while the file is still there, keeps its own answer. With no path it only runs. */
+export async function readingDriveFile<T>(
+  path: string | undefined,
+  work: () => Promise<T>,
+): Promise<T> {
+  if (path === undefined) return work();
+  try {
+    return await work();
+  } catch (error) {
+    if (isAppError(error) || !UNREADABLE.has(errnoOf(error) ?? "")) throw error;
+    const named = (error as { path?: unknown }).path;
+    const gone =
+      typeof named === "string"
+        ? named === path
+        : await stat(path).then(
+            () => false,
+            () => true,
+          );
+    throw gone ? unreadable() : error;
+  }
+}
+
+export function isJsonRequest(request: Request): boolean {
+  return request.headers.get("content-type")?.toLowerCase().startsWith("application/json") ?? false;
+}
+
 /** A copy of the drive file in its own `drive-<uuid>` folder under `stagingDir`, so the stick can
  * be pulled; the free space must hold the file and the start's floor before anything is copied. */
 export async function takeDriveFile(
@@ -322,6 +350,7 @@ export async function receiveDriveArchive(
     artifactPath: resolved.path,
     byteLength: resolved.size,
     fields,
+    drivePath: resolved.path,
     dispose: async () => {},
   };
 }
@@ -329,7 +358,7 @@ export async function receiveDriveArchive(
 /** Setup's receiver: a JSON body names a file on a drive, and anything else is an upload. */
 export function receiveRestoreArchive(stagingDir: string, root?: string): ReceiveArchive {
   return (request, options = {}) =>
-    request.headers.get("content-type")?.toLowerCase().startsWith("application/json")
+    isJsonRequest(request)
       ? receiveDriveArchive(request, options, {
           stagingDir,
           limitBytes: SETUP_DRIVE_BODY_MAX,

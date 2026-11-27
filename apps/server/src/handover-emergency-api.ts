@@ -85,8 +85,10 @@ import { createPasswordThrottle, type PasswordThrottle } from "./password-thrott
 import type { BackupKeyRecord } from "./backup-env-writer.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
 import {
+  isJsonRequest,
   listHostDriveBackups,
   readDriveJson,
+  readingDriveFile,
   releaseDrives,
   resolveDriveFile,
   SWITCH_DRIVE_BODY_MAX,
@@ -194,8 +196,21 @@ const STATUS = {
 
 const BACKUP_DRIVE_KEYS = new Set(["signIn", "masterKey", "file"]);
 
-function isJson(c: Context): boolean {
-  return c.req.header("content-type")?.toLowerCase().startsWith("application/json") ?? false;
+type BackupBody =
+  | { kind: "drive"; payload: Record<string, unknown>; file: unknown }
+  | { kind: "upload"; payload: Record<string, unknown>; artifact: Uint8Array };
+
+async function backupFromDrive(c: Context): Promise<BackupBody> {
+  const payload = await readDriveJson(c.req.raw, SWITCH_DRIVE_BODY_MAX, "handover.request_invalid");
+  if (!isRecord(payload) || Object.keys(payload).some((key) => !BACKUP_DRIVE_KEYS.has(key)))
+    refuseRequest("body");
+  return { kind: "drive", payload, file: payload.file };
+}
+
+async function backupUpload(c: Context, uploadLimit: number): Promise<BackupBody> {
+  const { payload, artifact } = await readUpload(c, uploadLimit);
+  if (!isRecord(payload) || artifact === undefined) refuseRequest("artifact");
+  return { kind: "upload", payload, artifact };
 }
 
 function isCopySource(value: unknown): value is EmergencyCopy["source"] {
@@ -417,7 +432,7 @@ export function mountHandoverEmergencyApi(
     boundary(c, log, async () => {
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
-      if (!isJson(c)) refuseRequest("body");
+      if (!isJsonRequest(c.req.raw)) refuseRequest("body");
       const body = await readDriveJson(
         c.req.raw,
         SWITCH_DRIVE_BODY_MAX,
@@ -439,27 +454,14 @@ export function mountHandoverEmergencyApi(
     boundary(c, log, async () => {
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
-      const drive = isJson(c);
-      const { payload, artifact } = drive
-        ? {
-            payload: await readDriveJson(
-              c.req.raw,
-              SWITCH_DRIVE_BODY_MAX,
-              "handover.request_invalid",
-            ),
-            artifact: undefined,
-          }
-        : await readUpload(c, deps.backup.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES);
-      if (
-        drive &&
-        (!isRecord(payload) || Object.keys(payload).some((key) => !BACKUP_DRIVE_KEYS.has(key)))
-      )
-        refuseRequest("body");
-      if (!isRecord(payload) || (!drive && artifact === undefined)) refuseRequest("artifact");
+      const body = isJsonRequest(c.req.raw)
+        ? await backupFromDrive(c)
+        : await backupUpload(c, deps.backup.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES);
+      const { payload } = body;
       if (payload.masterKey !== undefined && typeof payload.masterKey !== "string")
         refuseRequest("masterKey");
       const masterKey = payload.masterKey as string | undefined;
-      return inTurn(deps.node, "handover-emergency", async () => {
+      await inTurn(deps.node, "handover-emergency", async () => {
         const { personId } = await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
         const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
@@ -474,30 +476,31 @@ export function mountHandoverEmergencyApi(
             artifactPath,
             ...(isUnset(masterKey?.trim()) ? {} : { masterKey }),
           });
-        if (drive) {
-          const file = await resolveDriveFile(payload.file, {
+        if (body.kind === "drive") {
+          const file = await resolveDriveFile(body.file, {
             root: deps.drives.root,
             invalidCode: "handover.request_invalid",
           });
-          await stage(file.path);
+          await readingDriveFile(file.path, () => stage(file.path));
           log("info", "handover.backup_from_drive", { personId });
-          await releaseDrives({ host: deps.drives.requests, places: deps.drives.places, log });
-        } else {
-          const parent = join(deps.stateDir, SCRATCH_DIR);
-          await mkdir(parent, { recursive: true, mode: 0o700 });
-          const folder = await mkdtemp(join(parent, "handover-upload-"));
-          try {
-            const artifactPath = join(folder, "archive.enc");
-            await writeFile(artifactPath, artifact!, { mode: 0o600 });
-            await stage(artifactPath);
-          } finally {
-            await rm(folder, { recursive: true, force: true });
-          }
+          return;
         }
-        const response = c.json({ restarting: true });
-        setTimeout(deps.backup.restart, 0);
-        return response;
+        const parent = join(deps.stateDir, SCRATCH_DIR);
+        await mkdir(parent, { recursive: true, mode: 0o700 });
+        const folder = await mkdtemp(join(parent, "handover-upload-"));
+        try {
+          const artifactPath = join(folder, "archive.enc");
+          await writeFile(artifactPath, body.artifact, { mode: 0o600 });
+          await stage(artifactPath);
+        } finally {
+          await rm(folder, { recursive: true, force: true });
+        }
       });
+      if (body.kind === "drive")
+        await releaseDrives({ host: deps.drives.requests, places: deps.drives.places, log });
+      const response = c.json({ restarting: true });
+      setTimeout(deps.backup.restart, 0);
+      return response;
     }),
   );
   async function refuseRepeatedFailures(): Promise<void> {

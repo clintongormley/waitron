@@ -3,7 +3,9 @@ import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { openingKeyFor } from "./backup-file-key.js";
 import {
+  isJsonRequest,
   listHostDriveBackups,
+  readingDriveFile,
   readDriveJson,
   SETUP_DRIVE_LIST_BODY_MAX,
 } from "./drive-backup-files.js";
@@ -38,8 +40,7 @@ export function mountSetupDriveRoutes(
       assertOwnerTransport(c);
       const host = deps.driveHost;
       if (host === undefined) throw new AppError("setup.not_ready", {});
-      if (!c.req.header("content-type")?.toLowerCase().startsWith("application/json"))
-        invalidRequest("body");
+      if (!isJsonRequest(c.req.raw)) invalidRequest("body");
       const body = await readDriveJson(c.req.raw, SETUP_DRIVE_LIST_BODY_MAX);
       if (typeof body !== "object" || body === null || Array.isArray(body)) invalidRequest("body");
       if (Object.keys(body).length > 0) invalidRequest("body");
@@ -56,7 +57,7 @@ export function mountSetupDriveRoutes(
     return runRestore(c, log, async () => {
       try {
         const type = c.req.header("content-type")?.toLowerCase() ?? "";
-        const json = type.startsWith("application/json");
+        const json = isJsonRequest(c.req.raw);
         if (!json && !type.startsWith("application/octet-stream")) invalidRequest("artifact");
         const read = (fields?: Map<string, string>) => {
           const get = (name: string, header: string) =>
@@ -75,15 +76,15 @@ export function mountSetupDriveRoutes(
         try {
           const { masterKey, environment } = read(json ? upload.fields : undefined);
           c.header("Cache-Control", "no-store");
-          return c.json(
-            await preview({
+          const answer = await readingDriveFile(upload.drivePath, async () =>
+            preview({
               kind: "archive-file",
               artifactPath: upload.artifactPath,
               recoveryKey: await openingKeyFor(upload, masterKey),
               environment,
             }),
-            200,
           );
+          return c.json(answer, 200);
         } finally {
           await upload.dispose();
         }

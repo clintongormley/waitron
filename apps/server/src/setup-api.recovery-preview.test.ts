@@ -1,6 +1,6 @@
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished, vi } from "vitest";
@@ -112,6 +112,49 @@ it("preview takes a drive file where it lies", async () => {
     environment: "preproduction",
   });
   expect(await readdir(staging)).toEqual([]);
+});
+it("preview answers restore.drive_file_unreadable for a stick pulled during its read, and only for the drive's file", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-preview-pulled-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), { nodeId: preview.nodeId });
+  await mkdir(join(root, "sda1", "backups"), { recursive: true });
+  await mkdir(staging);
+  const answers = [];
+  for (const pulled of [true, false]) {
+    await writeFile(join(root, "sda1", "backups", name), ARCHIVE);
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        receiveArchive: receiveRestoreArchive(staging, root),
+        previewRestore: async (source) => {
+          if (source.kind !== "archive-file") throw new Error("expected a file");
+          if (pulled) await rm(source.artifactPath);
+          return readFile(pulled ? source.artifactPath : join(staging, "missing")).then(
+            () => preview,
+          );
+        },
+      },
+      () => {},
+    );
+    const response = await app.request("/setup-api/restore/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        file: { drive: "sda1", path: `backups/${name}` },
+        masterKey: MASTER_KEY_TEXT,
+        environment: "preproduction",
+      }),
+    });
+    answers.push([response.status, await response.json()]);
+  }
+  expect(answers).toEqual([
+    [400, { error: { code: "restore.drive_file_unreadable", params: {} } }],
+    [500, { error: { code: "server.internal" } }],
+  ]);
 });
 it("Review backup opens a backup file with the master key", async () => {
   const app = new Hono();

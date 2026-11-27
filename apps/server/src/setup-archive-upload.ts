@@ -14,6 +14,8 @@ export interface ArchiveUpload {
   artifactPath: string;
   byteLength: number;
   fields: Map<string, string>;
+  /** Set when `artifactPath` is a file on a USB drive, read where it lies. */
+  drivePath?: string;
   dispose(): Promise<void>;
 }
 export interface ArchiveUploadOptions {

@@ -406,6 +406,43 @@ it("stage takes a drive file where it lies", async () => {
   });
   expect(await readdir(staging)).toEqual([]);
 });
+it("stage answers restore.drive_file_unreadable for a stick pulled during its read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-stage-pulled-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+    nodeId: preparation.binding.targetNodeId,
+  });
+  await mkdir(join(root, "sdb1"), { recursive: true });
+  await mkdir(staging);
+  await writeFile(join(root, "sdb1", name), FILE);
+  const { app } = fixture({
+    stageRecovery: async (_eventId, source) => {
+      if (source.kind !== "archive-file") throw new Error("expected a received file");
+      await rm(source.artifactPath);
+      await readFile(source.artifactPath);
+      return { stagedId };
+    },
+    receiveArchive: receiveRestoreArchive(staging, root),
+  });
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        file: { drive: "sdb1", path: name },
+        request: { eventId: "interactive-restore", source: archiveSource },
+      }),
+    },
+    tls(),
+  );
+  expect([response.status, await response.json()]).toEqual([
+    400,
+    { error: { code: "restore.drive_file_unreadable", params: {} } },
+  ]);
+});
 it("staging a backup file for recovery takes the master key", async () => {
   const opened: Buffer[] = [];
   const keys: string[] = [];

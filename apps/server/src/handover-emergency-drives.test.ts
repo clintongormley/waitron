@@ -252,6 +252,28 @@ it("a drive path outside the drive is refused after the sign-in", async () => {
     error: { code: "handover.request_invalid", params: { field: "file" } },
   });
   expect(stageBackupAsCopy).not.toHaveBeenCalled();
+  expect(s.host.storageRelease).not.toHaveBeenCalled();
+});
+
+it("a stick pulled after the file is checked answers restore.drive_file_unreadable", async () => {
+  const { drivesRoot, name } = await backupOnDrive();
+  const actual =
+    await vi.importActual<typeof import("./drive-backup-files.js")>("./drive-backup-files.js");
+  vi.mocked(resolveDriveFile).mockImplementationOnce(async (...args) => {
+    const resolved = await actual.resolveDriveFile(...args);
+    await rm(resolved.path);
+    return resolved;
+  });
+  const restart = vi.fn();
+  const s = service({ drivesRoot, restart });
+  const answer = await s.post("backup", {
+    signIn: SIGN_IN,
+    file: { drive: "sda1", path: `backups/${name}` },
+  });
+  expect(answer.body).toEqual({ error: { code: "restore.drive_file_unreadable", params: {} } });
+  expect(vi.mocked(stageBackupAsCopy).mock.calls).toHaveLength(1);
+  expect(s.host.storageRelease).not.toHaveBeenCalled();
+  expect(restart).not.toHaveBeenCalled();
 });
 
 it("the emergency switch reads the file in place and releases the drive after staging, before the restart", async () => {

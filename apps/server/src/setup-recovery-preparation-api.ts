@@ -4,6 +4,7 @@ import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
 import { openingKeyFor } from "./backup-file-key.js";
+import { readingDriveFile } from "./drive-backup-files.js";
 import { asMasterKey, bucketRestoreSource } from "./setup-request-fields.js";
 import type { Logger } from "./logger.js";
 import type { BucketRestoreSource, SetupDeps } from "./setup-api-deps.js";
@@ -197,14 +198,17 @@ export function mountRecoveryPreparationApi(
         if (raw.kind !== "archive") invalid("body");
         const masterKey = asMasterKey(raw.masterKey, "masterKey");
         const checkedEnvironment = environment(raw.environment);
-        return c.json(
-          await deps.stageRecovery(eventId, {
+        const stageRecovery = deps.stageRecovery;
+        const received = upload;
+        const staged = await readingDriveFile(received.drivePath, async () =>
+          stageRecovery(eventId, {
             kind: "archive-file",
-            artifactPath: upload.artifactPath,
-            recoveryKey: await openingKeyFor(upload, masterKey),
+            artifactPath: received.artifactPath,
+            recoveryKey: await openingKeyFor(received, masterKey),
             environment: checkedEnvironment,
           }),
         );
+        return c.json(staged);
       } finally {
         try {
           await upload?.dispose();

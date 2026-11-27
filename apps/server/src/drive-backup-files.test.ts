@@ -20,6 +20,7 @@ import type { StorageDrive } from "./box-host-client.js";
 import {
   listDriveBackups,
   readDriveJson,
+  readingDriveFile,
   receiveDriveArchive,
   releaseDrives,
   resolveDriveFile,
@@ -307,6 +308,28 @@ function streamedRequest(text: string, onPull: () => void): Request {
     duplex: "half",
   } as RequestInit);
 }
+
+describe("readingDriveFile", () => {
+  const eio = () => Object.assign(new Error("i/o error"), { code: "EIO" });
+  it("a read error with no path answers restore.drive_file_unreadable once the file is gone, and keeps its own answer while it is there", async () => {
+    const file = join(root, "sda1", "backup");
+    await put("sda1", "backup");
+    const kept = await readingDriveFile(file, () => Promise.reject(eio())).catch((e: unknown) => e);
+    expect(kept).toMatchObject({ code: "EIO" });
+    await rm(file);
+    await expect(readingDriveFile(file, () => Promise.reject(eio()))).rejects.toMatchObject({
+      code: "restore.drive_file_unreadable",
+    });
+  });
+  it("an error that is not a read error, or a run with no drive path, keeps its own answer", async () => {
+    const file = join(root, "sda1", "gone");
+    const full = Object.assign(new Error("full"), { code: "ENOSPC", path: file });
+    await expect(readingDriveFile(file, () => Promise.reject(full))).rejects.toBe(full);
+    const missing = Object.assign(new Error("missing"), { code: "ENOENT", path: file });
+    await expect(readingDriveFile(undefined, () => Promise.reject(missing))).rejects.toBe(missing);
+    await expect(readingDriveFile(file, async () => 7)).resolves.toBe(7);
+  });
+});
 
 describe("readDriveJson", () => {
   it("reads a JSON body within its limit", async () => {
