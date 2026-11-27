@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+}
+
+.menu-languages {
+  position: relative;
+  z-index: 2;
+}
+
+.menu-languages summary,
+.menu-languages a {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--wt-tap-min);
+  padding-inline: var(--wt-space-3);
+  cursor: pointer;
+}
+
+.menu-languages summary {
+  gap: var(--wt-space-2);
+  border: 1px solid var(--wt-color-border);
+  border-radius: var(--wt-radius-full);
+  background: var(--wt-color-surface);
+}
+
+.menu-languages summary::after {
+  content: "⌄";
+}
+
+.menu-languages nav {
+  position: absolute;
+  inset-inline-end: 0;
+  min-inline-size: max-content;
+  border: 1px solid var(--wt-color-border);
+  border-radius: var(--wt-radius-md);
+  background: var(--wt-color-surface);
+}
+
+.menu-languages a {
+  color: var(--wt-color-primary-text);
+}
+
+.menu-languages a[aria-current] {
+  font-weight: var(--wt-font-weight-bold);
+}
+
+.menu-languages :is(summary, a):focus-visible {
+  outline: var(--wt-focus-ring);
+  outline-offset: var(--wt-focus-offset);
+}

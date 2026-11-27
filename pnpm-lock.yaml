@@ -65,6 +65,40 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
+  apps/customer-menu:
+    dependencies:
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@waitron/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.3
+    devDependencies:
+      '@vitest/browser-playwright':
+        specifier: ^4.1.12
+        version: 4.1.12(patch_hash=45bom5hoyzpt4rqmg44lye65qe)(playwright@1.65.1)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      axe-core:
+        specifier: ^4.14.1
+        version: 4.14.1
+      playwright:
+        specifier: ^1.65.1
+        version: 1.65.1
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vite:
+        specifier: ^8.3.8
+        version: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   apps/dashboard:
     dependencies:
       '@simplewebauthn/browser':
@@ -73,6 +107,9 @@ importers:
       '@waitron/country-packs':
         specifier: workspace:^
         version: link:../../packages/country-packs
+      '@waitron/customer-menu':
+        specifier: workspace:*
+        version: link:../customer-menu
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../../packages/dashboard-kit

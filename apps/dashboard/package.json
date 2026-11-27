@@ -18,6 +18,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@waitron/menu": "workspace:^",
     "@waitron/country-packs": "workspace:^",
+    "@waitron/customer-menu": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/dashboard-modules": "workspace:*",
     "@waitron/diagnostics": "workspace:*",

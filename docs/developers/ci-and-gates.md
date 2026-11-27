@@ -853,16 +853,19 @@ implicit `success()`, not a real run.
 
 A source test cannot catch a shipped bundle that builds but fails when opened.
 The code-gated `bundle-smoke` job builds the credentials command from identity,
-server, print-agent and provisioning with their existing Node build scripts, plus dashboard, setup and
-till with their Vite build scripts. This includes code pull requests that change
+server, print-agent and provisioning with their existing Node build scripts, plus dashboard, setup, till and
+customer menu with their Vite build scripts. This includes code pull requests that change
 no image input.
 
 The job opens the built setup page in headless Chromium and presses Continue to
 setup. It expects the setup choices to appear and refuses browser exceptions or
 HTTP error responses observed before that transition completes. The three setup reads use fixed browser-intercepted answers;
 this checks the built page and its event handlers, not the server's setup routes.
-Dashboard and till are built but are not opened by this check. The existing
-credentials refusal and server-start smoke checks remain separate.
+The customer-menu smoke step opens the Vite output at a language-specific address
+with an embedded published menu. It waits for the menu and a dish to appear while
+a photo request is held, then releases the photo and checks that it decodes. It
+allows only requests for the document, the built assets and the fixture photo.
+The dashboard and till builds have no browser step in this job.
 
 PR jobs check out the PR head, which can predate a workflow change on main. If
 that head has no `apps/setup/test/bundle-smoke.mjs`, the browser step prints a
@@ -6183,7 +6186,7 @@ does not see.
 > Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker than their name:
 > existence, shape and that every file named is still mutated, not freshness.
 
-### `bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads intercepted
+### `bundle-smoke` opens the built setup and customer menu pages in Chromium
 
 > Guard: `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real
 > build-script declarations, not the builds or browser check.

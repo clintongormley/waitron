@@ -6228,6 +6228,9 @@ preview canvas, and the layout follows that canvas. The language picker changes 
 its price formatting. Search matches displayed dish and set-menu names. Top-level section links
 remain visible while scrolling and underline the current section. The canvas has its own theme
 root so the dashboard theme does not set the customer page’s colours.
+The dashboard preview and `apps/customer-menu` share the same renderer. The
+standalone app uses the built-in light palette and carries the language in the address.
+The dark screenshot fixture selects the dark palette through `data-theme` on the document.
 Dish and set-menu names open details inside the canvas. The heading takes focus on open.
 The **Menu** button restores the search, filters, scroll position and focus on the name that
 opened the details. **Allergies and diets** sits beside search and opens a dialog with a

@@ -143,8 +143,8 @@ Receipts moved on 2026-11-24 are in [ci-and-gates](docs/developers/ci-and-gates.
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
-- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server
-  reads intercepted**; PRs whose scope is `documentation` or `root` skip it. Guard:
+- **`bundle-smoke` builds dashboard, setup, till and customer menu. Chromium opens setup with
+  intercepted server reads and opens customer menu with a published snapshot**; PRs whose scope is `documentation` or `root` skip it. Guard:
   `scripts/bundle-smoke.test.mjs`, weaker than its name.
   [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image

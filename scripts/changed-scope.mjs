@@ -50,6 +50,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   [
     "scripts/run-with-deadline.mjs",
     [
+      "apps/customer-menu",
       "apps/dashboard",
       "apps/server",
       "apps/setup",
@@ -81,7 +82,10 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
     ],
   ],
   ["scripts/dev-server-proxy.ts", ["apps/dashboard", "apps/setup", "apps/till"]],
-  ["scripts/npm-bundle-notices.mjs", ["apps/dashboard", "apps/setup", "apps/till"]],
+  [
+    "scripts/npm-bundle-notices.mjs",
+    ["apps/customer-menu", "apps/dashboard", "apps/setup", "apps/till"],
+  ],
   [
     "scripts/download-coverage-blobs.mjs",
     [
@@ -248,6 +252,7 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  * it, and nothing here proves it would.
  */
 export const SETUP_PACKAGE = "@waitron/setup";
+export const CUSTOMER_MENU_PACKAGE = "@waitron/customer-menu";
 
 /** Of its two Vitest projects, `node` and `browser`, it is the Chromium one that earns it a shard. */
 export const VENUE_SERVICE_PACKAGE = "@waitron/venue-service";
@@ -291,6 +296,7 @@ export const OWN_SHARD_PACKAGES = [
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
   SETUP_PACKAGE,
+  CUSTOMER_MENU_PACKAGE,
   VENUE_SERVICE_PACKAGE,
   SERVER_PACKAGE,
   FISCAL_VERIFACTU_PACKAGE,
@@ -400,6 +406,7 @@ export const SCOPE_GATES = [
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },
+  { output: "customer_menu", covers: membership(CUSTOMER_MENU_PACKAGE) },
   { output: "venue_service", covers: membership(VENUE_SERVICE_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },

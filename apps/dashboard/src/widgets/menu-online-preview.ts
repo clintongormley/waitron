@@ -1,3 +1,4 @@
+import "@waitron/customer-menu";
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import {
   contentLanguageDisplayName,
@@ -14,7 +15,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { MenuApi } from "../api/menu-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import "./customer-menu-page.js";
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
+
+const previewPhoto = (image: string) => liveMediaImage(image, "display");
 
 function editionOf(status: MenuStatus): number | null {
   return status.state === "unpublished" ? null : status.version;
@@ -173,12 +176,13 @@ export class MenuOnlinePreview extends LitElement {
       aria-label=${t("customer_menu.online_preview")}
       tabindex=${this.size === "computer" ? "0" : nothing}
     >
-      <dashboard-customer-menu-page
+      <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
         .photos=${this.photos}
+        .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}
-      ></dashboard-customer-menu-page>
+      ></customer-menu-page>
     </div>`;
   }
 

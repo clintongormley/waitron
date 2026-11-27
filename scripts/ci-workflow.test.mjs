@@ -57,6 +57,7 @@ const DISPOSABLE_FAMILIES = [
   "till",
   "dashboard",
   "setup",
+  "customer-menu",
   "venue-service",
   "adjustments",
   "staffing",
@@ -7029,6 +7030,11 @@ describe("scoped selection commands", () => {
     gateLines(scope, packages)
       .filter((line) => line.endsWith("=true"))
       .sort();
+
+  it("selects only the customer menu browser shard for a customer menu change", () => {
+    expect(enabledGates("packages", "@waitron/customer-menu")).toEqual(["customer_menu=true"]);
+    expect(gatesRead(job("test-customer-menu").body)).toEqual(["code", "customer_menu"]);
+  });
 
   it.each(["brand", "packages"])("%s gates select exactly the changed packages", (scope) => {
     expect(
