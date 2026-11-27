@@ -1409,7 +1409,6 @@ it("reads the live certificate before reserving the venue and keeps a corrected 
       aeatCert: {
         pfxBase64: btoa("certificate"),
         passphrase: "test passphrase",
-        certKind: "sello",
       },
     },
   ]);
