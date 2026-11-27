@@ -722,7 +722,8 @@ nothing but `log`'s lines" (`:291-292`).
 The payment path's figures all come from `storedOrderTotal` (`stored-order-lines.ts:264-268` (†)),
 which has six callers, all meaning "what the bill owes" (ran `rg`): `readBillFigures`
 (`bill-payments.ts:828` (†)), which feeds the fully-paid check (`:1112-1119`), a payment's amount and
-`coversBill` (`:1775-1833`), equal splits (`packages/orders-sales/src/bill-allocation.ts:77-92`), the
+`coversBill` (`:1775-1833`), equal splits (`packages/orders-sales/src/bill-allocation.ts:77-92`; 2026-11-27: since O2a it calls
+`equalShare` in `packages/shared/src/equal-share.ts`), the
 preview (`previewBillPayment`, `:1405-1427`), the balance (`readBillBalance`, `:871`),
 `assertBillInvariant`/`readBillExcess` (`:466-552` (†)), advances (`issueAdvanceIfOwed`,
 `:1009-1028`) and the card's completion (`completeBillPayment`, `:2241-2253`); `totalBeforeEdit` and

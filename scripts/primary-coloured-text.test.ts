@@ -98,6 +98,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     draws: "the unit link's chevron",
   },
   {
+    file: "packages/ui/src/components/wt-share-list.ts",
+    selector: ".marker wt-icon",
+    draws: "the check mark on a paid share's marker",
+  },
+  {
     file: "packages/ui/src/components/wt-stepper.ts",
     selector: 'button[data-step="1"] .mark',
     draws: "the + mark",

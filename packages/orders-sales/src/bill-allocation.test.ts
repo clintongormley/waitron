@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AppError, addDecimal, decimal, type Decimal } from "@waitron/shared";
+import { AppError, decimal, type Decimal } from "@waitron/shared";
 import {
   cashChange,
   confirmAllocation,
-  equalShare,
   previewAllocation,
   type AllocationRequest,
   type BillFunds,
@@ -21,11 +20,6 @@ function funds(total: string, received = "0.00", reserved = "0.00"): BillFunds {
   };
 }
 
-/** A count of cents as a money literal, without a float: 1005 is "10.05". */
-function literal(cents: number): string {
-  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
-}
-
 const TIPS_ON = { tipsEnabled: true };
 const TIPS_OFF = { tipsEnabled: false };
 
@@ -38,47 +32,6 @@ function thrown(fn: () => unknown): AppError {
   }
   throw new Error("expected an AppError, but nothing was thrown");
 }
-
-describe("equalShare: the available amount divided by the people still to pay, rounded up to the cent", () => {
-  it("gives the plan's D16 sequence for €100.01 across 3, then 2, then 1, and the shares sum to the bill", () => {
-    const first = equalShare(d("100.01"), 3);
-    const second = equalShare(d("66.67"), 2);
-    const third = equalShare(d("33.33"), 1);
-    expect([first, second, third]).toEqual(["33.34", "33.34", "33.33"]);
-    expect(addDecimal(addDecimal(first, second), third)).toBe("100.01");
-  });
-
-  it("rounds UP, not to nearest: €10.00 across 3 is €3.34", () => {
-    expect(equalShare(d("10.00"), 3)).toBe("3.34");
-  });
-
-  it("matches D16's 'floor, then one extra cent to the first C mod n' for every amount to €30.00 and n to 12", () => {
-    const mismatches: string[] = [];
-    for (let cents = 0; cents <= 3000; cents += 1) {
-      for (let n = 1; n <= 12; n += 1) {
-        const floor = Math.floor(cents / n);
-        const extra = cents % n;
-        let left = cents;
-        for (let person = 0; person < n; person += 1) {
-          const expected = floor + (person < extra ? 1 : 0);
-          const share = equalShare(d(literal(left)), n - person);
-          if (share !== literal(expected)) {
-            mismatches.push(`${cents}c/${n} person ${person}: ${share}`);
-            break;
-          }
-          left -= expected;
-        }
-      }
-    }
-    expect(mismatches).toEqual([]);
-  });
-
-  it("refuses a share among fewer than one person", () => {
-    const error = thrown(() => equalShare(d("10.00"), 0));
-    expect(error.code).toBe("management.request_invalid");
-    expect(error.params).toEqual({ field: "shareOf" });
-  });
-});
 
 describe("previewAllocation: the design's §3.2 table", () => {
   const pay40 = (payment: AllocationRequest["payment"]): AllocationRequest => ({

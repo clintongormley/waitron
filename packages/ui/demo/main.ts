@@ -25,6 +25,7 @@ import "../src/components/wt-textarea.js";
 import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-stepper.js";
+import "../src/components/wt-share-list.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-segmented-control.js";
@@ -285,6 +286,10 @@ const panel = (theme: "light" | "dark") => `
       <wt-stepper class="demo-stepper-bin" label="Burger" value="1" min="1" max="1"></wt-stepper>
       <wt-stepper label="Burger" value="2" disabled></wt-stepper>
     </div>
+    <div class="row" style="margin-top:16px">
+      <wt-stepper variant="round" label="Guests" value="3" min="1"></wt-stepper>
+    </div>
+    <wt-share-list class="demo-share-list" label="Shares"></wt-share-list>
     <wt-file-input name="photo" label="Photo" required accept="image/jpeg,image/png,image/webp" hint="JPEG, PNG or WebP, up to 20 MB"></wt-file-input>
     <wt-file-input name="photos" label="Photos" multiple compact></wt-file-input>
     <wt-tabs label="Venue settings">
@@ -640,6 +645,16 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   }
   for (const s of el.querySelectorAll<HTMLElementTagNameMap["wt-stepper"]>(".demo-stepper-bin")) {
     s.removeLabel = (label) => `Remove ${label}`;
+  }
+  for (const list of el.querySelectorAll<HTMLElementTagNameMap["wt-share-list"]>(
+    ".demo-share-list",
+  )) {
+    list.shares = [
+      { name: "Guest 1", detail: "card · tip €2.44", amount: "€24.44", state: "paid" },
+      { name: "Guest 2", detail: "card in progress", amount: "€24.43", state: "due" },
+      { name: "Guest 3", detail: "paying now", amount: "€24.43", state: "current" },
+      { name: "Guest 4", detail: "to pay", amount: "€24.43", state: "due" },
+    ];
   }
 }
 

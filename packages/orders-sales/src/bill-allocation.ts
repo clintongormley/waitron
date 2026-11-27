@@ -5,8 +5,7 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
+  equalShare,
   subtractDecimal,
   toScale,
   type Decimal,
@@ -54,7 +53,6 @@ export interface AllocationConfig {
 }
 
 export const ZERO = decimal("0.00");
-const CENT = decimal("0.01");
 
 /** A money amount as a request spells it: up to two decimals, no leading zeros. */
 export const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
@@ -72,16 +70,6 @@ export function cashChange(tendered: number, applied: number, tip: number): Deci
 
 const minDecimal = (left: Decimal, right: Decimal): Decimal =>
   compareDecimal(left, right) <= 0 ? left : right;
-
-/** `available / n`, rounded UP to the cent, so the shares of a bill sum to it exactly (plan D16). */
-export function equalShare(available: Decimal, n: number): Decimal {
-  if (!Number.isInteger(n) || n < 1) throw invalid("shareOf");
-  const divisor = decimal(String(n));
-  const nearest = divideDecimal(available, divisor, MONEY_SCALE);
-  return compareDecimal(multiplyDecimal(nearest, divisor), available) < 0
-    ? addDecimal(nearest, CENT)
-    : nearest;
-}
 
 function dueOf(request: AllocationRequest, available: Decimal): Decimal {
   switch (request.kind) {
