@@ -9,14 +9,16 @@ approved by the owner the same evening. Pass 3's second part (after payment, §7
 evening, and its write-up approved by the owner the same evening.** On 2026-11-27 the owner approved
 frame `bi` (a bin for Remove, "Move" for "Move to…", Undo after removing; §4 and §14.4). **Pass 3's
 third part (clocking in and out, hours and their approval, the cash drawer and a waiter's float,
-§7.14) decided with the owner on 2026-11-27, and its write-up approved by the owner the same day.**
+§7.14) decided with the owner on 2026-11-27, and its write-up approved by the owner the same day.** **Pass 3's
+last part (loading, §7.16, and the Spanish words, §7.18) decided with the owner on 2026-11-27.**
 §14 says how each piece looks, read off the approved pictures, so the build does not have to guess.
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
 the order screen, the menu, dish options, the table's and the bill's menus, and payment. Pass 2
 covers the floor (§9: zones, the map and the list of jobs, seating, joining and moving tables, counter
 zones, ☰, the kitchen screens and what the screens do when something goes wrong), and changed a few
-pass-1 decisions. What is still to come is in §10.
+pass-1 decisions. Pass 3 covers the ways to pay, what happens after payment, clocking in and the
+drawer, loading and the Spanish words; §10 says nothing is left.
 
 Every decision below was taken one at a time with the owner from drawn pictures. Where the owner
 changed a picture, the owner's words are quoted. The pictures are not in the repository (mock-ups
@@ -881,6 +883,72 @@ centred bold text link. Drawer closed: a 64 circle in `--wt-color-success` with 
 closed" 28 bold, the result card, the slip's note in a light blue panel; the foot a teal "Clock out"
 over the text link "Back to the floor".
 
+### 7.16 (pass 3) While things load
+
+One rule for every screen: **never a blank screen, and never a lone "Loading…"** (picture `cf`).
+Decided with the owner on 2026-11-27.
+
+- **The screen's frame appears at once**: its app bar, its foot and the bottom bar are real, with
+  what the screen already knew filled in (opening a table shows its name and guests from the floor).
+  Where its content will be, grey shapes stand in its place, with no words, until the box answers:
+  the floor's tables as grey rectangles where they stand (all rectangles, never a round one: the
+  owner, "i would show them all as rectangles, not one round one"), an order's rows and the menu's
+  tiles as grey bars and blocks. Nothing grey can be tapped.
+- **Straight after the PIN** the floor (or the device's first screen) opens at once in this way.
+  Today the PIN screen stays on "Logging in…" through the whole first read, then the floor is blank.
+- **A short wait shows nothing at all**: the grey shapes appear only once a read has taken about a
+  third of a second, so a quick answer does not flicker (a call made in the write-up).
+- **After 5 seconds** with no answer, a quiet banner, "Still waiting for the box…", lies over the
+  top of the grey content without moving it. Nothing turns red: the box may only be slow.
+- **After 15 seconds**, the banner becomes §9.11's "Can't reach the box" strip, in the same place,
+  with **Try again**. On a first load there is nothing to show "as it was", so the strip says only
+  "Check this phone is on the venue's WiFi."
+- **Anything already on screen stays while it is refreshed**: a refresh never puts grey shapes back
+  over what someone has seen. If the refresh fails, §9.11 applies.
+- **A tapped button shows a spinner beside its own words** and cannot be tapped twice; the rest of
+  the screen stays usable. Today's busy buttons mostly do this already (`wt-button`'s `loading`).
+
+### 7.17 (pass 3) How loading looks
+
+As §7.10 and §14.2; picture `cf`.
+
+**Grey shapes.** `--wt-color-surface-sunken`, no border, no words. A table is a rectangle with 8
+corners at the size and place its table will have. A list row keeps its real height and divider and
+holds three bars with 8 corners: the quantity 28 by 18, the name 16 tall and of varying length, the
+price 52 by 16. A section heading is a bar 90 by 12. They do not shimmer or pulse (a call made in
+the write-up, so that a slow box does not look busy).
+
+**The waiting banner** (`cf` 3). Lies over the content, 10 from the top and 12 from each side, with a
+soft shadow: a lifted panel, 10 corners, 10 by 14 inside, holding a 16 spinner ring (a 2 line border
+with its top in teal) and "Still waiting for the box…" muted 14. **The strip after 15 seconds**
+(`cf` 4) takes the same place and is §9.11's: the danger tint, the no-WiFi icon in
+`--wt-color-danger`, "Can't reach the box" bold 15, the next line 14, and an outlined **Try again**
+button, 40 tall.
+
+**A button at work** (`cf` 5). An 18 spinner ring in the button's own text colour, 10 before its
+unchanged words; the button keeps its colour.
+
+### 7.18 (pass 3) The Spanish words
+
+The till's Spanish uses tú throughout, and keeps doing so. Where today's strings use two words for
+one thing, the owner chose one on 2026-11-27 ("yes right, and orden del plato"):
+
+| English | Spanish | Instead of |
+|---|---|---|
+| receipt | **ticket** ("factura simplificada" only where the legal name matters) | recibo |
+| order (on screen) | **pedido** | comanda, which stays only for what a kitchen station receives |
+| the till | **caja** | terminal, TPV |
+| try again (a button) | **Reintentar**; in a sentence **Inténtalo de nuevo** | Intentar de nuevo, Volver a consultar |
+| could not load | **No se pudo cargar …** | No se han podido cargar, leer, consultar |
+| course | **orden del plato** ("Siguiente orden del plato", "Sin orden del plato") | orden de plato |
+
+Already one word each, and kept: "datáfono" (another card machine), "lector de tarjetas" (the
+connected reader), "servidor" (the box), "Devolución" and "Devolver" (refund, §13), "carta" (a
+menu).
+
+The loading text in Spanish: **"Esperando al servidor…"**; **"No se puede conectar con el servidor"**
+over **"Comprueba que este móvil está en el WiFi del local."**; **Reintentar**.
+
 ## 8. The till: the same pieces side by side
 
 On a screen about 800 pixels wide or more (owner approved the drawing, 2026-11-26):
@@ -1163,7 +1231,9 @@ The build applies the same rule to every other error.
 
 ## 10. Not designed yet
 
-- Loading states, and the Spanish wording.
+Nothing in the till's and the handheld's scope; pass 3 finished it on 2026-11-27 (§7.16–§7.18).
+Left out of the redesign when the owner approved the map on 2026-11-26: the PIN screen, the kitchen
+screens' boards and the dashboard's floor-plan editor.
 
 ## 11. Open questions
 
@@ -1199,7 +1269,8 @@ receipt screen, `bg` Refund, `bh` Change how it was paid, `tipcmp` the two tip s
 bill dropdown and frame 4's ☰ still lists "Choose zones"; (2026-11-27) `bi` removing and moving new
 dishes: the bin and "Move" in the selection foot, the bin while dragging, and Undo after removing;
 (2026-11-27, §7.14) `ca` clocking in and out, `cb` My hours (the worker), `cc` approving hours (the
-manager), `cd` the cash drawer, `ce` a waiter's float. Turned down or superseded: `w` (an edit
+manager), `cd` the cash drawer, `ce` a waiter's float; (2026-11-27, §7.16) `cf` while things load, redrawn with every table a
+rectangle and the warnings over the grey shapes. Turned down or superseded: `w` (an edit
 mode, dropped), `y` (the Ready strip), `z` frame 2 (a Stations tab), `ab` frame 1 (a zone ⋮ menu,
 now in ☰), `ac` frames 1 and 3 and `ad` frame 2 (a counter zone with seats), `ae` and `al` (a
 counter order delivered to a table; dropped for now, §9.8).
@@ -1276,6 +1347,18 @@ counter order delivered to a table; dropped for now, §9.8).
   to the till's drawer with the difference recorded against the waiter; each drawer's expected cash
   counts all of these; the daily summary email lists floats still open. Cash a waiter takes with no
   float stays as A238 has it.
+- (pass 3) **Loading (§7.16) needs one shared piece**: a grey placeholder in `packages/ui` (none
+  exists today; each screen writes its own `<p role="status">`), and one timer for the 5- and
+  15-second banners, shared by every screen's first read. Blank today while loading: the floor
+  (`till-floor-screen.ts`), the menu (`widgets/menu-browser.ts`) and the close-the-drawer screen
+  (`screens/till-drawer-close.ts`). The sign-in's busy state stays up through the whole first read
+  (`till-app.ts`, read, not run). Today's only timed retry, the parked and waiting lists'
+  "Trying again in {n} seconds", is the plan's to fold in or keep.
+- (pass 3) **The Spanish words (§7.18)** change the matching `es` strings in
+  `apps/till/src/i18n/strings.ts` and `help-strings.ts`, and move into
+  [design-system.md](../../developers/design-system.md) beside its "cartas" rule, together with a test
+  in `apps/till/src/i18n/strings.test.ts` (which already refuses "menú" and a few other words) that
+  refuses the dropped words. The till guide's Spanish follows.
 - (pass 2) **Lane D's point 8**: in the demo, a device-verification warning stayed after a reload while
   seating, joining and ordering still worked (2026-11-11). Reproduce and fix it in the build.
 

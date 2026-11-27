@@ -604,6 +604,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the dashboard and a manager's device, managers may edit times, workers may disagree, an unapproved
   day counts as recorded; the labour adviser is asked L8), the cash drawer's screens, and waiter
   floats (A240).
+  Pass 3's last part (27 November; §7.16–§7.18, not started): no blank screen while loading (grey
+  shapes at once, a banner over them after 5 and 15 seconds, one shared placeholder piece), and one
+  Spanish word for each thing (ticket, pedido, caja, Reintentar, orden del plato), with a test that
+  refuses the dropped words.
 
 - **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
   of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show
