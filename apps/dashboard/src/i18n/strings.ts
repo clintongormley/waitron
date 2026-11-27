@@ -1687,6 +1687,8 @@ export const en = {
   "recovery_pack_dialog.make": "Print the recovery pack",
   "recovery_pack_dialog.limited":
     "Too many recovery requests are running or have arrived recently. Wait a minute and try again, or choose Cancel.",
+  "recovery_pack_dialog.no_master_key":
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   "recovery_pack_dialog.lost_new_key":
     "The new master key did not reach this browser, so the box kept the current one.",
   "recovery_pack_dialog.lost_new_key_named":
@@ -6586,6 +6588,8 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.make": "Imprimir el paquete de recuperación",
   "recovery_pack_dialog.limited":
     "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto e inténtalo de nuevo, o elige Cancelar.",
+  "recovery_pack_dialog.no_master_key":
+    "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   "recovery_pack_dialog.lost_new_key":
     "La clave maestra nueva no llegó a este navegador, así que el servidor sigue con la actual.",
   "recovery_pack_dialog.lost_new_key_named":

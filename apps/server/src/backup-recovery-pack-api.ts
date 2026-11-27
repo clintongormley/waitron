@@ -91,7 +91,7 @@ const makeRun = createErrorBoundary(
     "recovery.pack_connection_insecure": 403,
     "recovery.pack_origin_refused": 403,
     "recovery.pack_invalid": 400,
-    "master_key.wrong": 403,
+    "promotion.break_glass_invalid": 403,
     "recovery.rate_limited": 429,
     "management.request_invalid": 400,
     "password.invalid": 401,

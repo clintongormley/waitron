@@ -2407,7 +2407,7 @@ describe("the recovery pack calls", () => {
         jsonResponse(
           {
             error: {
-              code: "master_key.wrong",
+              code: "promotion.break_glass_invalid",
               params: { keyName: "2026-11-23 · QZJV" },
             },
           },
@@ -2418,7 +2418,7 @@ describe("the recovery pack calls", () => {
     );
 
     await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toMatchObject({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-11-23 · QZJV" },
       status: 403,
     });

@@ -198,7 +198,7 @@ describe("the form", () => {
     setLocale(locale);
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-10-12 · QZJV" },
       status: 403,
     });
@@ -213,18 +213,31 @@ describe("the form", () => {
     expect(field(el)!.error).toBe("");
   });
 
-  it("a wrong key the box names no key for says the venue has no master key yet", async () => {
-    const api = stubApi();
-    api.makeRecoveryPack.mockRejectedValue({
-      code: "master_key.wrong",
-      params: {},
-      status: 403,
-    });
-    const { el } = await open({ api, at: HELD });
-    await type(el);
-    button(el, "make-pack")!.click();
-    await expect.poll(() => field(el)!.error).toBe(codeMessage("master_key.wrong"));
-  });
+  it.each([
+    [
+      "en-GB",
+      "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+    ],
+    [
+      "es-ES",
+      "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
+    ],
+  ] as const)(
+    "a wrong key the box names no key for says the venue has no master key yet (%s)",
+    async (locale, sentence) => {
+      setLocale(locale);
+      const api = stubApi();
+      api.makeRecoveryPack.mockRejectedValue({
+        code: "promotion.break_glass_invalid",
+        params: {},
+        status: 403,
+      });
+      const { el } = await open({ api, at: HELD });
+      await type(el);
+      button(el, "make-pack")!.click();
+      await expect.poll(() => field(el)!.error).toBe(sentence);
+    },
+  );
 
   it.each([
     [

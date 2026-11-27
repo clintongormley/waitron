@@ -646,7 +646,7 @@ describe("a made pack", () => {
     expect(response.status).toBe(403);
     expect(response.headers.get("content-type")).not.toBe("application/pdf");
     expect(await codeOf(response)).toEqual({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: first.masterKeyName },
     });
     expect(await packs()).toMatchObject([{ number: 1 }]);
@@ -663,7 +663,7 @@ describe("a made pack", () => {
       const response = await f.make(typed);
       expect(response.status).toBe(403);
       expect(await codeOf(response)).toEqual({
-        code: "master_key.wrong",
+        code: "promotion.break_glass_invalid",
         params: { keyName: first.masterKeyName },
       });
       expect(await packs()).toMatchObject([{ number: 1 }]);
@@ -673,7 +673,7 @@ describe("a made pack", () => {
   it("with no master key, Print is refused with no key name", async () => {
     const response = await fixture().make(WRONG_MASTER_KEY);
     expect(response.status).toBe(403);
-    expect(await codeOf(response)).toEqual({ code: "master_key.wrong", params: {} });
+    expect(await codeOf(response)).toEqual({ code: "promotion.break_glass_invalid", params: {} });
     expect(await packs()).toEqual([]);
     expect(await storedMasterKeys()).toEqual([]);
   });

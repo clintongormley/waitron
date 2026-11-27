@@ -55,7 +55,7 @@ const PRINT: readonly State[] = ["empty", "typed", "wrong key", "rate limited"];
 function makeFor(state: State) {
   if (state === "wrong key")
     return vi.fn().mockRejectedValue({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-10-12 · QZJV" },
       status: 403,
     });

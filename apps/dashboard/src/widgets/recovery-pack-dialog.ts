@@ -243,7 +243,7 @@ export class RecoveryPackDialog extends LitElement {
       if (answeredByBox(error)) {
         this.busy = false;
         const code = codeOf(error, "server.internal");
-        if (code === "master_key.wrong") {
+        if (code === "promotion.break_glass_invalid") {
           const keyName = (error as { params?: { keyName?: unknown } }).params?.keyName;
           this.keyRefusal = { keyName: typeof keyName === "string" ? keyName : null };
         } else
@@ -490,7 +490,7 @@ export class RecoveryPackDialog extends LitElement {
         refusal === null
           ? ""
           : refusal.keyName === null
-            ? codeMessage("master_key.wrong")
+            ? t("recovery_pack_dialog.no_master_key")
             : words.wrongKey(refusal.keyName)
       }
       @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {

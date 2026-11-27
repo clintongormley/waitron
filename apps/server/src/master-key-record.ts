@@ -12,8 +12,8 @@ import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import "./errors.js";
 
 /**
- * The typed key's bytes and the venue's current master key's row; `master_key.wrong`, naming that
- * key when there is one, for a wrong or malformed key or when the venue has none.
+ * The typed key's bytes and the venue's current master key's row; `promotion.break_glass_invalid`,
+ * naming that key when there is one, for a wrong or malformed key or when the venue has none.
  */
 export async function checkTypedMasterKey(
   db: Database | Transaction,
@@ -27,7 +27,10 @@ export async function checkTypedMasterKey(
     if (!isAppError(error)) throw error;
   }
   if (current === null || bytes === null || !masterKeyMatches(bytes, current.checkValue)) {
-    throw new AppError("master_key.wrong", current === null ? {} : { keyName: current.name });
+    throw new AppError(
+      "promotion.break_glass_invalid",
+      current === null ? {} : { keyName: current.name },
+    );
   }
   return { bytes, current };
 }
