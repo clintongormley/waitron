@@ -193,7 +193,7 @@ it.each([
   async (locale, sentence) => {
     setLocale(locale);
     const rotate = vi.fn().mockRejectedValue({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-11-23 · QZJV" },
       status: 400,
     });
@@ -215,7 +215,7 @@ it.each([
 
 it("words a wrong master key with the name the box's refusal carries", async () => {
   const rotate = vi.fn().mockRejectedValue({
-    code: "master_key.wrong",
+    code: "promotion.break_glass_invalid",
     params: { keyName: "2026-11-25 · WXYZ" },
     status: 403,
   });
@@ -227,16 +227,25 @@ it("words a wrong master key with the name the box's refusal carries", async () 
     .toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-25 · WXYZ"));
 });
 
-it("a refusal with no key name says the venue has no master key yet", async () => {
-  const rotate = vi.fn().mockRejectedValue({ code: "master_key.wrong", params: {}, status: 403 });
-  const { el } = await open(stubApi(rotate));
-  await type(el, KEY);
-  button(el, "change-backup-key")!.click();
-  await expect.poll(() => field(el).error).toBe(codeMessage("master_key.wrong"));
-  expect(field(el).error).toBe(
+it.each([
+  [
+    "en-GB",
     "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
-  );
-});
+  ],
+  ["es-ES", es["backup_key_dialog.no_master_key"]],
+] as const)(
+  "a refusal with no key name says the venue has no master key yet (%s)",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const rotate = vi
+      .fn()
+      .mockRejectedValue({ code: "promotion.break_glass_invalid", params: {}, status: 403 });
+    const { el } = await open(stubApi(rotate));
+    await type(el, KEY);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => field(el).error).toBe(sentence);
+  },
+);
 
 describe("a recovery pack PDF chosen in the field", () => {
   async function choosePack(el: BackupKeyDialog, masterKeyName: string) {
@@ -265,7 +274,11 @@ describe("a recovery pack PDF chosen in the field", () => {
     const newer = "2026-11-25 · WXYZ";
     const rotate = vi
       .fn()
-      .mockRejectedValueOnce({ code: "master_key.wrong", params: { keyName: newer }, status: 403 })
+      .mockRejectedValueOnce({
+        code: "promotion.break_glass_invalid",
+        params: { keyName: newer },
+        status: 403,
+      })
       .mockResolvedValueOnce(ANSWER);
     const { el } = await open(stubApi(rotate));
     await type(el, KEY);

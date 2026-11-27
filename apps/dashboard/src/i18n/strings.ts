@@ -1745,6 +1745,8 @@ export const en = {
   "backup_key_dialog.text":
     "New backups will use backup key {number}. A box you removed can't read them. Older backups still open with your master key.",
   "backup_key_dialog.done": "Backups now use backup key {number}.",
+  "backup_key_dialog.no_master_key":
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   "backup_key_dialog.saved_not_loaded":
     "Saved, but the box could not load the new settings. Reload the page.",
   "backup_key_dialog.unconfirmed":
@@ -6644,6 +6646,8 @@ export const es: Record<StringKey, string> = {
   "backup_key_dialog.text":
     "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas. Las copias anteriores se siguen abriendo con tu clave maestra.",
   "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
+  "backup_key_dialog.no_master_key":
+    "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   "backup_key_dialog.saved_not_loaded":
     "Guardada, pero el servidor no ha podido cargar los ajustes nuevos. Recarga la página.",
   "backup_key_dialog.unconfirmed":

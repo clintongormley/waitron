@@ -101,7 +101,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.run_in_progress": 409,
   "backup.reload_in_progress": 409,
   "backup.recovery_key_too_short": 409,
-  "master_key.wrong": 403,
+  "promotion.break_glass_invalid": 403,
   "node.operation_page_required": 403,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,

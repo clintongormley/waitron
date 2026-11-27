@@ -345,7 +345,7 @@ describe("runSpareSettings", () => {
     };
   }
 
-  it("with no master key, a key change answers master_key.wrong naming none, and the spare keeps key 1", async () => {
+  it("with no master key, a key change answers promotion.break_glass_invalid naming none, and the spare keeps key 1", async () => {
     await writeBackupKey(mainDir, heldBackupKey(makeMasterKey(), 1));
     const change = await keyChange();
     await link("streaming");
@@ -354,7 +354,9 @@ describe("runSpareSettings", () => {
     expect(await digestIn(spareDir)).toBe(sent);
     const refused = await change(WRONG_MASTER_KEY);
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toEqual({ error: { code: "master_key.wrong", params: {} } });
+    expect(await refused.json()).toEqual({
+      error: { code: "promotion.break_glass_invalid", params: {} },
+    });
     await tick(CHECK_MS);
     expect(await digestIn(mainDir)).toBe(sent);
     expect(await digestIn(spareDir)).toBe(sent);

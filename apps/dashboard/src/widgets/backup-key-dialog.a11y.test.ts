@@ -45,7 +45,7 @@ function rotateFor(state: State) {
   if (state === "busy") return vi.fn(() => new Promise(() => undefined));
   if (state === "wrong key")
     return vi.fn().mockRejectedValue({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-11-23 · QZJV" },
       status: 400,
     });
