@@ -55,7 +55,10 @@ async function checkAndPlace(
 
 export async function rehearseShutdownBackup(
   archive: SavedArchive,
-  input: RehearsalInput & { destinationTimeoutMs: number },
+  input: RehearsalInput & {
+    destinationTimeoutMs: number;
+    onReadBackFailure?: (id: string) => void;
+  },
 ): Promise<void> {
   const { signal } = input;
   for (const [index, backend] of archive.backends.entries()) {
@@ -69,10 +72,15 @@ export async function rehearseShutdownBackup(
       const artifactPath = join(root, "saved");
       await withDestinationCall(signal, input.destinationTimeoutMs, (call) =>
         backend.getFile(archive.key, artifactPath, call),
-      );
+      ).catch((error: unknown) => {
+        input.onReadBackFailure?.(backend.id);
+        throw error;
+      });
       const read = await digestFile(artifactPath, signal);
-      if (read.sha256 !== archive.sha256 || read.bytes !== archive.bytes)
+      if (read.sha256 !== archive.sha256 || read.bytes !== archive.bytes) {
+        input.onReadBackFailure?.(backend.id);
         throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+      }
       // Identical ciphertext gives the same restore input at every destination.
       if (index === 0) await checkAndPlace(artifactPath, root, input);
     } finally {

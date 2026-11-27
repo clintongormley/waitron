@@ -186,7 +186,12 @@ it("shows that the box can be switched off only when the shutdown check is ready
 
 it("requires confirmation before switching off with an unchecked backup", async () => {
   const paused = health({
-    shutdown: { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
+    shutdown: {
+      phase: "paused",
+      available: true,
+      errorCode: "backup.archive_invalid",
+      failedDestination: "/mnt/evening <copies>",
+    },
   });
   const unchecked = health({ shutdown: { phase: "ready", available: true, checked: false } });
   const getBoxHealth = vi.fn().mockResolvedValue(paused);
@@ -202,6 +207,9 @@ it("requires confirmation before switching off with an unchecked backup", async 
 
   expect(text(q(el, '[data-test="box-shutdown-status"]'))).toContain(
     "Waitron could not verify the saved backup.",
+  );
+  expect(text(q(el, '[data-test="box-shutdown-status"]'))).toContain(
+    "The affected backup destination is /mnt/evening <copies>.",
   );
   const anyway = q(el, '[data-test="box-shutdown-anyway"]');
   expect(anyway).not.toBeNull();

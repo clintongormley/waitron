@@ -412,6 +412,7 @@ export class BackupSupervisor {
     signal: AbortSignal,
     migrationsRoot: string | null,
     onUploadTimeout?: FileUploadCall["onUploadTimeout"],
+    onFailedDestination?: (location: string) => void,
   ): Promise<void> {
     if (this.#deps.readSingletonRole() !== "primary") throw new AppError("backup.not_primary", {});
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
@@ -432,21 +433,35 @@ export class BackupSupervisor {
     const stopping = AbortSignal.any([signal, controller.signal]);
     await waitForShutdownDrain(schedule.running, stopping);
     stopping.throwIfAborted();
-    const running = schedule.start(
-      "manual",
-      stopping,
-      (archive, signal) =>
+    const failedDestinations = new Set<string>();
+    const running = schedule.start("manual", stopping, {
+      checkSavedArchive: (archive, signal) =>
         rehearseShutdownBackup(archive, {
           ...this.#deps,
           recoveryKey,
           migrationsRoot,
           destinationTimeoutMs: cfg.destinationTimeoutMs,
           signal,
+          onReadBackFailure: (id) => failedDestinations.add(id),
         }),
       onUploadTimeout,
-    );
+      onDestinationResult(result) {
+        if (!result.stored) failedDestinations.add(result.id);
+      },
+    });
     if (running === undefined) throw new AppError("backup.run_in_progress", {});
-    await running;
+    try {
+      await running;
+    } catch (error) {
+      const failed = cfg.destinations.find((dest) => failedDestinations.has(dest.id));
+      if (failed !== undefined && !stopping.aborted) {
+        const view = destinationView(failed);
+        onFailedDestination?.(
+          view.kind === "local-fs" ? view.dir : `${view.bucket}/${view.namespace}`,
+        );
+      }
+      throw error;
+    }
     stopping.throwIfAborted();
   }
 

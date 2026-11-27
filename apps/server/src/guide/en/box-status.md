@@ -455,6 +455,8 @@ On a main box with a joined spare, choose **Hand over to the spare** to open the
 
 Waitron pauses work, saves a full backup to every saved destination and checks each copy. If you have no saved destination, choose **Download checked backup**. If the download stalls, choose **Download checked backup** again. Check the file name and size in Downloads. Keep the file and the master key together where you can reach them from the next box. Choose **I saved the backup** to confirm. Keep the box on until you see **Safe to switch off**. If the check fails, read the reason, then choose **Retry backup** to make a fresh copy or **Cancel and resume work** to keep the box open. Use **Shut down anyway** only if you have to switch off before you have a checked copy. Wait for the box to say you can switch it off. You may need an older backup if you later restore.
 
+If Box status names a destination, check that folder or bucket. When several uploads fail, Box status names the first failing destination in the **Backups** list. Open **Backups** to see the result of each upload.
+
 If this box keeps a continuous copy in a bucket, leave it on until Waitron confirms the bucket received the final update. If the check pauses, check the connection to the bucket and choose **Retry check** to continue with the same backup. If you need to restart the bucket copy or change its settings, choose **Cancel and resume work**, open **Backups** and fix the copy before trying to shut down again.
 
 If saving the full backup to a bucket times out, choose **Keep waiting** to continue with the same backup. If that choice expires, retry the check to make a fresh copy. Keep the box on until it says you can switch it off.
