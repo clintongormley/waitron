@@ -14,7 +14,7 @@ import {
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
 import { flan, mount } from "./till-table-order-screen.test-helpers.js";
-import { openTableMenu, partyBill } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openPartyMenu, partyBill } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const course: TillCourse = {
   id: "dessert",
@@ -200,7 +200,7 @@ it.each(["held", "fired", "served"] as const)(
     });
     const changed: Event[] = [];
     el.addEventListener("set-line-course", (event) => changed.push(event));
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(
       el.shadowRoot!.querySelector("[data-line-course], [data-line-course-static]"),
     ).toBeNull();

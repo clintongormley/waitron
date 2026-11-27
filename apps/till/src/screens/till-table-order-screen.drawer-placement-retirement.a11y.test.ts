@@ -15,8 +15,8 @@ import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
@@ -67,8 +67,8 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       host.style.width = "100%";
       await resized(el);
       const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-      await openTableMenu(el);
-      const menu = q("[data-table-menu]");
+      await openPartyMenu(el);
+      const menu = q("[data-party-menu]");
       expect(q("[data-move-line], [data-split-group-line]")).toBeNull();
       expect(q("[data-group-line]")).toBeNull();
 
@@ -79,7 +79,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
         element: menu,
         path: `__screenshots__/a773-retired-placement-${locale}-${theme}-${width}.png`,
       });
-      await closeTableMenu(el);
+      await closePartyMenu(el);
       if (width < 1280) await showView(el, "order");
       const panel = q("till-sent-orders") as TillSentOrders;
       await panel.updateComplete;

@@ -10,8 +10,8 @@ import { current, row } from "./till-table-order-screen.current-orders.test-help
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import "./till-table-order-screen.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
@@ -35,8 +35,8 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
         host.style.width = "100%";
         await resized(el);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await openTableMenu(el);
-        const menu = q("[data-table-menu]");
+        await openPartyMenu(el);
+        const menu = q("[data-party-menu]");
         expect(menu.checkVisibility()).toBe(true);
         expect(q(".pending")).toBeNull();
         expect(q("[data-order-total]").textContent).toContain(formatMoney("0.00", currentLocale()));
@@ -55,7 +55,7 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
           path: `__screenshots__/a773-empty-drawer-${locale}-${theme}-${width}.png`,
         });
 
-        await closeTableMenu(el);
+        await closePartyMenu(el);
         const fallback = q('[data-sent-fallback-line="stored-served"]');
         expect(fallback.checkVisibility()).toBe(true);
         expect(fallback.textContent).toContain("Recorded served dish");
@@ -96,7 +96,7 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
         )!;
         expect(served.checkVisibility()).toBe(true);
         expect(served.textContent).toContain("Recorded served dish");
-        await openTableMenu(el);
+        await openPartyMenu(el);
         expect(q(".pending")).toBeNull();
         expect(el.getBoundingClientRect().width).toBe(width);
         expect(window.innerWidth).toBe(width);

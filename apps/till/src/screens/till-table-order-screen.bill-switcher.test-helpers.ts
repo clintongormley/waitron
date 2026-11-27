@@ -70,10 +70,19 @@ export async function closeTableMenu(el: TillTableOrderScreen): Promise<void> {
   expect(tableMenuIsOpen(el)).toBe(false);
 }
 
+const partyMenu = (el: TillTableOrderScreen) => el.shadowRoot!.querySelector("[data-party-menu]")!;
+
 export async function openPartyMenu(el: TillTableOrderScreen): Promise<void> {
-  const menu = el.shadowRoot!.querySelector("[data-party-menu]")!;
+  const menu = partyMenu(el);
   await userEvent.click(menu.shadowRoot!.querySelector("button")!);
   expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+}
+
+export async function closePartyMenu(el: TillTableOrderScreen): Promise<void> {
+  const popup = partyMenu(el).shadowRoot!.querySelector("[popover]")!;
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect(popup.matches(":popover-open")).toBe(false);
 }
 
 const billSwitcher = (el: TillTableOrderScreen) =>
@@ -107,8 +116,11 @@ export async function switchToBill(
   await el.updateComplete;
 }
 
-/** The text of the ⋮'s list and the bill switcher together. */
+/** The text in both action lists and the bill switcher. */
 export const tableMenuAndSwitcherText = (el: TillTableOrderScreen): string =>
-  [...el.shadowRoot!.querySelectorAll("[data-table-menu], [data-bill-switcher]")]
-    .map((node) => node.textContent ?? "")
+  [...el.shadowRoot!.querySelectorAll("[data-party-menu], [data-table-menu], [data-bill-switcher]")]
+    .flatMap((node) => [
+      node.textContent ?? "",
+      ...[...node.querySelectorAll("wt-menu-row")].map((row) => row.shadowRoot?.textContent ?? ""),
+    ])
     .join("\n");

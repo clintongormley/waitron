@@ -148,6 +148,17 @@ describe("Table and bill actions", () => {
       await expect
         .poll(() => Math.round(popup.querySelector(".actions")!.getBoundingClientRect().bottom))
         .toBe(innerHeight);
+      const panel = popup.querySelector('[role="dialog"]')!;
+      const handle = getComputedStyle(panel, "::before");
+      const firstRow = sheet!.querySelector('[data-action="allergy"]')!;
+      expect(
+        Math.round(
+          firstRow.getBoundingClientRect().bottom -
+            panel.getBoundingClientRect().top -
+            parseFloat(handle.marginTop) -
+            parseFloat(handle.height),
+        ),
+      ).toBe(84);
       expect(el.shadowRoot!.activeElement).toBe(sheet!.querySelector('[data-action="allergy"]'));
       const finish = sheet!.querySelector<HTMLElement>("[data-finish-table]")!;
       expect(sheet!.lastElementChild).toBe(finish);
@@ -181,6 +192,7 @@ describe("Table and bill actions", () => {
       expect(getComputedStyle(title).backgroundColor).toBe("rgb(210, 239, 251)");
       const icon = title.querySelector("wt-icon")!;
       expect(getComputedStyle(icon).color).toBe(getComputedStyle(title).color);
+      expect(icon.getBoundingClientRect()).toMatchObject({ width: 16, height: 12 });
       expect(title.getBoundingClientRect().left).toBeGreaterThan(0);
       await userEvent.keyboard("{Escape}");
       expect(focusOnMenu(el, sheet)).toBe(true);

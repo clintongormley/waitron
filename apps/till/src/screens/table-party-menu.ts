@@ -86,7 +86,7 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
         if (control !== null) control.checked = requested;
       }}
     >
-      <span slot="trigger">${heading}<wt-icon name="chevron-down" size="lg"></wt-icon></span>
+      <span slot="trigger">${heading}<wt-icon name="chevron-down"></wt-icon></span>
       <div data-table-menu-table>
         ${
           party === null
@@ -121,7 +121,7 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
       ${
         party === null
           ? nothing
-          : html`<wt-button variant="secondary" data-finish-table @click=${options.finish}
+          : html`<wt-button icon="" variant="secondary" data-finish-table @click=${options.finish}
               >${t("table.finish")}</wt-button
             >`
       }
@@ -138,6 +138,7 @@ export const tablePartyMenuStyles = css`
   }
   .party-menu {
     --wt-party-menu-left: 0px;
+    --wt-menu-sheet-heading-padding-top: calc(var(--wt-space-1) - var(--wt-field-line-width));
     max-width: 100%;
   }
   .party-menu::part(sheet) {
@@ -163,6 +164,9 @@ export const tablePartyMenuStyles = css`
   }
   .party-menu [slot="trigger"] wt-icon {
     flex: none;
+    width: var(--wt-space-4);
+    height: var(--wt-space-4);
+    transform: scaleY(0.75);
   }
   .party-menu-subtitle {
     margin: 0 var(--wt-space-2);
