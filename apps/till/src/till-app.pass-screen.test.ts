@@ -163,7 +163,7 @@ describe("A773 pass screen: app", () => {
     ["pass", ["show-station", "show-expo"], [], false],
   ] as const)(
     "offers the narrow floor kitchen rows for %s with %j: %j",
-    async (kind, capabilities, rows, screenAvailable = true) => {
+    async (kind, capabilities, rows, screenAvailable: boolean = true) => {
       const viewport = [innerWidth, innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));
       await page.viewport(390, 844);
@@ -291,7 +291,7 @@ describe("A773 pass screen: app", () => {
         );
       }
       expect(shell.shadowRoot!.querySelector(".head")).toBeNull();
-      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible({ timeout: 1000 });
+      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible();
       await page.getByRole("button", { name: "Atrás", exact: true }).click();
       await vi.waitFor(() => expect(trigger()?.matches(":focus")).toBe(true));
       expect(location.pathname).not.toContain("/view/");
