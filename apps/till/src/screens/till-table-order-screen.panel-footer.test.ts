@@ -427,7 +427,11 @@ describe("A803 no tab panel", () => {
     const panel = q(el, "[data-action-panel]")!;
     expect(panel.parentElement!.classList.contains("layout")).toBe(true);
     expect(panel.querySelector("[data-target-picker]")!.checkVisibility()).toBe(true);
+    const closed = new Promise<void>((resolve) =>
+      panel.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
     await userEvent.click(panelBackButton(panel.querySelector<HTMLElement>("[data-action-back]")!));
+    await closed;
     await el.updateComplete;
     expect(q(el, "[data-action-panel]")).toBeNull();
   });
