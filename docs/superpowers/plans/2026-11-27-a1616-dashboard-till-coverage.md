@@ -6,8 +6,8 @@ Use existing fixtures and keep production code, coverage settings and existing a
 The 26 November nightly's merges (45741432235) passed: dashboard 98.12/95.07/98.50/99.11,
 till 98.00/95.54/99.17/99.23 (statements/branches/functions/lines). Merging the 27 November
 shards (45927524956) reproduces dashboard 97.85/94.68/98.26/98.96 and till
-97.99/95.53/99.14/99.21. Dashboard needs 57 more statements and 92 more branch paths.
-Till needs two more statements. The older blobs are unavailable, so compare per-file percentages
+97.99/95.53/99.14/99.21. Dashboard needed 57 more statements and 92 more branch paths.
+Till needed two more statements. The older blobs were unavailable, so compare per-file percentages
 from the old logs and exact missed counters from the new blobs. The till's `order-types.ts` and
 `till-request.ts` were added by #4371 and each contributes zero counters. The older report
 already has ten type-only rows at 0%.

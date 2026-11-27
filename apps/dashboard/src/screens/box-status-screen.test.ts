@@ -284,7 +284,7 @@ it("keeps the paused shutdown actionable after a refused retry", async () => {
 it.each([
   { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
   { phase: "checking", available: false },
-] as const)("keeps Cancel available during a $phase shutdown", async (shutdown) => {
+] as const)("cancels a $phase shutdown and offers Shut down again", async (shutdown) => {
   const idle = { phase: "idle", available: true } as const;
   const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown }));
   const cancelBoxShutdown = vi.fn(async () => {
