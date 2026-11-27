@@ -3340,7 +3340,7 @@ export class MenusScreen extends LitElement {
                         menuId,
                         html`<dashboard-menu-customer-style-dialog
                           .api=${this.api}
-                          .previewApi=${this.api.background ?? this.api}
+                          .readApi=${this.api.background ?? this.api}
                           .menuId=${menuId}
                           .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
                           .photos=${this.#onlineSave.draft?.photos ?? "none"}

@@ -101,7 +101,7 @@ export class MenuCustomerStyleDialog extends LitElement {
   ];
 
   @property({ attribute: false }) api!: Pick<MenuApi, "saveCustomerStyle">;
-  @property({ attribute: false }) previewApi!: Pick<
+  @property({ attribute: false }) readApi!: Pick<
     MenuApi,
     "getCustomerPreview" | "getCustomerStyle"
   >;
@@ -145,7 +145,7 @@ export class MenuCustomerStyleDialog extends LitElement {
   async #load(): Promise<void> {
     this.storedStyle = undefined;
     try {
-      const style = await this.previewApi.getCustomerStyle(this.menuId);
+      const style = await this.readApi.getCustomerStyle(this.menuId);
       if (!this.isConnected) return;
       this.storedStyle = style;
       this.draft = style.appearance;
@@ -220,7 +220,9 @@ export class MenuCustomerStyleDialog extends LitElement {
         pick: (value) => this.#edit(key, value),
         type: (text) => this.#edit(key, text.toLowerCase() || undefined),
       })}
-      ${warning ? html`<p class="warning" role="status"><wt-icon name="warning"></wt-icon><span>${warning}</span></p>` : nothing}
+      <div role="status">
+        ${warning ? html`<p class="warning"><wt-icon name="warning"></wt-icon><span>${warning}</span></p>` : nothing}
+      </div>
     </div>`;
   }
 
@@ -274,7 +276,7 @@ export class MenuCustomerStyleDialog extends LitElement {
       </div>
       <div class="preview">
         <dashboard-menu-online-preview
-          .api=${this.previewApi}
+          .api=${this.readApi}
           .menuId=${this.menuId}
           .defaultLanguage=${this.defaultLanguage}
           .photos=${this.photos}

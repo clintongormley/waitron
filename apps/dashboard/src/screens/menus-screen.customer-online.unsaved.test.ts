@@ -116,9 +116,15 @@ it("previews the default style draft and updates the tab after Save style", asyn
   await expect.element(save).toBeDisabled();
   await pageColor().fill("#ffffff");
   await expect.poll(() => canvasColor(editor)).toBe("rgb(255, 255, 255)");
+  const warningStatus = editor
+    .querySelector('wt-input[name="textColor"]')!
+    .closest("div")!
+    .querySelector('[role="status"]');
+  expect(warningStatus).not.toBeNull();
   await page.getByRole("textbox", { name: "Text colour", exact: true }).fill("#eeeeee");
   const contrast = page.getByText("Text and page colours may be hard to read together.");
   await expect.element(contrast).toBeVisible();
+  expect(warningStatus?.contains(contrast.element())).toBe(true);
   expect(contrast.element().closest("p")?.querySelector("wt-icon")?.getAttribute("name")).toBe(
     "warning",
   );
@@ -126,6 +132,8 @@ it("previews the default style draft and updates the tab after Save style", asyn
   await save.click();
   await expect.element(dialog).not.toBeInTheDocument();
   await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+  await styleButton().click();
+  await expect.element(pageColor()).toHaveValue("#ffffff");
 });
 
 it("scopes Escape and Discard to the style draft and keeps the staged Online settings", async () => {
@@ -139,6 +147,8 @@ it("scopes Escape and Discard to the style draft and keeps the staged Online set
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.element(styleDialog()).not.toBeInTheDocument();
   await expect.element(address()).toHaveValue("lunch-today");
+  await address().fill("lunch");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
   await styleButton().click();
   await expect.element(pageColor()).toHaveValue("#fbf7ef");
   const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
