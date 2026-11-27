@@ -2388,7 +2388,8 @@ describe("till-table-order-screen", () => {
           await vi.advanceTimersByTimeAsync(300);
           const ages = panel.shadowRoot!.querySelectorAll("till-fired-ago").length;
           expect(ages).toBeGreaterThan(0);
-          expect(vi.getTimerCount()).toBe(ages + 1);
+          // Each fired age keeps its own clock; the list redraws itself only while a Ready shows.
+          expect(vi.getTimerCount()).toBe(ages);
           // With only a held group left, no fired dish's age is on screen.
           el.currentOrders = current({
             reminder: null,
