@@ -172,8 +172,14 @@ it("opens a certificate before reservation, with one local read at a time", asyn
   const root = await mkdtemp(join(tmpdir(), "setup-certificate-inspect-"));
   roots.push(root);
   const stateDir = join(root, "state");
-  const started = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
+  let openingStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    openingStarted = resolve;
+  });
+  let releaseOpening!: () => void;
+  const release = new Promise<void>((resolve) => {
+    releaseOpening = resolve;
+  });
   const host = createFirstSetupModuleHost({
     stateDir,
     venueDir: join(root, "venue"),
@@ -189,8 +195,8 @@ it("opens a certificate before reservation, with one local read at a time", asyn
               provisioningSecret: {
                 ...secret,
                 async inspect(raw: unknown) {
-                  started.resolve();
-                  await release.promise;
+                  openingStarted();
+                  await release;
                   return secret.inspect!(raw);
                 },
               },
@@ -238,7 +244,7 @@ it("opens a certificate before reservation, with one local read at a time", asyn
 
   const opening = post(body(good.pfx));
   try {
-    await started.promise;
+    await started;
     let turnRan = false;
     void host.coordinator.run(async () => {
       turnRan = true;
@@ -250,7 +256,7 @@ it("opens a certificate before reservation, with one local read at a time", asyn
       error: { code: "setup.certificate_refused", params: { field: "body", reason: "busy" } },
     });
   } finally {
-    release.resolve();
+    releaseOpening();
   }
   const response = await opening;
   expect(response.status).toBe(200);

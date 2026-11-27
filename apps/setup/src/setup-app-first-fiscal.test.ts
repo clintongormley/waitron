@@ -119,7 +119,8 @@ async function importAsNewTaxpayer(app: SetupApp) {
   await screen(app, "venue");
   emit(app, "setup-advance");
 }
-const claims = (requests: { path: string }[]) => requests.filter((r) => r.path.endsWith("/claim"));
+const claims = <T extends { path: string }>(requests: T[]) =>
+  requests.filter((r) => r.path.endsWith("/claim"));
 
 it("sends a venue detail the claim refuses back under the field it names, and Next claims again", async () => {
   let refusals = 0;
@@ -1384,7 +1385,7 @@ async function selectCertificate(form: HTMLElement, content: string) {
   await userEvent.fill(nativeInput(form, "passphrase"), "test passphrase");
 }
 
-const inspections = (requests: { path: string }[]) =>
+const inspections = <T extends { path: string }>(requests: T[]) =>
   requests.filter((r) => r.path.endsWith("/certificate/inspect"));
 
 it("reads the live certificate before reserving the venue and keeps a corrected legal name", async () => {
@@ -1416,6 +1417,9 @@ it("reads the live certificate before reserving the venue and keeps a corrected 
   ]);
   expect(nativeInput(details, "taxId").value).toBe("B12345674");
   expect(nativeInput(details, "taxId").readOnly).toBe(true);
+  const source = details.shadowRoot!.querySelector("[data-test=certificate-tax-id-source]");
+  expect(source?.textContent).toContain("This tax ID comes from your certificate.");
+  expect(source!.getBoundingClientRect().height).toBeGreaterThan(5);
   expect(nativeInput(details, "legalName").value).toBe("Certificate Company");
   expect(nativeInput(details, "legalName").readOnly).toBe(false);
   expect(claims(requests)).toHaveLength(0);
@@ -1474,12 +1478,15 @@ it("keeps an invalid certificate tax number on the certificate step", async () =
 });
 
 it("ignores the certificate reply after the passphrase changes", async () => {
-  const stale = Promise.withResolvers<Response>();
+  let releaseStale!: (response: Response) => void;
+  const stale = new Promise<Response>((resolve) => {
+    releaseStale = resolve;
+  });
   let count = 0;
   const { app, requests } = await mount({
     intercept(path) {
       if (path.endsWith("/certificate/inspect"))
-        return count++ === 0 ? stale.promise : Response.json({ taxId: null, legalName: "Current" });
+        return count++ === 0 ? stale : Response.json({ taxId: null, legalName: "Current" });
     },
   });
   const cert = await certificateFirst(app);
@@ -1487,10 +1494,12 @@ it("ignores the certificate reply after the passphrase changes", async () => {
   clickStep(cert, "next");
   await expect.poll(() => inspections(requests)).toHaveLength(1);
   await userEvent.fill(nativeInput(cert, "passphrase"), "new passphrase");
+  releaseStale(Response.json({ taxId: "B12345674", legalName: "Stale" }));
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(cert.isConnected).toBe(true);
+  expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
   clickStep(cert, "next");
   const details = await screen(app, "venue");
-  stale.resolve(Response.json({ taxId: "B12345674", legalName: "Stale" }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(nativeInput(details, "legalName").value).toBe("Current");
   expect(nativeInput(details, "taxId").readOnly).toBe(false);
 });
