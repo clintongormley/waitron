@@ -112,6 +112,27 @@ it("keeps the first refusal's time when the database refused the transaction rec
   ]);
 });
 
+it("keeps the first refusal's time across two passes whose saves are refused", async () => {
+  await seedPendingEnvios(suite.db, { count: 1 });
+  const t = transport();
+  await suite.db.execute(sql`
+    create trigger refuse_sending_state before insert on verifactu_sending_state
+    begin select raise(abort, 'test metadata unavailable'); end
+  `);
+  try {
+    expect((await drain(t.deps, at(1))).skipped).toHaveLength(1);
+    expect((await drain(t.deps, at(10))).skipped).toHaveLength(1);
+    expect(await mark()).toEqual([]);
+  } finally {
+    await suite.db.execute(sql`drop trigger refuse_sending_state`);
+  }
+
+  await drain(t.deps, at(30));
+  expect(await mark()).toEqual([
+    { certificate_refused_fingerprint: "AA:01", certificate_refused_at: at(1).toISOString() },
+  ]);
+});
+
 it("creates the sending state when there is none yet", async () => {
   await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", at(1)));
   expect(

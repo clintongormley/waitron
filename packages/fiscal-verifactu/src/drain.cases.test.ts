@@ -1168,22 +1168,24 @@ describe("drain — a duplicate whose lookup fails", () => {
   });
 
   it("keeps an earlier refusal's time when a lookup is refused for the same certificate", async () => {
-    const { real } = await mixedBatch();
+    const { real, accepted } = await mixedBatch();
     await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", FIRST));
 
     await drain(deps(refusingLookups(real, "AA:01")), SECOND);
 
+    expect((await envioOf(accepted.registroId)).estado).toBe("aceptado");
     expect(await certificateMark()).toEqual([
       { certificate_refused_fingerprint: "AA:01", certificate_refused_at: FIRST.toISOString() },
     ]);
   });
 
   it("keeps an earlier refusal when a lookup is refused and the certificate cannot be named", async () => {
-    const { real } = await mixedBatch();
+    const { real, accepted } = await mixedBatch();
     await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", FIRST));
 
     await drain(deps(refusingLookups(real, null)), SECOND);
 
+    expect((await envioOf(accepted.registroId)).estado).toBe("aceptado");
     expect(await certificateMark()).toEqual([
       { certificate_refused_fingerprint: "AA:01", certificate_refused_at: FIRST.toISOString() },
     ]);
