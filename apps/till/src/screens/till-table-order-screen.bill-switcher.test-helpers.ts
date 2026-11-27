@@ -66,7 +66,7 @@ export async function openTableMenu(el: TillTableOrderScreen): Promise<void> {
 /** Closes the ⋮'s list, and fails unless it is closed afterwards. */
 export async function closeTableMenu(el: TillTableOrderScreen): Promise<void> {
   expect(tableMenuIsOpen(el)).toBe(true);
-  await tapTableMenu(el);
+  await userEvent.keyboard("{Escape}");
   expect(tableMenuIsOpen(el)).toBe(false);
 }
 

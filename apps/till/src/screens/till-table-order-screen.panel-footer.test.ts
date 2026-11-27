@@ -276,9 +276,9 @@ describe("the bill actions below Sent and New order", () => {
     await el.updateComplete;
     expect(q(el, "[data-pay-sheet]")).not.toBeNull();
     await openTableMenu(el);
-    expect(q(el, "[data-table-menu] [data-discount-bill]")!.textContent).toContain(
-      t("table.discount_bill"),
-    );
+    expect(
+      q(el, "[data-table-menu] [data-discount-bill] wt-menu-row")!.getAttribute("label"),
+    ).toContain(t("table.discount_bill"));
   });
 });
 
@@ -305,7 +305,11 @@ describe("A803 no tab panel", () => {
     await page.viewport(width, height);
     const { el } = await mountFooter(twoBills);
     await resized(el);
-    const head = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".head-actions > *")];
+    const head = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>(
+        ".head-actions > :not(.head-bill-controls), .head-bill-controls > *",
+      ),
+    ];
     expect(
       head.map((node) =>
         node.hasAttribute("data-bill-switcher")

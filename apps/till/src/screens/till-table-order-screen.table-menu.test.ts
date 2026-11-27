@@ -108,12 +108,14 @@ async function clickEditorBack(editor: Element): Promise<void> {
   await userEvent.click(button.shadowRoot!.querySelector("button")!);
 }
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
-/** The bill action group: its accessible name and the choices in order. */
-function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
-  return [...menu(el).querySelectorAll<HTMLElement>('[role="group"]')].map((group) => ({
-    name: textOf(el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!),
-    items: [...group.querySelectorAll<HTMLElement>("wt-button")].map(textOf),
-  }));
+function billActionsOf(el: TillTableOrderScreen) {
+  const sheet = menu(el);
+  return {
+    name: sheet.getAttribute("sheet-heading"),
+    items: [...sheet.querySelectorAll("[data-table-menu-bill] wt-menu-row")].map((row) =>
+      row.getAttribute("label"),
+    ),
+  };
 }
 const item = (el: TillTableOrderScreen, selector: string) =>
   menu(el)?.querySelector<HTMLElement>(selector) ??
@@ -427,24 +429,48 @@ describe("Table and bill actions", () => {
     expect(buttons.filter((button) => textOf(button) === "Table actions")).toEqual([]);
   });
 
+  it("opens the current bill's sheet at the bottom of the order on a phone and a till", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen();
+      const sheet = menu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const panel = sheet.shadowRoot!.querySelector(".actions")!;
+      const bounds = () => {
+        const { left, right, bottom } = panel.getBoundingClientRect();
+        return [left, right, bottom].map(Math.round);
+      };
+      await expect.poll(bounds).toEqual([0, 390, 844]);
+      await expect
+        .element(page.getByRole("dialog", { name: "Bill 2 · Clint · €54.00" }))
+        .toBeVisible();
+
+      await page.viewport(1280, 900);
+      const orderLeft = () =>
+        Math.round(el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left);
+      await expect.poll(orderLeft).toBeGreaterThan(0);
+      await expect.poll(bounds).toEqual([orderLeft(), 1280, 900]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   it("keeps an owing bill's actions under its label", async () => {
     const el = await mountScreen();
 
-    expect(groups(el)).toEqual([
-      {
-        name: "Bill 2 · Clint",
-        items: [
-          "Name this bill…",
-          "Move dishes…",
-          "Merge bills…",
-          "Move this bill…",
-          "Comp the bill…",
-          "Record unpaid departure",
-          "Full invoice",
-          "Print the bill",
-        ],
-      },
-    ]);
+    expect(billActionsOf(el)).toEqual({
+      name: "Bill 2 · Clint · €54.00",
+      items: [
+        "Print the bill",
+        "Full invoice",
+        "Move dishes",
+        "Merge bills",
+        "Move this bill",
+        "Name this bill",
+        "Comp the bill",
+        "Record unpaid departure",
+      ],
+    });
   });
 
   it("offers Split a table only at two or more tables", async () => {
@@ -463,11 +489,11 @@ describe("Table and bill actions", () => {
     });
     const el = await mountScreen({ bills: [paid] });
 
-    const [bill] = groups(el);
-    expect(bill!.name).toBe("Bill 2");
-    expect(bill!.items).toContain("Name this bill…");
-    expect(bill!.items).toContain("Receipt copy");
-    expect(bill!.items).not.toContain("Full invoice");
+    const bill = billActionsOf(el);
+    expect(bill.name).toBe("Bill 2 · Paid");
+    expect(bill.items).toContain("Name this bill");
+    expect(bill.items).toContain("Receipt copy");
+    expect(bill.items).not.toContain("Full invoice");
     expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
     expect(item(el, "[data-bill-receipt]")).not.toBeNull();
   });
@@ -476,9 +502,9 @@ describe("Table and bill actions", () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [presented] });
 
-    expect(groups(el)[0]!.items).toContain("Nothing was served");
+    expect(billActionsOf(el).items).toContain("Nothing was served");
     expect(item(el, "[data-cancel-credit]")).not.toBeNull();
-    expect(groups(el)[0]!.items).toContain("Full invoice");
+    expect(billActionsOf(el).items).toContain("Full invoice");
   });
 
   it("calls Nothing was served No se sirvió nada in Spanish", async () => {
@@ -486,7 +512,7 @@ describe("Table and bill actions", () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [presented] });
 
-    expect(groups(el)[0]!.items).toContain("No se sirvió nada");
+    expect(billActionsOf(el).items).toContain("No se sirvió nada");
   });
 
   it("a presented full invoice naming a customer offers no Nothing was served, which the server would refuse", async () => {
@@ -523,7 +549,7 @@ describe("Table and bill actions", () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [presented] });
 
-    expect(groups(el)[0]!.items).toContain("Reopen bill");
+    expect(billActionsOf(el).items).toContain("Reopen bill");
     const split = capture(el, "split-after-print-bill");
     item(el, "[data-split-after-print]")!.click();
     expect(split).toEqual([{ workingOrderId: "wo-2" }]);
@@ -584,14 +610,14 @@ describe("Table and bill actions", () => {
     });
     const el = await mountScreen({ bills: [issued] });
 
-    expect(groups(el)[0]!.items).not.toContain("Full invoice");
+    expect(billActionsOf(el).items).not.toContain("Full invoice");
     expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
   });
 
   it("offers no Full invoice while full invoices are off", async () => {
     const el = await mountScreen({ fullInvoices: false });
 
-    expect(groups(el)[0]!.items).not.toContain("Full invoice");
+    expect(billActionsOf(el).items).not.toContain("Full invoice");
     expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
   });
 
@@ -608,7 +634,7 @@ describe("Table and bill actions", () => {
   it("names the bill menu in Spanish", async () => {
     setLocale("es");
     const el = await mountScreen();
-    expect(groups(el).map((group) => group.name)).toEqual(["Cuenta 2 · Clint"]);
+    expect(billActionsOf(el).name).toBe("Cuenta 2 · Clint · 54,00 €");
     expect(menu(el).getAttribute("label")).toBe("Acciones de cuenta");
   });
 
@@ -657,7 +683,8 @@ describe("Table and bill actions", () => {
     const el = await mountScreen();
     const printed = capture(el, "end-meal");
 
-    item(el, '[data-action="print-bill"]')!.click();
+    await userEvent.click(menu(el).shadowRoot!.querySelector("button")!);
+    await userEvent.click(item(el, '[data-action="print-bill"]')!);
 
     expect(printed).toEqual([{ workingOrderId: "wo-2" }]);
   });
@@ -748,14 +775,14 @@ describe("Table and bill actions", () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed" });
     const el = await mountScreen({ bills: [presented] });
 
-    expect(groups(el)[0]!.items).toContain("Print the bill");
+    expect(billActionsOf(el).items).toContain("Print the bill");
   });
 
   it("names Print the bill in Spanish", async () => {
     setLocale("es");
     const el = await mountScreen();
 
-    expect(groups(el)[0]!.items).toContain("Imprimir la cuenta");
+    expect(billActionsOf(el).items).toContain("Imprimir la cuenta");
   });
 
   it.each([
@@ -788,7 +815,7 @@ describe("Table and bill actions", () => {
     const el = await mountScreen({ bills: [printed] });
     const reprint = capture(el, "reprint-bill");
 
-    expect(groups(el)[0]!.items).toContain("Receipt copy");
+    expect(billActionsOf(el).items).toContain("Receipt copy");
     item(el, "[data-bill-receipt]")!.click();
 
     expect(reprint).toEqual([{ workingOrderId: "wo-2" }]);
@@ -864,24 +891,24 @@ describe("Table and bill actions", () => {
 
       expect(billItem(el, '[data-action="move-dishes"]')).toBeNull();
       expect(billItem(el, '[data-action="merge"]')).toBeNull();
-      expect(groups(el)[0]!.items).not.toContain("Move dishes…");
-      expect(groups(el)[0]!.items).not.toContain("Merge bills…");
+      expect(billActionsOf(el).items).not.toContain("Move dishes");
+      expect(billActionsOf(el).items).not.toContain("Merge bills");
     });
 
     it("a paid bill keeps Name this bill and Receipt copy", async () => {
       const el = await mountScreen({ bills: [paid] });
 
-      expect(groups(el)[0]!.items).toEqual(["Name this bill…", "Receipt copy"]);
+      expect(billActionsOf(el).items).toEqual(["Receipt copy", "Name this bill"]);
     });
 
     it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy, Nothing was served and Reopen bill", async () => {
       const el = await mountScreen({ bills: [presented] });
 
-      expect(groups(el)[0]!.items).toEqual([
-        "Name this bill…",
-        "Move this bill…",
-        "Record unpaid departure",
+      expect(billActionsOf(el).items).toEqual([
         "Receipt copy",
+        "Move this bill",
+        "Name this bill",
+        "Record unpaid departure",
         "Nothing was served",
         "Reopen bill",
       ]);
@@ -894,13 +921,13 @@ describe("Table and bill actions", () => {
       });
       const el = await mountScreen({ bills: [unnumbered] });
 
-      expect(groups(el)[0]!.items).toEqual([
-        "Name this bill…",
-        "Move this bill…",
-        "Record unpaid departure",
-        "Full invoice",
+      expect(billActionsOf(el).items).toEqual([
         "Print the bill",
+        "Full invoice",
         "Receipt copy",
+        "Move this bill",
+        "Name this bill",
+        "Record unpaid departure",
         "Nothing was served",
         "Reopen bill",
       ]);
@@ -949,7 +976,7 @@ describe("Table and bill actions", () => {
       });
       const el = await mountScreen({ bills: [paid] });
 
-      expect(groups(el)[0]!.items).toContain("Name this bill…");
+      expect(billActionsOf(el).items).toContain("Name this bill");
       expect(item(el, "[data-bill-receipt]")).toBeNull();
     });
 
@@ -962,7 +989,7 @@ describe("Table and bill actions", () => {
       });
       const el = await mountScreen({ bills: [presented] });
 
-      expect(groups(el)[0]!.items).toContain("Name this bill…");
+      expect(billActionsOf(el).items).toContain("Name this bill");
       expect(item(el, "[data-cancel-credit]")).toBeNull();
     });
 
@@ -976,18 +1003,15 @@ describe("Table and bill actions", () => {
         )!.disabled,
       ).toBe(true);
       expect(
-        commanding.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-choose-bill-invoice]",
-        )!.disabled,
+        commanding.shadowRoot!.querySelector<HTMLButtonElement>("[data-choose-bill-invoice]")!
+          .disabled,
       ).toBe(false);
       expect(
         busy.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[data-bill-request]")!
           .disabled,
       ).toBe(false);
       expect(
-        busy.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-choose-bill-invoice]",
-        )!.disabled,
+        busy.shadowRoot!.querySelector<HTMLButtonElement>("[data-choose-bill-invoice]")!.disabled,
       ).toBe(true);
     });
 

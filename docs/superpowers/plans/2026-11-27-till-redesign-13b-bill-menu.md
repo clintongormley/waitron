@@ -8,6 +8,7 @@ The [design](../specs/2026-11-26-till-handheld-redesign-design.md) at `46a29becb
 split in §6. On 26 November at 20:32 the watcher gave the approval record for this redesign: “The
 record is the spec's Status line on main at 46a29becbb”. The
 [pass-1 split](2026-11-26-till-handheld-redesign-pass-1.md) assigns this entry point to 13b.
+Claude reviewed the plan. The watcher cleared it at 09:56 on 27 November with Print first.
 Picture `i`, frame 3, supplies the sheet. Its HTML gives a 40% scrim, 16 px upper corners, 52 px
 rows and 16 px labels. §14.4 and `j` frame B supply the outlined 44 px ⋮. Reuse 13a’s sheet and rows.
 Use today’s action forms and document handlers. The redesigned action panels belong to 14c–d and
@@ -30,13 +31,13 @@ the later invoice form to PR 17.
   left edge on wide tills and fill the width on phones.
 - Frame `i` 3 lists Print the bill, Full invoice, Move dishes, Merge bills, Move this bill, Name
   this bill, Comp the bill, Record unpaid departure. That puts the one-tap Print action ahead of
-  Full invoice, reversing their order today. Settle the order with the watcher before building and
-  call it out in the PR and with the screenshots. If Print moves first, remove the old row-order
-  comment in `#billDocumentItems`. Keep the guide’s instruction to set Full invoice before Print.
+  Full invoice. Say in the PR and with the pictures that printing fixes the invoice type and
+  Waitron offers no correction to a full invoice there yet. Keep the guide’s instruction to
+  set Full invoice before Print. Remove the old row-order comment in `#billDocumentItems`.
   Receipt copy goes with Print, and Nothing was served and Reopen bill follow the ordinary rows.
 - Start with a real click test in `till-table-order-screen.table-menu.test.ts`. Check the open
   sheet's heading, order and bottom placement at 390 px, and its order-column edge at till width.
-  Check Escape returns to ⋮ and a real Print tap emits exactly one request for the shown bill.
+  Check a real Print tap emits exactly one request for the shown bill.
   Keep the open, paid and presented bill assertions and the Full invoice Save and Cancel focus
   tests. Retarget tag and text selectors to the real buttons. Run the till's affected browser
   tests (find menu consumers with `rg -l 'data-table-menu|data-record-departure' apps/till/src`)

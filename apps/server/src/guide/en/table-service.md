@@ -653,9 +653,10 @@ return to the same bill. Use **Back** at the top of **Move to another table**, *
 **Split the table** to go back a step. If you changed a field, you can keep editing or discard the
 changes.
 
-Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
-bill, enter full invoice details, move dishes or change the bill itself. When an action needs a
-choice, it opens beside the order. Choose **Back** to return.
+Tap **⋮** beside the bill switcher to open the action sheet for the bill you are viewing. Check
+the bill name and balance at the top. Choose **Full invoice** before **Print the bill** if you need
+to enter invoice details. When an action needs a choice, it opens beside the order. Choose **Back**
+to return.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the

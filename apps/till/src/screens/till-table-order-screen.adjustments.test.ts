@@ -426,7 +426,7 @@ describe("till-table-order-screen: comping the whole bill", () => {
     const button = el.shadowRoot!.querySelector<HTMLElement>(
       "[data-table-menu] [data-discount-bill]",
     )!;
-    expect(button.textContent!.trim()).toBe(t("table.discount_bill_dialog"));
+    expect(button.querySelector("wt-menu-row")!.label).toBe(t("table.discount_bill_dialog"));
 
     button.click();
 

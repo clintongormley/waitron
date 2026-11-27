@@ -256,7 +256,12 @@ import {
   sameGuestCount,
   type SplitGuestsDetail,
 } from "../widgets/guest-count.js";
-import { billActions, billControlStyles, billSwitcher } from "./table-bill-controls.js";
+import {
+  billActionRow,
+  billActions,
+  billControlStyles,
+  billSwitcher,
+} from "./table-bill-controls.js";
 import { barSize, dockSize } from "./table-order-footer-size.js";
 import { tablePartyMenu, tablePartyMenuStyles, type TablePartyAction } from "./table-party-menu.js";
 import {
@@ -798,9 +803,14 @@ export class TillTableOrderScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
-      /* Leaves room for the ⋮ beside it when a long unsent mark wraps the switcher's words. */
-      .head-actions .bill-switcher {
-        max-width: calc(100% - var(--wt-tap-min) - var(--wt-space-2));
+      .head-bill-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        max-width: 100%;
+      }
+      .head-bill-controls .bill-switcher {
+        min-width: 0;
       }
 
       /* Words first, so the problem never rests on the warning colour. */
@@ -2985,20 +2995,18 @@ export class TillTableOrderScreen extends LitElement {
     if (!this.#adjustable() || this.lines.length === 0) return nothing;
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
-    return html`<wt-button
-      icon="menu-discount"
-      data-discount-bill
-      @click=${() =>
+    return billActionRow(
+      "table.discount_bill_dialog",
+      () =>
         this.#adjust("discount", {
           lineId: null,
           name,
           quantity: null,
           total: this.#payStore!.total,
           unitTotal: null,
-        })}
-    >
-      ${t("table.discount_bill_dialog")}
-    </wt-button>`;
+        }),
+      { hook: "discount" },
+    );
   }
 
   #courseName(courseId: string | null, retainedCourse?: TillCourse): string {
@@ -3129,19 +3137,9 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#partyMenu()}
         <div class="head-actions">
           <till-table-status .tables=${this.tables} .party=${this.party}></till-table-status>
-          ${billSwitcher({
-            party: this.party,
-            bottomSheet: !this.wide,
-            bills: this.bills,
-            billId: this.orderId,
-            personId: this.personId,
-            newBillBusy: this.newBillBusy,
-            onSwitch: (workingOrderId) =>
-              this.#leavingActions(() => this.#dispatch("switch-bill", { workingOrderId })),
-            onNewBill: () => this.#leavingActions(() => this.#dispatch("new-bill", {})),
-          })}
+          ${this.#billControls()}
           ${diningControl(diningShown(this.dining, this.diningChoice, this.diningStart), this)}
-          ${this.#billActions()} ${this.#floorBackButton()}
+          ${this.#floorBackButton()}
         </div>
         ${
           this.billGone === null
@@ -6956,31 +6954,45 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
+  #billControls(): TemplateResult | typeof nothing {
+    if (this.party === null) return nothing;
+    return html`<div class="head-bill-controls">
+      ${billSwitcher({
+        party: this.party,
+        bottomSheet: !this.wide,
+        bills: this.bills,
+        billId: this.orderId,
+        personId: this.personId,
+        newBillBusy: this.newBillBusy,
+        onSwitch: (workingOrderId) =>
+          this.#leavingActions(() => this.#dispatch("switch-bill", { workingOrderId })),
+        onNewBill: () => this.#leavingActions(() => this.#dispatch("new-bill", {})),
+      })}
+      ${this.#billActions()}
+    </div>`;
+  }
+
   #billActions(): TemplateResult | typeof nothing {
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     if (this.party === null || shown === undefined) return nothing;
-    const action = (
-      name: string,
-      icon: string,
-      key: StringKey,
-      choose: () => void,
-      disabled = false,
-    ) =>
-      html`<wt-button
-        icon=${icon}
-        data-action=${name}
-        data-record-departure=${name === "left-unpaid" ? "" : nothing}
-        .disabled=${disabled}
-        @click=${(event: Event) => this.#fromMenu(event, choose)}
-      >
-        ${t(key)}
-      </wt-button>`;
+    const action = (name: string, key: StringKey, choose: () => void) =>
+      billActionRow(key, (event) => this.#fromMenu(event, choose), { action: name });
     const verb = (name: ActionVerb, key: StringKey) =>
-      action(name, name === "merge" ? "menu-merge" : "menu-move", key, () =>
-        this.#chooseVerb(name),
-      );
-    return billActions(billLabel(shown), [
-      action("name-bill", "menu-rename", "table.action_name_bill", () => this.#openBillNaming()),
+      action(name, key, () => this.#chooseVerb(name));
+    const { invoice, receipt, cancelCredit, reopen } = this.#billDocumentItems(shown);
+    const rows: (TemplateResult | typeof nothing)[] = [
+      this.#printBillOffered(shown)
+        ? billActionRow(
+            "bill.print",
+            (event) =>
+              this.#fromMenu(event, () =>
+                this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+              ),
+            { action: "print-bill", direct: true, disabled: this.busy || this.billPrintPending },
+          )
+        : nothing,
+      invoice,
+      receipt,
       ...(shown.status !== "open"
         ? []
         : [
@@ -6988,41 +7000,33 @@ export class TillTableOrderScreen extends LitElement {
             verb("merge", "table.action_merge_bills"),
           ]),
       this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
+      action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
       this.#compBill(),
       owing(shown) &&
       !shown.leftUnpaid &&
       compareDecimal(decimal(stillOwed(shown)), decimal("0")) > 0
-        ? action("left-unpaid", "menu-unpaid", "departure.record", () =>
+        ? action("left-unpaid", "departure.record", () =>
             this.#dispatch("record-unpaid-departure", {
               workingOrderId: shown.workingOrderId,
             }),
           )
         : nothing,
-      ...this.#billDocumentItems(
-        shown,
-        this.#printBillOffered(shown)
-          ? action(
-              "print-bill",
-              "menu-print",
-              "bill.print",
-              () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
-              this.busy || this.billPrintPending,
-            )
-          : nothing,
-      ),
-    ]);
+      cancelCredit,
+      reopen,
+    ];
+    return billActions(shown, rows, () => this.#placeOrderPanels());
   }
 
   #placeOrderPanels(): void {
-    const menu = this.renderRoot.querySelector<HTMLElement>("[data-party-menu][data-open]");
+    const sheet = this.renderRoot.querySelector<HTMLElement>(".table-action-sheet[data-open]");
     const panels = this.renderRoot.querySelectorAll<HTMLElement & { panelInset: number }>(
       "[data-order-panel]",
     );
     const actions = this.renderRoot.querySelector<WtDialog>("[data-table-action-dialog]");
-    if (menu === null && panels.length === 0 && actions === null) return;
+    if (sheet === null && panels.length === 0 && actions === null) return;
     const inset = this.orderPaneInset;
     actions?.style.setProperty("--wt-dialog-inset-inline-start", `${inset}px`);
-    menu?.style.setProperty("--wt-party-menu-left", `${inset}px`);
+    sheet?.style.setProperty("--wt-table-action-sheet-left", `${inset}px`);
     for (const panel of panels) panel.panelInset = inset;
   }
 
@@ -7074,60 +7078,47 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** Print the bill follows Full invoice, which has to be chosen before the bill is printed. */
   #billDocumentItems(
     bill: PartyBill,
-    printBill: TemplateResult | typeof nothing,
-  ): (TemplateResult | typeof nothing)[] {
+  ): Record<"invoice" | "receipt" | "cancelCredit" | "reopen", TemplateResult | typeof nothing> {
     const target = { workingOrderId: bill.workingOrderId };
     const reopens = bill.status === "placed" && bill.receiptAvailable && !namesCustomer(bill);
     const credits = reopens && !bill.hasPayments;
-    return [
-      this.fullInvoices &&
-      owing(bill) &&
-      bill.invoiceNumber === undefined &&
-      this.paymentConfirmation === undefined
-        ? html`<wt-button
-            icon="menu-bill"
-            data-choose-bill-invoice
-            .disabled=${this.busy}
-            @click=${() =>
-              this.#dispatch("choose-bill-invoice", { ...target, revision: bill.revision })}
-          >
-            ${t("invoice.full")}
-          </wt-button>`
+    return {
+      invoice:
+        this.fullInvoices &&
+        owing(bill) &&
+        bill.invoiceNumber === undefined &&
+        this.paymentConfirmation === undefined
+          ? billActionRow(
+              "invoice.full",
+              () => this.#dispatch("choose-bill-invoice", { ...target, revision: bill.revision }),
+              { hook: "invoice", disabled: this.busy },
+            )
+          : nothing,
+      receipt:
+        this.canPrintReceipt &&
+        (bill.status === "settled" || bill.status === "placed") &&
+        bill.receiptAvailable
+          ? billActionRow("table.bill_receipt", () => this.#dispatch("reprint-bill", target), {
+              hook: "receipt",
+              direct: true,
+            })
+          : nothing,
+      cancelCredit: credits
+        ? billActionRow(
+            "cancel_credit.action",
+            () => this.#dispatch("cancel-credit-bill", target),
+            { hook: "cancel-credit" },
+          )
         : nothing,
-      printBill,
-      this.canPrintReceipt &&
-      (bill.status === "settled" || bill.status === "placed") &&
-      bill.receiptAvailable
-        ? html`<wt-button
-            icon="menu-print"
-            data-bill-receipt
-            @click=${() => this.#dispatch("reprint-bill", target)}
-          >
-            ${t("table.bill_receipt")}
-          </wt-button>`
-        : nothing,
-      credits
-        ? html`<wt-button
-            icon="menu-credit"
-            data-cancel-credit
-            @click=${() => this.#dispatch("cancel-credit-bill", target)}
-          >
-            ${t("cancel_credit.action")}
-          </wt-button>`
-        : nothing,
-      reopens && bill.leftUnpaid !== true
-        ? html`<wt-button
-            icon="menu-split"
-            data-split-after-print
-            @click=${() => this.#dispatch("split-after-print-bill", target)}
-          >
-            ${t("split.action")}
-          </wt-button>`
-        : nothing,
-    ];
+      reopen:
+        reopens && bill.leftUnpaid !== true
+          ? billActionRow("split.action", () => this.#dispatch("split-after-print-bill", target), {
+              hook: "reopen",
+            })
+          : nothing,
+    };
   }
 
   /** A bill of the party moves whole unless it is paid or abandoned: the server refuses `bill.paid`

@@ -4302,7 +4302,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
         const screen = tableOrder(el)!.shadowRoot!;
         return {
           total: screen.querySelector("[data-order-total]")?.textContent?.trim(),
-          billItems: screen.querySelectorAll("[data-table-menu-bill] wt-button").length,
+          billItems: screen.querySelectorAll("[data-table-menu-bill] > button").length,
           rows: screen.querySelectorAll("[data-bill-switcher] [data-switch-bill]").length,
         };
       };

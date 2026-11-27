@@ -1278,11 +1278,12 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   table has its own outlined button at the end. An unseated table offers Move and Join.
   The sheet fills a narrow display. On a wide display it starts at the order column’s left edge
   and ends at the display’s right edge. The whole display dims while the sheet is open.
-- **Bill actions** open from the ⋮ beside the switcher when a current bill is shown. The group
-  lists Name this bill, then for an open bill Move dishes and Merge bills, then Move this bill,
-  Comp the bill, Record unpaid departure, Full invoice and Print the bill, as allowed by its
-  state. Receipt copy, Nothing was served and Reopen bill appear where they apply. Print the
-  bill and Receipt copy require this device to be able to print the document.
+- **Bill actions** open in the shared menu sheet from the ⋮ beside the switcher. Its heading
+  names the current bill and its balance or status. The rows are Print the bill, Full invoice,
+  Move dishes, Merge bills, Move this bill, Name this bill, Comp the bill and Record unpaid
+  departure, as the bill's state allows. Receipt copy appears near the top when offered. Nothing
+  was served and Reopen bill appear at the end when offered. Print the bill and Receipt copy
+  require this device to be able to print the document.
 - **The action panel.** A menu choice that needs a picker opens it beside the order. The
   heading takes focus and scrolls into view. Back and Escape close the panel and return focus
   to the menu that opened it. Escape closes an open list first. Naming and guests windows

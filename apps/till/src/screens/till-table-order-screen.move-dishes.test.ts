@@ -216,15 +216,14 @@ describe("A803 move dishes panel", () => {
     expect(marks.map(textOf)).toEqual([`${t("table.group_held")} · Mains`]);
   });
 
-  it("the ⋮ of an open bill of a party lists Move dishes… where Split by item was, before Merge bills", async () => {
+  it("the ⋮ of an open bill of a party lists Move dishes before Merge bills", async () => {
     const el = await mountScreen();
     const items = [...menu(el).querySelectorAll<HTMLElement>("[data-action]")].map(
       (button) => button.dataset.action,
     );
     expect(items.indexOf("move-dishes")).toBeGreaterThanOrEqual(0);
-    expect(items[items.indexOf("move-dishes") - 1]).toBe("name-bill");
     expect(items[items.indexOf("move-dishes") + 1]).toBe("merge");
-    expect(textOf(moveItem(el)!)).toBe("Move dishes…");
+    expect(moveItem(el)!.querySelector("wt-menu-row")!.label).toBe("Move dishes");
   });
 
   it("is offered on a part-paid open bill too", async () => {

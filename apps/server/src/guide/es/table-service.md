@@ -690,9 +690,10 @@ de la mesa en la parte superior para volver a la misma cuenta. Usa **Atrás** en
 de **Mover a otra mesa**, **Unir mesas** o **Separar la mesa** para volver al paso anterior. Si
 cambiaste algún campo, puedes seguir editando o descartar los cambios.
 
-Abre **⋮** junto al selector para ver las acciones de la cuenta que tienes en pantalla. Desde ahí
-puedes imprimirla, introducir los datos de la factura completa, mover platos o cambiar la cuenta.
-Cuando una acción requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.
+Pulsa **⋮** junto al selector para abrir el panel de acciones de la cuenta que tienes en pantalla.
+Comprueba el nombre y el saldo de la cuenta en la parte superior. Si necesitas introducir los datos
+de la factura, elige **Factura completa** antes de **Imprimir la cuenta**. Cuando una acción
+requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe

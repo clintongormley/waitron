@@ -69,7 +69,7 @@ export function tablePartyMenu(options: TablePartyMenuOptions) {
     </button>`;
   return html`<div class="party-menu-header">
     <wt-row-actions
-      class="party-menu"
+      class="party-menu table-action-sheet"
       data-party-menu
       data-move-split
       bottom-sheet
@@ -137,12 +137,14 @@ export const tablePartyMenuStyles = css`
     padding-inline: var(--wt-space-2);
   }
   .party-menu {
-    --wt-party-menu-left: 0px;
     --wt-menu-sheet-heading-padding-top: calc(var(--wt-space-1) - var(--wt-field-line-width));
     max-width: 100%;
   }
-  .party-menu::part(sheet) {
-    margin-left: var(--wt-party-menu-left);
+  .table-action-sheet {
+    --wt-table-action-sheet-left: 0px;
+  }
+  .table-action-sheet::part(sheet) {
+    margin-left: var(--wt-table-action-sheet-left);
   }
   .party-menu::part(trigger) {
     max-width: 100%;
