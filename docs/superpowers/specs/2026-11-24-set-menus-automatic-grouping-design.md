@@ -219,6 +219,10 @@ be cancelled or edited by hand.
 
 ### 6. Comps and discounts
 
+_2026-11-27: the owner's new model replaces this section's discount rules and rule C: discounts are
+held on the bill and applied to its lines only when the invoice is made
+([design](2026-11-27-discounts-as-bill-lines-design.md))._
+
 _2026-11-26: the owner's rule C replaces the set-menu and whole-bill rules below, and section 7's
 sentences on a set menu's discount and on moving a set menu with its dishes: every discount is an
 amount, on the whole bill, a dish or a set menu, and comes off with a notice when its set menu

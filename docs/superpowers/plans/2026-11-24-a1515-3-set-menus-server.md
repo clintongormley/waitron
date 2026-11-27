@@ -2197,6 +2197,10 @@ adjustment with an ending; `readEntryRows`, `:323`, still lists it). Test:
 
 ### PR 3c — A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`)
 
+_2026-11-27: dropped. The owner replaced rule C with discounts held on the bill until the invoice
+([design](../specs/2026-11-27-discounts-as-bill-lines-design.md)); 3a, 3b1 and 3b2's fate is in its
+section 11._
+
 Written 26 November; replaces the 3c-1 and 3c-2 scope the owner cleared on 25 November (D38), of
 which rule C withdraws 3c-2. It gets its task steps on this page against `main` as 3b2 leaves it,
 and the watcher clears them.
