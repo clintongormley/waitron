@@ -1216,8 +1216,8 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     [
       "giveBackReasonMessage",
       "filing_pending",
-      "This full invoice is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
-      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+      "This full invoice is still being sent to the tax agency, so dishes, cancelled dishes or goodwill cannot be refunded yet; the extra paid on top can. Try again in a few minutes.",
+      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos, de platos cancelados o por cortesía todavía no se puede devolver; lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
     ],
     [
       "giveBackFilingMessage",
