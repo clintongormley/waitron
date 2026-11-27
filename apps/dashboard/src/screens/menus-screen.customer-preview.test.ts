@@ -316,8 +316,8 @@ describe("the customer menu Online preview", () => {
     if (sides.kind !== "extras") throw new Error("Expected extras");
     const extra = sides.items[0]!;
     sides.items = [
-      { ...extra, name: "Bread", portion: "1.000", unit: "rac", servingUnit: "Ración" },
-      { ...extra, name: "Salad", portion: "2.000", unit: "rac", servingUnit: "Ración" },
+      { ...extra, name: "Bread", portion: "1.000", unit: "ptn", servingUnit: "Portion" },
+      { ...extra, name: "Salad", portion: "2.000", unit: "ptn", servingUnit: "Portion" },
       { ...extra, portion: "1.000" },
       { ...extra, name: "Oil", portion: "0.250", unit: "l" },
     ];
@@ -326,7 +326,7 @@ describe("the customer menu Online preview", () => {
     await page.getByRole("button", { name: dish.name, exact: true }).click();
     const names = page.getByRole("heading", { name: sides.name }).element().nextElementSibling!;
     expect(Array.from(names.children, (row) => row.firstElementChild?.textContent?.trim())).toEqual(
-      ["Bread", "Salad · 2 × Ración", "Almond dressing · 1 kg", "Oil · 0,25 l"],
+      ["Bread", "Salad · 2 × Portion", "Almond dressing · 1 kg", "Oil · 0,25 l"],
     );
   });
 

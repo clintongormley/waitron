@@ -343,8 +343,8 @@ it.each<{
 }>([
   {
     unitKind: "a serving",
-    frozenUnit: { ...unit, name: { en: "Serving", es: "Ración" }, precision: 2, measure: false },
-    displayUnit: { unit: "ea", servingUnit: "Ración" },
+    frozenUnit: { ...unit, name: { en: "Serving", es: "Portion" }, precision: 2, measure: false },
+    displayUnit: { unit: "ea", servingUnit: "Portion" },
   },
   {
     unitKind: "a volume with no scale unit",
