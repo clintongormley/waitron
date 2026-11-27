@@ -1,16 +1,25 @@
 import { X509Certificate } from "node:crypto";
 import forge from "node-forge";
 import { describe, expect, it, vi } from "vitest";
-import { makeAuthority } from "../test/certificate-fixtures.js";
 import {
+  makeAuthority,
+  SIN_DATOS_BODY,
+  startAnsweringServer,
+} from "../test/certificate-fixtures.js";
+import {
+  EC_CHAIN_CANDIDATE,
+  EC_ROOT_PEM,
+  EC_SIGNED_CANDIDATE,
   KEY_ONLY_CANDIDATE,
   MAC_ACCENTED_CANDIDATE,
+  OPENSSL_AUTHORITY,
   OPENSSL_SIGNED_FINGERPRINT,
   RC2_ACCENTED_CANDIDATE,
   RC2_CANDIDATE,
   RC2_SIGNED_CANDIDATE,
   RC4_CANDIDATE,
 } from "../test/openssl-certificates.js";
+import { mtlsFetch } from "./aeat-transport.js";
 import { openCertificateFile } from "./certificate-file.js";
 import { answerOpener, openOrRewrite, rewriteOldCertificate } from "./certificate-convert.js";
 
@@ -34,6 +43,41 @@ function certificatesIn(pfx: Buffer, passphrase: string, rewritten = false): str
         Buffer.from(forge.asn1.toDer(forge.pki.certificateToAsn1(bag.cert!)).getBytes(), "binary"),
       ).fingerprint256,
   );
+}
+
+type Asn1 = forge.asn1.Asn1;
+const parts = (node: Asn1) => node.value as Asn1[];
+
+/** Each certificate a rewritten file holds, as base64 of the DER it stores; the rewrite leaves its
+ * certificates unencrypted. */
+function storedCertificates(pfx: Buffer): string[] {
+  const content = (info: Asn1) => forge.asn1.fromDer(parts(parts(info)[1]!)[0]!.value as string);
+  return parts(content(parts(forge.asn1.fromDer(pfx.toString("binary")))[1]!))
+    .flatMap((info) => parts(content(info)))
+    .filter((bag) => forge.asn1.derToOid(parts(bag)[0]!.value as string) === forge.pki.oids.certBag)
+    .map((bag) =>
+      Buffer.from(
+        parts(parts(parts(parts(bag)[1]!)[0]!)[1]!)[0]!.value as string,
+        "binary",
+      ).toString("base64"),
+    );
+}
+
+const derOf = (pem: string) => new X509Certificate(pem).raw.toString("base64");
+
+/** `RC2_SIGNED_CANDIDATE` without its MAC, so forge reads it after an edit, with `extra`'s key
+ * contents added beside its own. */
+function rc2With(extra?: Asn1): Buffer {
+  const pfx = forge.asn1.fromDer(bytes(RC2_SIGNED_CANDIDATE).toString("binary"));
+  parts(pfx).splice(2);
+  if (extra !== undefined) {
+    const holder = parts(parts(parts(pfx)[1]!)[1]!)[0]!;
+    const authSafe = forge.asn1.fromDer(holder.value as string);
+    const added = forge.asn1.fromDer(parts(parts(parts(extra)[1]!)[1]!)[0]!.value as string);
+    parts(authSafe).push(...parts(added));
+    holder.value = forge.asn1.toDer(authSafe).getBytes();
+  }
+  return Buffer.from(forge.asn1.toDer(pfx).getBytes(), "binary");
 }
 
 describe("rewriting a file Node refuses that node-forge reads", () => {
@@ -102,6 +146,116 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
       expect(read).not.toHaveBeenCalled();
     } finally {
       read.mockRestore();
+    }
+  });
+
+  it.each([
+    ["an RSA intermediate signed by an EC root", EC_CHAIN_CANDIDATE],
+    ["a leaf signed by an EC root", EC_SIGNED_CANDIDATE],
+  ])("keeps every certificate as stored when forge cannot read one: %s", async (_label, file) => {
+    const original = bytes(file);
+    expect(openCertificateFile(original, file.passphrase)).toEqual({
+      ok: false,
+      reason: "old_encryption",
+    });
+    const opened = openOrRewrite(original, file.passphrase);
+    if (!opened.ok || opened.rewritten === undefined) throw new Error("not rewritten");
+    const leaf = new X509Certificate(file.certificatePems[0]!);
+    expect(opened.details.fingerprint).toBe(leaf.fingerprint256);
+    expect(storedCertificates(opened.rewritten)).toEqual(file.certificatePems.map(derOf));
+    const server = await startAnsweringServer(
+      { ...OPENSSL_AUTHORITY, caPem: EC_ROOT_PEM },
+      { status: 200, body: SIN_DATOS_BODY },
+    );
+    const transport = mtlsFetch(
+      { pfx: opened.rewritten, passphrase: file.passphrase, certKind: "sello" },
+      OPENSSL_AUTHORITY.caPem,
+    );
+    try {
+      expect((await transport.fetch(server.origin, { method: "POST", body: "" })).status).toBe(200);
+      expect(server.sawClientCn()).toBe(leaf.subject.match(/^CN=(.*)$/m)![1]);
+    } finally {
+      await transport.close();
+      await server.close();
+    }
+  });
+
+  it("puts the key's certificate first and keeps the others in the file's order", () => {
+    const authority = makeAuthority();
+    const p12 = forge.pkcs12.pkcs12FromAsn1(
+      forge.asn1.fromDer(bytes(RC2_SIGNED_CANDIDATE).toString("binary")),
+      RC2_SIGNED_CANDIDATE.passphrase,
+    );
+    const key = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag! })[
+      forge.pki.oids.pkcs8ShroudedKeyBag!
+    ]![0]!.key!;
+    const [leaf] = p12.getBags({ bagType: forge.pki.oids.certBag! })[forge.pki.oids.certBag!]!;
+    const chain = [
+      forge.pki.certificateFromPem(authority.caPem),
+      forge.pki.certificateFromPem(OPENSSL_AUTHORITY.caPem),
+      leaf!.cert!,
+    ];
+    const reordered = Buffer.from(
+      forge.asn1
+        .toDer(forge.pkcs12.toPkcs12Asn1(key, chain, "cert-pass-9", { algorithm: "3des" }))
+        .getBytes(),
+      "binary",
+    );
+    expect(storedCertificates(rewriteOldCertificate(reordered, "cert-pass-9")!)).toEqual(
+      [chain[2]!, chain[0]!, chain[1]!].map((certificate) =>
+        derOf(forge.pki.certificateToPem(certificate)),
+      ),
+    );
+  });
+
+  it("refuses a file holding a certificate bag Node cannot parse", () => {
+    const { asn1, pki } = forge;
+    const node = (type: number, value: string) =>
+      asn1.create(asn1.Class.UNIVERSAL, type, false, value);
+    const tagged = (value: Asn1) => asn1.create(asn1.Class.CONTEXT_SPECIFIC, 0, true, [value]);
+    const oid = (id: string) => node(asn1.Type.OID, asn1.oidToDer(id).getBytes());
+    const sequence = (...value: Asn1[]) =>
+      asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, value);
+    const data = (value: Asn1) =>
+      sequence(
+        oid(pki.oids.data!),
+        tagged(node(asn1.Type.OCTETSTRING, asn1.toDer(value).getBytes())),
+      );
+    const notACertificate = sequence(node(asn1.Type.INTEGER, "\x01"));
+    const bag = (certificate: Asn1) =>
+      sequence(
+        oid(pki.oids.certBag!),
+        tagged(
+          sequence(
+            oid(pki.oids.x509Certificate!),
+            tagged(node(asn1.Type.OCTETSTRING, asn1.toDer(certificate).getBytes())),
+          ),
+        ),
+      );
+    const holding = (certificate: Asn1) =>
+      sequence(node(asn1.Type.INTEGER, "\x03"), data(sequence(data(sequence(bag(certificate))))));
+    const { passphrase } = RC2_SIGNED_CANDIDATE;
+    const ca = forge.pki.certificateToAsn1(forge.pki.certificateFromPem(OPENSSL_AUTHORITY.caPem));
+    expect(
+      storedCertificates(rewriteOldCertificate(rc2With(holding(ca)), passphrase)!),
+    ).toHaveLength(3);
+    expect(rewriteOldCertificate(rc2With(holding(notACertificate)), passphrase)).toBeNull();
+  });
+
+  it("refuses a file holding a second key, shrouded or plain", () => {
+    const other = forge.pki.privateKeyFromPem(OPENSSL_AUTHORITY.serverKeyPem);
+    const { passphrase } = RC2_SIGNED_CANDIDATE;
+    expect(rewriteOldCertificate(rc2With(), passphrase)).not.toBeNull();
+    for (const password of [passphrase, null]) {
+      const twoKeys = rc2With(
+        forge.pkcs12.toPkcs12Asn1(other, [], password, {
+          algorithm: "3des",
+          useMac: false,
+          generateLocalKeyId: false,
+        }),
+      );
+      expect(rewriteOldCertificate(twoKeys, passphrase)).toBeNull();
+      expect(openOrRewrite(twoKeys, passphrase)).toEqual({ ok: false, reason: "old_encryption" });
     }
   });
 
