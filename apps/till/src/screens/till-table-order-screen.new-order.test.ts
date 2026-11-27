@@ -80,7 +80,7 @@ describe("New order: stored placement and selection", () => {
       await userEvent.click(tick(el, "fire")!);
       await el.updateComplete;
       expect(tick(el, "fire")!.getAttribute("aria-checked")).toBe("true");
-      expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(1);
+      expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(1);
     },
   );
   it("shows Fire now, numbered new groups and joins, sorting only inside their stored places", async () => {
@@ -162,7 +162,7 @@ describe("New order: stored placement and selection", () => {
     await el.updateComplete;
     expect(tick(el, "new:1")!.getAttribute("aria-checked")).toBe("true");
     expect(
-      [...root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')].map((row) =>
+      [...root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')].map((row) =>
         row.getAttribute("data-draft-select"),
       ),
     ).toEqual(["0", "1"]);
@@ -176,7 +176,7 @@ describe("New order: stored placement and selection", () => {
     expect(tick(el, "new:1")!.getAttribute("aria-checked")).toBe("true");
     await userEvent.click(tick(el, "new:1")!);
     await el.updateComplete;
-    expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(0);
   });
 
   it("removes unsent selection when the bill becomes read-only, keeping its arrangement visible", async () => {
@@ -536,7 +536,7 @@ describe("New order: compact rows", () => {
     const select = root(el).querySelector<HTMLButtonElement>('[data-draft-select="0"]')!;
     expect(select.slot).toBe("lead-0");
     expect(select.classList.contains("draft-row-select")).toBe(true);
-    expect(select.getAttribute("aria-label")).toBe("Select · Beer");
+    expect(select.getAttribute("aria-label")).toBe("Select · Beer ×1");
     expect(select.textContent!.trim()).toBe("");
     const box = select.querySelector<HTMLElement>(".draft-select-box")!;
     const look = getComputedStyle(box);
@@ -557,7 +557,7 @@ describe("New order: compact rows", () => {
 
     await userEvent.click(select);
     await el.updateComplete;
-    expect(select.getAttribute("aria-pressed")).toBe("true");
+    expect(select.getAttribute("aria-checked")).toBe("true");
     const ticked = select.querySelector<HTMLElement>(".draft-select-box")!;
     expect(ticked.hasAttribute("data-ticked")).toBe(true);
     expect(ticked.querySelector('wt-icon[name="check"]')).not.toBeNull();
@@ -565,9 +565,66 @@ describe("New order: compact rows", () => {
 
     await userEvent.click(select);
     await el.updateComplete;
-    expect(select.getAttribute("aria-pressed")).toBe("false");
+    expect(select.getAttribute("aria-checked")).toBe("false");
     expect(select.querySelector(".draft-select-box")!.hasAttribute("data-ticked")).toBe(false);
   });
+
+  it("names each selection box by its dish's quantity and note, so two rows of one dish differ", async () => {
+    const draft = new DraftStore();
+    draft.loadFrom("draft", [
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+      { product: beer, quantity: "2", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "2", place: { kind: "new", slot: 2 }, note: "No ice" },
+    ]);
+    const { el } = await wide({ draftStore: draft });
+    await rowOf(el, 2);
+    const names = [...root(el).querySelectorAll("[data-draft-select]")].map((box) =>
+      box.getAttribute("aria-label"),
+    );
+    expect(names).toEqual(["Select · Beer ×1", "Select · Beer ×2", "Select · Beer ×2 · No ice"]);
+  });
+
+  it("outlines the whole held row, not its selection box, and still moves it when dragged", async () => {
+    const draft = new DraftStore();
+    draft.loadFrom("draft", [
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+      { product: flan, quantity: "1", place: { kind: "new", slot: 1 } },
+    ]);
+    const { el } = await wide({ draftStore: draft });
+    const row = await rowOf(el, 1);
+    const entry = row.closest<HTMLElement>(".entry")!;
+    const select = root(el).querySelector<HTMLElement>('[data-draft-select="1"]')!;
+    expect(getComputedStyle(entry).outlineStyle).toBe("none");
+    await hold(row);
+    await el.updateComplete;
+    await basketOf(el, 1).updateComplete;
+    expect(getComputedStyle(entry).outlineStyle).not.toBe("none");
+    expect(getComputedStyle(select).outlineStyle).toBe("none");
+    const at = point(group(el, "fire")!.querySelector<HTMLElement>("h3")!);
+    pointer(window, "pointermove", at);
+    await el.updateComplete;
+    pointer(window, "pointerup", at);
+    vi.useRealTimers();
+    await el.updateComplete;
+    expect(draft.lines[1]!.place).toEqual({ kind: "fire" });
+  });
+
+  it.each(["locked", "sending", "in flight"] as const)(
+    "opens no details on a tap that arrives once the order is %s, before it redraws",
+    async (state) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      const row = await rowOf(el, 0);
+      const basket = basketOf(el, 0);
+      const open = vi.spyOn(basket, "openLineDetails");
+      if (state === "locked") draft.lockEdits();
+      else if (state === "sending") draft.sending = true;
+      else basket.orderInFlight = true;
+      row.click();
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
 
   it("moves a row pressed and dragged from the row itself, without opening its details", async () => {
     const draft = new DraftStore();
@@ -625,7 +682,7 @@ describe("New order: compact rows", () => {
     await userEvent.click(remove(el)!);
     await el.updateComplete;
     expect(draft.lines.map((line) => line.product.name)).toEqual(["Flan"]);
-    expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-draft-select][aria-checked="true"]')).toHaveLength(0);
     expect(remove(el)!.disabled).toBe(true);
   });
 
@@ -657,6 +714,44 @@ describe("New order: compact rows", () => {
     await el.updateComplete;
     expect(draft.lines).toHaveLength(1);
   });
+
+  it.each(["locked", "sending", "command"])(
+    "removes nothing on a click that arrives once %s starts, before the bar redraws",
+    async (state) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      await selectRow(el, 0);
+      const button = remove(el)!;
+      if (state === "locked") draft.lockEdits();
+      else if (state === "sending") draft.sending = true;
+      else el.groupCommandBusy = true;
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      expect(draft.lines).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    ["another dish remains", 2],
+    ["the last dish goes", 1],
+  ] as const)(
+    "puts focus on the order's heading after Remove by keyboard when %s",
+    async (_case, count) => {
+      const { el } = await wide();
+      const draft = store(el);
+      draft.addProduct(beer, "1");
+      if (count === 2) draft.addProduct(flan, "1");
+      await selectRow(el, 0);
+      const button = remove(el)!;
+      await button.updateComplete;
+      button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+      await userEvent.keyboard("{Enter}");
+      expect(draft.lines).toHaveLength(count - 1);
+      await vi.waitFor(() =>
+        expect(root(el).activeElement).toBe(root(el).querySelector("#draft-title")),
+      );
+    },
+  );
 
   it("scrolls the last-added row into view", async () => {
     const { el } = await wide();

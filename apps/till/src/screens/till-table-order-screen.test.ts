@@ -328,7 +328,7 @@ async function submitDraft(
   await saveDraftLine(el);
   if (kind === "fire-all") {
     for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await el.updateComplete;
@@ -1270,7 +1270,7 @@ describe("till-table-order-screen", () => {
         const pressed = (name: string) => {
           const button = draftToggle(el, name);
           expect(button).toBeInstanceOf(HTMLButtonElement);
-          return button.getAttribute("aria-pressed");
+          return button.getAttribute("aria-checked");
         };
         expect(pressed("Beer")).toBe("true");
         expect(pressed("Croquetas")).toBe("false");
@@ -1740,7 +1740,7 @@ describe("till-table-order-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
     async function openFreshMove(el: TillTableOrderScreen, index = 0) {
       for (const selected of el.shadowRoot!.querySelectorAll<HTMLElement>(
-        '[data-draft-select][aria-pressed="true"]',
+        '[data-draft-select][aria-checked="true"]',
       )) {
         await userEvent.click(selected);
       }

@@ -79,8 +79,27 @@ export interface DraftRowView {
     extra: SelectedExtra,
   ) => { addAllergens: ProductAllergens | null; suitableFor: readonly string[] } | undefined;
   lastAdded: boolean;
+  /** Held ready to drag: the row is outlined. */
+  dragging: boolean;
   disabled: boolean;
   open: () => void;
+}
+
+const isCounted = (line: OrderLine) => line.notOffered === true || soldByTheUnit(line.product);
+
+/** Names what tells two rows of one dish apart, since the box sits outside the row's own button. */
+export function draftSelectLabel(line: OrderLine, guest: string | undefined): string {
+  const quantity = isCounted(line) ? `×${quantityText(line.quantity)}` : quantityLabel(line);
+  return [
+    t("table.select_line"),
+    `${lineProductName(line.product)} ${quantity}`,
+    ...(guest === undefined ? [] : [guest]),
+    ...[...(line.extras ?? []), ...(line.notOfferedExtras ?? [])].map(
+      (extra) => `${extra.name}${pickQuantityBadge(extra.quantity)}`,
+    ),
+    ...optionAnswers(line.optionSnapshots, { reads: "staff" }),
+    ...(line.note === undefined ? [] : [line.note]),
+  ].join(" · ");
 }
 
 /**
@@ -91,10 +110,7 @@ export interface DraftRowView {
 export function draftRow(view: DraftRowView): TemplateResult {
   const { line, index } = view;
   const name = lineProductName(line.product);
-  const quantity =
-    line.notOffered || soldByTheUnit(line.product)
-      ? quantityText(line.quantity)
-      : quantityLabel(line);
+  const quantity = isCounted(line) ? quantityText(line.quantity) : quantityLabel(line);
   const price = formatMoney(view.price, currentLocale());
   const more = [
     ...(line.extras ?? []).map((extra, i) => {
@@ -124,6 +140,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
       class=${ended ? "entry draft-row period-ended-entry" : "entry draft-row"}
       part="entry"
       ?data-last-added=${view.lastAdded}
+      ?data-draft-dragging=${view.dragging}
     >
       <slot class="draft-row-lead" name=${`lead-${index}`}></slot>
       <button
@@ -174,6 +191,10 @@ export const draftRowStyles = css`
   }
   :host .order-lines > .entry.draft-row[data-last-added] {
     background: var(--wt-color-surface-lifted);
+  }
+  :host .order-lines > .entry.draft-row[data-draft-dragging] {
+    outline: 2px solid var(--wt-color-primary);
+    outline-offset: -2px;
   }
   :host .draft-row > .draft-row-lead {
     display: grid;

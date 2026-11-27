@@ -415,7 +415,7 @@ async function toggle(el: TillApp, name: string): Promise<void> {
 async function act(el: TillApp, kind: string): Promise<void> {
   if (kind === "fire-all") {
     for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await flush(el);
@@ -3826,7 +3826,7 @@ describe("till-app: how long a send may take", () => {
 
   async function confirmFireAll(el: TillApp): Promise<void> {
     for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
-      '[data-draft-select][aria-pressed="false"]',
+      '[data-draft-select][aria-checked="false"]',
     ))
       row.click();
     await settle(el);
@@ -8933,7 +8933,7 @@ describe("direct New order actions", () => {
     await showView(tableOrder(el)!, "order");
     const tick = screen.querySelector<HTMLElement>("[data-draft-select]")!;
     await userEvent.click(tick);
-    expect(tick.getAttribute("aria-pressed")).toBe("true");
+    expect(tick.getAttribute("aria-checked")).toBe("true");
     await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
     const move = screen.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
     expect(move.open).toBe(true);
@@ -8944,7 +8944,7 @@ describe("direct New order actions", () => {
     await flush(el, 6);
 
     expect(draft(el).lines[0]).toBe(selected);
-    expect(screen.querySelector("[data-draft-select]")!.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.querySelector("[data-draft-select]")!.getAttribute("aria-checked")).toBe("true");
     expect(move.open).toBe(true);
     const closed = new Promise<void>((resolve) =>
       move.addEventListener("wt-close", () => resolve(), { once: true }),
@@ -9237,7 +9237,7 @@ describe("native app phone order view with mixed dish families", () => {
             window.dispatchEvent(new Event("focus"));
             await expect.poll(() => api.listDrafts!.mock.calls.length).toBeGreaterThan(reads);
             await flush(el);
-            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            expect(q('[data-draft-select="0"]').getAttribute("aria-checked")).toBe("true");
             for (let index = 0; index < originalRows.length; index++)
               expect(draft(el).lines[index]).toBe(originalRows[index]);
             expect(draft(el).lines).toEqual(before);
@@ -9260,7 +9260,7 @@ describe("native app phone order view with mixed dish families", () => {
             });
             await showView(order, "order");
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
-            expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
+            expect(q('[data-draft-select="0"]').getAttribute("aria-checked")).toBe("true");
             expect(draft(el).lines).toEqual(before);
             expect(api.submitDraft).not.toHaveBeenCalled();
           } finally {

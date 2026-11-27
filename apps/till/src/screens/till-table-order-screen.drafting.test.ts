@@ -346,7 +346,9 @@ describe("till-table-order-screen: a note being written while other lines move",
 
   it("keeps its dish and note when another section loses a line", async () => {
     const el = await writingColasNote();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select][aria-label$="Flan"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-draft-select][aria-label="Select · Flan ×1"]',
+    )!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-draft-remove]")!.click();
     await settle(el);

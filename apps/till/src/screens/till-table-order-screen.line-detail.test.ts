@@ -72,7 +72,7 @@ it("A738 a mouse double click on a row opens one table line window without chang
   await basket.updateComplete;
   expect(basket.shadowRoot!.querySelectorAll("till-modifier-picker")).toHaveLength(1);
   expect(store(el).lines[0]!.quantity).toBe("2");
-  expect(control.getAttribute("aria-pressed")).toBe("false");
+  expect(control.getAttribute("aria-checked")).toBe("false");
 });
 async function course(picker: TillModifierPicker, value: string) {
   const field = picker.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
@@ -104,7 +104,7 @@ it("opens an unsent dish's existing editor with a staged Course and Close, witho
   expect(original.product.unitPrice).toBe("3.00");
   expect(sends).toBe(0);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-checked"),
   ).toBe("false");
 });
 

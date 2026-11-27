@@ -6510,7 +6510,9 @@ medium), a muted `sm` second line of extras, answers and note, and the price (`m
 then the split control as a muted `chevron-down` on a row of more than one. The price is
 `draftLinePrice` (`apps/till/src/state/draft-layout.ts`), the same per-line rule the order total
 adds. The row added last is `--wt-color-surface-lifted`. A tap opens the dish's details; a press
-that moves drags the row; Remove, Move to… and Fire in the draft bar act on the ticked rows. Spec:
+held until the whole row is outlined (2px of `--wt-color-primary` inside its edge) drags it; Remove,
+Move to… and Fire in the draft bar act on the ticked rows. The selection box is a `checkbox` named by
+the dish, its quantity, its guest and its second line, so two rows of one dish read differently. Spec:
 §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.
 
 ### The dish picker

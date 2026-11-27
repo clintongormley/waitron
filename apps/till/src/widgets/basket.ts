@@ -441,6 +441,8 @@ export class TillBasket extends LitElement {
   @property({ type: Boolean, reflect: true, attribute: "line-details" }) lineDetails = false;
   /** Each unsent line as one compact row (`draft-row.ts`); sent lines keep the full row. */
   @property({ type: Boolean }) compactRows = false;
+  /** The compact rows held ready to drag. */
+  @property({ attribute: false }) draggedLines?: readonly OrderLine[];
   @property({ type: Boolean }) readOnly = false;
   @property({ type: Boolean }) allowPickRemoval = false;
   @property({ attribute: false }) draftParent?: object;
@@ -878,8 +880,12 @@ export class TillBasket extends LitElement {
               nutrition: this.#nutrition(line),
               extraNutrition: (extra) => this.#extraOwnNutrition(line, extra),
               lastAdded: this.store.lastAdded === line,
-              disabled: this.store.sending || this.store.editsLocked || this.orderInFlight,
-              open: () => this.openLineDetails(line),
+              dragging: this.draggedLines?.includes(line) ?? false,
+              disabled: this.#rowBlocked(),
+              // A click can arrive before a lock or send has redrawn the row disabled.
+              open: () => {
+                if (!this.#rowBlocked()) this.openLineDetails(line);
+              },
             });
           return html`
             <slot name=${`before-${index}`}></slot>
@@ -1232,6 +1238,10 @@ export class TillBasket extends LitElement {
         </wt-button>
       </span>
     `;
+  }
+
+  #rowBlocked(): boolean {
+    return this.store.sending || this.store.editsLocked || this.orderInFlight;
   }
 
   /** The dish as listed, by the stored line it came from. */

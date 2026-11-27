@@ -11,7 +11,12 @@ import "../widgets/set-menu-counts.js";
 import "../widgets/set-menu-summary.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import type { PartyAllergyRead } from "@waitron/module";
-import { allergyGuestId, allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
+import {
+  allergyGuestId,
+  allergyGuestWho,
+  allergyMark,
+  allergyMarkStyles,
+} from "../widgets/party-allergy-mark.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupNumberText } from "../widgets/group-name.js";
@@ -104,7 +109,12 @@ import {
   toWireProductIdentity,
 } from "../state/order-line.js";
 import "../widgets/basket.js";
-import { draftRowSlotStyles, draftSelectBox, draftSplitChevron } from "../widgets/draft-row.js";
+import {
+  draftRowSlotStyles,
+  draftSelectBox,
+  draftSelectLabel,
+  draftSplitChevron,
+} from "../widgets/draft-row.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -1313,12 +1323,6 @@ export class TillTableOrderScreen extends LitElement {
         padding-top: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* A draft line's name may wrap inside a word, so on a narrow screen the line's controls and its
-         remove button stay on screen. */
-      .round-bar till-basket::part(name) {
-        overflow-wrap: anywhere;
       }
 
       /* A child of the screen, not of the order pane: a sticky box cannot rise above the top of
@@ -4662,6 +4666,7 @@ export class TillTableOrderScreen extends LitElement {
                       .draftParent=${this}
                       .courses=${this.courses}
                       .orderInFlight=${this.groupCommandBusy}
+                      .draggedLines=${this.draftDragging && this.#draftPress?.group === undefined ? this.#draftPress?.chosen : undefined}
                       stacked
                       .store=${store}
                       .revealAdded=${this.wide || this.view === "order"}
@@ -4704,6 +4709,13 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftRoutingWarning(store, line, index, true),
     ];
     const mark = this.#draftAllergyMark(line);
+    const guest =
+      line.draftLineId === undefined
+        ? undefined
+        : allergyGuestWho(this.#allergy()?.snapshot ?? null, {
+            kind: "draft",
+            id: line.draftLineId,
+          });
     const marked = mark === nothing ? nothing : html`<span slot=${`mark-${index}`}>${mark}</span>`;
     if (store.editsLocked) return marked;
     return html`${
@@ -4732,10 +4744,10 @@ export class TillTableOrderScreen extends LitElement {
         type="button"
         class="draft-row-select"
         data-draft-select=${index}
-        aria-label=${`${t("table.select_line")} · ${name}`}
+        role="checkbox"
+        aria-label=${draftSelectLabel(line, guest)}
         @contextmenu=${preventTouchContextMenu}
-        ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group === undefined && this.#draftPress?.chosen.includes(line)}
-        aria-pressed=${selected}
+        aria-checked=${selected}
         ?disabled=${store.editsLocked || store.sending}
         @click=${() => {
           if (!store.editsLocked && !store.sending) this.#toggleSelected(line);
@@ -5045,12 +5057,17 @@ export class TillTableOrderScreen extends LitElement {
       data-draft-remove
       variant=${disabled ? "secondary" : "primary"}
       ?disabled=${disabled}
-      @click=${() => {
-        for (const line of removable().reverse()) {
+      @click=${async () => {
+        const lines = removable();
+        if (lines.length === 0) return;
+        for (const line of lines.reverse()) {
           store.removeLine(store.lines.indexOf(line));
           this.#selected.delete(line);
         }
         this.requestUpdate();
+        // Remove turns disabled once nothing is ticked, so focus goes to the order's heading.
+        await this.updateComplete;
+        this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
       }}
       >${t("action.remove")}</wt-button
     >`;

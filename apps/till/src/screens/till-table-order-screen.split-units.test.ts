@@ -256,7 +256,7 @@ it("clears a partial family selection when folding so Fire cannot select extra u
   await el.updateComplete;
   expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-checked"),
   ).toBe("false");
 });
 
@@ -269,6 +269,6 @@ it("keeps the folded line selected when every expanded unit was ticked", async (
   await el.updateComplete;
   expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
   expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-checked"),
   ).toBe("true");
 });
