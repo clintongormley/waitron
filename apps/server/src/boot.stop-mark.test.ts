@@ -91,9 +91,12 @@ it.each([
   ["records and emails a failed final backup while sales stay paused", "failed"],
   ["emails one stalled upload alert across Keep waiting and a later failure", "stalled"],
   ["multi-destination shutdown offers a saved folder and bucket", "multiple"],
+  ["skips appliance power-off after a stop signal during the hold write", "stop-during-hold"],
 ] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
-  const writeMark = scenario === "multiple" ? vi.spyOn(atomic, "writeFileDurable") : null;
+  const checksPowerOff = scenario === "multiple" || scenario === "stop-during-hold";
+  const writeDurable = atomic.writeFileDurable;
+  const writeMark = checksPowerOff ? vi.spyOn(atomic, "writeFileDurable") : null;
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
   let pairedShutdown: MockInstance<typeof shutdownDuties.adminShutdownDuties> | undefined;
@@ -202,7 +205,7 @@ it.each([
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
-        if (scenario === "multiple" || scenario === "streaming") void checkFinished.then(resolve);
+        if (checksPowerOff || scenario === "streaming") void checkFinished.then(resolve);
       });
     });
   const smtp = scenario === "failed" || scenario === "stalled" ? await startFakeSmtp() : null;
@@ -299,7 +302,7 @@ it.each([
           started = await startServer(env, env, {
             boxHost: {
               ...synchronisedBoxHost(),
-              ...(scenario === "multiple" ? { powerOff: markAtPowerOff } : {}),
+              ...(checksPowerOff ? { powerOff: markAtPowerOff } : {}),
             },
             ...(scenario === "paired-streaming"
               ? {
@@ -388,10 +391,25 @@ it.each([
           );
           return;
         }
-        if (scenario === "multiple") {
+        if (writeMark !== null) {
           const mark = join(stateDir, "admin-shutdown.json");
-          const wroteMark = () => writeMark!.mock.calls.some(([file]) => file === mark);
+          const wroteMark = () => writeMark.mock.calls.some(([file]) => file === mark);
           expect(wroteMark()).toBe(false);
+          if (scenario === "stop-during-hold") {
+            writeMark.mockImplementation(async (...args) => {
+              if (args[0] === mark) await started.markRestart!();
+              return writeDurable(...args);
+            });
+            finishCheck();
+            await vi.waitFor(async () =>
+              expect((await (await health()).json()).shutdown.phase).toBe("ready"),
+            );
+            await started.close();
+            expect((await stat(mark)).isFile()).toBe(true);
+            expect((await stat(join(stateDir, "stop-mark.json"))).isFile()).toBe(true);
+            expect(markAtPowerOff).not.toHaveBeenCalled();
+            return;
+          }
           finishCheck();
           await vi.waitFor(async () => {
             expect(await (await health()).json()).toMatchObject({

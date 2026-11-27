@@ -45,8 +45,9 @@ still gives the manual instruction. Spare shutdown, Cloud backup and handover st
    it back on. Build the PR head into a separate container with its own state, logs and backup
    folders. Use a loopback HTTPS port through an SSH tunnel and a synthetic preproduction venue.
    Start a temporary host socket that forwards only `clock.status` and `poweroff` to the candidate
-   handler. Bind only this socket into the candidate container and disable its automatic restart.
-   Check for a paired main box before the test so the slot accounts for the spare's absence.
+   handler. Bind only this socket into the test container and disable automatic restart for that
+   container. Keep the spare's normal app, data and host service in place. If a main box is paired,
+   reserve a slot away from its restart and tell the watcher its spare copy may show as behind.
    Record the browser message, the host request and physical power-off. After power-on, collect the
    stop logs and check the eight-second deadline. Recreate the test socket and start the candidate
    with the same test state. Verify a refused sale before **Carry on**, then complete one. Remove

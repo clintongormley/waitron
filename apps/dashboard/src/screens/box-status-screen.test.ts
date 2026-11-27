@@ -236,7 +236,8 @@ it("requires confirmation before switching off with an unchecked backup", async 
       return unchecked.shutdown;
     })
     .mockRejectedValueOnce({ code: "management.request_invalid" });
-  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  const api = stubApi({ getBoxHealth, resolveBoxShutdown });
+  const { el } = await mount(api);
   el.canCheckClock = true;
   await el.updateComplete;
 
@@ -270,6 +271,17 @@ it("requires confirmation before switching off with an unchecked backup", async 
     ),
   );
   expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
+  getBoxHealth.mockResolvedValue(
+    health({
+      shutdown: { phase: "ready", available: true, checked: false, powerOff: "requested" },
+    }),
+  );
+  api.liveData.refresh();
+  await expect
+    .poll(() => text(q(el, '[data-test="box-shutdown-status"]')))
+    .toContain(
+      "Waitron asked the box to switch off. If the box stays on, switch it off manually. A restore may need an older backup.",
+    );
 });
 
 it("offers Keep waiting while an upload is stalled", async () => {
