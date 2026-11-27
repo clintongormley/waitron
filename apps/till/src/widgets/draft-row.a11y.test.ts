@@ -235,38 +235,50 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     expect(getComputedStyle(added).backgroundColor).not.toBe(plain.backgroundColor);
   });
 
-  it("an opened row keeps a closed row's height and price edge, and its split arrow a full tap target", async () => {
+  it("an opened row keeps a closed row's height; its price ends at its arrow, or near the box's edge without one", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
       { product: croquettes, quantity: "2" },
       { product: bravas, quantity: "2" },
+      { product: dish("olives", "Olives"), quantity: "1" },
     ]);
     const { el } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
     const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
     await basket.updateComplete;
-    await userEvent.click(
-      basket.shadowRoot!.querySelector<HTMLButtonElement>('[data-draft-row="0"]')!,
-    );
-    await el.updateComplete;
-    await basket.updateComplete;
-    const [opened, closed] = [0, 1].map((index) => {
+    const measure = async (index: number) => {
       const row = basket.shadowRoot!.querySelector<HTMLElement>(`[data-draft-row="${index}"]`)!;
+      if (row.getAttribute("aria-expanded") !== "true") {
+        await userEvent.click(row);
+        await el.updateComplete;
+        await basket.updateComplete;
+      }
       const entry = row.closest<HTMLElement>(".entry")!;
+      const style = getComputedStyle(entry);
       return {
         entry,
+        inner: entry.getBoundingClientRect().right - Number.parseFloat(style.borderRightWidth),
+        space: Number.parseFloat(style.getPropertyValue("--wt-space-2")),
         lead: entry.querySelector(".draft-row-lead")!.getBoundingClientRect(),
         price: row.querySelector(".draft-row-price")!.getBoundingClientRect(),
         split: el
-          .shadowRoot!.querySelector(`[data-split-draft-line="${index}"]`)!
-          .getBoundingClientRect(),
+          .shadowRoot!.querySelector(`[data-split-draft-line="${index}"]`)
+          ?.getBoundingClientRect(),
       };
-    });
-    expect(opened!.entry.hasAttribute("data-open")).toBe(true);
-    expect(closed!.entry.hasAttribute("data-open")).toBe(false);
-    expect(opened!.lead.height).toBeCloseTo(closed!.lead.height, 1);
-    expect(Math.abs(opened!.price.right - closed!.price.right)).toBeLessThanOrEqual(0.5);
-    expect(opened!.split.width).toBeGreaterThanOrEqual(44);
-    expect(opened!.split.height).toBeGreaterThanOrEqual(44);
+    };
+    const closed = await measure(1);
+    const several = await measure(0);
+    expect(several.entry.hasAttribute("data-open")).toBe(true);
+    expect(closed.entry.hasAttribute("data-open")).toBe(false);
+    expect(several.lead.height).toBeCloseTo(closed.lead.height, 1);
+    expect(several.split!.width).toBeGreaterThanOrEqual(44);
+    expect(several.split!.height).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(several.split!.right - several.inner)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(several.price.right - several.split!.left)).toBeLessThanOrEqual(0.5);
+    const one = await measure(2);
+    expect(one.entry.hasAttribute("data-open")).toBe(true);
+    expect(one.split).toBeUndefined();
+    expect(one.space).toBeGreaterThan(0);
+    expect(Math.abs(one.price.right - (one.inner - one.space))).toBeLessThanOrEqual(0.5);
   });
 
   it("a disabled row has no violations", async () => {

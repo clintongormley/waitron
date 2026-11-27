@@ -197,7 +197,6 @@ export function draftRow(view: DraftRowView): TemplateResult {
 }
 
 const LEAD_WIDTH = css`var(--wt-tap-min)`;
-const OPEN_BORDER = css`2px`;
 
 /** Last in the basket's styles; each rule matches the specificity of the line-details grid it overrides. */
 export const draftRowStyles = css`
@@ -220,15 +219,13 @@ export const draftRowStyles = css`
   :host .draft-row[data-last-added] .diet-badge {
     color: var(--wt-color-text);
   }
-  /* The end column gives back the box's side margin and border, so the price ends where every
-     closed row's does; the split arrow keeps its whole width and reaches over them. */
+  /* The end column is as wide as the split arrow, inside the box; without one, the price ends
+     --wt-space-2 in from the box's edge, as frame g 3 draws it. */
   :host .order-lines > .entry.draft-row[data-open] {
-    grid-template-columns:
-      ${LEAD_WIDTH} minmax(0, 1fr)
-      calc(var(--wt-tap-min) - var(--wt-space-2) - ${OPEN_BORDER});
+    grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
     grid-template-rows: minmax(calc(var(--wt-tap-min) + var(--wt-space-2)), auto) auto;
     margin: var(--wt-space-1) var(--wt-space-2);
-    border: ${OPEN_BORDER} solid var(--wt-color-primary);
+    border: 2px solid var(--wt-color-primary);
     border-radius: var(--wt-radius-md);
     background: var(--wt-color-surface);
     box-shadow: none;
@@ -299,6 +296,9 @@ export const draftRowStyles = css`
     display: grid;
     grid-column: 3;
     align-self: stretch;
+  }
+  :host .draft-row[data-open] > .draft-row-end {
+    min-width: var(--wt-space-2);
   }
   :host .draft-row > .draft-row-opened {
     display: block;
