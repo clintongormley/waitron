@@ -112,37 +112,6 @@ export function apartInSetMenus(
   return (dish) => (apart.has(dish.id) ? null : keyOf(dish));
 }
 
-/**
- * {@link tabLinePortionKey} for a slice of the Sent panel, whose rows lack the product, answers
- * and prices: those come from the bill line of the same id and number. Null when the slice is not
- * the whole of a one-portion line, or when that bill line is not known.
- */
-export function sentSlicePortionKey(
-  slice: SentSlice,
-  lines: readonly TabLine[],
-  shown: unknown = null,
-): string | null {
-  const { row } = slice;
-  const dish = lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo);
-  if (dish === undefined || slice.quantity !== "1" || trimQuantity(row.quantity) !== "1")
-    return null;
-  const bill = tabLinePortionKey(dish, lines, shown);
-  return bill === null
-    ? null
-    : JSON.stringify([
-        bill,
-        slice.kind,
-        row.workingOrderId,
-        row.netAmount,
-        row.released,
-        row.readyAt,
-        row.firedAt,
-        row.kitchen,
-        row.sentAt !== undefined,
-        nutritionFacts(row.nutrition),
-      ]);
-}
-
 /** What makes two sent portions one row: `dish`, the facts serving does not change, and
  * `progress`, how far the kitchen got with an unserved portion (null once served). */
 export interface SentRowPortionKey {
@@ -151,10 +120,12 @@ export interface SentRowPortionKey {
 }
 
 /**
- * {@link sentSlicePortionKey} for the sent rows, which draw a dish's served and unserved portions
- * as one row. Serving changes the slice's kind, the line's served time, state and movability and
- * the kitchen's progress, so `dish` leaves them out and an unserved portion's progress travels
- * apart; the basket's and the kitchen's keys still keep them in.
+ * {@link tabLinePortionKey} for a sent row's slice, which lacks the product, answers and prices:
+ * those come from the bill line of the same id and number. Null when the slice is not the whole of
+ * a one-portion line, or when that bill line is not known. Serving changes the slice's kind, the
+ * line's served time, state and movability and the kitchen's progress, so `dish` leaves them out
+ * and an unserved portion's progress travels apart, letting a dish's served and unserved portions
+ * share one row; the basket's and the kitchen's keys still keep them in.
  */
 export function sentRowPortionKey(
   slice: SentSlice,
@@ -189,6 +160,11 @@ export function sentRowPortionKey(
         : JSON.stringify([dish.state, dish.movable, row.readyAt, row.kitchen]),
   };
 }
+
+/** Whether two sent portions share one row as they stand; `sentSections` also joins a served
+ * portion to an unserved one of its dish. */
+export const sameSentRow = (a: SentRowPortionKey, b: SentRowPortionKey): boolean =>
+  a.dish === b.dish && a.progress === b.progress;
 
 /** The facts a kitchen screen draws for a dish, shared by the station queue's items and the pass's. */
 type KitchenDish = Pick<

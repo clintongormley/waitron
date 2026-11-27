@@ -3,8 +3,8 @@ import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/kitchen-api
 import type { SentSlice } from "./sent-panel.js";
 import {
   portionGroups,
+  sameSentRow,
   sentRowPortionKey,
-  sentSlicePortionKey,
   tabLinePortionKey,
 } from "./portion-groups.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
@@ -176,7 +176,7 @@ describe("A803 portion grouping: bill lines", () => {
   });
 });
 
-describe("A803 portion grouping: Sent panel rows", () => {
+describe("A803 portion grouping: sent rows", () => {
   function row(id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
     return withRowRequestedAt({
       billStatus: "open",
@@ -215,11 +215,18 @@ describe("A803 portion grouping: Sent panel rows", () => {
   });
   const lines = [line("b1", 1), line("b2", 2)];
   const group = (slices: SentSlice[], known = lines) =>
-    portionGroups(
-      slices,
-      (entry) => sentSlicePortionKey(entry, known),
-      (entry) => entry.row.lineNo,
-    ).map((members) => members.map((entry) => entry.row.lineId));
+    slices
+      .reduce<SentSlice[][]>((rows, entry) => {
+        const key = sentRowPortionKey(entry, known);
+        const same = rows.find((members) => {
+          const other = sentRowPortionKey(members[0]!, known);
+          return key !== null && other !== null && sameSentRow(key, other);
+        });
+        if (same) same.push(entry);
+        else rows.push([entry]);
+        return rows;
+      }, [])
+      .map((members) => members.map((entry) => entry.row.lineId).sort());
 
   it("groups two identical sent portions", () => {
     expect(group([slice(row("b2", 2)), slice(row("b1", 1))])).toEqual([["b1", "b2"]]);
@@ -252,14 +259,17 @@ describe("A803 portion grouping: Sent panel rows", () => {
 
   it("never groups a slice of a line of more than one, or a row whose bill line is not known", () => {
     expect(
-      sentSlicePortionKey(slice(row("b1", 1, { quantity: "3.000" })), [
+      sentRowPortionKey(slice(row("b1", 1, { quantity: "3.000" })), [
         line("b1", 1, { quantity: "3.000" }),
       ]),
     ).toBeNull();
-    expect(sentSlicePortionKey(slice(row("b1", 1)), [line("b1", 2)])).toBeNull();
-    expect(sentSlicePortionKey(slice(row("b1", 1, { quantity: "3.000" })), lines)).toBeNull();
+    expect(sentRowPortionKey(slice(row("b1", 1)), [line("b1", 2)])).toBeNull();
+    expect(sentRowPortionKey(slice(row("b1", 1, { quantity: "3.000" })), lines)).toBeNull();
     expect(
-      sentSlicePortionKey(
+      sentRowPortionKey(slice(row("b1", 1)), [line("b1", 1, { quantity: "2.000" })]),
+    ).toBeNull();
+    expect(
+      sentRowPortionKey(
         slice(row("b1", 1, { servedQuantity: "0.500" }), { quantity: "0.5" }),
         lines,
       ),
@@ -297,9 +307,12 @@ describe("A803 portion grouping: Sent panel rows", () => {
       const unserved = key(slice(row("b1", 1)));
       expect(served).toEqual({ dish: unserved.dish, progress: null });
       expect(unserved.progress).not.toBeNull();
-      expect(
-        sentSlicePortionKey(slice(servedRow("b2", 2), { kind: "served" }), servedLines),
-      ).not.toBe(sentSlicePortionKey(slice(row("b1", 1)), servedLines));
+    });
+
+    it("joins two served portions that became ready at different times", () => {
+      const first = key(slice(servedRow("b1", 1), { kind: "served" }));
+      const later = servedRow("b2", 2, { readyAt: "2026-10-28T12:18:00.000Z" });
+      expect(sameSentRow(first, key(slice(later, { kind: "served" })))).toBe(true);
     });
 
     it("keeps two unserved portions' progress apart when their readiness differs", () => {
@@ -330,14 +343,6 @@ describe("A803 portion grouping: Sent panel rows", () => {
       expect(key(slice(elsewhere, { kind: "served" })).dish).not.toBe(
         key(slice(row("b1", 1))).dish,
       );
-    });
-
-    it("never joins a slice of a line of more than one, or a row whose bill line is not known", () => {
-      expect(sentRowPortionKey(slice(row("b1", 1, { quantity: "3.000" })), lines)).toBeNull();
-      expect(sentRowPortionKey(slice(row("b1", 1)), [line("b1", 2)])).toBeNull();
-      expect(
-        sentRowPortionKey(slice(row("b1", 1)), [line("b1", 1, { quantity: "2.000" })]),
-      ).toBeNull();
     });
   });
 });

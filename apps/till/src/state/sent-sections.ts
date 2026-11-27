@@ -1,7 +1,7 @@
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import type { SentRowPortionKey } from "./portion-groups.js";
+import { type SentRowPortionKey, sameSentRow } from "./portion-groups.js";
 import { type SentSlice, sentPanel } from "./sent-panel.js";
 
 export type SentRowState =
@@ -80,7 +80,7 @@ function joinRows(
   const groups: { key: SentRowPortionKey | null; slices: SentSlice[] }[] = [];
   for (const unit of units.values()) {
     const key = unit.length === 1 ? portionKey(unit[0]!) : null;
-    const same = key && groups.find((group) => group.key && sameKey(group.key, key));
+    const same = key && groups.find((group) => group.key && sameSentRow(group.key, key));
     if (same) same.slices.push(...unit);
     else groups.push({ key, slices: [...unit] });
   }
@@ -94,9 +94,6 @@ function joinRows(
   }
   return groups.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
 }
-
-const sameKey = (a: SentRowPortionKey, b: SentRowPortionKey) =>
-  a.dish === b.dish && a.progress === b.progress;
 
 function compareRows(a: SentRow, b: SentRow): number {
   const aLeft = a.left[0]?.row;
@@ -125,10 +122,9 @@ function compareRows(a: SentRow, b: SentRow): number {
 export function sentSections(
   current: CurrentOrders,
   billId: string,
-  now: number,
   portionKey: (slice: SentSlice) => SentRowPortionKey | null = () => null,
 ): SentSection[] {
-  const panel = sentPanel(current, billId, now);
+  const panel = sentPanel(current, billId);
   const groupOf = new Map<CurrentOrderRow, CurrentOrderGroup>();
   for (const group of current.groups) for (const row of group.rows) groupOf.set(row, group);
   const sliced = new Map<CurrentOrderGroup | null, SentSlice[]>();

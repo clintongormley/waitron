@@ -355,6 +355,33 @@ it("A803 portion grouping: Undo served on a grouped row asks how many and takes 
   ]);
 });
 
+it("A803 portion grouping: a served row whose portions became ready at different times keeps its window's actions", async () => {
+  const rows = [2, 1].map((lineNo) => ({
+    ...steakRow(`s-${lineNo}`, lineNo, "served"),
+    readyAt: `2026-09-28T20:0${lineNo}:00.000Z`,
+  }));
+  const currentOrders = current({
+    reminder: null,
+    groups: [currentGroup("g1", 3, "fired", rows)],
+    ungrouped: [],
+  });
+  const el = await openGrouped("served", { currentOrders });
+  expect(text(q(el, "[data-sent-line-dialog] .move-dish"))).toBe("Steak ×2");
+  const events = capture(el, "unserve-lines");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-unserve]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  expect(events).toEqual([
+    {
+      items: [
+        { lineId: "s-1", quantity: "1" },
+        { lineId: "s-2", quantity: "1" },
+      ],
+    },
+  ]);
+});
+
 /** Three identical steaks drawn as one row, s-1 served and s-2 and s-3 not, with its window open. */
 async function openPartServed(over: Partial<TillTableOrderScreen> = {}) {
   const kindOf = (lineNo: number): Kind => (lineNo === 1 ? "served" : "fired");

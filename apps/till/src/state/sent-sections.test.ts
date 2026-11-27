@@ -9,7 +9,6 @@ import { sentRowPortionKey } from "./portion-groups.js";
 import { type SentRow, sentSections } from "./sent-sections.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
-const now = Date.parse("2026-10-17T13:00:00.000Z");
 const at = (minute: number) => `2026-10-17T12:${String(minute).padStart(2, "0")}:00.000Z`;
 function row(id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
   return withRowRequestedAt({
@@ -108,7 +107,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         [row("c", { courseId: "mains", firedAt: at(9) }), row("d", { firedAt: at(4) })],
       ),
       "bill-1",
-      now,
     );
     expect(sections.map((section) => section.group?.id ?? null)).toEqual(["g1", "g2", null]);
     expect(sections[2]).toMatchObject({
@@ -123,7 +121,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const sections = sentSections(
       current([group("g1", "fired", [row("a", { workingOrderId: "bill-2" })])], []),
       "bill-1",
-      now,
     );
     expect(sections).toEqual([]);
   });
@@ -140,7 +137,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(ids(section!.rows)).toEqual([["ready"], ["early"], ["late"], ["served"], ["cancelled"]]);
     expect(section!.rows.map((each) => each.state)).toEqual([
@@ -165,7 +161,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(ids(section!.rows).flat()).toEqual([
       "ready-early",
@@ -186,7 +181,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(ids(section!.rows).flat()).toEqual(["z-first", "a-second"]);
   });
@@ -198,7 +192,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         group("ga", "fired", [row("a", { courseId: "mains" }), row("c", { courseId: "gone" })], 1),
       ]),
       "bill-1",
-      now,
     );
     expect(sections.map((section) => section.group!.id)).toEqual(["ga", "gb"]);
     expect(sections[0]!.title.courseIds).toEqual(["gone", "mains"]);
@@ -208,7 +201,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const [section] = sentSections(
       current([], [row("a", { firedAt: null, requestedAt: at(2) })]),
       "bill-1",
-      now,
     );
     expect(section!.title).toEqual({ courseIds: [], state: "at_the_pass", firedAt: null });
   });
@@ -220,7 +212,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         group("held", "held", [row("mine", { courseId: "starters", released: false }), other]),
       ]),
       "bill-1",
-      now,
     );
     expect(sections).toHaveLength(1);
     expect(sections[0]).toMatchObject({
@@ -235,7 +226,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const sections = sentSections(
       current([group("g1", "fired", [row("a")]), group("g2", "held", [row("b")], 2)]),
       "bill-1",
-      now,
     );
     expect(sections.map((section) => section.held)).toEqual([false, false]);
   });
@@ -244,7 +234,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const [section] = sentSections(
       current([group("g1", "fired", [row("a", { courseId: "mains" })], 1, at(48))]),
       "bill-1",
-      now,
     );
     expect(section!.title).toEqual({ courseIds: ["mains"], state: "fired", firedAt: at(48) });
   });
@@ -260,7 +249,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(section!.title.state).toBe("at_the_pass");
     expect(section!.rows.map((each) => each.state)).toEqual([
@@ -279,7 +267,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(section!.title.state).toBe("fired");
     expect(
@@ -291,7 +278,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const [section] = sentSections(
       current([group("g1", "fired", [row("a", { servedQuantity: "1.000", servedAt: at(3) })])]),
       "bill-1",
-      now,
     );
     expect(section!.title.state).toBe("fired");
   });
@@ -304,7 +290,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(section!.rows).toHaveLength(1);
     const [only] = section!.rows;
@@ -328,7 +313,7 @@ describe("sentSections (till redesign PR 8a)", () => {
       line("b2", 2, { servedAt: at(7), state: "ready", movable: false }),
       line("b3", 3),
     ];
-    const [section] = sentSections(current([group("g1", "fired", rows)]), "bill-1", now, (slice) =>
+    const [section] = sentSections(current([group("g1", "fired", rows)]), "bill-1", (slice) =>
       sentRowPortionKey(slice, lines),
     );
     expect(section!.rows).toHaveLength(1);
@@ -351,7 +336,7 @@ describe("sentSections (till redesign PR 8a)", () => {
       line("b3", 3, { servedAt: at(7), movable: false }),
       line("b4", 4, { servedAt: at(8), movable: false }),
     ];
-    const [section] = sentSections(current([group("g1", "fired", rows)]), "bill-1", now, (slice) =>
+    const [section] = sentSections(current([group("g1", "fired", rows)]), "bill-1", (slice) =>
       sentRowPortionKey(slice, lines),
     );
     expect(ids(section!.rows)).toEqual([["b2", "b3", "b4"], ["b1"]]);
@@ -372,7 +357,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
       (slice) => sentRowPortionKey(slice, lines),
     );
     expect(section!.rows.map((each) => [each.state, each.served, each.quantity])).toEqual([
@@ -393,7 +377,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ]),
       ]),
       "bill-1",
-      now,
     );
     expect(
       section!.rows.map((each) => [each.state, each.quantity, each.served, each.amount]),
@@ -414,7 +397,6 @@ describe("sentSections (till redesign PR 8a)", () => {
         ],
       ),
       "bill-1",
-      now,
       (slice) => sentRowPortionKey(slice, lines),
     );
     expect(section!.rows.map((each) => each.amount)).toEqual(["6.00"]);
@@ -424,7 +406,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     const [section] = sentSections(
       current([group("held", "held", [row("a", { quantity: "2.000", released: false })])]),
       "bill-1",
-      now,
     );
     expect(section!.rows).toEqual([
       expect.objectContaining({ state: "held", quantity: "2", served: "0" }),

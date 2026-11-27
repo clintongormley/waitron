@@ -237,7 +237,7 @@ export class TillSentOrders extends LitElement {
   #model(): SentModel | null {
     const current = this.#current();
     if (current === null) return null;
-    const sections = sentSections(current, this.billId, this.now ?? Date.now(), (slice) =>
+    const sections = sentSections(current, this.billId, (slice) =>
       sentRowPortionKey(slice, this.lines, [
         allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
         this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,

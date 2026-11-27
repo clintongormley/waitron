@@ -6547,7 +6547,7 @@ An order, at a table or the counter, stores each dish as its own portion, so two
 are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
 would stand, its members in line order: the till's sent-line fallback list and the
 Move dishes picker, Items in Pay (`portionGroups`, `tabLinePortionKey`,
-`sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the station screen's cards and the
+`apps/till/src/state/portion-groups.ts`), the station screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
 paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
 order detail (`readBillLines`, `apps/server/src/orders-detail.ts`). Two rows stay apart when anything
@@ -6622,7 +6622,7 @@ in its own column, the name, and the price at the right, then ⓘ. Its muted sec
 dish's extras and note, and the row's state only when that differs from its heading's ("Held",
 "At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
 portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
-one line of 3 or three identical lines of 1 (`sentRowPortionKey`,
+one line of 3 or three identical lines of 1 (`sentRowPortionKey` and `sameSentRow`,
 `apps/till/src/state/portion-groups.ts`); a cancelled but charged part stays a row of its own. Within
 a section, rows with something left come first, ready ones first and then by when they were made
 ready or fired, and served rows last; a held section keeps line order.

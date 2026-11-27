@@ -217,8 +217,8 @@ import { payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
   apartInSetMenus,
+  sameSentRow,
   sentRowPortionKey,
-  sentSlicePortionKey,
   tabLinePortionKey,
 } from "../state/portion-groups.js";
 import {
@@ -3436,7 +3436,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Every row Sent lists now, as its own slice. */
   #sentSlices(orders: CurrentOrders): SentSlice[] {
-    const model = sentPanel(orders, this.orderId ?? "", this.now ?? Date.now());
+    const model = sentPanel(orders, this.orderId ?? "");
     return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
   }
 
@@ -3505,8 +3505,8 @@ export class TillTableOrderScreen extends LitElement {
     members.sort((a, b) => a.row.lineNo - b.row.lineNo);
     if (members.length > 1) {
       const shown = this.#sentShown();
-      const keys = members.map((member) => sentSlicePortionKey(member, this.lines, shown(member)));
-      if (keys.some((key) => key === null || key !== keys[0])) return;
+      const keys = members.map((member) => sentRowPortionKey(member, this.lines, shown(member)));
+      if (keys.some((key) => key === null || !sameSentRow(key, keys[0]!))) return;
     }
     return members;
   }
@@ -4343,7 +4343,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #clearTopDue = false;
 
-  /** The Sent box draws after the screen does, and only then has its height. */
+  /** The sent rows draw after the screen does, and only then have their height. */
   async #clearOrderTopOnceDrawn(): Promise<void> {
     await this.renderRoot.querySelector<LitElement>("till-sent-orders")?.updateComplete;
     if (this.view === "order") this.#clearOrderTopOfDock();
