@@ -1,7 +1,53 @@
 # A1621 — Discounts held on the bill until the invoice: build plan
 
-Status: plan for approval (lane B, 2026-11-27). Not yet read by a fresh reader. Fiscal: the owner
-lands every pull request marked "owner lands" below.
+Status: plan for approval (lane B, 2026-11-27); read once by a fresh reader (below). Fiscal: the
+owner lands every pull request marked "owner lands" below. One question for the owner (D23)
+gates PR 7a; D12 depends on lane L's OVERPAID-BILLS.
+
+**Fresh read (2026-11-27, on `1d842b6c96`; findings in lane B's `reviews/a1621-plan-fresh-read-1.md`).**
+No Critical, seven Important, ten Minor. Each was checked against the code before it was taken.
+Taken in:
+- **I-1** `storedOrderTotal`'s change moved from 3a into 2b: without it 2b's own payment test
+  cannot complete a bill (the paid check reads `readBillFigures`, `bill-payments.ts:828`, `:1112-1119`).
+- **I-2** D23 rewritten as the two honest choices; 7a waits for the answer and tests the counter
+  case. The reader's receipt holds: `withSentOrderOpen` (`sent-order-open.ts:46-61`) already reopens
+  a placed, unpaid Counter order in a pay-after-sending zone (used at `pay-for-items.ts:256` and
+  `bill-payments.ts:2395`), and the close of day invoices placed bills (`close-of-day.ts:128`).
+- **I-3** A declined card's put-back (`movedItemsBack`, `bill-payments.ts:2379-2410`, which calls
+  `moveOrderLines` into the existing source) runs 4a's move hook in an undo mode.
+- **I-4** Taken in part. The till can already give a set menu a comp: the set-menu summary's Comp
+  (`apps/till/src/widgets/set-menu-summary.ts:250-262`) calls the order screen's `#compMenu`
+  (`till-table-order-screen.ts:1920`), which targets the set menu's own line; the reader's search for
+  `setMenuRole` missed it. What it found that holds: nothing in the till reads the preview's
+  `replaces` (ran `rg`), so "the till says so" (spec 6.7) was built nowhere. 6c now reads it.
+- **I-5** D12 is now a dependency on lane L's OVERPAID-BILLS, with the reason.
+- **I-6** `shared_from` is a foreign key set to empty when its row goes; the put-back on an empty link
+  is stated. The guard named in the finding (`scripts/id-columns-are-references.test.ts`) covers only
+  tables a configuration import transfers (its header), which this one is not; the check is
+  `scripts/schema-constraints.test.ts`.
+- **I-7** Copying a line's pending discounts when the line splits moved from 4a into 2b, because
+  crystallising splits lines itself; PR 1 works out a split line the same way, and 2b tests the two
+  against each other.
+- **M-1** 3b's check folded into 2b and Remove into 7a: sixteen pull requests. 2b is about four
+  hours, but its three tasks are separate. 7a now waits only for 6b (the bill's foot and the
+  question); the drawings that wait on lanes N and E are in 6c, which gates 7b.
+- **M-2** guards are "never weakened"; PR 9 removes the retired tables' and code's entries, including
+  `seed.madrid-baseline.test.ts:465-466` (ran `rg`).
+- **M-3** `till-app.ts` (at its cap) is listed in 6b with "move a block out first".
+- **M-4** requests other than Pay, Print, Pay for items, the counter, unpaid departure and the deferred
+  close show the refusal's own wording, not the dialog (6b).
+- **M-5** the payment preview refuses only a payment that would complete the bill.
+- **M-6** Remove's set-menu claim moved to 7c, where it can fail; D16 gains a control; 2b names the
+  test that no edit can make a discount stop holding between the check and the invoice.
+- **M-7** "Give a different discount" is one request (7a).
+- **M-8** taken in part: the schema test moved to `packages/adjustments/src/schema/`; the
+  non-existent `working-order-table-state.test.ts` replaced by `tabs.test.ts`; `bill-payments.ts`
+  moves a block out first. Kept: `unattended` is not `moneyMoved` again, because `moneyMoved` also
+  lets a captured card file a product taken off sale (`bill-payments.ts:1166`), which a refund's
+  completion must still refuse.
+- **M-9** lane E's slices name the pull requests they wait for (Overlap).
+- **M-10** an old comp test that crystallises first and checks what a crystallising test already
+  checks is merged into that test, not kept twice.
 
 > **For agentic workers:** use superpowers:subagent-driven-development, one implementer per task,
 > dispatched as `subagent_type: "implementer"`. Steps are test first.
@@ -55,7 +101,7 @@ do today.
 
 ---
 
-## The split: seventeen pull requests
+## The split: sixteen pull requests
 
 The hard part is the switch from "written into prices when given" to "pending until the invoice".
 Every reader of what an open bill owes, every invoice path, every move and the till must all agree
@@ -74,23 +120,23 @@ exactly as spec 7.2 orders them.
 | --- | --- | --- | --- | --- |
 | 1. The working-out (`feat/a1621-1-working-out`) | Nothing changes. | +330 −120 / +600 | No | No |
 | 2a. The pending table and its read (`feat/a1621-2a-pending-table`) | Nothing changes. Venues reset. | +420 (+ generated) / +450 | **Yes** | No |
-| 2b. Crystallising at every invoice (`feat/a1621-2b-crystallise`) | Nothing changes. | +320 −110 / +500 | No | **Yes** |
-| 3a. One figure for what an open bill owes (`feat/a1621-3a-bill-owes`) | Nothing changes; the dashboard's order detail can list a bill's discounts (none yet). | +260 / +450 | No | **Yes** |
-| 3b. The check before the invoice, and Remove (`feat/a1621-3b-check-remove`) | Nothing changes. | +300 / +500 | No | **Yes** |
-| 4a. Discounts follow moved dishes (`feat/a1621-4a-moves`) | Nothing changes. | +380 −40 / +600 | No | **Yes** |
-| 4b. Pay for items takes its share (`feat/a1621-4b-pay-for-items`) | Nothing changes. | +260 −30 / +450 | No | **Yes** |
+| 2b. Crystallising at every invoice, and the check before it (`feat/a1621-2b-crystallise`) | Nothing changes. | +430 −110 / +700 | No | **Yes** |
+| 3. Every list and screen figure for an open bill (`feat/a1621-3-bill-figures`) | Nothing changes; the dashboard's order detail can list a bill's discounts (none yet). | +240 / +400 | No | **Yes** |
+| 4a. Discounts follow moved dishes (`feat/a1621-4a-moves`) | Nothing changes. | +330 −20 / +500 | No | **Yes** |
+| 4b. Pay for items takes its share, and a declined card gives it back (`feat/a1621-4b-pay-for-items`) | Nothing changes. | +290 −30 / +500 | No | **Yes** |
 | 5. A changed dish keeps its discount (`feat/a1621-5-changed-dish`) | Nothing changes. | +200 / +400 | No | **Yes** |
 | 6a. The till shows the server's totals (`feat/a1621-6a-till-totals`) | The till shows the box's figure for an open bill's total instead of adding the lines itself; the figures are the same today. | +180 −90 / +300 | No | No |
-| 6b. The till draws discounts, with Remove (`feat/a1621-6b-till-discounts`) | Nothing yet (no bill holds a pending discount). | +380 −60 / +400 | No | No |
-| 6c. The till's question before the invoice (`feat/a1621-6c-till-check`) | Nothing yet. | +320 / +350 | No | No |
-| 7a. **Switch:** whole-bill discounts are pending (`feat/a1621-7a-bill`) | A whole-bill discount stays a percentage or amount until the invoice, covers dishes ordered later (a percentage), stays whole on a cancel (an amount), can be removed, travels with moved and paid-alone dishes, and set menus keep being worked out under it. | +260 −160 / +450, about 30 checks changed | No | **Yes** |
-| 7b. **Switch:** set-menu discounts are pending (`feat/a1621-7b-set-menus`) | A set menu's discount or Free no longer locks the set menu; if the set menu breaks up the till asks before the invoice. | +180 −220 / +350, about 40 checks changed | No | **Yes** |
+| 6b. The bill's foot, Remove, and the question before the invoice, on the till (`feat/a1621-6b-till-foot-check`) | Nothing yet (no bill holds a pending discount). | +420 −40 / +450 | No | No |
+| 6c. Discounts under dishes, extras and set menus, on the till (`feat/a1621-6c-till-targets`) | Nothing yet. | +300 −40 / +350 | No | No |
+| 7a. **Switch:** whole-bill discounts are pending, and Remove (`feat/a1621-7a-bill`) | A whole-bill discount stays a percentage or amount until the invoice, covers dishes ordered later (a percentage), stays whole on a cancel (an amount), can be removed, travels with moved and paid-alone dishes, and set menus keep being worked out under it. Waits for the owner's answers to D12 and D23. | +360 −160 / +600, about 30 checks changed | No | **Yes** |
+| 7b. **Switch:** set-menu discounts are pending (`feat/a1621-7b-set-menus`) | A set menu's discount or Free no longer locks the set menu; a second one replaces the first and the till says so; if the set menu breaks up the till asks before the invoice. | +180 −220 / +350, about 40 checks changed | No | **Yes** |
 | 7c. **Switch:** a dish's own discount is pending (`feat/a1621-7c-dishes`) | A dish's percentage covers its extras added later; an amount stays; both can be removed; a variant change asks about an amount only. | +260 −200 / +450, about 60 checks changed | No | **Yes** |
 | 7d. **Switch:** Free on a dish, and every extra's comp or discount, are pending (`feat/a1621-7d-free-and-extras`) | Free on the burger also covers Chips added later; Free on the Chips goes when the Chips go; both can be removed. | +120 −90 / +300, about 35 checks changed | No | **Yes** |
 | 8. Reopen to split gives discounts again (`feat/a1621-8-reopen`) | A bill reopened to split holds its discounts as discounts again (a percentage stays a percentage), removable until its new invoice; the report counts each discount once. | +200 −90 / +350 | No | **Yes** |
 | 9. The old repair code goes (`feat/a1621-9-cleanup`) | Nothing a person sees, but the adjustments report's help text stops mentioning discounts that came off. Venues reset. | +60 −1,900 / −2,400 | **Yes** | **Yes** |
 
-Each pull request is about three hours of building. 7c is the largest; if its first implementer
+Each pull request is about three hours of building; 2b and 7a are about four, each in separate
+tasks one implementer can finish. 7c is the largest; if its first implementer
 passes about 150 tool calls, it stops at a passing point and a second implementer carries on from
 its handover (the global rule), it is not split further, because 7c's halves would change the same
 test files.
@@ -100,9 +146,9 @@ screen's guide change in the same change as the screen, so 7a–7d and 8 each up
 of `apps/server/src/guide/{en,es}/table-service.md`, and 9 updates the report's help text. The demo
 seeds no discounted bill to update (D19).
 
-**Order.** 1 → 2a → 2b → 3a → 3b, then 4a, 4b, 5 and 6a in any order, then 6b and 6c (after their
-frames, D21), then 7a → 7b → 7c → 7d → 8 → 9. Each lands on its own; none needs a later one to be
-correct.
+**Order.** 1 → 2a → 2b → 3, then 4a, 4b, 5 and 6a in any order, then 6b (after its frames, D21)
+→ 7a (also after the owner answers D12 and D23) → 6c (after lane N's sent rows and lane E's set-menu
+summary land) → 7b → 7c → 7d → 8 → 9. Each lands on its own; none needs a later one to be correct.
 
 ---
 
@@ -135,7 +181,9 @@ Recommendations, each with why. None changes what the owner decided, except wher
   `set_menu_id` and `set_menu_name` (to name it once its row is gone); `action` (`comp`,
   `discount_percent`, `discount_amount`, today's names, so crystallising maps one to one);
   `percent_bp`; `amount`; `origin` (`given` or `bill_share`, D8); `shared_from` (the row an amount
-  share was split from, so a declined card can give it back, D10); `given_together` (one id for the
+  share was split from, so a declined card can give it back, D10; a foreign key to this table set to
+  empty when that row goes, because the source bill can be invoiced, and its rows deleted, while Pay
+  for items' card is still in the reader, `pay-for-items.ts:294-298`); `given_together` (one id for the
   portions of one till row, removed together, spec 6.1); `position` (order given); the reason id,
   name and policy snapshot as `adjustments` copies them (`adjustments.ts:56-60`); `requested_by`,
   `approved_by`, `note`, `given_at`. CHECKs pin one target shape per row and the action/percent/amount
@@ -163,9 +211,14 @@ Recommendations, each with why. None changes what the owner decided, except wher
   activity entry, spec 6.6): the close of day; every completion after money moved (the reader's
   second transaction, the card follow-up job, a manager's card or refund resolution, a held bill);
   a card refund's completion and its recovery job (`issueAfterBillRefund`,
-  `tender-refund-sends.ts:334-353` (†)). A hand-keyed card is charged on another machine before its
-  request, so its check is the payment preview (`previewBillPayment`, `bill-payments.ts:1405` (†));
-  6c pins by test that the till previews before a hand-keyed card.
+  `tender-refund-sends.ts:334-353` (†)), marked by a new `IssueOptions.unattended`, not by
+  `moneyMoved`, which would also let it file a product taken off sale (`bill-payments.ts:1166`). A
+  hand-keyed card is charged on another machine before its
+  request, so its check is the payment preview (`previewBillPayment`, `bill-payments.ts:1405` (†)),
+  for a payment that would complete the bill only (a part payment is never asked); 6b pins by test
+  that the till previews before a hand-keyed card. Requests other than Pay, Print the bill, Pay for
+  items, the counter, unpaid departure and the deferred close (a cancel, a move, a comp to zero) show
+  the refusal's own wording with the discounts named, not the dialog.
 - **D7. The refusal code is `adjustment.no_longer_applies`**, in the adjustments registry
   (`packages/adjustments/src/errors.ts`), its details listing each discount: its id, `why`
   (`set_menu_gone` or `cut_down`), what it was given on (dish, extra or set-menu name, or the bill),
@@ -184,23 +237,33 @@ Recommendations, each with why. None changes what the owner decided, except wher
   whole-bill percentage only when every moved dish came from one bill and that bill holds it; if two
   source bills hold one each, each moved dish takes its share as an amount (D8), so a percentage never
   reaches dishes that did not carry it.
-- **D10. A discounted line split later** (Pay for items taking 1 of 3 beers on one line;
-  `carveLines` copies a split line's reductions today, `working-order-transfer.ts:635`,
-  `order-portions.ts:144-174`): the new part gets a copy of each pending discount on the line, a
-  percentage or Free as it is, an amount shared by quantity (cents left over to the earlier part).
-  A whole-bill amount split between two bills keeps `shared_from` so a declined card gives it back
-  (spec 6.4's put-back, builder's call).
+- **D10. A discounted line split later** (Pay for items taking 1 of 3 beers on one line, or
+  crystallising itself splitting a line into two prices; `carveLines` copies a split line's
+  reductions today, `working-order-transfer.ts:635`, `order-portions.ts:144-174`): the new part gets
+  a copy of each pending discount on the line, a percentage or Free as it is, an amount shared by
+  quantity (cents left over to the earlier part). Built in 2b, since crystallising splits lines
+  (I-7), and PR 1's working-out splits a line the same way, so the two agree. A whole-bill amount
+  split between two bills keeps `shared_from` so a declined card gives it back (spec 6.4's
+  put-back, builder's call; 4b).
 - **D11. A cancel still records the stored lines' drop**, undiscounted
   (`regroupAfterRemoval` reading `sum(line_total)`, `working-order-removal.ts:293-305`); pending
   discounts are worked out at the invoice, so the adjustments report shows the cancel at the dish's
   charge and the discount at what it finally took.
-- **D12. A bill paid past its total.** Spec 6.5 sends a bill whose shown total falls below the money
-  taken to "the existing give-back-or-keep-as-tip flow". Today a comp or discount that does that is
-  refused (`bill.received_exceeds_total`, `assertBillInvariantAt`, `adjustments-apply.ts:974` (†);
-  pinned by `set-menu-dish-adjustments.test.ts:562`), and lane L's OVERPAID-BILLS (`docs/backlog.md:581-584`,
-  "A cancel, discount, move or split may leave more on a bill than it comes to") is the unbuilt change
-  that lifts it. This plan keeps today's refusals and makes them read the shown total (3a); it does
-  not build lane L's change. Removing a discount only raises the total, so it never trips them.
+- **D12. A bill paid past its total: a dependency on lane L's OVERPAID-BILLS, not a question.** Spec
+  6.5 sends a bill whose shown total falls below the money taken to "the existing
+  give-back-or-keep-as-tip flow". Today a comp or discount that does that is refused
+  (`bill.received_exceeds_total`, `bill-payments.ts:477`; `assertBillInvariantAt`,
+  `adjustments-apply.ts:974` (†); pinned by `set-menu-dish-adjustments.test.ts:562`). The owner already
+  decided the rule on 24 November in OVERPAID-BILLS' design, which lane L builds
+  (`docs/backlog.md:581-584`: "A cancel, discount, move or split may leave more on a bill than it comes
+  to, settled before it closes"), so asking again would reopen a decision made. Why a dependency and
+  not a part of this plan: that rule is one change for cancels, discounts, moves and splits alike,
+  and lane L owns it. Every check A1621 keeps reads the shown total (2b, 3), so when OVERPAID-BILLS
+  lifts the refusal it covers pending discounts with no further change. Until then, a discount given
+  after a part payment that would take the bill below its money is refused, exactly as today, so 7a
+  does not wait for it. Whichever of 7a and OVERPAID-BILLS lands second adds the case "10% given after
+  a part payment leaves the bill overpaid and offers give-back or tip" to its tests. Removing a
+  discount only raises the total, so it never trips the refusal.
 - **D13. Totals computed in SQL** (the floor's tab total, the held-orders list, the counter's waiting
   list, the party bills, the orders list, Find bill, which also sorts and pages by total in SQL,
   `find-bill-bills.ts:70`, `:139`, `:232-234` (†)): the box works out, in code, what pending discounts take
@@ -211,10 +274,13 @@ Recommendations, each with why. None changes what the owner decided, except wher
   check before the invoice is asked then.
 - **D15. The dashboard's order detail lists an open bill's pending discounts** (it shows each line
   and a total, `apps/dashboard/src/widgets/order-detail-dialog.ts:42-45`, `:435`; without them, an
-  open bill's lines would not add up to its total). Small; in 3a.
+  open bill's lines would not add up to its total). Small; in 3.
 - **D16. The grouping's tie-break** (spec 6.7: between equally cheap groupings, keep a discounted
-  set-menu row): a failing test first. The calculation already prefers keeping saved places
-  (`packages/shared/src/set-menu-grouping.ts:470-479` (†)); if that passes the test, no code.
+  set-menu row): a failing test first, with its control: two groupings of equal price, the discounted
+  row kept; and a grouping one cent cheaper without it, the cheaper one chosen (so a test that passes
+  because the grouping never moves anything fails the control). The calculation already prefers
+  keeping saved places (`packages/shared/src/set-menu-grouping.ts:470-479` (†)); if that passes both,
+  no code.
 - **D17. Reopen to split** (spec 8, builder's call on the mechanism): copies take their list prices;
   each of the printed bill's comps and discounts is given again as a pending row on the copies, same
   action and percentage (an amount as its recorded `reduction`), same reason, people and note; when it
@@ -232,17 +298,39 @@ Recommendations, each with why. None changes what the owner decided, except wher
   assumed discounted demo bills.
 - **D20. Activity entries** (spec 6.6, 9): `discount.given`, `discount.removed`,
   `discount.written_as_it_stood`, declared in `packages/db/src/activity-kinds.ts`, people by id only.
-- **D21. The till's drawing waits for frames.** 6b and 6c draw new things (a discount under a dish,
-  a set menu and the foot, Remove, the question). The owner sees the frames through the watcher before
-  6b and 6c are built, on lane N's sent rows (its PR 8a) and lane E's set-menu summary (A1515-4
-  slice 1).
+- **D21. The till's drawing waits for frames.** 6b draws the bill's foot, Remove and the question;
+  6c draws a discount under a dish, an extra and a set menu. The owner sees the frames through the
+  watcher before each is built. Only 6c waits for lane N's sent rows (its PR 8a) and lane E's set-menu
+  summary (A1515-4 slice 1), so 7a (whole bill) waits for 6b only, and 7b for 6c.
 - **D22. Remove** is `DELETE /api/working-orders/:id/discounts/:discountId` with the bill's
-  revision; it removes the discount's `given_together` group, needs `adjustment.apply`, no PIN, never
-  the simplified-invoice refusal (spec 6.5, 10), and is refused while a payment is in flight
-  (`refusePaymentInFlight`, `working-order-edit-state.ts:233`).
-- **D23. Counter orders placed before they are paid: QUESTION for the owner.** See "Found against
-  the code", item 2. Recommended: a counter order's pending discounts crystallise when it is placed,
-  with the check asked then; after that they can no longer be removed. Built in 2b once answered.
+  revision, built in 7a; it removes the discount's `given_together` group, needs `adjustment.apply`,
+  no PIN, never the simplified-invoice refusal (spec 6.5, 10), and is refused while a payment is in
+  flight (`refusePaymentInFlight`, `working-order-edit-state.ts:233`). **Give a different discount**
+  is one request: the comp window's apply takes `replacesDiscountId` and deletes that discount in the
+  same transaction as it writes the new one, so a refusal leaves the old one standing.
+- **D23. Counter orders placed before they are paid: QUESTION for the owner; 7a waits for the
+  answer.** See "Found against the code", item 2. The two honest choices:
+  - **(a) Write the discounts when the order is placed** (asked then, as at Pay). This matches what
+    staff can do today: a comp on a placed order is already refused (`assertTabOpen`,
+    `stored-order-lines.ts:375-384` (†), called at `adjustments-apply.ts:549`), so nothing about a
+    placed order's discounts can change after Place anyway. The cost: after Place, a discount can no
+    longer be removed. Example: at the Counter a coffee and a cake, 10% off; staff press Place order and
+    the kitchen starts; the 10% is written then. When the guest pays ten minutes later the receipt shows
+    the 10%, but staff could not have taken it off after pressing Place.
+  - **(b) Keep them pending until payment**, writing them with the order briefly set back to open
+    inside `withSentOrderOpen` (`sent-order-open.ts:46-61`), which the database already allows for a
+    placed, unpaid Counter order in a pay-after-sending zone and which Pay for items and the declined
+    card already use (`pay-for-items.ts:256`, `bill-payments.ts:2395`). Remove on a placed order would
+    use it too. The cost: CLAUDE.md's rule "Only `sent-order-open.ts` sets a placed order back to
+    `open`, around Pay for items' move" widens to crystallising and Remove, and the close of day
+    (`close-of-day.ts:128`, which invoices placed bills) uses it as well. In the example, staff could
+    remove the 10% until the guest pays. Whether Place order leaves an order unpaid outside a
+    pay-after-sending zone I have not checked; such an order would still need (a).
+
+  Recommended: (a), because it changes no database rule and matches what staff can already do on a
+  placed order. (a) is one call at `working-order-counter.ts:121`; (b) wraps crystallising and Remove
+  for such an order in `withSentOrderOpen`. Either is built in 2b if the answer comes first, else in
+  7a; 7a does not land without it, and its tests include the Counter case either way.
 
 ---
 
@@ -259,9 +347,9 @@ Recommendations, each with why. None changes what the owner decided, except wher
    `bill-payments.ts:1087` (†)). The database refuses inserting, updating or deleting lines of an order
    that is not open (`packages/db/triggers/core.sql:132-150`, `:397-409` (†)), and crystallising
    updates prices and may split a line in two. So spec 7.1 ("in the same transaction" as the invoice)
-   cannot hold for such an order without loosening those triggers. D23 asks the owner; the
-   alternative is loosening the triggers for price columns on a placed order, a fiscal-adjacent
-   change I do not recommend.
+   cannot hold for such an order as the code stands. D23 puts the two ways round it to the owner. (The
+   first version of this plan named loosening the triggers as the alternative; the fresh reader showed
+   the database already lets `withSentOrderOpen` reopen such an order, which is the real choice (b).)
 3. **A cascade alone silently drops some discounts.** Spec 6.1 has a dish or extra discount deleted
    with its line. Real removals delete lines, but two writes delete and re-insert what a person sees
    as the same dish or extra: a held-order save's variant swap (`working-order-held-write.ts:147-154`,
@@ -272,7 +360,8 @@ Recommendations, each with why. None changes what the owner decided, except wher
    (`core.sql:742-754` (†)).
 5. **Two of spec 6.5's "readers" read no prices.** `billOwes` (`parties.ts:984-992` (†)) reads status
    and line counts; `stillOwedOnIssuedBill` (`bill-payments.ts:594-600` (†)) takes the amount it is
-   given. Neither changes. The full list of readers is in 3a.
+   given. Neither changes. The full list of readers is in 2b (the payment path) and 3 (lists and
+   screens).
 6. **"The existing give-back-or-keep-as-tip flow" does not yet take a discount** (D12).
 7. **The demo has no discounted bills** (D19).
 8. **The till would not call a shared working-out** (D2).
@@ -282,7 +371,7 @@ Recommendations, each with why. None changes what the owner decided, except wher
 ## Traced readers of the records, the freeze and the endings, and what happens to each
 
 Read (a research pass, with the (†) ones re-read by me). The readers of what an open bill owes are
-in PR 3a's page; the invoice paths in 2b's.
+in PR 2b's page (the payment path) and PR 3's (lists and screens); the invoice paths in 2b's.
 
 | Reader (`file:line`) | What it decides today | Fate, and where |
 | --- | --- | --- |
@@ -300,7 +389,7 @@ in PR 3a's page; the invoice paths in 2b's.
 | `readEditableOrder`'s `adjusted` (`working-order-edit-state.ts:352` (†)) | Added units of a discounted line go apart | Also reads pending (5) |
 | `carryLineReductions` (`order-portions.ts:144-174`) from `carveLines` (`working-order-transfer.ts:635`), line-edit copies (`working-order-line-edits.ts:1021`) and `copyBillDishes` (`split-after-print.ts:403`) | A split or copied line keeps its reductions | Pending copies (4a); Reopen gives again (8); open-bill uses go (9) |
 | `readLockedLines`' stamp and `rowKey` (`stored-order-lines.ts:194-208`, `portion-sale-projection.ts:31-55`) | Lowered rows file apart | Unchanged (crystallised rows) |
-| `readBillLines` to the till (`stored-order-lines.ts:460`, `:558-560`) and to the dashboard (`orders-list.ts:839-881`) | The "was" price | Unchanged; pending discounts reach both as `discounts` (3a) |
+| `readBillLines` to the till (`stored-order-lines.ts:460`, `:558-560`) and to the dashboard (`orders-list.ts:839-881`) | The "was" price | Unchanged; pending discounts reach both as `discounts` (3) |
 | `endingRestores`, `endAdjustment`, `givenBackBy`, `readDiscountNotices` (`packages/adjustments/src/endings.ts:219-446` (†)); `endRepricedDishDiscounts` (`dish-discount-ending.ts:88-131`); `setMenuDiscountsLeftBy`, `endSetMenuDiscounts`, `endDiscountsCancelledBy` (`set-menu-discount-ending.ts:100-227`); `readBillsDiscountNotices`, `requireOpenNotice` (`discount-notices.ts:48-129`) | Rule C's repairs and notices | Reach only written records after each switch; deleted (9) |
 | `readBillAdjustments` (`record.ts:163-247`), `receiptLines` (`receipt-adjustments.ts:82`) | Receipts and invoices | Unchanged; ending joins go (9) |
 | `reports.ts` (`:297-336` came-off rule, `:347`, `:387`, `:471`), `free-items.ts:150-183` | The adjustments report, the Given free sheet | Count only written records, the last of a Reopen chain (8); came-off rule goes (9) |
@@ -318,7 +407,7 @@ lines) reads the preview's `billTotal`, `reduction` and `needsApproval` (`:372-3
 `till-table-order-screen.ts:3480`, `:3884-3899`; `basket.ts:1277-1289`). `listUnitPriceGross` is
 also read by `state/split-selection.ts:101-114`, `state/portion-groups.ts:60-70`,
 `till-app.ts:8790` and `:17323`. `discountNotices` is declared and never read
-(`api/floor-api.ts:137`, `api/orders-api.ts:161`). 6b and 9 change these; the split and portion
+(`api/floor-api.ts:137`, `api/orders-api.ts:161`). 6b, 6c and 9 change these; the split and portion
 readers keep reading written records, which open bills no longer hold after 7d.
 
 ---
@@ -351,7 +440,8 @@ readers keep reading written records, which open bills no longer hold after 7d.
   helper. A test that checks a price right after a comp keeps its check by calling the real
   crystallising function (2b) first, unless the design changed what it pins. Every changed check is
   listed in the pull request's "Changed test checks", checked at least as strictly. Golden huella,
-  `inmutabilidad`, other fiscal hash or filing tests and every guard under `scripts/` are never edited.
+  `inmutabilidad`, other fiscal hash or filing tests and every guard under `scripts/` are never weakened; PR 9
+  removes only the entries naming the tables and the error code it retires.
 - Every new or retired error code: `scripts/alert-codes.test.ts`, `scripts/errors-reachable.test.ts`,
   and its English and Spanish till wording in `apps/till/src/i18n/codes.ts`.
 - Every new till route: refusing cases and inventory rows in
@@ -360,7 +450,7 @@ readers keep reading written records, which open bills no longer hold after 7d.
   box-word guards (`apps/server/src/guide-box-word.test.ts`).
 - Each pull request updates `docs/backlog/menu.md`'s A1515 entry (the A1621 note dated 27 November)
   where it makes it stale, and deletes what it finishes.
-- A sale-path read changes in 3a: its pull request carries a line starting `Sale-path read changed:`
+- A sale-path read changes in 2b: its pull request carries a line starting `Sale-path read changed:`
   so the watcher's bench count sees it (CLAUDE.md §4, the A1308 rule, applied here by analogy).
 
 ## Review focus (all pull requests)
@@ -407,7 +497,8 @@ sees changes.
    two prices becomes two rows for the next, numbered after the bill's last line number, as
    `splitLinesWithinOrder` numbers them (`rowsAfter` already simulates this,
    `apps/server/src/adjustment-bill-total.ts:115-134` (†)); 2b's test checks the numbers against the
-   real split. Output per discount: what it takes off, the rows it leaves each line at, and whether it
+   real split. A later discount on a line an earlier one split works out as 2b's copy on a split
+   does (D10): one copy on each part, a percentage or Free as it is, an amount shared by quantity. Output per discount: what it takes off, the rows it leaves each line at, and whether it
    holds (`yes`, `set_menu_gone` when its set-menu row is gone, `cut_down` when an amount exceeds
    what its target costs). Output for the bill: the total taken off.
 2. Move `portionExactness`, `spreadReaching`, `spread`'s line mapping, `handOut`'s pure part and
@@ -425,7 +516,9 @@ sees changes.
   `set_menu_gone`, nothing taken; an amount over its target → `cut_down`, the target to zero;
 - a weighed line: what is taken can differ from what was asked, and the function reports what is
   taken (the assertion that fails if the function reported the asked amount);
-- a `bill_share` amount works out with the dishes' step.
+- a `bill_share` amount works out with the dishes' step;
+- two discounts on a line of three units, the first splitting it into two prices: the second works
+  out once per part, as D10 copies it (2b checks the same figures against the database).
 The assertion that fails if the behaviour is deleted: each example's per-line figures and total.
 `adjustments-apply.test.ts` runs unchanged (the moved helpers keep today's results).
 
@@ -460,7 +553,8 @@ check (`packages/adjustments/src/backup-verification.ts:9`) and the live change 
 **The change.**
 1. `packages/db/src/schema/adjustments/bill-discounts.ts` (new) with D3's columns, foreign keys
    (`working_orders` restrict, `working_order_lines` cascade for `line_id`, set null for
-   `set_menu_line_id`, `persons` restrict), CHECKs and indexes; exported from
+   `set_menu_line_id`, `bill_discounts` set null for `shared_from`, `persons` restrict), CHECKs and
+   indexes; exported from
    `packages/db/src/schema/adjustments/index.ts`; `classify("bill_discounts", "state", …)`;
    `ADJUSTMENTS_TABLES` gains it (mutable, so not in `immutableTables`).
 2. The trigger (D4) in `packages/db/triggers/core.sql`.
@@ -473,9 +567,11 @@ check (`packages/adjustments/src/backup-verification.ts:9`) and the live change 
    off. A bill with no pending row costs one indexed read.
 5. `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
 
-**Tests (failing first).** `packages/db/src/schema/adjustments/bill-discounts.test.ts`: each CHECK
-refuses its bad shape; a line delete removes its dish discount; a grouping delete of a set-menu row
-leaves its discount with no row; abandoning a bill clears its rows and its lines' rows (the assertion
+**Tests (failing first).** `packages/adjustments/src/schema/bill-discounts.test.ts` (beside the
+existing `adjustment-lines.test.ts` there): each CHECK refuses its bad shape; a line delete removes
+its dish discount; a grouping delete of a set-menu row leaves its discount with no row; deleting a
+row a share was split from leaves the share with an empty `shared_from` (the assertion that fails
+with the default `restrict`); abandoning a bill clears its rows and its lines' rows (the assertion
 that fails without the trigger). `apps/server/src/bill-discounts-read.test.ts`, with rows inserted
 through the store on a real venue (`useVenueDb`, `provisionAdjustmentVenue`): a bill with a 10% and
 a dish's 2.00 answers spec 7.3's figures; a row on a moved line is read on the line's new bill.
@@ -491,7 +587,8 @@ a dish's 2.00 answers spec 7.3's figures; a row on a moved line is read on the l
 `pnpm --filter @waitron/adjustments exec vitest run backup-verification`; `@waitron/db`'s and
 `@waitron/adjustments`' `test:coverage`.
 
-**Files.** The schema file and its test (new), `packages/db/src/schema/adjustments/index.ts`,
+**Files.** The schema file (new), its test in `packages/adjustments/src/schema/` (new),
+`packages/db/src/schema/adjustments/index.ts`,
 `packages/db/src/classification.ts`, `packages/db/triggers/core.sql`, `packages/db/drizzle/**`
 (generated), `packages/adjustments/src/{classification,pending-discounts}.ts`,
 `scripts/write-path-tables.json`, `apps/server/src/bill-discounts-read.ts` and its test (new),
@@ -502,10 +599,12 @@ their tests.
 
 ---
 
-## PR 2b — Crystallising at every invoice (`feat/a1621-2b-crystallise`)
+## PR 2b — Crystallising at every invoice, and the check before it (`feat/a1621-2b-crystallise`)
 
 **What lands.** Every path that invoices a bill's dishes first writes its pending discounts into the
-lines and records them. Dormant. Owner lands (invoice paths).
+lines and records them; the payment path's figures read the discounted total; a split line keeps its
+pending discounts; every asked path (D6) refuses a discount that no longer holds before money moves.
+Dormant. Owner lands (invoice paths). About four hours, in three tasks.
 
 **Today (read).** Every dish invoice prices the stored lines at one of two calls:
 `priceForIssuance` (`working-order-invoice.ts:293-317` (†)), called by Print the bill
@@ -514,14 +613,35 @@ lines and records them. Dormant. Owner lands (invoice paths).
 own call (`bill-payments.ts:1165` (†)), reached through `issueWhenFullyPaid` by every payment, card
 completion, counter sale, zero bill and every edit that leaves a paid bill exactly covered. The full
 trigger list (26 groups, from the routes down) is the research pass's; the only `recordSale` callers
-in product code (ran `rg`) are `working-order-invoice.ts:349`, `bill-payments.ts:1198` and the advance ticket's
-`bill-advances.ts:166`, which files money, not dishes. `priceForIssuance` says it "Writes nothing but
-`log`'s lines" (`:291-292`).
+in product code (ran `rg`) are `working-order-invoice.ts:349`, `bill-payments.ts:1198` and the advance
+ticket's `bill-advances.ts:166`, which files money, not dishes. `priceForIssuance` says it "Writes
+nothing but `log`'s lines" (`:291-292`).
+
+The payment path's figures all come from `storedOrderTotal` (`stored-order-lines.ts:264-268` (†)),
+which has six callers, all meaning "what the bill owes" (ran `rg`): `readBillFigures`
+(`bill-payments.ts:828` (†)), which feeds the fully-paid check (`:1112-1119`), a payment's amount and
+`coversBill` (`:1775-1833`), equal splits (`packages/orders-sales/src/bill-allocation.ts:77-92`), the
+preview (`previewBillPayment`, `:1405-1427`), the balance (`readBillBalance`, `:871`),
+`assertBillInvariant`/`readBillExcess` (`:466-552` (†)), advances (`issueAdvanceIfOwed`,
+`:1009-1028`) and the card's completion (`completeBillPayment`, `:2241-2253`); `totalBeforeEdit` and
+`refuseOrderOverSimplifiedLimit` (`stored-order-lines.ts:280-306` (†)); `refuseBelowAdvances` callers
+at `move-bill.ts:349` and `pay-for-items.ts:293`; `createOpenOrder` (`working-order-open.ts:295`, a
+new order, never discounted). Crystallising and this figure must land together (fresh read I-1): with
+only one of them, the paid check and the invoice disagree and a payment either never completes or is
+refused by the database's tender check.
+
+Crystallising can split a line in two prices (`reprice`, `adjustments-apply.ts:1059-1068` (†), through
+`splitLinesWithinOrder` and `carveLines`, `working-order-transfer.ts:685`, `:635`), so a second
+discount on the same line must follow the split part too (fresh read I-7).
+
+The precedent for refusing before a card is charged: `refuseWhileAdvanceCorrectionOpen` when a
+payment covers the bill (`bill-payments.ts:1831-1836` (†)), and in Pay for items before the reader
+(`pay-for-items.ts:297`).
 
 **The change.**
 1. `apps/server/src/bill-discounts-crystallise.ts` (new): `crystalliseBillDiscounts(tx, cfg, billId,
    { asked })`. With `asked`, a discount that does not hold refuses `adjustment.no_longer_applies`
-   (D7; the code and its details land here, its till wording in 6c). Otherwise, for each discount in
+   (D7; the code and its details land here, its till wording in 6b). Otherwise, for each discount in
    order: run PR 1 on the bill as it now stands for that one discount, write it with `reprice`
    (moved from `adjustments-apply.ts:1003-1105` to `apps/server/src/adjustment-reprice.ts`, unchanged)
    and `recordAdjustment` (D5), delete the pending row; a discount that did not hold gets a
@@ -530,55 +650,71 @@ in product code (ran `rg`) are `working-order-invoice.ts:349`, `bill-payments.ts
    bill's discounts) and before `bill-payments.ts:1165` (`asked` unless D6's not-asked paths;
    `IssueOptions` gains `unattended`, set by `issueAfterBillRefund` and the job and manager routes).
    Close of day passes `asked: false`.
-3. D23, once answered: call it, asked, in the counter's Place order before `markOrderPlaced`
-   (`working-order-counter.ts:121`).
+3. `storedOrderTotal` subtracts `readBillDiscounts`' total off for an open bill with no sale; its doc
+   says so. One place covers every payment-path reader above.
+4. `carveLines` copies a split line's pending discounts to the new part (D10), through the store; PR
+   1's working-out splits a line the same way.
+5. The check before money moves: `refuseDiscountsNotHolding(tx, billId)` (in the crystallising file)
+   where a payment covers the bill (beside `bill-payments.ts:1836`) and in the payment preview when
+   the previewed payment would complete the bill. It reads `readBillDiscounts`, so the shown total,
+   the question and the invoice read one working-out. `bill-payments.ts` has 10 lines of room (ran
+   `wc -l`): move a block out first.
+6. D23, once answered: choice (a) is one call, asked, in the counter's Place order before
+   `markOrderPlaced` (`working-order-counter.ts:121`).
 
-**Tests (failing first).** `apps/server/src/bill-discounts-crystallise.test.ts` with inserted rows:
+**Tests (failing first).** `apps/server/src/bill-discounts-crystallise.test.ts`, with inserted rows:
 - **the shown total equals the invoice**: for each fixture of Review focus 1, `readBillDiscounts`'
   total off equals the fall in `storedOrderTotal` after crystallising, and equals the receipt's
   discount lines (the assertion that fails if crystallising wrote anything else); the split rows'
   line numbers equal PR 1's simulation;
+- **two discounts on one line of three units** (fresh read I-7): 10% then 1.00 off a line of three
+  beers at 3.35; PR 1's figures equal what crystallising writes, line by line (the assertion that
+  fails if the second discount reached only the original part);
+- a cash payment of the discounted total completes and issues the bill (the paid check and the
+  invoice agree; fails if either reads the undiscounted total); the simplified-invoice limit reads the
+  discounted total; equal split shares the discounted total;
 - each path crystallises: Print the bill, unpaid departure, a cash payment, the close of day, the
   reader's second transaction (records exist after, pending rows gone);
-- asked and not holding → refused, nothing written (run the request to its end, then read the
-  records); the close of day with a set-menu discount whose row is gone writes it taking nothing,
-  with its activity entry;
+- asked and not holding: a cash payment that would complete the bill is refused and no payment row
+  exists after (run the request to its end, then read); a reader payment is refused in its first
+  transaction and the fake provider is asked for nothing; a part payment is not refused; Print the
+  bill, unpaid departure, Pay for items, the deferred close, a counter sale and a cancel leaving a paid
+  bill exactly covered are refused the same way; the card follow-up completing a held payment is not
+  refused and writes it as it stood, with its activity entry;
+- **nothing can stop a discount holding between the check and the invoice** (spec 6.6): while a card
+  payment is pending, every bill edit route is refused (`refusePendingPartPayment`,
+  `working-order-edit-state.ts:242`), one case per route; if one is not, its invoice crystallises as
+  it stood and the case says so;
 - `reprice`'s move changes nothing: `adjustments-apply.test.ts` unchanged.
 
 **Changed test checks.** None.
 
-**Checks to run.** The new test; `bill-payments.test.ts`, `meal-end.test.ts`,
+**Checks to run.** The new test; `bill-payments.test.ts`, `bill-payments.card.test.ts`,
+`bill-payments-api.test.ts`, `pay-for-items.card.test.ts`, `meal-end.test.ts`,
 `unpaid-departure.test.ts`, `close-of-day.test.ts`, `deferred-close.test.ts`,
-`adjustments-apply.test.ts`, `receipt-adjustments.test.ts`; golden huella; `inmutabilidad`;
-`scripts/alert-codes.test.ts`; `scripts/errors-reachable.test.ts`; `scripts/product-file-size.test.ts`.
+`adjustments-apply.test.ts`, `receipt-adjustments.test.ts`, `split-off-extras.split.test.ts`; golden
+huella; `inmutabilidad`; `scripts/alert-codes.test.ts`; `scripts/errors-reachable.test.ts`;
+`scripts/product-file-size.test.ts`; `scripts/write-path-tables.test.ts`.
 
 **Files.** `apps/server/src/{bill-discounts-crystallise,adjustment-reprice}.ts` (new),
-`adjustments-apply.ts`, `working-order-invoice.ts`, `bill-payments.ts` (about 6 lines; it has 10 of
-room), `tender-refund-sends.ts`, `bill-payments-loop.ts`, `payments-resolution-routes.ts`,
-`close-of-day.ts`, `packages/adjustments/src/errors.ts`, `packages/db/src/activity-kinds.ts`.
+`adjustments-apply.ts`, `working-order-invoice.ts`, `stored-order-lines.ts`, `working-order-transfer.ts`,
+`bill-payments.ts`, `tender-refund-sends.ts`, `bill-payments-loop.ts`, `payments-resolution-routes.ts`,
+`close-of-day.ts`, `packages/adjustments/src/{errors,pending-discounts}.ts`,
+`packages/db/src/activity-kinds.ts`.
 
-**Tasks.** 2b.1 the function, `reprice`'s move and the equality tests; 2b.2 the call sites with their
-`asked` choice and per-path tests.
+**Tasks.** 2b.1 the function, `reprice`'s move, copying on a split, and the equality tests; 2b.2
+`storedOrderTotal` and the call sites with their `asked` choice; 2b.3 the check before money moves.
 
 ---
 
-## PR 3a — One figure for what an open bill owes (`feat/a1621-3a-bill-owes`)
+## PR 3 — Every list and screen figure for an open bill (`feat/a1621-3-bill-figures`)
 
-**What lands.** Every reader of what an open bill owes subtracts its pending discounts, and the bill
-reads the till uses carry a `discounts` list. Dormant (no rows), so every figure is today's. Owner
-lands (the payment path's figures).
+**What lands.** Every list and screen total for an open bill subtracts its pending discounts, and the
+bill reads the till uses carry a `discounts` list. The payment path's figures moved to 2b. Dormant
+(no rows), so every figure is today's. Owner lands (the totals the deferred close sends back as its
+expected total).
 
-**Today: every reader, traced (read).** Grouped by what they serve.
-
-- **The payment path.** `storedOrderTotal` (`stored-order-lines.ts:264-268` (†)) has six callers, all
-  meaning "what the bill owes" (ran `rg`): `readBillFigures` (`bill-payments.ts:828` (†)), which feeds
-  the fully-paid check (`:1112-1119`), a payment's amount and `coversBill` (`:1775-1833`), equal
-  splits (`packages/orders-sales/src/bill-allocation.ts:77-92`), the preview (`previewBillPayment`,
-  `:1405-1427`), the balance (`readBillBalance`, `:871`), `assertBillInvariant`/`readBillExcess`
-  (`:466-552` (†)), advances (`issueAdvanceIfOwed`, `:1009-1028`) and the card's completion
-  (`completeBillPayment`, `:2241-2253`); `totalBeforeEdit` and `refuseOrderOverSimplifiedLimit`
-  (`stored-order-lines.ts:280-306` (†)); `refuseBelowAdvances` callers at `move-bill.ts:349` and
-  `pay-for-items.ts:293`; `createOpenOrder` (`working-order-open.ts:295`, a new order, never discounted).
+**Today: every reader, traced (read).**
 - **Totals summed in SQL** (D13): party bills (`parties.ts:757`, giving `outstanding` and `overpaid`
   at `:792-793`, read by the floor, split sources, deferred close's `expectedTotal`); held orders
   (`working-order-held-read.ts:192`); the counter's waiting list (`working-order-counter.ts:460`,
@@ -588,96 +724,50 @@ lands (the payment path's figures).
 - **Deliberately unchanged:** `working-order-removal.ts:299-305` (a cancel's recorded drop, D11);
   `billOwes` and `stillOwedOnIssuedBill` (no prices, "Found", item 5); every reader of an issued bill
   (`readBillFigures`' issued branch, `sale-due.ts:31`, receipts, corrections, reports).
-- **Left to later pull requests:** the comp window's own figures (`readRows`, `billTotalOf`,
-  `judgeComp`: 7a); Pay for items' prices (`readPicks`, `totalOnOwnBill`, `totalLeftBehind`: 4b); the
-  till's own sums (`billGross`, `till-table-order-screen.ts:2481-2488` (†); `WorkingOrderStore.total`,
-  `apps/till/src/state/working-order.ts:500-503`; `payLines`, `state/bill-payment.ts:393-419`: 6a).
+- **Left to other pull requests:** the payment path (2b); the comp window's own figures (`readRows`,
+  `billTotalOf`, `judgeComp`: 7a); Pay for items' prices (`readPicks`, `totalOnOwnBill`,
+  `totalLeftBehind`: 4b); the till's own sums (`billGross`, `till-table-order-screen.ts:2481-2488` (†);
+  `WorkingOrderStore.total`, `apps/till/src/state/working-order.ts:500-503`; `payLines`,
+  `state/bill-payment.ts:393-419`: 6a).
 
 **The change.**
-1. `storedOrderTotal` subtracts `readBillDiscounts`' total off for an open or placed bill with no
-   sale; its doc says so. One place covers every payment-path reader above.
-2. `apps/server/src/pending-off-sql.ts` (new): the open bills holding pending rows, worked out once
+1. `apps/server/src/pending-off-sql.ts` (new): the open bills holding pending rows, worked out once
    per read, as a SQL `json_each` table; each SQL site above subtracts it (one or two lines each;
    `orders-list.ts` has 4 lines of room).
-3. `discounts` (each discount, its target, action, value, what it takes off now, whether it holds,
+2. `discounts` (each discount, its target, action, value, what it takes off now, whether it holds,
    its origin and reason name) on `PartyBill` (`parties.ts`), the held order read
    (`working-order-held-read.ts`), and the dashboard's order detail (D15), with the dashboard
    widget's rows.
 
 **Tests (failing first).** With inserted rows: a bill with 10% shows 90% of its lines in each SQL
 site's answer (party bills, held orders, the floor, the counter list, orders list, Find bill, Find
-bill sorted by total placing it by its discounted figure); a cash payment of the discounted total
-completes and issues the bill (the paid check and crystallising agree; the assertion that fails if
-either reads the undiscounted total); the simplified-invoice limit reads the discounted total; the
-dashboard's order detail lists the discount.
+bill sorted by total placing it by its discounted figure; the assertion that fails if a site reads
+`sum(line_total)` alone); the deferred close accepts the party bill's discounted total as its
+expected total; the dashboard's order detail lists the discount.
 
 **Changed test checks.** None (whole-shape checks of the answers gain `discounts: []` where a test
 pins the exact shape with `toEqual`; listed in the pull request).
 
 **Checks to run.** The tests of each touched reader (`parties.test.ts`, `working-order-held-read.test.ts`,
-`working-order-table-state.test.ts`, `orders-list` and `find-bill` suites, `bill-payments.test.ts`,
-`bill-payments-api.test.ts`), the dashboard's `order-detail-dialog` tests, golden huella,
-`inmutabilidad`, `scripts/product-file-size.test.ts`, `scripts/live-subscriptions.test.ts`.
+`tabs.test.ts`, `table-signals.test.ts`, `orders-list.test.ts`, `orders-list.reads.test.ts`,
+`find-bill-bills.test.ts`, `deferred-close.test.ts`), the dashboard's `order-detail-dialog` tests,
+golden huella, `inmutabilidad`, `scripts/product-file-size.test.ts`,
+`scripts/live-subscriptions.test.ts`.
 
-**Files.** `stored-order-lines.ts`, `pending-off-sql.ts` (new), `parties.ts`,
-`working-order-held-read.ts`, `working-order-counter.ts`, `working-order-table-state.ts`,
-`orders-list.ts`, `find-bill-bills.ts`, `packages/shared/src/adjustment-policy-types.ts` (the wire
-type), `apps/dashboard/src/widgets/order-detail-dialog.ts`, their tests.
+**Files.** `pending-off-sql.ts` (new), `parties.ts`, `working-order-held-read.ts`,
+`working-order-counter.ts`, `working-order-table-state.ts`, `orders-list.ts`, `find-bill-bills.ts`,
+`packages/shared/src/adjustment-policy-types.ts` (the wire type),
+`apps/dashboard/src/widgets/order-detail-dialog.ts`, their tests.
 
-**Tasks.** 3a.1 `storedOrderTotal` and the payment path's tests; 3a.2 the SQL sites; 3a.3 the
-`discounts` field and the dashboard's order detail.
-
----
-
-## PR 3b — The check before the invoice, and Remove (`feat/a1621-3b-check-remove`)
-
-**What lands.** Every asked path (D6) refuses `adjustment.no_longer_applies` before money moves; the
-Remove route (D22). Dormant. Owner lands.
-
-**Today (read).** The precedent for refusing before a card is charged:
-`refuseWhileAdvanceCorrectionOpen` when a payment covers the bill (`bill-payments.ts:1831-1836` (†)),
-and in Pay for items before the reader (`pay-for-items.ts:297`). The comp routes sit in
-`adjustments-api.ts` (apply `:201`, preview `:268`), behind `requireSession(…, { action:
-"take-orders" })` (†).
-
-**The change.**
-1. `refuseDiscountsNotHolding(tx, billId)` (in the crystallising file): called where a payment
-   covers the bill (beside `:1836`), in the payment preview, and through 2b's `asked` for the other
-   asked paths. The check reads `readBillDiscounts`, so the shown total, the question and the
-   invoice read one working-out.
-2. Remove: `apps/server/src/bill-discounts-api.ts` (new), mounted with the till routes; reads the
-   discount, refuses a bill not open or with a payment in flight, deletes its `given_together` group
-   through the store, works the bill's set menus out again (a dish whose own discount goes rejoins
-   the grouping), bumps the bill's and party's revision, records `discount.removed`. Profile action
-   `take-orders`; inventory row.
-
-**Tests (failing first).** With inserted rows: a cash payment that would complete a bill holding a
-set-menu discount whose row is gone is refused, and no payment row exists after (run to the end);
-a reader payment is refused in its first transaction and no charge is asked of the fake provider;
-Print the bill, unpaid departure, Pay for items, the deferred close, a counter sale and a cancel
-leaving a paid bill exactly covered are refused the same way; the card follow-up completing a held
-payment is not refused and writes it as it stood. Remove deletes the row and its group, raises the
-shown total, works the set menus out again, records the activity entry, is refused without
-`adjustment.apply` and while a card payment is pending, and is not refused for taking the bill over
-the simplified limit.
-
-**Changed test checks.** None.
-
-**Checks to run.** The new tests; `bill-payments.card.test.ts`, `pay-for-items.card.test.ts`,
-`meal-end.test.ts`, `deferred-close.test.ts`, `till-api.profile-actions.test.ts`; golden huella;
-`inmutabilidad`; `scripts/alert-codes.test.ts`; `scripts/errors-reachable.test.ts`.
-
-**Files.** `bill-discounts-crystallise.ts`, `bill-payments.ts` (two lines), `bill-discounts-api.ts`
-(new), `till-api.ts` (mount), `packages/db/src/activity-kinds.ts`, their tests.
-
-**Tasks.** 3b.1 the check at every asked path; 3b.2 Remove.
+**Tasks.** 3.1 the SQL sites; 3.2 the `discounts` field and the dashboard's order detail.
 
 ---
 
 ## PR 4a — Discounts follow moved dishes (`feat/a1621-4a-moves`)
 
-**What lands.** Move dishes, table split, merge and a line split carry pending discounts by spec 6.4
-and the owner's Q4. Dormant. Owner lands (it decides which invoice a discount lands on).
+**What lands.** Move dishes, table split and merge carry pending discounts by spec 6.4 and the
+owner's Q4, and a declined card's put-back undoes what the move did. Dormant. Owner lands (it
+decides which invoice a discount lands on). Copying on a line split is 2b's (fresh read I-7).
 
 **Today (read).** One update moves lines between bills, keeping their ids
 (`working-order-transfer.ts:186-194` (†)), then both bills are worked out again (`:197-198` (†)).
@@ -691,9 +781,9 @@ reductions (`carveLines`, `working-order-transfer.ts:635`; `carryLineReductions`
 `order-portions.ts:144-174`).
 
 **The change.** `apps/server/src/bill-discounts-moves.ts` (new), called from `moveOrderLines` after
-both bills are worked out again, and from `carveLines`:
+both bills are worked out again, with a mode, `move` or `undo`:
 1. A dish or extra discount needs nothing (its bill is its line's, D3).
-2. A line split copies the line's discounts to the new part (D10).
+2. (Line splits: 2b.)
 3. A whole-bill discount when dishes move: to a **new** bill, a percentage is copied (the source
    keeps it) and an amount is split by what each bill charges after the move, before discounts (spec
    6.4; the owner's 50.00/10.00 → 3.00 and 7.00); to an **existing** bill, the moved dishes' share
@@ -703,13 +793,24 @@ both bills are worked out again, and from `carveLines`:
    destination's set-menu row of the same type holding them, else stays with no row (spec 6.4's last
    paragraph); `resolveMoveLines` reads pending set-menu discounts beside today's.
 5. A merge is a move of every line into an existing bill.
+6. **Undo mode** (fresh read I-3), passed by the declined card's put-back (`movedItemsBack`,
+   `bill-payments.ts:2379-2410`, which moves the items back with `moveOrderLines` into the existing
+   source): no share is worked out. Before the move back, inside the put-back's own savepoint, the
+   Pay for items bill's copied whole-bill percentages are deleted, and each of its amounts is added
+   back to the row named by `shared_from` and deleted. An empty `shared_from` means the source's row
+   was written by an invoice made while the card was in the reader (`pay-for-items.ts:294-298`); the
+   source is then not open, `moveOrderLines` refuses the move back, the savepoint undoes the deletes,
+   and the items stay on their own bill with their share, to be paid there, as the put-back already
+   does for a source no longer open (`bill-payments.ts:2333-2339`).
 
 **Tests (failing first).** With inserted rows: the owner's 50.00/10.00 example to a new bill (3.00
 and 7.00) and to an existing one (amounts on the two moved items adding to 3.00); 10% to a new bill
 copied, to an existing bill 10% of the moved items as per-item amounts, the destination's other
 items untouched (the assertion the owner's Q4 sets); a set menu moved whole keeps its discount on the
-destination's row; a table split from two discounted bills (D9); a line of three beers with 10%, one
-split off, both parts 10%; an amount of 1.00 on three units split 0.34, 0.33, 0.33 by line order.
+destination's row; a table split from two discounted bills (D9); a declined card's put-back from a
+bill holding 10% and from one holding 10.00 off: the source's shown total is the same before Pay for
+items and after the put-back (the assertion that fails if the put-back worked out a share again, which
+would discount the items twice), and no row is left on the abandoned bill.
 
 **Changed test checks.** None.
 
@@ -719,15 +820,15 @@ split off, both parts 10%; an amount of 1.00 on three units split 0.34, 0.33, 0.
 **Files.** `bill-discounts-moves.ts` (new), `working-order-transfer.ts`, `bill-actions.ts`,
 `table-actions.ts`, `packages/adjustments/src/pending-discounts.ts`, their tests.
 
-**Tasks.** 4a.1 line splits and dish/extra targets; 4a.2 whole-bill shares (new and existing bill,
-D9); 4a.3 set-menu discounts and merge.
+**Tasks.** 4a.1 whole-bill shares (new and existing bill, D9); 4a.2 set-menu discounts and merge;
+4a.3 undo mode for the put-back.
 
 ---
 
-## PR 4b — Pay for items takes its share (`feat/a1621-4b-pay-for-items`)
+## PR 4b — Pay for items takes its share, and a declined card gives it back (`feat/a1621-4b-pay-for-items`)
 
 **What lands.** Pay for items' new bill and its preview carry the chosen items' discounts; a declined
-card gives them back. Dormant. Owner lands (an invoice path).
+card gives them back through 4a's undo mode. Dormant. Owner lands (an invoice path).
 
 **Today (read).** `payForItems` (`pay-for-items.ts:444`) moves the chosen items to a new bill
 (`moveItemsToNewBill`, `:243`, splitting part of a line first, `:266-269`) and pays there; it may
@@ -736,14 +837,16 @@ issue the source (`:300`). The preview prices the picks as their own bill groups
 `set-menu-regroup.ts:319-359`). A declined card moves them back (`putItemsBack`,
 `bill-payments.ts:2343`) and abandons the new bill.
 
-**The change.** The move goes through 4a (a new bill: a percentage copied, an amount split). The
-preview works out both bills' discounts on the lines it already simulates, without writing (PR 1 on
-the simulated lines). The put-back returns each amount share to the row it came from (`shared_from`)
-before the new bill is abandoned; the trigger (D4) drops the copied percentage.
+**The change.** The move goes through 4a (a new bill: a percentage copied, an amount split, its
+`shared_from` set). The preview works out both bills' discounts on the lines it already simulates,
+without writing (PR 1 on the simulated lines). A printed bill reopened first (`reopenIfPrinted`,
+`:395-434`) maps the picks to the copies before the move, as today.
 
 **Tests (failing first).** The owner's two items (12.00 and 28.00) in the preview and in the
-payment; the Hake paid alone (spec 7.3: 11.50 and 11.50); a declined card leaves the source at 10.00
-off again; a percentage paid alone on a reader and declined leaves no row on the abandoned bill.
+payment; the Hake paid alone (spec 7.3: 11.50 and 11.50); the preview's figures equal the payment's
+(the assertion that fails if the preview skips the share); a declined reader card leaves the source
+at 10.00 off again; the source invoiced while the card was in the reader, then the card declined:
+the items stay on their own bill with their 3.00 share.
 
 **Changed test checks.** None.
 
@@ -832,85 +935,111 @@ after them.
 
 ---
 
-## PR 6b — The till draws discounts, with Remove (`feat/a1621-6b-till-discounts`)
+## PR 6b — The bill's foot, Remove, and the question before the invoice, on the till (`feat/a1621-6b-till-foot-check`)
 
-**What lands.** Each pending discount drawn under its target (a sent dish or extra, a set menu in
-the summary, the bill's foot) with its value and what it takes off now, marked when it no longer
-applies, with **Remove**; "Share of Table 4's 10%" for a moved share (D8). Nothing shows until 7a.
-Built to the frames the owner approves (D21).
+**What lands.** A whole-bill discount drawn at the bill's foot ("Discount 10.00  −10.00",
+"10%  −4.50") with **Remove**, marked when it no longer applies. On `adjustment.no_longer_applies`
+from Pay, Print the bill, Pay for items, the counter, unpaid departure or the deferred close, a
+dialog with spec 6.6's sentence for each discount and **Remove it** and **Give a different
+discount**: the comp window opens on the bill, or on the dish or set menu the till can still find,
+and saving sends one request that writes the new discount and removes the old (D22). Any other
+request refused with that code (a cancel, a move, a comp to zero) shows the code's own wording with
+the discounts named (fresh read M-4). Nothing shows until 7a. Built to the frames the owner approves
+(D21); needs nothing from lanes N or E.
 
 **Today (read).** A comp shows only as a struck-through old price (`widgets/price-was.ts:18-26`;
 `#sentPrice`, `till-table-order-screen.ts:3884-3899`; basket `#dishTotal`, `basket.ts:1277-1289`);
-nothing reads `discountNotices` (declared at `api/floor-api.ts:137`, `api/orders-api.ts:161`).
-
-**The change.** A new widget (`widgets/bill-discount-row.ts`) used by lane N's sent rows
-(`widgets/sent-row.ts`, its PR 8a), lane E's set-menu summary (`widgets/set-menu-summary.ts`), the
-bill's foot and the counter basket; `api/payments-api.ts` gains Remove's call; the till's handler
-lives in a new controller file, not `till-app.ts`. English and Spanish strings; guide text in 7a–7d.
-
-**Tests (failing first).** Each target draws its discount and Remove sends the discount's id and the
-bill's revision; a `set_menu_gone` discount draws as not applying; axe tests in both themes
-(`*.a11y.test.ts`).
-
-**Changed test checks.** `sent-prices` tests where the struck-through price stops applying to a
-pending discount (none until 7a; listed).
-
-**Checks to run.** The widget's and screens' tests, their `.a11y` tests, `apps/till/src/i18n/box-word.test.ts`,
-`scripts/no-hardcoded-chrome-views.test.ts`, `scripts/primary-coloured-text.test.ts`,
-`scripts/product-file-size.test.ts`.
-
-**Overlap.** Builds on lane N's 8a (sent rows) and lane E's A1515-4 slice 1 (set-menu summary): 6b
-starts after both land.
-
-**Tasks.** 6b.1 the widget and the bill's foot; 6b.2 sent rows, set-menu summary and the basket;
-6b.3 Remove.
-
----
-
-## PR 6c — The till's question before the invoice (`feat/a1621-6c-till-check`)
-
-**What lands.** On `adjustment.no_longer_applies` from Pay, Print the bill, Pay for items, the
-counter, unpaid departure or the deferred close, the till shows spec 6.6's sentence for each
-discount with **Remove it** and **Give a different discount** (opening the comp window on the bill
-or on what the till can still find; saving the new one removes the old). On
-`adjustment.amount_on_changed_dish` from the counter's save, "This dish had 2€ off. It's now the
-large burger: keep the 2€ off, or remove it?". Nothing shows until 7a.
-
-**Today (read).** The nearest precedent is the dead-ends question asked before the payment preview
-(`#askStoredDeadEnds`, `till-app.ts:8141-8170`); Print the bill's refusals go through
-`#onMealEndRefused` (`:21052-21089`); the pay window's through `refusalOf`
+nothing reads `discountNotices` (declared at `api/floor-api.ts:137`, `api/orders-api.ts:161`). The
+nearest precedent for a question before payment is the dead-ends question asked before the payment
+preview (`#askStoredDeadEnds`, `till-app.ts:8141-8170`); Print the bill's refusals go through
+`#onMealEndRefused` (`till-app.ts:21052-21089`); the pay window's through `refusalOf`
 (`state/bill-payment.ts:265-322`).
 
-**The change.** A dialog widget and a controller file (not `till-app.ts`), wired into those refusal
-paths; the code's wording in `i18n/codes.ts`; the hand-keyed card's preview is pinned by a test
-(D6).
+**The change.** A row widget (`widgets/bill-discount-row.ts`, new) at the bill's foot on the table
+screen and the counter basket; the dialog widget (new); a controller file (new) holding Remove's,
+the dialog's and the refusals' handlers; `api/payments-api.ts` gains Remove's call and the apply's
+`replacesDiscountId`. The two `till-app.ts` hooks (`#onMealEndRefused`, the pay refusal path) are its
+only lines there: `till-app.ts` is at its cap (25,758 of 25,758, ran `wc -l`), so the pull request
+moves a block of at least the same size out of it first (fresh read M-3). English and Spanish
+wording in `i18n/codes.ts` and `i18n/strings.ts`; guide text in 7a.
 
-**Tests (failing first).** Each refusal path opens the dialog with each discount's sentence; Remove
-then a retry pays; Give a different discount opens the comp window on the set menu, the dish or the
-bill; the counter's variant question sends the answer.
+**Tests (failing first).** The foot draws a 10% and a 10.00; Remove sends the discount's id and the
+bill's revision; a `cut_down` amount draws as taking what it can; each named refusal path opens the
+dialog with each discount's sentence; Remove then a retry pays; Give a different discount opens the
+comp window on the bill, a set menu or a dish and sends `replacesDiscountId`; a cancel refused with
+the code shows its wording, not the dialog; the till previews a hand-keyed card payment that
+completes the bill before asking for the outside machine (D6); axe tests in both themes.
 
 **Changed test checks.** None.
 
-**Checks to run.** As 6b, plus `till-app-bill-payments.test.ts`, `till-app-pay-for-items.test.ts`,
-`till-app-meal-end.test.ts`, `till-app-deferred-close.test.ts`.
+**Checks to run.** The widgets' and screens' tests and their `.a11y` tests,
+`till-app-bill-payments.test.ts`, `till-app-pay-for-items.test.ts`, `till-app-meal-end.test.ts`,
+`till-app-deferred-close.test.ts`, `apps/till/src/i18n/box-word.test.ts`,
+`scripts/no-hardcoded-chrome-views.test.ts`, `scripts/primary-coloured-text.test.ts`,
+`scripts/product-file-size.test.ts`.
+
+**Files.** `apps/till/src/widgets/{bill-discount-row,discounts-check-dialog}.ts` (new), a controller
+file (new), `till-app.ts` (two hooks, a block moved out), `till-table-order-screen.ts` (the foot;
+69 lines of room), `widgets/basket.ts` (the foot; 33 lines of room), `api/payments-api.ts`,
+`i18n/{codes,strings}.ts`, tests.
 
 **Overlap.** Lane I's #4453 (quiet pay) and #4483 (`till-app-meal-end.test.ts`): rebase after.
 
-**Tasks.** 6c.1 the dialog and the pay paths; 6c.2 Print, unpaid departure, deferred close; 6c.3 the
-variant question.
+**Tasks.** 6b.1 the foot and Remove; 6b.2 the dialog on the pay paths; 6b.3 Print, unpaid
+departure, deferred close, the other requests' wording, and the hand-keyed card's test.
 
 ---
 
-## PR 7a — Switch: whole-bill discounts are pending (`feat/a1621-7a-bill`)
+## PR 6c — Discounts under dishes, extras and set menus, on the till (`feat/a1621-6c-till-targets`)
 
-**What lands.** The comp window's whole-bill discount writes a pending row. Everything 1–6 built
-becomes live for whole-bill discounts. Owner lands.
+**What lands.** Each pending discount on a dish, an extra or a set menu drawn under it, with its value,
+what it takes off now and **Remove**, marked when it no longer applies; "Share of Table 4's 10%" for
+a moved share (D8). The comp window says what a set menu's new discount replaces (spec 6.7, "the till
+says so"), from the preview's `replaces`, which nothing in the till reads today (ran `rg`; fresh read
+I-4). On `adjustment.amount_on_changed_dish` from the counter's save, "This dish had 2€ off. It's now
+the large burger: keep the 2€ off, or remove it?". Nothing shows until 7b. Built to the frames the
+owner approves, on lane N's sent rows and lane E's set-menu summary.
+
+**Today (read).** Giving a set menu a comp already exists: the set-menu summary's Comp
+(`widgets/set-menu-summary.ts:250-262`) calls the order screen's `#compMenu`
+(`till-table-order-screen.ts:1916-1923`), which targets the set menu's own line; lane E's slice 1
+keeps "the existing comp action". The comp window reads only `billTotal`, `reduction` and
+`needsApproval` from the preview (`widgets/adjustment-dialog.ts:372-399`).
+
+**The change.** The row widget from 6b used by lane N's sent rows (`widgets/sent-row.ts`, its PR 8a),
+lane E's set-menu summary and the counter basket's dish and extra rows; the comp window shows the
+`replaces` sentence; the counter's save answers the variant question.
+
+**Tests (failing first).** Each target draws its discount and Remove works from it; a `set_menu_gone`
+discount draws as not applying; the comp window on a set menu holding 10% says the new one replaces
+it (the assertion that fails if `replaces` is not read); the counter's variant question sends keep or
+remove; axe tests in both themes.
+
+**Changed test checks.** `till-table-order-screen.sent-prices.test.ts` where the struck-through price
+no longer applies to a pending discount; listed.
+
+**Checks to run.** As 6b's widget and screen checks.
+
+**Overlap.** Starts after lane N's 8a and lane E's A1515-4 slice 1 land.
+
+**Tasks.** 6c.1 sent rows and the basket; 6c.2 the set-menu summary and `replaces`; 6c.3 the variant
+question.
+
+---
+
+## PR 7a — Switch: whole-bill discounts are pending, and Remove (`feat/a1621-7a-bill`)
+
+**What lands.** The comp window's whole-bill discount writes a pending row; the Remove route.
+Everything 1–6b built becomes live for whole-bill discounts. Waits for the owner's answer to D23.
+Owner lands. About four hours, in four tasks.
 
 **Today (read).** A whole-bill discount spreads over every line now and lowers them
 (`planAdjustment`'s bill branch, `adjustments-apply.ts:573-599` (†); `reprice`); a lowered line freezes
 its set menu (`frozenLinesOf` and `belowListPrice`, `packages/orders-sales/src/set-menu-grouping-plan.ts:83-108` (†)), so
 a bill discounted as a whole stops working out its set menus. The comp window's limits read what is
 off the lines (`judgeComp`, `:802-848` (†): `readReasonStanding` and the list price less the price).
+The comp routes sit in `adjustments-api.ts` (apply `:201`, preview `:268`), behind
+`requireSession(…, { action: "take-orders" })` (†).
 
 **The change.**
 1. `apps/server/src/bill-discounts-give.ts` (new): the comp window's plan and apply for a whole-bill
@@ -918,8 +1047,15 @@ off the lines (`judgeComp`, `:802-848` (†): `readReasonStanding` and the list 
    total, `adjustment.exceeds_amount`), limits with standing figures that add pending discounts'
    working-out to today's records, the pending row written, the revision bumped,
    `discount.given` recorded. `planAdjustment`/`applyAdjustment` hand a whole-bill discount to it.
+   The apply takes `replacesDiscountId` (D22): the old discount is deleted in the same transaction.
 2. The preview's `billTotal` before and after from the working-out (spec 6.5).
-3. Guide: the comps section says a whole-bill discount can be removed until the bill is paid or
+3. Remove (D22): `apps/server/src/bill-discounts-api.ts` (new), mounted with the till routes; reads
+   the discount, refuses a bill not open or with a payment in flight, deletes its `given_together`
+   group through the store, bumps the bill's and party's revision, records `discount.removed`.
+   Profile action `take-orders`; inventory row in `till-api.profile-actions.test.ts`.
+4. D23's answer: (a) is 2b's one call, nothing here; (b) also wraps Remove and the crystallising
+   call for a placed Counter order in `withSentOrderOpen`.
+5. Guide: the comps section says a whole-bill discount can be removed until the bill is paid or
    printed, a percentage covers later dishes, and an amount stays whole when a dish is cancelled
    (English and Spanish).
 
@@ -927,30 +1063,40 @@ off the lines (`judgeComp`, `:802-848` (†): `readReasonStanding` and the list 
 a dish added later is covered, Remove brings 50.00 back, the invoice files 10% of the final bill;
 lane B's 25 November bill stays 17.00 after the Soup is cancelled (anti-goal 1); 10.00 off a bill
 cut to 8.00 by cancels is asked about before Pay; the owner's two items paid alone; set menus keep
-regrouping under a whole-bill discount.
+regrouping under a whole-bill discount; Give a different discount replaces 10% with 15% in one
+request, and a refused replacement leaves the 10% standing; **the Counter case** (fresh read I-2): a
+Counter order with 10% placed and paid later files 10% of its lines, by the route D23's answer chose.
+Remove: deletes the row and its group, raises the shown total, records the activity entry, is
+refused without `adjustment.apply` and while a card payment is pending, and is not refused for
+taking the bill over the simplified limit. A discount given after a part payment that would take the
+bill below its money is refused as today (D12).
 
 **Changed test checks** (about 30; each listed in the pull request): the whole-bill groups of
 `adjustments-apply.test.ts` (`:813` "a bill discount with a weighed line", `:875`, `:928`, and the
 whole-bill cases of `:1904` "cumulative limits" and `:2515` "the bill's comp limit") move their price
-checks behind crystallising; `set-menu-adjustments.test.ts:144` and `:269`;
+checks into the crystallising tests where those already check the same thing (fresh read M-10), and
+otherwise behind a call to crystallise; `set-menu-adjustments.test.ts:144` and `:269`;
 `set-menu-dish-adjustments.test.ts:668`; `set-menu-discount-moves.test.ts:416` (a whole-bill
 discount no longer freezes, "until 3c"); `set-menu-discount-apply.test.ts:303`.
 
 **Checks to run.** The touched suites; `receipt-adjustments.test.ts`, `free-items.test.ts`,
-`packages/adjustments/src/reports.test.ts`; golden huella; `inmutabilidad`; the guide guards.
+`packages/adjustments/src/reports.test.ts`, `till-api.profile-actions.test.ts`; golden huella;
+`inmutabilidad`; the guide guards.
 
-**Files.** `bill-discounts-give.ts` (new), `adjustments-apply.ts` (the hand-off; room made in PR 1),
-`adjustment-bill-total.ts`, the guide in both languages, tests.
+**Files.** `bill-discounts-give.ts`, `bill-discounts-api.ts` (new), `adjustments-apply.ts` (the
+hand-off; room made in PR 1), `adjustments-api.ts`, `adjustment-bill-total.ts`, `till-api.ts`
+(mount), the guide in both languages, tests.
 
-**Tasks.** 7a.1 plan and apply; 7a.2 preview and limits; 7a.3 the changed checks and the guide.
+**Tasks.** 7a.1 plan and apply, with the replacement; 7a.2 preview and limits; 7a.3 Remove and the
+Counter case; 7a.4 the changed checks and the guide.
 
 ---
 
 ## PR 7b — Switch: set-menu discounts are pending (`feat/a1621-7b-set-menus`)
 
 **What lands.** A comp or discount on a set menu is pending; a second replaces the first (the till
-says so, from the preview's `replaces`); a set menu holding one is worked out like any other; one
-whose row goes is asked about before the invoice. Owner lands.
+says so, from the preview's `replaces`, which 6c draws); a set menu holding one is worked out like any
+other; one whose row goes is asked about before the invoice. Waits for 6c. Owner lands.
 
 **Today (read).** A set menu's comp or discount is written onto its row and charged dishes
 (`setMenuDishes`, `set-menu-adjustment.ts:20-23`), freezing it; a second ends the first
@@ -965,7 +1111,8 @@ paragraph (`table-service.md:591-593`) in both languages.
 
 **Tests (failing first).** 50% off a Daily, then its Hake cancelled so the Daily breaks up: the bill
 shows the discount as not applying and Pay is asked (spec 6.6's sentence); a second discount
-replaces the first; the Daily moved whole keeps it; the tie-break (D16).
+replaces the first and the preview's `replaces` names the first; the Daily moved whole keeps it; the
+tie-break and its control (D16).
 
 **Changed test checks** (about 40): `set-menu-discount-apply.test.ts`, `set-menu-discount-cancel.test.ts`
 (endings become a kept discount asked about), `set-menu-discount-moves.test.ts` (`:140`, `:162`,
@@ -985,7 +1132,7 @@ guide.
 
 **What lands.** A percentage or amount on a dish is pending: a percentage covers its extras, added
 later included; an amount stays; the dish still leaves its set menu when it has a discount of its
-own (spec 6.7, 3a); a till row of several portions gets one per portion, removed together; part of a
+own (spec 6.7, A1515-3's 3a); a till row of several portions gets one per portion, removed together; part of a
 non-portion line is split off when given. A variant change asks about an amount (PR 5 live). Owner
 lands.
 
@@ -998,7 +1145,9 @@ reduced dish out (`frozenLineIdSources`, `set-menu-freeze.ts:18-45` (†)).
 **The change.** `bill-discounts-give.ts` takes dish targets: release and carve as today at the
 moment of giving, then pending rows (one per portion of a row, one `given_together` id); the
 grouping's `reduced` set reads pending dish discounts of origin `given` (not extras, D34; not
-shares, D8) beside written records. Guide: the dish paragraph and the old "comes off that dish"
+shares, D8) beside written records; Remove now works the bill's set menus out again, so a dish whose
+own discount goes rejoins the grouping (fresh read M-6: before 7c no pending discount excludes a
+dish, so a test of this could not fail earlier). Guide: the dish paragraph and the old "comes off that dish"
 sentence (`table-service.md:18-19`).
 
 **Tests (failing first).** The burger examples of spec 7.3 end to end; a discounted Hake stays out of
@@ -1007,7 +1156,8 @@ moved: each keeps 10%; the per-dish floor still asks for a PIN at the same limit
 
 **Changed test checks** (about 60, the largest set): `adjustments-apply.test.ts`'s line groups
 (`:316` "a comp" for its discount cases, `:667`, `:791`, `:1291`, `:1350`, `:2007`, `:2412`,
-`:3203`, `:3505`, `:3590`, `:3926`) move their price checks behind crystallising;
+`:3203`, `:3505`, `:3590`, `:3926`) move their price checks into the crystallising tests where those
+already check the same thing (fresh read M-10), otherwise behind a call to crystallise;
 `set-menu-dish-adjustments.test.ts`; `order-portions.adjustments.test.ts`; `dish-discount-ending.test.ts`
 (the dish cases now PR 5's); `bill-editing.adjustments.test.ts`; `free-items.test.ts` (open-bill
 discounts no longer counted before the invoice).
@@ -1086,7 +1236,12 @@ retired), `carryLineReductions` on open-bill copies, `discountNotices` on the wi
 `DISCOUNT_NOTICE_WHYS`, `reapplies` on the comp request, the report's "came off" rule (D55,
 `reports.ts:297-336`) and its help text (`packages/adjustments/src/dashboard/strings.ts:106`), the
 `adjustment_endings` and `adjustment_ending_lines` tables (schema, classification, manifest,
-backup verification, `ADJUSTMENTS_TABLES`), and the till's dead types. A pointer line in the spec of
+backup verification, `ADJUSTMENTS_TABLES`), and the till's dead types. The entries naming what it
+retires come out of the guards and fixtures that list them (ran `rg`; fresh read M-2):
+`scripts/schema-constraints.test.ts:52-55`, `:331`; `scripts/append-only-triggers.test.ts:35-36`;
+`scripts/personal-log-params.test.ts:139` (`set_menu.move_adjusted.dishNames`);
+`apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:465-466`. Removing an entry for a table or
+code that no longer exists weakens nothing. A pointer line in the spec of
 24 November §6 (`docs/superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md:220`),
 dated, to this design (spec 11's last row). Backlog: A1515's 26 November note and this item close.
 
@@ -1110,21 +1265,25 @@ cases deleted with the rule.
 ## Overlap with other work (ran `gh pr list --state open`, read the overlapping files)
 
 - **Lane E, A1515-4** (`feat/e-a1515-4-till-set-menus`, local only, one commit: its plan). Its plan
-  gives "discounts and the warning before a dish discount to A1621". Slice 1 (set-menu summary)
-  lands before 6b, which draws on it. Slice 2's server quote passes "frozen adjustments" to the
-  grouping; it should call the grouping's own frozen-source function (`planGrouping`,
-  `set-menu-regroup.ts:132-145`) so 7b–7c's change reaches it without a second edit. Slice 3 (Items
-  price) shows the server preview's total, which 4b makes discount-aware.
+  gives "discounts and the warning before a dish discount to A1621". What each slice waits for
+  (fresh read M-9): **slice 1** (set-menu summary) waits for nothing here, and 6c waits for it.
+  **Slice 2** (the unsent preview as a server quote) passes "frozen adjustments" to the grouping; if
+  it calls the grouping's own frozen-source function (`planGrouping`, `set-menu-regroup.ts:132-145`)
+  it waits for nothing and 7a–7c's changes reach it without a second edit; if it copies the freeze,
+  it waits for 7c. Its quote should also subtract pending discounts once 2b exists (call
+  `readBillDiscounts`); before 7a no bill holds one. **Slice 3** (Items price) shows the server
+  preview's total; it waits for nothing, and after 4b that total includes the discounts.
 - **Lane N, till order redesign** (#4459 PR 6, #4477 PR 7a, #4484 PR 8-0, plan for 8a–8c): owns
-  `till-table-order-screen.ts`, `basket.ts`, the new `sent-row.ts`. 6a rebases after #4459/#4477; 6b
-  draws under 8a's sent rows.
+  `till-table-order-screen.ts`, `basket.ts`, the new `sent-row.ts`. 6a and 6b rebase after
+  #4459/#4477; 6c draws under 8a's sent rows.
 - **Lane I, #4453 quiet pay** (`bill-pay-dialog.ts`, `state/bill-payment.ts`, `till-app.ts`): 6a and
-  6c rebase after it.
+  6b rebase after it.
 - **#4457 bill picker polish**, **#4450**, **#4492**, **#4491**: guide `table-service.md` text only,
   or no shared file; a rebase conflict at most.
 - **#4483 CORRECT-FULL-INVOICE 2b** (corrections, give-back, `till-app-meal-end.test.ts`, the guide):
-  no shared product file; 6c's test file rebases after it.
-- **Lane L, OVERPAID-BILLS** (not yet a pull request): D12.
+  no shared product file; 6b's test file rebases after it.
+- **Lane L, OVERPAID-BILLS** (not yet a pull request): D12. A1621 depends on it for spec 6.5's
+  overpaid sentence and does not wait for it.
 - No open pull request touches `adjustments-*`, `bill-payments.ts`, `set-menu-*`,
   `working-order-*`, `pay-for-items.ts` or `split-after-print.ts` (ran: grep of every open pull
   request's file list).
