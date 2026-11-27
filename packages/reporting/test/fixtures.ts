@@ -499,7 +499,6 @@ export async function seedFiredLine(
       name: "Item",
 
       unitPrice: stringToCents("1.00"),
-      vatClass: "general",
     })
     .returning({ id: products.id });
   await seedTakeawayVatRate(db, product!.id);
@@ -513,8 +512,6 @@ export async function seedFiredLine(
       descriptions: { "es-ES": "Item" },
       quantity: stringToThousandths("1.000"),
       unitPriceGross: stringToCents("1.00"),
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       lineTotal: stringToCents("1.00"),
       servedAt: opts.served ? firedAt : null,
     })

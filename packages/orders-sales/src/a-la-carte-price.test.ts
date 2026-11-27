@@ -42,7 +42,7 @@ describe("setMenuALaCartePrices", () => {
       const product = async (name: string, unitPrice: number | null, parentId?: string) => {
         const [row] = await tx
           .insert(products)
-          .values({ name, unitPrice, vatClass: "reduced", parentId })
+          .values({ name, unitPrice, parentId })
           .returning({ id: products.id });
         return row!.id;
       };

@@ -88,7 +88,6 @@ async function product(
     kitchenName: `KITCHEN ${name}`,
     customerName,
     unitPrice: "3.00",
-    vatClass: "reduced",
   });
   return created.id;
 }
@@ -133,7 +132,6 @@ async function manyProducts(
         customerName,
         pricingUnit: "each",
         unitPrice: 300,
-        vatClass: "reduced",
       };
     });
     await tx.insert(products).values(rows);

@@ -45,8 +45,6 @@ function offer(productId: string, countsAsCourseId: string, unitPrice: string): 
     customerName: null,
     kitchenName: null,
     unit: portion,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     category: null,
     allergens: null,
     diet: null,

@@ -327,8 +327,6 @@ async function seedOrder(
     workingOrderId: order.id,
     quantity: 2000,
     unitPriceGross: 1100,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     lineTotal: 2200,
   };
   const [burger] = await db
@@ -494,8 +492,6 @@ describe("recordKitchenNotices", () => {
         unitName: { en: "kg", "es-ES": "kilo" },
         quantity: 500,
         unitPriceGross: 4400,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 2200,
       })
       .returning({ id: workingOrderLines.id });
@@ -578,7 +574,6 @@ describe("recordKitchenNotices", () => {
         name: "Small plate",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "reduced",
       });
       return addProductToMenu(tx, { menuId: menu.id, productId: product.id });
     });
@@ -606,8 +601,6 @@ describe("recordKitchenNotices", () => {
           unitPrecision: sold.unit.precision,
           quantity: 2000,
           unitPriceGross: 100,
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           lineTotal: 200,
         })
         .returning({ id: workingOrderLines.id });
@@ -1656,8 +1649,6 @@ describe("A807 one notice per kitchen-note change", () => {
         unitName: { en: "kg" },
         quantity: 700,
         unitPriceGross: 4400,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 3080,
       })
       .returning({ id: workingOrderLines.id });
@@ -1701,8 +1692,6 @@ describe("A807 one notice per kitchen-note change", () => {
         unitName: { en: "kg" },
         quantity: 2000,
         unitPriceGross: 4400,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 8800,
       })
       .returning({ id: workingOrderLines.id });

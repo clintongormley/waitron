@@ -229,7 +229,6 @@ it("clears owned daily dates and incoming destinations without reopening their o
       categoryId: null,
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "general",
     });
     await tx.insert(routingCells).values({ ...f.cfg, noCategory: true, stationId: f.other });
     await tx

@@ -106,7 +106,6 @@ describe("menu → priceBasket → recordSale (end-to-end)", () => {
         name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await assignMenuToVenue(tx, cat.id);
 

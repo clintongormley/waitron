@@ -113,7 +113,6 @@ describe("unreviewed offered allergens", () => {
           name: "Unplaced",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "reduced",
         });
       });
       expect(await warnings(f)).toEqual([

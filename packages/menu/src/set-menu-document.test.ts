@@ -76,7 +76,7 @@ async function fixture(tx: Transaction) {
           { name: "Sirloin", courseId: mains!, unitPrice: 1800 },
           { name: "Wine", courseId: mains!, unitPrice: 400 },
           { name: "Bravas", courseId: sharing!, unitPrice: 600 },
-        ].map((dish) => ({ ...dish, vatClass: "reduced" as const, dietaryDeclarations: [] })),
+        ].map((dish) => ({ ...dish, dietaryDeclarations: [] })),
       )
       .returning({ id: products.id })
   ).map(({ id }) => id);

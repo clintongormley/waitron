@@ -66,7 +66,6 @@ describe("park & retrieve schema", () => {
         name: "Café solo",
 
         unitPrice: 100,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     productA = product.id;

@@ -59,7 +59,6 @@ beforeEach(async () => {
       name: "Coffee",
       unitId: unit.id,
       unitPrice: "9.00",
-      vatClass: "reduced",
     });
     productId = product.id;
     offerId = (
@@ -291,7 +290,6 @@ describe("product variants", () => {
         name: "Bravas",
         unitId: unit.id,
         unitPrice: "6.00",
-        vatClass: "reduced",
       });
       return setProductVariants(tx, other.id, [variant("Half portion", "4.00")], "en");
     });
@@ -359,7 +357,6 @@ describe("which products have an Active variant", () => {
           name,
           unitId: product!.unitId,
           unitPrice: "5.00",
-          vatClass: "general",
         });
       return {
         unavailable: await make("Tea"),

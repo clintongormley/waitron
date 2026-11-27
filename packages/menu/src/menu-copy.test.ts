@@ -73,7 +73,6 @@ async function fixture(): Promise<Fixture> {
           name,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         })
       ).id;
     const burger = await make("Burger", "12.00");

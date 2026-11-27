@@ -77,8 +77,6 @@ beforeEach(async () => {
       quantity: 1000,
       unitPriceGross: 605,
       lineTotal: 605,
-      vatClass: "general",
-      takeawayVatClass: "general",
     })),
   );
   await suite.db
@@ -266,8 +264,6 @@ it("refuses when the reopened bill is missing one of the ticket's dishes", async
     quantity: 1000,
     unitPriceGross: 605,
     lineTotal: 605,
-    vatClass: "general",
-    takeawayVatClass: "general",
   });
   await expectRefused(
     await wholeCredit(),

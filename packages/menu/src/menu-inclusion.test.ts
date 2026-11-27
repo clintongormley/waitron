@@ -105,7 +105,6 @@ describe("menu inclusions and owned sections", () => {
           name,
           pricingUnit: "each",
           unitPrice: "3",
-          vatClass: "general",
         });
       return [(await make("Lager staff")).id, (await make("Merlot staff")).id];
     });
@@ -208,7 +207,6 @@ describe("menu inclusions and owned sections", () => {
         name: "Merlot",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       }),
     );
     await app(async (tx) => {
@@ -241,7 +239,6 @@ describe("menu inclusions and owned sections", () => {
         name: "Kept product",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       }),
     );
     await app(async (tx) => {

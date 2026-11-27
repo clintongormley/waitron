@@ -36,7 +36,6 @@ async function fixture(tx: Transaction) {
     categoryId: null,
     unitId: null,
     unitPrice: "6.00",
-    vatClass: "reduced",
     takeawayVatRate: "21.00",
   });
   const sirloin = await createProduct(tx, {
@@ -44,14 +43,12 @@ async function fixture(tx: Transaction) {
     categoryId: null,
     unitId: null,
     unitPrice: "20.00",
-    vatClass: "general",
   });
   const wine = await createProduct(tx, {
     name: "Wine",
     categoryId: null,
     unitId: null,
     unitPrice: "8.00",
-    vatClass: "reduced",
   });
   const variantDetails = { customerName: null, kitchenName: null, image: null, available: true };
   const [glass, bottle] = await setProductVariants(
@@ -197,7 +194,6 @@ it("refuses measured dishes and reports a dish switched to a measured unit later
       name: "Turbot",
       categoryId: null,
       unitPrice: "25.00",
-      vatClass: "reduced",
       unitId: unit.id,
     });
     await addSetMenuDishes(tx, f.menuId, [pick(f.soup)]);

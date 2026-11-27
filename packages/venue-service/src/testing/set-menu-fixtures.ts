@@ -54,7 +54,7 @@ export async function setMenuFixture(tx: Transaction) {
           { name: "Soup", courseId: starters!, unitPrice: 700 },
           { name: "Sirloin", courseId: mains!, unitPrice: 1800 },
           { name: "Bravas", courseId: sharing!, unitPrice: 600 },
-        ].map((dish) => ({ ...dish, vatClass: "reduced" as const, dietaryDeclarations: [] })),
+        ].map((dish) => ({ ...dish, dietaryDeclarations: [] })),
       )
       .returning({ id: products.id })
   ).map(({ id }) => id);

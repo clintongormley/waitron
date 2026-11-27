@@ -528,7 +528,6 @@ describe("option list CRUD", () => {
           name,
           unitId: null,
           unitPrice: "12.00",
-          vatClass: "reduced",
         });
         if (name !== "chips")
           await writeProductModifiers(tx, product.id, [{ kind: "options", id: carried.id }]);
@@ -565,7 +564,6 @@ describe("option list CRUD", () => {
           name,
           unitId: null,
           unitPrice: "12.00",
-          vatClass: "reduced",
         });
         made[name] = product.id;
         // The steak and the burger carry the list; the chips do not.

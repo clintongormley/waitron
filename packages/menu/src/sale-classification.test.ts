@@ -46,7 +46,6 @@ async function fixture() {
         name,
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       });
     const mojito = await product("Mojito", cocktails.id);
     const wine = await product("Wine by the glass", alcoholic.id);

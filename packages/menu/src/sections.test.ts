@@ -65,7 +65,6 @@ async function fixture(): Promise<Fixture> {
           kitchenName: `${name} (kitchen)`,
           pricingUnit: "each",
           unitPrice: "2",
-          vatClass: "general",
         })
       ).id;
     const lager = await make("Lager");

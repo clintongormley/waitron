@@ -373,7 +373,6 @@ describe("translation peer baseline projection", () => {
           customerName: { es: "CLIENT ES bread", en: "CLIENT Bread" },
           unitPrice: "3.00",
           pricingUnit: "each",
-          vatClass: "reduced",
         });
         const entries: (TranslationCellRef & { text: string | null })[] = [
           { kind: "included_menu", id: member.id, language: "en", field: "name", text: null },

@@ -60,7 +60,7 @@ it("a set menu's terms are its price, names and lines", async () => {
       .returning({ id: kitchenCourses.id });
     const [{ id: dish }] = await tx
       .insert(products)
-      .values({ name: "Hake", courseId: course, unitPrice: 1200, vatClass: "reduced" })
+      .values({ name: "Hake", courseId: course, unitPrice: 1200 })
       .returning({ id: products.id });
     const lines = await addSetMenuDishes(tx, set.id, [{ productId: dish, excludedVariantIds: [] }]);
     const holder = await createMenu(tx, { name: "Lunch" });

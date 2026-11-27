@@ -115,8 +115,8 @@ it("deleting a set menu deletes its lines and their course choices", async () =>
 it("only excludes variants of the offer's product", async () => {
   await insertMenu("set_menu", 1400, "reduced");
   await suite.db.insert(products).values([
-    { id: "soup", name: "Soup", vatClass: "reduced", unitPrice: 600 },
-    { id: "salad", name: "Salad", vatClass: "reduced", unitPrice: 700 },
+    { id: "soup", name: "Soup", unitPrice: 600 },
+    { id: "salad", name: "Salad", unitPrice: 700 },
   ]);
   await suite.db.insert(products).values([
     { id: "cup", parentId: "soup", name: "Cup" },

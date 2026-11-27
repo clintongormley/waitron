@@ -162,8 +162,6 @@ describe("set menu storage on a bill", () => {
       quantity: 1000,
       unitPriceGross: 100,
       lineTotal: 100,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
     });
     for (const [column, value] of [
       ["set_menu_id", MENU],

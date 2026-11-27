@@ -2692,7 +2692,6 @@ describe("routing cell route", () => {
           categoryId: fx.categoryId,
           pricingUnit: "each",
           unitPrice: "3.00",
-          vatClass: "general",
         }),
       )
     ).id;
@@ -3088,7 +3087,6 @@ describe("routing cell route", () => {
         categoryId: null,
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       }),
     );
     const response = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
@@ -3170,7 +3168,6 @@ describe("routing cell route", () => {
         categoryId: fx.categoryId,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       }),
     );
     const path = `${base}/explain?productId=${product.id}`;
@@ -3197,7 +3194,6 @@ describe("a routing cell's period choices on the routes", () => {
         categoryId: fx.categoryId,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
       const period = await saveMenuPeriod(tx, dining.id, {
@@ -3610,7 +3606,6 @@ it("the station planning route returns the configured period ranges for a non-de
       categoryId: f.categoryId,
       pricingUnit: "each",
       unitPrice: "3",
-      vatClass: "general",
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
@@ -4144,7 +4139,6 @@ it("A724: the station planning route returns last orders at its period's own end
       categoryId: f.categoryId,
       pricingUnit: "each",
       unitPrice: "3",
-      vatClass: "general",
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (

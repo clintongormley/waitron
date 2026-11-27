@@ -178,7 +178,7 @@ export async function seedMenuItem(db: Database | Transaction, id?: string): Pro
   const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
   const [product] = await db
     .insert(products)
-    .values({ name: "Test product", unitPrice: 100, vatClass: "general" })
+    .values({ name: "Test product", unitPrice: 100 })
     .returning({ id: products.id });
   await seedTakeawayVatRate(db, product!.id);
   const [item] = await db

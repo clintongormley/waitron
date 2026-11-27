@@ -105,7 +105,6 @@ describe("menu operations", () => {
         name: "Tea",
         unitId: null,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       expect(await listProducts(tx)).toEqual([product]);
       expect(product).toMatchObject({ name: "Tea", unitPrice: "2.00" });
@@ -121,7 +120,6 @@ describe("menu operations", () => {
         kitchenName: "BAR COFFEE",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "reduced",
       });
       expect(product).toMatchObject({
         name: "Coffee",
@@ -149,7 +147,6 @@ describe("menu operations", () => {
         name: "Negroni",
         unitId: eachUnitId,
         unitPrice: "0.00",
-        vatClass: "general",
       });
       const nine = await addProductToMenu(tx, {
         menuId: upstairs.id,
@@ -202,7 +199,6 @@ describe("menu operations", () => {
         name: "Water",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
       });
       const item = await addProductToMenu(tx, {
         menuId: menu.id,
@@ -292,21 +288,18 @@ describe("menu operations", () => {
         name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       const water = await createProduct(tx, {
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const olives = await createProduct(tx, {
         categoryId: null,
         name: "olives",
         unitId: eachUnitId,
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const products = await listProducts(tx);
       expect(products.map((p) => p.id).sort()).toEqual([ham.id, water.id, olives.id].sort());
@@ -342,7 +335,6 @@ describe("menu operations", () => {
         name,
         pricingUnit: "each",
         unitPrice: 100,
-        vatClass: "general",
         createdAt: sameMoment,
         updatedAt: sameMoment,
       });
@@ -372,7 +364,6 @@ describe("menu operations", () => {
         name: "loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       });
       await tx.execute(sql`update products set unit_id = null where id = ${product.id}`);
       const [seen] = await listProducts(tx);
@@ -391,7 +382,6 @@ describe("menu operations", () => {
         name: "loose sweets",
         unitId: null,
         unitPrice: "0.00",
-        vatClass: "general",
       });
       expect(created.pricingUnit).toBe("each");
       expect(created.unit).toEqual(EACH_UNIT);
@@ -406,7 +396,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await updateProduct(tx, created.id, { unitId: null });
       expect(await storedUnitId(tx, created.id)).toBeNull();
@@ -425,7 +414,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await updateProduct(tx, created.id, { unitPrice: "25.00" });
       expect(await storedUnitId(tx, created.id)).toBe(kgUnitId);
@@ -439,7 +427,6 @@ describe("menu operations", () => {
         name: "loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       });
       expect(await storedUnitId(tx, created.id)).toBeNull();
       expect(created.pricingUnit).toBe("each");
@@ -463,7 +450,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await expect(updateProduct(tx, created.id, { unitId: "" })).rejects.toMatchObject({
         code: "unit.not_found",
@@ -539,7 +525,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await expect(
         updateProduct(tx, product.id, { pricingUnit: "portion" as PricingUnit }),
@@ -557,7 +542,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await updateProduct(tx, ham.id, { pricingUnit: "each" });
       expect(await storedUnitId(tx, ham.id)).toBeNull();
@@ -571,7 +555,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: eachUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await tx.execute(sql`update units set seed_key = null where id = ${kgUnitId}`);
       await expect(
@@ -597,7 +580,6 @@ describe("menu operations", () => {
         name: "ham",
         pricingUnit: "weight",
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       const assignments = await tx.execute<{ unit_id: string }>(sql`
         select unit_id from products
@@ -622,7 +604,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await updateProduct(tx, ham.id, { unitId: eachUnitId });
       const stored = await tx.execute<{ unit_id: string }>(sql`
@@ -645,7 +626,6 @@ describe("menu operations", () => {
         name: "ham",
         pricingUnit: "each",
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       await updateProduct(tx, product.id, { pricingUnit: "weight" });
       const assignments = await tx.execute<{ unit_id: string }>(sql`
@@ -668,7 +648,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await updateProduct(tx, water.id, {
         unitPrice: "1.80",
@@ -688,7 +667,6 @@ describe("menu operations", () => {
         name: "ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
         image: libraryImageName("x.webp"),
       });
       expect(withImage.image).toBe(libraryImageName("x.webp"));
@@ -698,7 +676,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       expect(noImage.image).toBeNull();
       const listed = await listProducts(tx);
@@ -723,7 +700,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       expect(p.active).toBe(true);
       await updateProduct(tx, p.id, { active: false });
@@ -748,7 +724,6 @@ describe("menu operations", () => {
         name: "seasonal",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
         active: false,
       });
       expect(hidden.active).toBe(false);
@@ -758,7 +733,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       expect(shown.active).toBe(true);
       const listed = await listProducts(tx);
@@ -775,7 +749,6 @@ describe("menu operations", () => {
         categoryId: null,
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general" as const,
       };
       const bacon = await createProduct(tx, {
         ...base,
@@ -806,7 +779,6 @@ describe("menu operations", () => {
         name: "bacon",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await updateProduct(tx, p.id, { ordering: "not_sold_separately" });
       await updateProduct(tx, p.id, { name: "streaky bacon" });
@@ -822,7 +794,6 @@ describe("menu operations", () => {
         name: "Bread",
         unitId: eachUnitId,
         unitPrice: "1.20",
-        vatClass: "general",
       });
       const input = {
         nuts: { kinds: ["walnuts" as const, "almonds" as const, "almonds" as const] },
@@ -843,7 +814,6 @@ describe("menu operations", () => {
         name: "bread",
         unitId: eachUnitId,
         unitPrice: "1.20",
-        vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       expect(p.allergens).toEqual({ gluten: { kinds: ["wheat" as const] } });
@@ -859,7 +829,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       expect(p.allergens).toBeNull();
     });
@@ -872,7 +841,6 @@ describe("menu operations", () => {
         name: "Reviewed tea",
         unitId: null,
         unitPrice: "1.00",
-        vatClass: "general",
         ...(allergens === null ? {} : { allergens }),
       });
       expect(product.allergens).toEqual(allergens);
@@ -910,7 +878,6 @@ describe("menu operations", () => {
         name: "cake",
         unitId: eachUnitId,
         unitPrice: "3.00",
-        vatClass: "general",
         allergens: { eggs: {} },
       });
       // An invalid code on update is rejected before the write.
@@ -938,7 +905,6 @@ describe("menu operations", () => {
         name: "milk",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
         allergens: { milk: {} },
       });
       await assignMenuToVenue(tx, cat.id);
@@ -971,7 +937,6 @@ describe("menu operations", () => {
           name,
           unitId,
           unitPrice: "1.00",
-          vatClass: "general",
         });
       }
       await assignMenuToVenue(tx, cat.id);
@@ -990,7 +955,6 @@ describe("menu operations", () => {
         name: "falafel wrap",
         unitId: eachUnitId,
         unitPrice: "6.00",
-        vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
 
@@ -1009,7 +973,6 @@ describe("menu operations", () => {
         name: "sandwich",
         unitId: eachUnitId,
         unitPrice: "3.00",
-        vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       return p;
@@ -1026,7 +989,6 @@ describe("menu operations", () => {
         name: "falafel",
         unitId: eachUnitId,
         unitPrice: "4.00",
-        vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
       const plain = await createProduct(tx, {
@@ -1034,7 +996,6 @@ describe("menu operations", () => {
         name: "plain",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
       });
       const rows = await listProducts(tx);
       return [rows.find((p) => p.id === forced.id)!, rows.find((p) => p.id === plain.id)!];
@@ -1067,7 +1028,6 @@ describe("menu operations", () => {
         name: "plain",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
       });
       return readDiet(tx, p.id);
     });
@@ -1084,7 +1044,6 @@ describe("menu operations", () => {
         name: "falafel",
         unitId: eachUnitId,
         unitPrice: "4.00",
-        vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
       return readDiet(tx, p.id);
@@ -1114,7 +1073,6 @@ describe("menu operations", () => {
         name: "x",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
       });
       await expect(
         updateProduct(tx, p.id, {
@@ -1132,7 +1090,6 @@ describe("menu operations", () => {
         name: "x",
         unitId: eachUnitId,
         unitPrice: "1.00",
-        vatClass: "general",
         dietOverride: { vegan: "no" },
       });
       await updateProduct(tx, p.id, { unitPrice: "2.00" });
@@ -1175,14 +1132,12 @@ describe("menu operations", () => {
         name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
-        vatClass: "reduced",
       });
       const p2 = await createProduct(tx, {
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await deactivateProduct(tx, p2.id);
       await assignMenuToVenue(tx, cat.id);
@@ -1210,7 +1165,6 @@ describe("menu operations", () => {
           name,
           unitId: eachUnitId,
           unitPrice: "9.00",
-          vatClass: "general",
         });
         await tx
           .update(products)
@@ -1234,7 +1188,6 @@ describe("menu operations", () => {
           name,
           unitId: eachUnitId,
           unitPrice: "9.00",
-          vatClass: "general",
         });
         await tx
           .update(products)
@@ -1341,7 +1294,6 @@ describe("menu operations", () => {
         name: "water",
         unitId: eachUnitId,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       const [available] = (await listAvailableProducts(tx)).products;
@@ -1400,8 +1352,6 @@ describe("menu operations", () => {
       },
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
-      takeawayVatClass: "general",
       category: null,
       allergens: null,
       diet: null,
@@ -1422,7 +1372,6 @@ describe("menu operations", () => {
         name: "Oil",
         unitId: eachUnitId,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await reassignProductsToUnit(tx, eachUnitId, [product.id], kgUnitId);
       expect((await listProducts(tx))[0]!.pricingUnit).toBe("weight");
@@ -1462,7 +1411,6 @@ describe("menu offers nest a product's variants", () => {
         name: "Wine by the glass",
         pricingUnit: "each",
         unitPrice: "4.00",
-        vatClass: "reduced",
       });
       const offer = await addProductToMenu(tx, {
         menuId: menu.id,
@@ -1497,7 +1445,6 @@ describe("menu offers nest a product's variants", () => {
         name: "Cava",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       await addProductToMenu(tx, {
         menuId: f.menuId,
@@ -1534,7 +1481,6 @@ describe("menu offers nest a product's variants", () => {
         name: "Vermut",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       return addProductToMenu(tx, {
         menuId: f.menuId,
@@ -1701,7 +1647,6 @@ describe("a variant's published allergens and diet", () => {
         name: "Latte",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "reduced",
         allergens: PARENT_MANUAL,
         dietOverride: PARENT_DIET_OVERRIDE,
       });
@@ -1885,7 +1830,6 @@ describe("a product's own colour", () => {
         name: "Wine",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       const [variant] = await setProductVariants(
         tx,
@@ -2018,7 +1962,6 @@ describe("declared product facts", () => {
     name: "Tea",
     unitId: null,
     unitPrice: "2.00",
-    vatClass: "general" as const,
   };
   it("refuses a negative price before the database does on create and update", async () => {
     await asVenue(async (tx) => {
@@ -2153,15 +2096,13 @@ describe("a new product's takeaway VAT rate", () => {
   });
 
   it("starts at the area's takeaway rate from the beginning of time", async () => {
-    const product = await run((tx) => createProduct(tx, { ...tea, vatClass: "general" }));
+    const product = await run((tx) => createProduct(tx, { ...tea }));
     const schedules = await run((tx) => readTakeawayVatSchedules(tx, [product.id]));
     expect(schedules.get(product.id)).toEqual([{ from: null, rate: "10.00" }]);
   });
 
   it("starts at the rate the request names", async () => {
-    const product = await run((tx) =>
-      createProduct(tx, { ...tea, vatClass: "general", takeawayVatRate: "4.00" }),
-    );
+    const product = await run((tx) => createProduct(tx, { ...tea, takeawayVatRate: "4.00" }));
     const schedules = await run((tx) => readTakeawayVatSchedules(tx, [product.id]));
     expect(schedules.get(product.id)).toEqual([{ from: null, rate: "4.00" }]);
   });
@@ -2181,7 +2122,6 @@ describe("a new product's takeaway VAT rate", () => {
       const { id } = await createProduct(tx, {
         ...tea,
         name: "Juice",
-        vatClass: "general",
         takeawayVatRate: "4.00",
       });
       const rows = await tx
@@ -2219,11 +2159,7 @@ describe("a new product's takeaway VAT rate", () => {
     const counts = await run(async (tx) => {
       const taxpayers = countingReadsOf(tx, taxpayer);
       const settingsReads = countingSettingsReads(taxpayers.tx);
-      const { id } = await createProduct(
-        settingsReads.tx,
-        { ...tea, name: "Juice", vatClass: "general" },
-        rates,
-      );
+      const { id } = await createProduct(settingsReads.tx, { ...tea, name: "Juice" }, rates);
       return {
         id,
         taxpayer: taxpayers.reads(),
@@ -2238,7 +2174,7 @@ describe("a new product's takeaway VAT rate", () => {
     expect(schedules.get(counts.id)).toEqual([{ from: null, rate: "5.00" }]);
     const unread = await run(async (tx) => {
       const taxpayers = countingReadsOf(tx, taxpayer);
-      await createProduct(taxpayers.tx, { ...tea, name: "Lemonade", vatClass: "general" });
+      await createProduct(taxpayers.tx, { ...tea, name: "Lemonade" });
       return taxpayers.reads();
     });
     expect(unread).toBe(1);
@@ -2246,7 +2182,7 @@ describe("a new product's takeaway VAT rate", () => {
 
   it("gives a variant no rate of its own", async () => {
     const variantId = await run(async (tx) => {
-      const parent = await createProduct(tx, { ...tea, vatClass: "general" });
+      const parent = await createProduct(tx, { ...tea });
       const [variant] = await setProductVariants(
         tx,
         parent.id,

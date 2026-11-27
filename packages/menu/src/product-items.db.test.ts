@@ -34,7 +34,6 @@ beforeEach(async () => {
           name,
           pricingUnit: "each",
           unitPrice: "2",
-          vatClass: "general",
         })
       ).id;
     cola = await make("Cola", d);
@@ -300,7 +299,6 @@ describe("deleteProductItems with the counts the client read before deleting", (
         name: "Stout",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       }),
     );
 
@@ -429,7 +427,6 @@ describe("summariseFolders", () => {
         name: "Porter",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       });
       await deactivateProduct(tx, id);
     });

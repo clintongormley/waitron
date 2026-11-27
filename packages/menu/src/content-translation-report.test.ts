@@ -58,7 +58,6 @@ async function bread(
     kitchenName: "KITCHEN Pan",
     unitPrice: "3.00",
     pricingUnit: "each",
-    vatClass: "reduced",
   });
 }
 

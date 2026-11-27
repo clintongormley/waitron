@@ -57,7 +57,7 @@ async function fixture(tx: Transaction) {
         courseId,
         parentId,
         ...(parentId === null
-          ? { unitPrice: 900, vatClass: "reduced", dietaryDeclarations: [] }
+          ? { unitPrice: 900, dietaryDeclarations: [] }
           : { unitPrice: 1800, variantOrder: name === "Bottle" ? 1 : 0 }),
       })
       .returning({ id: products.id });

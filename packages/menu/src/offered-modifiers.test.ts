@@ -54,14 +54,12 @@ const products = {
     customerName: { en: "Chargrilled burger" },
     kitchenName: "BURG",
     unitPrice: "9.00",
-    vatClass: "general" as const,
   },
   bacon: {
     name: "bacon staff",
     customerName: { en: "Smoked streaky bacon" },
     kitchenName: "BCN",
     unitPrice: "3.00",
-    vatClass: "reduced" as const,
     allergens: { mustard: {} },
     dietaryDeclarations: ["halal" as const],
   },
@@ -70,7 +68,6 @@ const products = {
     customerName: { en: "Aged manchego" },
     kitchenName: "CHS",
     unitPrice: "2.00",
-    vatClass: "general" as const,
     allergens: { milk: {} },
     dietaryDeclarations: ["vegetarian" as const],
   },
@@ -79,7 +76,6 @@ const products = {
     customerName: { en: "Gordal olives" },
     kitchenName: "OLV",
     unitPrice: "1.25",
-    vatClass: "reduced" as const,
   },
 };
 

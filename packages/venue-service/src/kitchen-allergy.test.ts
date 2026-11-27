@@ -76,8 +76,6 @@ beforeEach(async () => {
       quantity: 1000,
       unitPriceGross: 700,
       lineTotal: 700,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
     })
     .returning();
   const [ticket] = await suite.db

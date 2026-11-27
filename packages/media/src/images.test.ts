@@ -214,7 +214,6 @@ describe("metadata and references", () => {
           name: "Bread",
 
           unitPrice: 200,
-          vatClass: "general",
           image: image.filename,
           active: false,
         })
@@ -253,7 +252,6 @@ describe("metadata and references", () => {
           name: "Bread",
 
           unitPrice: 200,
-          vatClass: "general",
         })
         .returning({ id: products.id });
       // A variant is a `products` row with a `parent_id`.
@@ -302,7 +300,6 @@ describe("metadata and references", () => {
           name: "Bread",
 
           unitPrice: 200,
-          vatClass: "general",
           image: image.filename,
         })
         .returning({ id: products.id });
@@ -323,7 +320,7 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const top = { pricingUnit: "each", unitPrice: 200, vatClass: "general" };
+      const top = { pricingUnit: "each", unitPrice: 200 };
       await tx.insert(products).values([
         { ...top, id: "p-on", name: "Bread", image: image.filename },
         { ...top, id: "p-off", name: "Cake", active: false },
@@ -938,7 +935,6 @@ it("protects an image only a live menu version names, and releases it once anoth
       name: "Lemonade",
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "reduced",
       image: image.filename,
     });
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
@@ -987,7 +983,6 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
       name: "Lemonade",
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "reduced",
     });
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
@@ -1046,7 +1041,6 @@ it("lists a live version and a queued edition of one menu in number order, then 
       name: "Lemonade",
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "reduced",
       image: image.filename,
     });
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
@@ -1113,7 +1107,6 @@ it("protects the photo of a product a live menu version offers only as an extra"
         name,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "reduced",
         ...(photoName === null ? {} : { image: photoName }),
       });
     const lemonade = await make("Lemonade", null);
@@ -1283,7 +1276,6 @@ describe("free default choice with incomplete menu and image text", () => {
         customerName: { en: "Potatoes" },
         unitId: unit.id,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await setProductVariants(
         tx,
@@ -1365,8 +1357,6 @@ describe("free default choice with incomplete menu and image text", () => {
         quantity: 1000,
         unitPriceGross: 200,
         lineTotal: 200,
-        vatClass: "general",
-        takeawayVatClass: "general",
       });
       const before = await snapshot();
       expect(before["menu_versions"]).toHaveLength(1);

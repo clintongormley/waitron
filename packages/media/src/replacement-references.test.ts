@@ -60,7 +60,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
       name: "Staff dish",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
       image: image.filename,
     });
     await tx.insert(products).values({
@@ -68,7 +67,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
       name: "Large",
 
       unitPrice: 300,
-      vatClass: "general",
       image: image.filename,
     });
     const root = (await readMenuStructure(tx, menu.id)).rootSectionId;

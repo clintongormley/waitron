@@ -72,7 +72,6 @@ async function fixture(db: Transaction, setMenuOnly = false) {
       categoryId: category,
       unitPrice: "3",
       pricingUnit: "each",
-      vatClass: "general",
     })
   ).id;
   if (setMenuOnly) {

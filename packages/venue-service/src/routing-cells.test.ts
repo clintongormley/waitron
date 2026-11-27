@@ -85,7 +85,6 @@ async function fixture(tx: Transaction) {
         categoryId: drinks,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       })
     ).id;
   const mojito = await product("Mojito");

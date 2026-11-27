@@ -111,7 +111,6 @@ describe("the venue's default takeaway rate for new products", () => {
     name: "Water",
     pricingUnit: "each",
     unitPrice: "2",
-    vatClass: "general",
   } as const;
   const storedRate = async () =>
     (

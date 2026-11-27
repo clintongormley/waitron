@@ -74,7 +74,6 @@ async function fixture(tx: Transaction) {
         categoryId,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       })
     ).id;
   const burger = await product("Burger", food);

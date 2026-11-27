@@ -112,7 +112,6 @@ beforeEach(async () => {
       description: { en: "A dry white from Rueda" },
       unitId: glass.id,
       unitPrice: "4.00",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
       allergens: PARENT_ALLERGENS,
       dietOverride: { vegan: "yes" },
@@ -136,7 +135,6 @@ beforeEach(async () => {
         name: "125 ml",
 
         unitPrice: null,
-        vatClass: null,
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
@@ -151,7 +149,6 @@ beforeEach(async () => {
         description: { en: "A sweet red from Toro" },
 
         unitPrice: 550,
-        vatClass: "general",
         dietaryDeclarations: ["vegetarian"],
         image: libraryImageName("large.jpg"),
         courseId: ownCourse!.id,
@@ -295,7 +292,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           name,
           unitId: null,
           unitPrice: "3.00",
-          vatClass: "general",
         });
         await tx.insert(products).values({ parentId: parent.id, name: `${name} pint` });
       }
@@ -362,7 +358,6 @@ describe("a variant's main category is always its parent's", () => {
           categoryId: null,
 
           unitPrice: null,
-          vatClass: null,
           dietaryDeclarations: null,
           variantOrder: 2,
         })
@@ -386,7 +381,6 @@ describe("a variant's unit is always its product's", () => {
         name: "Cider",
         unitId: null,
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const [variant] = await tx
         .insert(products)
@@ -422,7 +416,6 @@ describe("readOfferedModifiers", () => {
         name: "Burger",
         unitId: null,
         unitPrice: "9.00",
-        vatClass: "general",
       });
       const list = await createExtraList(
         tx,
@@ -568,7 +561,6 @@ describe("createProduct", () => {
         kitchenName: "CAVA",
         unitId: f.largeGlass,
         unitPrice: "6.25",
-        vatClass: "general",
         image: libraryImageName("cava.jpg"),
       }),
     );

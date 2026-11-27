@@ -142,7 +142,6 @@ async function fixture(tx: Transaction, suffix = "") {
         categoryId,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       })
     ).id;
   const mojito = await product(`Mojito${suffix}`, cocktails);
@@ -1240,7 +1239,6 @@ describe("routing previews", () => {
         categoryId: f.beer,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       await setCategoryCell(tx, f.drinks, station(f.bar));
       const before = await storedCells(tx);
@@ -1400,7 +1398,6 @@ describe("routing previews", () => {
             categoryId,
             pricingUnit: "each",
             unitPrice: "3.00",
-            vatClass: "general",
           })
         ).id;
       const burger = await product("Burger", f.food);
@@ -1887,7 +1884,6 @@ describe("routing previews", () => {
             categoryId,
             pricingUnit: "each",
             unitPrice: "3.00",
-            vatClass: "general",
           })
         ).id;
       const variant = async (parentId: string, name: string, categoryId: string | null) => {
@@ -2186,7 +2182,6 @@ async function extrasFixture(tx: Transaction) {
         categoryId,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       })
     ).id;
   const chips = await product("Chips", sides);
@@ -3015,7 +3010,6 @@ describe("saving a cell's period choices", () => {
         categoryId: f.cocktails,
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       })
     ).id;
     const lunchMenu = (await createMenu(tx, { name: "Lunch menu" })).id;
@@ -3967,7 +3961,6 @@ describe("folder routing previews", () => {
           categoryId: f.food,
           pricingUnit: "each",
           unitPrice: "1",
-          vatClass: "general",
         })
       ).id;
       const list = await createExtraList(

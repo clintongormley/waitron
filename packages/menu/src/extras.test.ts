@@ -61,7 +61,6 @@ beforeEach(async () => {
         name: key,
         unitId: null,
         unitPrice,
-        vatClass: "reduced",
       });
       breads[key as keyof typeof breads] = product.id;
     }
@@ -121,7 +120,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "100.00",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -153,7 +151,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "100.00",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -186,7 +183,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "0.10",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -222,7 +218,6 @@ describe("extra list CRUD", () => {
         name: "Olive oil",
         unitId: unit.id,
         unitPrice: "0.02",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -259,7 +254,6 @@ describe("extra list CRUD", () => {
         name: "Olive",
         unitId: unit.id,
         unitPrice: "0.30",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -299,7 +293,6 @@ describe("extra list CRUD", () => {
         name: "Olive oil",
         unitId: unit.id,
         unitPrice: "0.02",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -410,7 +403,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "100.00",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -674,7 +666,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "100.00",
-        vatClass: "reduced",
       });
       return product.id;
     });
@@ -705,7 +696,6 @@ describe("extra list CRUD", () => {
         name: "Cheese",
         unitId: unit.id,
         unitPrice: "100.00",
-        vatClass: "reduced",
       });
       return { productId: product.id, unitId: unit.id };
     });
@@ -1020,7 +1010,6 @@ describe("extra list CRUD", () => {
           name,
           unitId: null,
           unitPrice: "6.00",
-          vatClass: "reduced",
         });
         if (name !== "soup")
           await writeProductModifiers(tx, product.id, [{ kind: "extras", id: created.id }]);
@@ -1052,7 +1041,6 @@ describe("extra list CRUD", () => {
           name,
           unitId: null,
           unitPrice: "6.00",
-          vatClass: "reduced",
         });
         await writeProductModifiers(tx, product.id, [{ kind: "extras", id: listId }]);
         return product.id;

@@ -1028,7 +1028,6 @@ it("records each product once when a bulk folder deletion also selects its produ
           name: `Archived dish ${offset + index}`,
           categoryId: folder.id,
           unitPrice: 100,
-          vatClass: "general",
         })),
       );
     // Selecting the full set twice exposes repeats regardless of the folder query's row order.

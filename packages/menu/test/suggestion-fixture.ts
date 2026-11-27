@@ -45,7 +45,6 @@ export async function addProduct(
     kitchenName: `KITCHEN ${label}`,
     customerName,
     unitPrice: "3.00",
-    vatClass: "reduced",
   });
   return product.id;
 }
@@ -208,7 +207,6 @@ export async function addPlainProducts(
         customerName: { ca: `CLIENT-CA Tapa ${n}`, es: `CLIENT-ES Tapa ${n}` },
         pricingUnit: "each" as const,
         unitPrice: 300,
-        vatClass: "reduced" as const,
       };
     });
     const inserted = await tx.insert(products).values(rows).returning({ id: products.id });

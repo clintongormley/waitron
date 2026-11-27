@@ -52,7 +52,6 @@ it("deleting a category removes its own and its subtree's category cells and kee
       name: "Negroni",
       pricingUnit: "each",
       unitPrice: "9.00",
-      vatClass: "general",
     });
     const category = (categoryId: string) => ({
       row: { kind: "category" as const, categoryId },
@@ -131,7 +130,6 @@ it("an open order keeps its copied category label after the category is deleted"
       name: "Bread",
       unitId: unit.id,
       unitPrice: "2.00",
-      vatClass: "general",
     });
     const order = await seedWorkingOrder(tx, {
       source: "dashboard",

@@ -167,7 +167,6 @@ it("a saved empty zone week and an unsaved week give the same hours, guides and 
         categoryId,
         unitPrice: "10",
         pricingUnit: "each",
-        vatClass: "general",
       })
     ).id;
     await addProductToMenu(tx, { menuId: period!.menuId, productId });
