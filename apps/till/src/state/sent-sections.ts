@@ -106,6 +106,8 @@ function compareRows(a: SentRow, b: SentRow): number {
         ? 1
         : -1
       : a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo;
+  if (a.state === "held" && b.state === "held")
+    return aLeft.lineNo - bLeft.lineNo || aLeft.lineId.localeCompare(bLeft.lineId);
   const aReady = aLeft.readyAt !== null;
   const bReady = bLeft.readyAt !== null;
   if (aReady !== bReady) return aReady ? -1 : 1;

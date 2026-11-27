@@ -177,6 +177,20 @@ describe("sentSections (till redesign PR 8a)", () => {
     ]);
   });
 
+  it("lists a held group's rows in line order, whatever their line ids", () => {
+    const [section] = sentSections(
+      current([
+        group("held", "held", [
+          row("z-first", { lineNo: 1, released: false, firedAt: null }),
+          row("a-second", { lineNo: 2, released: false, firedAt: null }),
+        ]),
+      ]),
+      "bill-1",
+      now,
+    );
+    expect(ids(section!.rows).flat()).toEqual(["z-first", "a-second"]);
+  });
+
   it("orders groups at one position by id, and sorts a course it does not know first", () => {
     const sections = sentSections(
       current([
