@@ -58,7 +58,7 @@ import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { CloudConnection } from "./cloud-client.js";
-import { WaitingMasterKeyHolder, type WaitingMasterKey } from "./waiting-master-key.js";
+import type { WaitingMasterKey, WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
@@ -72,6 +72,8 @@ export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
   node: ProvisionedNode;
   /** The backup API's own turns, so a Save or a key change waits for a pack being made. */
   turns: Turns;
+  /** Shared with Change the backup key, which forgets it. */
+  waitingMasterKey: WaitingMasterKeyHolder;
   readBoxEnv: () => Promise<Readonly<Record<string, string | undefined>>>;
   /** What the backup supervisor holds now; the key never leaves the server. */
   backups: () => Pick<BackupRuntimeStatus, "schedule" | "retention" | "recoveryKey">;
@@ -266,7 +268,7 @@ export function mountBackupRecoveryPackMakeApi(
 ): void {
   const nodeId = deps.node.nodeId;
   const typedKeyAdmission = createLiveOperationRateLimit();
-  const holder = new WaitingMasterKeyHolder();
+  const holder = deps.waitingMasterKey;
 
   app.post("/api/backup/recovery-pack", (c) => {
     c.header("Cache-Control", "no-store");
@@ -318,7 +320,9 @@ export function mountBackupRecoveryPackMakeApi(
               newMasterKey,
             }),
           );
-          if (newMasterKey !== undefined && nextKey !== undefined) {
+          if (newMasterKey === undefined || nextKey === undefined) {
+            holder.forget();
+          } else {
             holder.hold({
               pack: pack.number,
               personId,

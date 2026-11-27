@@ -54,6 +54,7 @@ import { createTurns, type Turns } from "./backup-turns.js";
 import { saveNewMasterKey } from "./master-key-record.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { makeNewMasterKey } from "@waitron/provisioning";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -150,6 +151,7 @@ function fixture(
       ring: RING,
       node,
       turns: options.turns ?? createTurns(),
+      waitingMasterKey: new WaitingMasterKeyHolder(),
       readBoxEnv: options.readBoxEnv ?? (async () => ({ ...boxEnv })),
       backups: () => ({
         schedule: ARCHIVES.schedule,

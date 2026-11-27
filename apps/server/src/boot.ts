@@ -512,6 +512,7 @@ import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import {
   createSealedStateRefresher,
   sealedStateJob,
@@ -4288,6 +4289,7 @@ async function bootServer(
     log,
   );
 
+  const waitingMasterKey = new WaitingMasterKeyHolder();
   mountBackupApi(
     app,
     {
@@ -4302,6 +4304,7 @@ async function bootServer(
       readStream: () => streamHost.status(),
       stream: streamHost,
       turns: backupTurns,
+      waitingMasterKey,
     },
     log,
   );
@@ -4319,6 +4322,7 @@ async function bootServer(
       ring,
       node: tradingContext,
       turns: backupTurns,
+      waitingMasterKey,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       backups: () => backupSupervisor.current(),
       loadFonts: loadRecoveryPackFonts,

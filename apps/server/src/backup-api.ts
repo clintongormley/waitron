@@ -60,6 +60,7 @@ import type { Turns } from "./backup-turns.js";
 import { cloudArchiveAvailable } from "./cloud-archive-target.js";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
+import type { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import "./errors.js";
 
 /** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env`, which
@@ -84,6 +85,7 @@ export interface BackupApiDeps {
   /** Shared with the stream settings routes, which also read and then write the key in
    * `backup.env`. */
   turns: Turns;
+  waitingMasterKey: Pick<WaitingMasterKeyHolder, "forget">;
   /** Builds the backend Save tests an archive bucket through. */
   buildBackend?: (dest: BackupDestination) => StorageBackend;
   archiveProbeTimeoutMs?: number;
@@ -529,6 +531,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
+        deps.waitingMasterKey.forget();
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
           await changeBackupKey(deps, record, keyRotatedAt);

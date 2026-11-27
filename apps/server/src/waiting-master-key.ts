@@ -7,12 +7,13 @@ export interface WaitingMasterKey {
   readonly checkValue: string;
   readonly publicKey: Uint8Array;
   readonly madeAt: string;
-  /** The backup key number the pack printed, written as it is whatever `backup.env` holds by then. */
+  /** The backup key number the pack printed. */
   readonly backupKeyNumber: number;
 }
 
-/** Holds at most one waiting key: a later make replaces it. Makes and confirms take the backup
- * turns, so nothing replaces the key between a confirm's check and its `forget`. */
+/** Holds at most one waiting key. Any later pack, and any Change the backup key, ends the wait: a
+ * confirm after them would replace the backup key they relied on. Makes, key changes and confirms
+ * take the backup turns, so nothing replaces the key between a confirm's check and its `forget`. */
 export class WaitingMasterKeyHolder {
   #waiting: WaitingMasterKey | undefined;
 

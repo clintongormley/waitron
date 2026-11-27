@@ -32,6 +32,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import {
   deleteCredential,
   loadKeyRing,
@@ -300,6 +301,7 @@ function buildApp(
         },
       },
       turns,
+      waitingMasterKey: new WaitingMasterKeyHolder(),
       ...extra,
     },
     log,

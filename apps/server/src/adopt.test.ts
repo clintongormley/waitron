@@ -64,6 +64,7 @@ import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -281,6 +282,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
           ring: RING,
           node: { nodeId: asNodeId(ownNodeId) },
           turns: createTurns(),
+          waitingMasterKey: new WaitingMasterKeyHolder(),
           readBoxEnv: async () => ({}),
           backups: () => ({ schedule: undefined, retention: undefined, recoveryKey: undefined }),
           loadFonts: loadRecoveryPackFonts,

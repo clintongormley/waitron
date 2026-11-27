@@ -39,6 +39,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { readSettingsEvidence, type SettingsEvidenceDeps } from "./backup-settings-evidence.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { BACKUP_SETTINGS } from "./backup-settings-document.js";
@@ -170,6 +171,7 @@ function buildApp(sup: BackupSupervisor, sc: Scenario, extra: Partial<BackupApiD
         },
       },
       turns: createTurns(),
+      waitingMasterKey: new WaitingMasterKeyHolder(),
       ...extra,
     },
     () => {},

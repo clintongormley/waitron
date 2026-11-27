@@ -38,6 +38,7 @@ import {
   writeBackupKey,
 } from "./backup-env-writer.js";
 import { createTurns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { createLogger, type Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { runSpareSettings, sendBackupSettings } from "./spare-settings.js";
@@ -321,6 +322,7 @@ describe("runSpareSettings", () => {
         readStream: () => ({ state: "off" }),
         stream: { reload: async (write) => write?.() },
         turns: createTurns(),
+        waitingMasterKey: new WaitingMasterKeyHolder(),
       },
       logger(),
     );

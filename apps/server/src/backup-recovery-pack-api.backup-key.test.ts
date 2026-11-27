@@ -40,6 +40,7 @@ import {
   packRequests,
   seedPackVenue,
 } from "./testing/recovery-pack-make.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 
 const MADE_AT = "2026-10-30T09:00:00.000Z";
 const OLD_ROTATED_AT = "2026-09-20T08:00:00.000Z";
@@ -97,9 +98,11 @@ function fixture(
 ) {
   const steps: string[] = [];
   const app = new Hono();
+  const waitingMasterKey = new WaitingMasterKeyHolder();
   mountBackupRecoveryPackMakeApi(
     app,
     {
+      waitingMasterKey,
       db: suite.db,
       ring: PACK_RING,
       node,
@@ -137,6 +140,7 @@ function fixture(
   const requests = packRequests(app, { token: () => admin.token, sockets });
   return {
     steps,
+    waitingMasterKey,
     make: requests.make,
     received: requests.received,
     confirm: requests.confirm,
@@ -327,7 +331,10 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
 });
 
 /** The backup routes, whose "Change the backup key" writes to `stateDir`'s `backup.env`. */
-async function rotateApp(stateDir: string) {
+async function rotateApp(
+  stateDir: string,
+  waitingMasterKey: WaitingMasterKeyHolder = new WaitingMasterKeyHolder(),
+) {
   const dest = await folder("pack-backup-key-dest-");
   const venueDir = await folder("pack-backup-key-venue-");
   const sup = supervisorWithJob({
@@ -366,6 +373,7 @@ async function rotateApp(stateDir: string) {
       readStream: () => ({ state: "off" }),
       stream: { reload: async (write) => void (await write?.()) },
       turns: createTurns(),
+      waitingMasterKey,
     },
     () => {},
   );
@@ -629,28 +637,73 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     expect((await f.status()).newKeyWaiting).toBeUndefined();
   });
 
-  it("writes the key the pack printed even when the backup key changed between the make and the confirm", async () => {
+  it("a Change the backup key between the make and the confirm forgets the waiting key, so the confirm is refused", async () => {
     const stateDir = await stateFolder(3);
     const f = fixture(stateDir);
     const made = await f.make(true);
-    const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
-    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    await made.arrayBuffer();
     const changed = await (
-      await rotateApp(stateDir)
+      await rotateApp(stateDir, f.waitingMasterKey)
     ).post("/api/backup/rotate", { masterKey: encodeMasterKeyCode(OLD_MASTER) });
     expect(changed.status).toBe(200);
     await changed.arrayBuffer();
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
       heldBackupKey(OLD_MASTER, 4).key,
     );
+    expect((await f.status()).newKeyWaiting).toBeUndefined();
+    const before = await snapshot(stateDir, f);
+    expect(before.rows).toHaveLength(1);
+
+    const response = await f.confirm(made);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect(f.steps).toEqual([]);
+  }, 60_000);
+
+  it("a refused Change the backup key keeps the waiting key, and its confirm still takes it", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
+    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    const refused = await (
+      await rotateApp(stateDir, f.waitingMasterKey)
+    ).post("/api/backup/rotate", { masterKey: encodeMasterKeyCode(makeMasterKey()) });
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      "promotion.break_glass_invalid",
+    );
+    expect((await f.status()).newKeyWaiting).toBe(true);
 
     expect((await f.confirm(made)).status).toBe(204);
-    expect(await keyFile(stateDir)).toMatchObject({
-      WAITRON_BACKUP_RECOVERY_KEY: printed,
-      WAITRON_BACKUP_KEY_NUMBER: "4",
-    });
-    expect(printed).not.toBe(heldBackupKey(shownBytes(made), 5).key);
+    expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(printed);
   }, 60_000);
+
+  it("a plain pack made while a key waits forgets it: the confirm is refused and the plain pack stays up to date", async () => {
+    const stateDir = await stateFolder(3);
+    let at = Date.parse(MADE_AT);
+    const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    const plain = await f.make(encodeMasterKeyCode(OLD_MASTER));
+    expect(plain.headers.get("x-waitron-recovery-pack")).toBe("2");
+    const file = await readRecoveryPackPdf(new Uint8Array(await plain.arrayBuffer()));
+    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(heldBackupKey(OLD_MASTER, 3).key);
+    expect((await f.received(2)).status).toBe(204);
+    expect((await f.status()).newKeyWaiting).toBeUndefined();
+    const before = await snapshot(stateDir, f);
+
+    const response = await f.confirm(made);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect(await f.status()).toMatchObject({ upToDate: true, reasons: [] });
+  });
 
   it.each([
     ["a wrong master key", "wrong"],
