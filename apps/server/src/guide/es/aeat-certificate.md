@@ -7,8 +7,8 @@ contraseña que usaste al exportarlo. Demo y Preparación no piden este certific
 
 La configuración comprueba el archivo antes de ejecutar la prueba fiscal o crear el local. Una
 contraseña incorrecta se explica bajo **Contraseña del certificado**. Si el archivo no se puede
-abrir, usa el antiguo cifrado RC2, no incluye la clave privada, ha caducado o aún no
-es válido, la explicación aparece bajo **Archivo del certificado**.
+abrir, usa el antiguo cifrado RC2, no incluye la clave privada, ha caducado, aún no es válido o es
+de otro NIF, la explicación aparece bajo **Archivo del certificado**.
 
 Corrige la contraseña o elige otro archivo, pulsa **Siguiente** y repite la prueba fiscal. Si falta
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un
@@ -16,6 +16,11 @@ cifrado moderno. Las instrucciones de exportación están en la pantalla del cer
 
 Si la prueba fiscal dice que la AEAT no ha aceptado el certificado, pulsa **Volver**, elige otro
 certificado y repite la prueba.
+
+Si el archivo es de otro NIF, elige el certificado del local. Si el NIF del local es el incorrecto,
+pulsa **Volver** y corrígelo. Si la configuración dice que los datos están fijados, pulsa
+**Abandonar este intento** y después **Introducir nuevos datos**; si no aparece, usa **Empezar de
+nuevo**.
 
 Si se rechaza el certificado al terminar una configuración interrumpida, corrígelo primero. Después
 se te pedirá que confirmes de nuevo que eres quien inició la configuración antes de continuar.

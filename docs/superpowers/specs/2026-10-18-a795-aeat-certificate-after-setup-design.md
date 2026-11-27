@@ -1,7 +1,8 @@
 # A795 — installing or renewing the AEAT certificate after setup — design
 2026-10-22 update: A852 adds file-opening and date checks to setup. See the
 [setup certificate guide](../../../apps/server/src/guide/en/aeat-certificate.md). The observations
-below describe the earlier setup path.
+below describe the earlier setup path. 2026-11-27 update: setup also refuses a certificate whose
+tax ID is not the venue's (`other_taxpayer`, SETUP-CERT-FIRST piece 1).
 
 Date: 2026-10-18, revised the same day after a fresh-context claims review (§10 lists what it
 changed). Status: **waiting on the owner's answers to three questions (§9)**. Nothing is built.

@@ -347,7 +347,10 @@ function prepareBody(): Record<string, unknown> {
 
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
 // a regime type: the host sees the secret only as opaque `unknown`, validated through the seat.
-const CERTIFICATE = makeAuthority().issue({ passphrase: "cert-secret" });
+const CERTIFICATE = makeAuthority().issue({
+  passphrase: "cert-secret",
+  organizationIdentifier: "VATES-50000000R",
+});
 const CERT = {
   pfxBase64: CERTIFICATE.pfx.toString("base64"),
   passphrase: CERTIFICATE.passphrase,
@@ -386,6 +389,32 @@ it("refuses an unusable certificate before calling any legacy provision step", a
       error: {
         code: "setup.certificate_refused",
         params: { field: "passphrase", reason: "passphrase_wrong" },
+      },
+    },
+  });
+  expect(calls).toEqual([]);
+});
+
+it("refuses another taxpayer's certificate before calling any legacy provision step", async () => {
+  const { deps, calls } = makeDeps();
+  const app = new Hono();
+  mountSetup(app, deps, noopLog);
+  const other = makeAuthority().issue({ organizationIdentifier: "VATES-B12345674" });
+  const response = await postProvision(app, {
+    ...liveBody(),
+    aeatCert: { ...CERT, pfxBase64: other.pfx.toString("base64"), passphrase: other.passphrase },
+  });
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 422,
+    body: {
+      error: {
+        code: "setup.certificate_refused",
+        params: {
+          field: "pfxBase64",
+          reason: "other_taxpayer",
+          certificateTaxId: "B12345674",
+          taxId: "50000000R",
+        },
       },
     },
   });

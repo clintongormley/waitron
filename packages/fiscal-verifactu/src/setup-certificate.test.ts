@@ -9,6 +9,7 @@ const noKey = authority.issue({ withKey: false });
 const expired = authority.issue({ notAfter: new Date("2026-10-16T12:00:00Z") });
 const future = authority.issue({ notBefore: new Date("2026-10-16T12:00:01Z") });
 const secret = FISCAL_SLOT.provisioningSecret!;
+const venue = { taxId: "89890001K" };
 const body = (pfx: Buffer, passphrase = candidate.passphrase) => ({
   pfxBase64: pfx.toString("base64"),
   passphrase,
@@ -31,7 +32,9 @@ describe("setup certificate local validation", () => {
     ["expired at its exact end", body(expired.pfx), "pfxBase64", "expired"],
     ["not yet valid", body(future.pfx), "pfxBase64", "not_yet_valid"],
   ])("refuses %s with only the field and reason", async (_label, certificate, field, reason) => {
-    await expect(secret.validate({ ...certificate, certKind: "sello" })).rejects.toThrowError(
+    await expect(
+      secret.validate({ ...certificate, certKind: "sello" }, venue),
+    ).rejects.toThrowError(
       expect.objectContaining({ code: "setup.certificate_refused", params: { field, reason } }),
     );
   });
@@ -39,11 +42,42 @@ describe("setup certificate local validation", () => {
   it("accepts an opening certificate at its start and before its end with either kind", async () => {
     const starting = authority.issue({ notBefore: new Date("2026-10-16T12:00:00Z") });
     for (const certKind of ["sello", "representante"]) {
-      await expect(secret.validate({ ...body(starting.pfx), certKind })).resolves.toBeUndefined();
+      await expect(
+        secret.validate({ ...body(starting.pfx), certKind }, venue),
+      ).resolves.toBeUndefined();
       vi.setSystemTime("2026-10-16T11:59:59.999Z");
-      await expect(secret.validate({ ...body(expired.pfx), certKind })).resolves.toBeUndefined();
+      await expect(
+        secret.validate({ ...body(expired.pfx), certKind }, venue),
+      ).resolves.toBeUndefined();
       vi.setSystemTime("2026-10-16T12:00:00Z");
     }
+  });
+
+  it("refuses a certificate for another tax number, naming both numbers", async () => {
+    await expect(secret.validate(body(candidate.pfx), { taxId: "B12345674" })).rejects.toThrowError(
+      expect.objectContaining({
+        code: "setup.certificate_refused",
+        params: {
+          field: "pfxBase64",
+          reason: "other_taxpayer",
+          certificateTaxId: "89890001K",
+          taxId: "B12345674",
+        },
+      }),
+    );
+  });
+
+  it("accepts the venue's number typed in lower case with spaces and hyphens", async () => {
+    await expect(
+      secret.validate(body(candidate.pfx), { taxId: " 8989-0001 k" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("accepts a certificate that carries no organisation identifier", async () => {
+    const personal = authority.issue({ organizationIdentifier: null });
+    await expect(
+      secret.validate(body(personal.pfx), { taxId: "B12345674" }),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -51,7 +85,7 @@ it("maps an unavailable setup check to the whole request", async () => {
   const node = process.execPath;
   try {
     process.execPath = "/nonexistent/waitron-node";
-    await expect(secret.validate(body(candidate.pfx))).rejects.toMatchObject({
+    await expect(secret.validate(body(candidate.pfx), venue)).rejects.toMatchObject({
       code: "setup.certificate_refused",
       params: { field: "body", reason: "unavailable" },
     });

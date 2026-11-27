@@ -2684,6 +2684,11 @@ export class SetupApp extends LitElement {
     this.certificateRefusal = {
       field: params.field,
       reason: typeof params.reason === "string" ? params.reason : "unreadable",
+      ...(params.reason === "other_taxpayer" &&
+      typeof params.certificateTaxId === "string" &&
+      typeof params.taxId === "string"
+        ? { certificateTaxId: params.certificateTaxId, taxId: params.taxId }
+        : {}),
     };
     this.screen = "cert";
     return true;

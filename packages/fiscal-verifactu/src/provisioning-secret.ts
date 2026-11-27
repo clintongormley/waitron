@@ -2,6 +2,7 @@ import { putCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
+import { normaliseTaxId } from "./certificate-file.js";
 import { openCertificate } from "./certificate-open.js";
 import { installsOf } from "./certificate-record.js";
 import "./errors.js";
@@ -70,7 +71,7 @@ export function parseAeatCert(raw: unknown): AeatCert {
   return parsed;
 }
 
-export async function validateSetupAeatCert(raw: unknown): Promise<void> {
+export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string }): Promise<void> {
   const cert = parseAeatCert(raw);
   const pfx = Buffer.from(cert.pfxBase64, "base64");
   const refuse = (reason: string, field = "pfxBase64"): never => {
@@ -90,13 +91,20 @@ export async function validateSetupAeatCert(raw: unknown): Promise<void> {
   const now = Date.now();
   if (now >= opened.details.validUntil.getTime()) refuse("expired");
   if (now < opened.details.validFrom.getTime()) refuse("not_yet_valid");
+  const certificateTaxId = opened.details.taxId;
+  if (certificateTaxId !== null && certificateTaxId !== normaliseTaxId(venue.taxId)) {
+    throw new AppError("setup.certificate_refused", {
+      field: "pfxBase64",
+      reason: "other_taxpayer",
+      certificateTaxId,
+      taxId: venue.taxId,
+    });
+  }
 }
 
 /**
- * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Validated again here
- * because a caller may skip the host's `validate` seat, and `putCredential` accepts any non-empty
- * `certKind` and `pfxBase64`. A file that opens also gets an install row, unless the node's latest
- * one is already this certificate; one that does not open is sealed with none.
+ * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks the blob's
+ * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`.
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },

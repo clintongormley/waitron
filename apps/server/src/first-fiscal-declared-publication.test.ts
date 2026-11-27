@@ -1,8 +1,8 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readCurrentMasterKey } from "@waitron/db";
-import { loadKeyRing } from "@waitron/credentials";
+import { invoiceSeries, readCurrentMasterKey, taxpayer } from "@waitron/db";
+import { loadKeyRing, readNodeSigningKey } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
@@ -121,6 +121,7 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
     staged,
     activate,
     counts: () => ({ activations, publications }),
+    ring,
   };
 }
 it("installs the staged master key and no box key after exact fiscal commit and before trading", async () => {
@@ -134,7 +135,7 @@ it("installs the staged master key and no box key after exact fiscal commit and 
 it("browser setup records a readable certificate against its committed node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
   const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
-  const candidate = makeAuthority().issue();
+  const candidate = makeAuthority().issue({ organizationIdentifier: "VATES-50000000R" });
   const f = await fixture({
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: candidate.passphrase,
@@ -150,4 +151,34 @@ it("browser setup records a readable certificate against its committed node", as
     personId: null,
     kind: "sello",
   });
+});
+
+it("browser setup refuses another taxpayer's certificate before making anything", async () => {
+  const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
+  const { verifactuCertificates, verifactuRecords } =
+    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const other = makeAuthority().issue({ organizationIdentifier: "VATES-B12345674" });
+  const f = await fixture({
+    pfxBase64: other.pfx.toString("base64"),
+    passphrase: other.passphrase,
+    certKind: "sello",
+  });
+  const before = await f.store.read();
+  await expect(f.activate()).rejects.toMatchObject({
+    code: "setup.certificate_refused",
+    params: {
+      field: "pfxBase64",
+      reason: "other_taxpayer",
+      certificateTaxId: "B12345674",
+      taxId: "50000000R",
+    },
+  });
+  expect(f.counts()).toEqual({ activations: 0, publications: 0 });
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
+  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select().from(verifactuRecords)).toEqual([]);
+  expect(await suite.db.select().from(verifactuCertificates)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
+  expect(await readNodeSigningKey(suite.node, f.ring, f.staged.stage.nodeId)).toBeNull();
+  expect(await f.store.read()).toEqual(before);
 });

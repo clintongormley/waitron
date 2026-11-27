@@ -12,7 +12,7 @@ import { request } from "../test/first-fiscal.js";
 import { mountGuidePages } from "./guide-pages.js";
 
 const authority = makeAuthority();
-const good = authority.issue();
+const good = authority.issue({ organizationIdentifier: `VATES-${request.taxId}` });
 const noKey = authority.issue({ withKey: false });
 const expired = authority.issue({ notAfter: new Date("2020-01-01T00:00:00Z") });
 const future = authority.issue({
@@ -114,3 +114,51 @@ it.each([false, true])(
     expect(runFiscalTest).toHaveBeenCalledTimes(1);
   },
 );
+
+it("setup refuses a certificate issued to another tax number, and nothing is made", async () => {
+  const root = await mkdtemp(join(tmpdir(), "setup-other-taxpayer-"));
+  roots.push(root);
+  const stateDir = join(root, "state");
+  const host = createFirstSetupModuleHost({
+    stateDir,
+    venueDir: join(root, "venue"),
+    environment: {},
+    modules: ALL_MODULES,
+  });
+  const claim = await host.owner.claimFirstSetup({ environment: "production", request });
+  const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
+  const app = new Hono();
+  mountSetup(app, { environment: "production", runFiscalTest, firstFiscal: host }, () => {});
+  const before = await host.store.read();
+  const other = authority.issue({ organizationIdentifier: "VATES-B12345674" });
+  const response = await app.request("/setup-api/fiscal-test", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Waitron-Setup-Owner": claim.capability,
+      "X-Waitron-Setup-Attempt": claim.state.attemptId,
+      "X-Waitron-Setup-Revision": String(claim.state.revision),
+      "X-Waitron-Setup-Generation": String(claim.state.ownerGeneration),
+    },
+    body: JSON.stringify({ mode: "live", aeatCert: body(other.pfx, other.passphrase) }),
+  });
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 422,
+    body: {
+      error: {
+        code: "setup.certificate_refused",
+        params: {
+          field: "pfxBase64",
+          reason: "other_taxpayer",
+          certificateTaxId: "B12345674",
+          taxId: request.taxId,
+        },
+      },
+    },
+  });
+  expect(runFiscalTest).not.toHaveBeenCalled();
+  expect(await host.store.read()).toEqual(before);
+  expect((await readdir(stateDir)).some((name) => name.startsWith("fiscal-readiness-db-"))).toBe(
+    false,
+  );
+});

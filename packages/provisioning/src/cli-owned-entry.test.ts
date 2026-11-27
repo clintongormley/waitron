@@ -15,6 +15,7 @@ import { childEnvironment } from "../test/child-environment.js";
 
 const certificateMaterial = makeCertificateAuthority().issue({
   passphrase: "SYNTHETIC-certificate",
+  organizationIdentifier: "VATES-50000000R",
 });
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });

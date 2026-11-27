@@ -38,6 +38,7 @@ const PERSONAL_LOG_RULES: ReadonlyMap<string, (value: string) => string> = new M
   ["holderPersonName", maskName],
   ["person", maskName],
   ["supplierTaxId", maskPiece],
+  ["certificateTaxId", maskPiece],
   ["legalName", maskName],
   ["taxId", maskPiece],
   ["idEmisorFactura", maskPiece],

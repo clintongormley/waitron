@@ -106,6 +106,7 @@ describe("createLogger personal data", () => {
     ["holderPersonName", "Martha Spencer", "M***a S***r"],
     ["person", "Martha Spencer", "M***a S***r"],
     ["supplierTaxId", "12345678Z", "1***Z"],
+    ["certificateTaxId", "12345678Z", "1***Z"],
     ["legalName", "Jamie King Foster", "J***e K***g F***r"],
     ["taxId", "12345678Z", "1***Z"],
     ["idEmisorFactura", "12345678Z", "1***Z"],
@@ -238,6 +239,7 @@ describe("stringifyMasked", () => {
     holderPersonName: "M***a S***r",
     person: "M***a S***r",
     supplierTaxId: "M***r",
+    certificateTaxId: "M***r",
     legalName: "M***a S***r",
     taxId: "M***r",
     idEmisorFactura: "M***r",
@@ -316,7 +318,7 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
     ["B 1234567 8", "B***8"],
     ["B12", "***"],
   ])("writes the tax number %j as %j", (value, masked) => {
-    for (const key of ["taxId", "supplierTaxId", "idEmisorFactura"]) {
+    for (const key of ["taxId", "supplierTaxId", "certificateTaxId", "idEmisorFactura"]) {
       expect(maskPersonalData(key, value)).toBe(masked);
     }
   });

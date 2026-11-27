@@ -26,7 +26,10 @@ import { request } from "../test/first-fiscal.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 
-const certificate = makeAuthority().issue({ passphrase: "synthetic" });
+const certificate = makeAuthority().issue({
+  passphrase: "synthetic",
+  organizationIdentifier: `VATES-${request.taxId}`,
+});
 
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({

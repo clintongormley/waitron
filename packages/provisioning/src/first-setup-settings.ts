@@ -9,6 +9,7 @@ export async function parseFirstSetupSettings(
   contribution: FiscalContribution,
   environment: DeploymentEnvironment,
   body: Record<string, unknown>,
+  taxId: string,
 ) {
   if (Object.keys(body).some((key) => !["aeatCert", "email"].includes(key)))
     throw new AppError("setup.request_invalid", { field: "body" });
@@ -17,7 +18,7 @@ export async function parseFirstSetupSettings(
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    await secret!.validate(body.aeatCert);
+    await secret!.validate(body.aeatCert, { taxId });
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (
