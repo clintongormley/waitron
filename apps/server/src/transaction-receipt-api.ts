@@ -295,8 +295,8 @@ export function mountTransactionReceiptApi(
         if (printer === undefined) throw new AppError("receipt.no_printer", {});
         let copy: { jobId: string } | undefined;
         if (ticket.invoiceType === "R1") {
-          // The till offers an R1 no Print original, so Reprint prints its original while none has
-          // gone out.
+          // The till's delivery panel is an F1's alone (apps/till/src/screens/ticket-delivery.ts), so
+          // Reprint prints an R1's original while none has gone out.
           await expireInvoiceDeliveryClaims(tx);
           const state = await readInvoiceDeliveryState(tx, id, { emailAvailable: false });
           const duplicate = state!.status.originalCompleted;

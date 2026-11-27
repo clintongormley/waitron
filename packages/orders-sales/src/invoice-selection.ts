@@ -31,7 +31,8 @@ export function storedRecipientIdentifier(
 
 /**
  * Whether a stored sale is delivered as a full invoice: it names a customer and does not replace
- * another invoice, so an F1 or an R1 corrective of one, never an R4 replacement.
+ * another invoice, so an F1, or a corrective naming a customer that does not replace (an R1),
+ * never an R4 replacement.
  */
 export function deliversAsFullInvoice(row: {
   counterpartyTaxId: string | null;

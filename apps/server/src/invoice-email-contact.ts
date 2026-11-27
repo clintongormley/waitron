@@ -28,7 +28,7 @@ async function departmentOf(
       if (sale?.corrects == null || sale.replaces)
         return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
       let from = sale.corrects;
-      for (let target = await correction(from); target?.replaces === true; ) {
+      for (let target = await correction(from); target?.replaces === true;) {
         from = target.corrects!;
         target = await correction(from);
       }
