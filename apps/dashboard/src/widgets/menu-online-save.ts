@@ -31,6 +31,11 @@ export const menuOnlineStyles = css`
   .online-settings p {
     margin: 0;
   }
+  .online-settings-status {
+    display: grid;
+    justify-items: start;
+    gap: var(--wt-space-2);
+  }
   wt-segmented-control[name="customer-menu-photos"]::part(button) {
     padding-inline: var(--wt-space-2);
   }
@@ -50,7 +55,9 @@ export const menuOnlineStyles = css`
       padding-block-end: 0;
     }
     .online-workspace[data-view="settings"] dashboard-menu-online-preview,
-    .online-workspace[data-view="preview"] .online-settings > :not(.online-availability),
+    .online-workspace[data-view="preview"]
+      .online-settings
+      > :not(.online-availability, .online-settings-status),
     .online-workspace[data-view="preview"] + wt-form-actions {
       display: none;
     }
@@ -311,17 +318,21 @@ export class MenuOnlineSave implements ReactiveController {
                 @wt-change=${(event: CustomEvent<{ value: CustomerMenuPhotoSize }>) =>
                   this.#edit({ photos: event.detail.value })}
               ></wt-segmented-control>`
-          : this.#loadFailed
-            ? html`<p role="alert">${t("customer_menu.settings_load_error")}</p>
-                <wt-button
-                  variant="secondary"
-                  @click=${() => {
-                    if (this.#menuId) void this.#load(this.#menuId);
-                  }}
-                >
-                  ${t("menus.retry")}
-                </wt-button>`
-            : html`<p role="status">${t("customer_menu.settings_loading")}</p>`
+          : html`<div class="online-settings-status">
+              ${
+                this.#loadFailed
+                  ? html`<p role="alert">${t("customer_menu.settings_load_error")}</p>
+                      <wt-button
+                        variant="secondary"
+                        @click=${() => {
+                          if (this.#menuId) void this.#load(this.#menuId);
+                        }}
+                      >
+                        ${t("menus.retry")}
+                      </wt-button>`
+                  : html`<p role="status">${t("customer_menu.settings_loading")}</p>`
+              }
+            </div>`
       }
     </div>`;
   }

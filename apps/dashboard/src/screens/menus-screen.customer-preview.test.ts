@@ -146,10 +146,14 @@ async function open(
   preview: (url: URL) => Response | Promise<Response>,
   theme: Theme = "light",
   readStatus: () => MenuStatus = () => status,
+  readOnlineSettings: () => Response | Promise<Response> = () =>
+    Response.json({ enabled: false, address: null, photos: "large" }),
 ) {
   const fetcher = new DashboardApi("", async (input) => {
     const url = new URL(input, location.origin);
     if (url.pathname === path) return preview(url);
+    if (url.pathname === "/management-api/menus/lunch/customer-online-settings")
+      return readOnlineSettings();
     const currentStatus = readStatus();
     const draft = {
       status: currentStatus,
@@ -170,11 +174,6 @@ async function open(
       "/management-api/categories": [],
       "/management-api/menu-settings": { defaultProductVatClass: "general", defaultColor: null },
       "/management-api/menus/lunch/structure": structure,
-      "/management-api/menus/lunch/customer-online-settings": {
-        enabled: false,
-        address: null,
-        photos: "large",
-      },
       "/management-api/menus/lunch/status": currentStatus,
       "/management-api/menus/lunch/preview": draft,
       "/management-api/menus/lunch/read": {
@@ -265,6 +264,53 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
       expect(customerPage(el)?.shadowRoot?.querySelector(".detail img")).toBeNull();
       await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
+  it("shows the published dishes while the saved photo setting loads", async () => {
+    const settings = Promise.withResolvers<Response>();
+    const { el } = await open(
+      () => Response.json(published()),
+      "light",
+      () => status,
+      () => settings.promise,
+    );
+    const photo = () => customerPage(el)?.shadowRoot?.querySelector(".dish img");
+    try {
+      await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Roast pepper" })).toBeVisible();
+      expect(photo()).toBeNull();
+    } finally {
+      settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
+    }
+  });
+
+  it("offers Retry in the phone preview when loading settings fails", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    await page.viewport(390, 800);
+    try {
+      const getSettings = vi
+        .fn()
+        .mockReturnValueOnce(new Response(null, { status: 503 }))
+        .mockImplementation(() =>
+          Response.json({ enabled: false, address: null, photos: "large" }),
+        );
+      const { el } = await open(
+        () => Response.json(published()),
+        "light",
+        () => status,
+        getSettings,
+      );
+      await expect
+        .element(page.getByText("Could not load the Online settings."), { timeout: 2000 })
+        .toBeVisible();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeNull();
+      await page.getByRole("button", { name: "Try again", exact: true }).click();
+      await vi.waitFor(() =>
+        expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeTruthy(),
+      );
     } finally {
       await page.viewport(...viewport);
     }
