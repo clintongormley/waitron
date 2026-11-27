@@ -239,6 +239,7 @@ export function billActions(
     data-table-menu
     bottom-sheet
     sheet-variant="menu"
+    iconSize="lg"
     label=${t("table.bill_actions")}
     sheet-heading=${`${billLabel(bill)} · ${owes(bill)}`}
     @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => {
@@ -358,6 +359,8 @@ export const billControlStyles = css`
   .bill-menu [data-table-menu-bill] {
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding-block-end: var(--wt-space-5);
   }
   .bill-menu [data-row-choice]:disabled {

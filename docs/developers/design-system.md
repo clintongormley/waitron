@@ -1278,8 +1278,9 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   table has its own outlined button at the end. An unseated table offers Move and Join.
   The sheet fills a narrow display. On a wide display it starts at the order column’s left edge
   and ends at the display’s right edge. The whole display dims while the sheet is open.
-- **Bill actions** open in the shared menu sheet from the ⋮ beside the switcher. Its heading
-  names the current bill and its balance or status. The rows are Print the bill, Full invoice,
+- **Bill actions** open in the shared menu sheet from the ⋮ beside the switcher. The 44 px square
+  button uses the large icon size. The grab handle and heading stay visible while the rows scroll.
+  The heading names the current bill and its balance or status. The rows are Print the bill, Full invoice,
   Move dishes, Merge bills, Move this bill, Name this bill, Comp the bill and Record unpaid
   departure, as the bill's state allows. Receipt copy appears near the top when offered. Nothing
   was served and Reopen bill appear at the end when offered. Print the bill and Receipt copy

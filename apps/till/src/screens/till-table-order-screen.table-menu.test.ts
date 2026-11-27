@@ -434,7 +434,11 @@ describe("Table and bill actions", () => {
     try {
       const el = await mountScreen();
       const sheet = menu(el);
-      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const trigger = sheet.shadowRoot!.querySelector("button")!;
+      const icon = trigger.querySelector("wt-icon")!;
+      expect([trigger.offsetWidth, trigger.offsetHeight]).toEqual([44, 44]);
+      expect(icon.getBoundingClientRect().width).toBe(18);
+      await userEvent.click(trigger);
       const panel = sheet.shadowRoot!.querySelector(".actions")!;
       const bounds = () => {
         const { left, right, bottom } = panel.getBoundingClientRect();
@@ -450,6 +454,32 @@ describe("Table and bill actions", () => {
         Math.round(el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left);
       await expect.poll(orderLeft).toBeGreaterThan(0);
       await expect.poll(bounds).toEqual([orderLeft(), 1280, 900]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("keeps the bill heading visible when the last action scrolls into view on a sideways phone", async () => {
+    await page.viewport(844, 390);
+    try {
+      const el = await mountScreen();
+      const sheet = menu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const panel = sheet.shadowRoot!.querySelector('[part="sheet"]')!;
+      const heading = panel.querySelector("h2")!;
+      const last = sheet.querySelector("[data-record-departure]")!;
+      const headingOffset = () =>
+        heading.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+      const initialOffset = headingOffset();
+      expect(initialOffset).toBeGreaterThan(0);
+      expect(last.getBoundingClientRect().bottom).toBeGreaterThan(
+        panel.getBoundingClientRect().bottom,
+      );
+
+      last.scrollIntoView({ block: "end" });
+
+      await expect.poll(() => last.getBoundingClientRect().bottom).toBeLessThanOrEqual(390);
+      expect(headingOffset()).toBeCloseTo(initialOffset);
     } finally {
       await page.viewport(1280, 900);
     }
