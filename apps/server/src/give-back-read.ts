@@ -342,7 +342,7 @@ export async function readFacts(
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
-  const { cancelled, cancelIds, members, partOf, free } = await cancelsAndFreeByLine(
+  const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
     tx,
     saleId,
     toLine,
@@ -352,19 +352,29 @@ export async function readFacts(
   const leftOf = (id: string) =>
     decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
   const familyOf = (id: string) => [...(members.get(id) ?? [id])];
+  // A filed corrective's legs paid what it took off the dish, so the lines' `left` already counts
+  // their links; the gross, read where the lines cannot be, counts none.
+  const linesRead = correctable.lines !== null;
   const lines = filed.map((line) => {
     const cancel = cancelled.get(line.id);
     const dish = partOf.get(line.id);
     const rest =
       familyOf(line.id).reduce((total, id) => total + leftOf(id), 0) -
-      decimalToCents(cancel?.back ?? ZERO);
+      decimalToCents(cancel?.back ?? ZERO) +
+      (linesRead ? (filedBack.get(line.id) ?? 0) : 0);
+    const left = dish === undefined ? Math.max(0, rest) : 0;
     const view = {
       id: line.id,
       descriptions: line.descriptions,
       quantity: thousandthsToDecimal(line.quantity),
       gross: centsToDecimal(line.lineGross ?? 0),
-      left: centsToDecimal(dish === undefined ? Math.max(0, rest) : 0),
-      cancelled: cancel ?? null,
+      left: centsToDecimal(left),
+      cancelled:
+        cancel === undefined
+          ? null
+          : correctable.fullInvoice
+            ? { ...cancel, owed: centsToDecimal(Math.min(decimalToCents(cancel.owed), left)) }
+            : cancel,
       cancelIds: [...(cancelIds.get(line.id) ?? [])],
       partOf: dish ?? null,
       givenFree: free.has(line.id),

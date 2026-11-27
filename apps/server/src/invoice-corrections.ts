@@ -41,12 +41,12 @@ import {
   closableRefusal,
   readCorrectionLegs,
   readCorrectionLegsOf,
-  readCorrectionMoney,
   readCorrectionRow,
   type CorrectionLegs,
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
+import { linkCorrectionToCancels } from "./cancelled-lines.js";
 import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
 import { deviceMayPrintReceipts, enqueueOriginalReceipt } from "./receipt-print.js";
@@ -463,7 +463,7 @@ export async function fileCorrectionIn(
   asked?: { expectedSplit?: readonly SplitLine[]; print: true },
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
-  const { completed } = await readSettledMoney(tx, correction);
+  const { completed, legs } = await readSettledMoney(tx, correction);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
   const saleId = correction.originalSaleId as SaleId;
   const preview = await previewCorrectionAmounts(
@@ -517,6 +517,10 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  if (fullInvoice)
+    await linkCorrectionToCancels(tx, saleId, legs, {
+      filed: { allocations: preview.allocations, openedAt: correction.createdAt },
+    });
   if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;
@@ -563,12 +567,20 @@ export async function closeInvoiceCorrection(
   actor: { personId: string },
 ): Promise<InvoiceCorrectionView> {
   const correction = await openCorrection(tx, correctionId);
-  const { completed } = await readSettledMoney(tx, correction);
+  const { completed, legs } = await readSettledMoney(tx, correction);
+  let fullInvoice = false;
   if (completed > 0) {
-    const filing = await previewOrRefusal(tx, deps.backend, cfg, correction.originalSaleId, {
-      gross: centsToDecimal(completed),
-      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
-    });
+    const filing = await previewOrRefusal(
+      tx,
+      deps.backend,
+      cfg,
+      correction.originalSaleId,
+      {
+        gross: centsToDecimal(completed),
+        ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+      },
+      (seen) => (fullInvoice = seen),
+    );
     if (!("refusal" in filing) || !filing.closable)
       throw new AppError("invoice_correction.still_correctable", { correctionId });
   }
@@ -583,6 +595,10 @@ export async function closeInvoiceCorrection(
     .returning({ id: invoiceCorrections.id });
   if (ended.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  if (fullInvoice)
+    await linkCorrectionToCancels(tx, correction.originalSaleId as SaleId, legs, {
+      closed: { lineIds: correction.lineIds, moneyBack: completed },
+    });
   // Refused when issuing the table's invoice is refused (`clock.unconfirmed`, say); retrying once
   // that cause clears issues it.
   await issueAdvanceBill(tx, deps, cfg, correction.originalSaleId, actor.personId);
@@ -615,13 +631,13 @@ async function issueAdvanceBill(
 /** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`
  * while one of them is still pending. */
 async function readSettledMoney(tx: Transaction, correction: InvoiceCorrectionRow) {
-  const money = await readCorrectionMoney(tx, correction.id);
+  const { money, refunds } = await readCorrectionLegs(tx, correction.id);
   if (money.pendingRefundId !== null)
     throw new AppError("invoice_correction.refund_pending", {
       saleId: correction.originalSaleId,
       refundId: money.pendingRefundId,
     });
-  return money;
+  return { ...money, legs: refunds.filter((leg) => leg.state === "completed") };
 }
 
 /** The correction `correctionId`, refused unless it exists and is open. */
@@ -634,7 +650,8 @@ async function openCorrection(tx: Transaction, correctionId: string) {
 
 /**
  * What filing `selection` off the sale would file, or the refusal it meets and whether Close may
- * end the correction over it (`closableRefusal`).
+ * end the correction over it (`closableRefusal`); `kindSeen` is told whether it is a full
+ * invoice's, as core's `FullInvoiceCorrection` tells it.
  */
 export async function previewOrRefusal(
   tx: Transaction,
@@ -642,6 +659,7 @@ export async function previewOrRefusal(
   cfg: Pick<DeviceRequestConfig, "nodeId">,
   saleId: string,
   selection: { gross: Decimal; lineIds?: readonly string[] },
+  kindSeen?: (fullInvoice: boolean) => void,
 ): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
   try {
     return await previewCorrectionAmounts(
@@ -650,7 +668,7 @@ export async function previewOrRefusal(
       saleId as SaleId,
       cfg.nodeId,
       selection,
-      AS_ADMITTED,
+      kindSeen === undefined ? AS_ADMITTED : { ...AS_ADMITTED, kindSeen },
     );
   } catch (error) {
     if (!(error instanceof AppError)) throw error;

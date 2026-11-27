@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
-import { adjustments, billAdvances, parties, taxpayer, workingOrders } from "@waitron/db";
+import { billAdvances, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
@@ -11,16 +11,12 @@ import {
 } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { refundsWithoutCorrectiveQuery } from "./accountant-export.js";
-import { readBillEditState } from "./bill-editing.js";
 import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
 import type { GiveBackView } from "./give-back-read.js";
-import { cancelItem } from "./line-cancel.js";
-import { readCancellationContext } from "./line-cancel-context.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import * as fixture from "./testing/full-invoice-give-back.js";
 import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
 
 let venue: BillVenue;
 let reasonId: string;
@@ -289,21 +285,23 @@ describe("Give money back on a full invoice", () => {
     ]);
   });
 
-  it("pays a cancel still owed plain first, then files the rest as an R1", async () => {
+  it("puts a cancel still owed on the R1 with the rest of the goodwill", async () => {
     const { billId, saleId } = await fullInvoice({ cash: "37.00" });
     const cancelId = await cancelSteak(billId);
     const body = await giveBody(saleId, ask("goodwill", "30.00"));
     expect(body.expected).toEqual([
-      { kind: "refund", amount: "25.00", way: "cash" },
-      { kind: "correction", amount: "5.00", way: "cash", lineIds: [] },
+      { kind: "correction", amount: "30.00", way: "cash", lineIds: [] },
     ]);
     const answer = await give(saleId, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(correctivesOf(saleId)).toEqual([r1(-500)]);
+    expect(correctivesOf(saleId)).toEqual([r1(-3000)]);
     expect(moneyOf(saleId)).toEqual([
-      { applied: 2500, method: "cash", state: "completed", leg: 0, cancel: cancelId },
-      { applied: 500, method: "cash", state: "completed", leg: 1, cancel: null },
+      { applied: 3000, method: "cash", state: "completed", leg: 1, cancel: cancelId },
     ]);
+    // The R1 takes 30.00 × 25/37 off the Steak, all of which its cancel still owed.
+    expect(
+      venue.db.all(sql`select amount from adjustment_refunds where adjustment_id = ${cancelId}`),
+    ).toEqual([{ amount: 2027 }]);
   });
 });
 
@@ -600,33 +598,4 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
 });
 
 /** A still-charge cancel of the bill's Steak (its first line) with Refund ticked; its id. */
-async function cancelSteak(billId: string): Promise<string> {
-  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
-  const [line] = venue.db.all<{ id: string }>(
-    sql`select id from working_order_lines where working_order_id = ${billId} and line_no = 1`,
-  );
-  await inTx(venue, async (tx) => {
-    const [party] = await tx.select().from(parties).where(eq(parties.id, order!.partyId!));
-    return cancelItem(
-      tx,
-      venue.cfg,
-      order!.partyId!,
-      line!.id,
-      {
-        quantity: "1",
-        expectedEdit: await readBillEditState(tx, billId),
-        outcome: "keep_charge",
-        reasonId: voidReasonId,
-        expectedPartyRevision: party!.revision,
-        expectedBillRevision: order!.revision,
-        expectedContext: await readCancellationContext(tx, order!.partyId!, line!.id),
-        submissionId: randomUUID(),
-        refundHandoff: true,
-        admission: testTradingAdmission(),
-      },
-      venue.adminId,
-    );
-  });
-  const rows = await venue.db.select().from(adjustments).where(eq(adjustments.lineId, line!.id));
-  return rows.find((row) => row.action === "cancel")!.id;
-}
+const cancelSteak = (billId: string) => fixture.cancelLine(venue, billId, 1, voidReasonId);

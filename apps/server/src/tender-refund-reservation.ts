@@ -6,6 +6,7 @@ import {
 } from "@waitron/adjustments";
 import {
   adjustmentRefunds,
+  invoiceCorrectionRefunds,
   billAdvances,
   refunds,
   sales,
@@ -249,10 +250,15 @@ export async function authorizeStoredTenderRefund(
   refund: typeof refunds.$inferSelect,
   authorize: (cancelledBy?: string) => Promise<Authorization>,
 ): Promise<void> {
-  const links = await tx
-    .select()
-    .from(adjustmentRefunds)
-    .where(eq(adjustmentRefunds.refundId, refund.id));
+  // A leg's links are its filed corrective's, which no cancel's approval covers (D4).
+  const [leg] = await tx
+    .select({ id: invoiceCorrectionRefunds.id })
+    .from(invoiceCorrectionRefunds)
+    .where(eq(invoiceCorrectionRefunds.tenderRefundId, refund.id));
+  const links =
+    leg !== undefined
+      ? []
+      : await tx.select().from(adjustmentRefunds).where(eq(adjustmentRefunds.refundId, refund.id));
   const cancels = await cancelsForSale(
     tx,
     refund.saleId!,
