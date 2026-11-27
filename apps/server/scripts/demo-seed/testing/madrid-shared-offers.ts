@@ -22,9 +22,6 @@ export interface MadridSharedProduct {
   /** The captured category's name. */
   category: string;
   courseId: string | null;
-  vatClass: string;
-  /** `null`: none of its own, so its offers take away at `vatClass`. */
-  takeawayVatClass: string | null;
   /** Whole cents, VAT included. */
   unitPrice: number;
   pricingUnit: string;
@@ -86,7 +83,7 @@ interface MenuDocument {
 /** Add products that join existing categories and are offered on more than one menu, and the
  * declared cell changes, to the capture. Refused: an existing row changed beyond the declared
  * cells, or a removal outside the declaration; an added row not declared, or a declared one missing; a declared product
- * whose names, classes, price, pricing unit, category or image differ from its seeded row or from
+ * whose names, price, pricing unit, category or image differ from its seeded row or from
  * any of its published offers, or whose seeded course differs; and a published document that, with the added sections, members
  * and offers taken out, the declared offer changes undone and its included-menu hashes set aside,
  * differs from the capture after stripping declared removals. Published set-menu copies and their
@@ -175,8 +172,6 @@ export function madridWithSharedOffers(
       ["kitchenName", product.kitchenName, row.kitchen_name],
       ["category", categoryKey(product.category), row.category_id],
       ["course", product.courseId, row.course_id],
-      ["vatClass", product.vatClass, row.vat_class],
-      ["takeawayVatClass", product.takeawayVatClass, row.takeaway_vat_class],
       ["unitPrice", product.unitPrice, row.unit_price],
       ["pricingUnit", product.pricingUnit, row.pricing_unit],
       ["image", product.image, row.image],
@@ -219,12 +214,6 @@ export function madridWithSharedOffers(
           ["name", product.name, offer.name],
           ["customerName", product.customerName, offer.customerName],
           ["kitchenName", product.kitchenName, offer.kitchenName],
-          ["vatClass", product.vatClass, offer.vatClass],
-          [
-            "takeawayVatClass",
-            product.takeawayVatClass ?? product.vatClass,
-            offer.takeawayVatClass,
-          ],
           ["unitPrice", (product.unitPrice / 100).toFixed(2), offer.unitPrice],
           ["pricingUnit", product.pricingUnit, offer.pricingUnit],
           ["image", product.image, offer.image],

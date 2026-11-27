@@ -168,7 +168,6 @@ export interface HeldOrder {
       };
       offeredModifiers?: OfferedOptionsList[];
       unitPrice: string;
-      vatClass: "general" | "reduced" | "super_reduced" | "zero";
       category: string | null;
       allergens: Readonly<ProductAllergens> | null;
       courseId: string | null;
@@ -457,7 +456,6 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             },
             ...(options?.length ? { offeredModifiers: options } : {}),
             unitPrice: line.unitPriceGross,
-            vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
             category: context.categoryName,
             ...productDeclarationValues(declarationOf(line)),
             courseId: line.courseId,

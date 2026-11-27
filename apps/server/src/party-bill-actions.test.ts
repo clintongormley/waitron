@@ -271,9 +271,8 @@ describe("split a bill", () => {
       (await linesOf(v, second)).map((l) => ({
         name: l.name,
         price: l.unitPriceGross,
-        vat: l.vatClass,
       })),
-    ).toEqual([{ name: "Water", price: 200, vat: "general" }]);
+    ).toEqual([{ name: "Water", price: 200 }]);
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
     expect(await activeTablesOf(v, partyId)).toEqual([table4]);
   });
@@ -771,7 +770,6 @@ describe("merge bills", () => {
       lines.map((l) => ({
         name: l.name,
         price: l.unitPriceGross,
-        vat: l.vatClass,
         groupId: l.groupId,
         creditedTo: l.creditedTo,
       })),
@@ -779,14 +777,12 @@ describe("merge bills", () => {
       {
         name: "Burger",
         price: 1200,
-        vat: "general",
         groupId: wine!.groupId,
         creditedTo: OPERATOR,
       },
       {
         name: "Red wine bottle",
         price: 3000,
-        vat: "general",
         groupId: wine!.groupId,
         creditedTo: OPERATOR,
       },
@@ -1206,7 +1202,7 @@ describe("merge bills", () => {
 });
 
 describe("transfer items", () => {
-  it("moves the chosen items, keeping price, VAT class, group and credit, and moves the revision on by one", async () => {
+  it("moves the chosen items, keeping price, group and credit, and moves the revision on by one", async () => {
     const table = await v.table("Table 30");
     const { partyId, tabId } = await seat(v, table);
     await orderForParty(v, partyId, ["Burger", "Red wine bottle", "Paella"]);
@@ -1221,13 +1217,11 @@ describe("transfer items", () => {
     expect({
       name: moved.name,
       price: moved.unitPriceGross,
-      vat: moved.vatClass,
       groupId: moved.groupId,
       creditedTo: moved.creditedTo,
     }).toEqual({
       name: "Burger",
       price: 1200,
-      vat: "general",
       groupId: burger!.groupId,
       creditedTo: OPERATOR,
     });

@@ -1,7 +1,6 @@
 import { and, eq, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { products, units } from "@waitron/db";
-import type { VatClass } from "@waitron/shared";
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
@@ -67,11 +66,6 @@ function parentsAlways<C extends AnyColumn>(
  */
 export const effectiveProductColumns = {
   description: inherited(products.description, parentProducts.description),
-  vatClass: owned(products.vatClass, parentProducts.vatClass),
-  // A copy's takeaway label is the eat-in one: a product line taken away files at its product's
-  // takeaway rate (`product_takeaway_vat_rates`), and nothing reads this label for it. It goes with
-  // the label columns (VAT rates piece B, PR B5).
-  takeawayVatClass: owned(products.vatClass, parentProducts.vatClass) as SQL<VatClass>,
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   color: parentsAlways(products.color, parentProducts.color),

@@ -36,7 +36,7 @@ import {
   readVenueVatRates,
   toInvoiceLineDescriptions,
 } from "@waitron/menu";
-import type { GrossLine, VatClass } from "@waitron/menu";
+import type { GrossLine } from "@waitron/menu";
 import {
   AppError,
   decimal,
@@ -73,8 +73,6 @@ export interface SeedSalesProduct {
   customerName: Record<string, string> | null;
   /** GROSS (VAT-inclusive). */
   unitPrice: string;
-  vatClass: VatClass;
-  takeawayVatClass?: VatClass | null;
 }
 
 /** A deli product always names the takeaway rate its lines file at. */
@@ -310,7 +308,7 @@ export async function seedSales(
       await insertInChunks(
         tx,
         workingOrderLines,
-        grossLines.map((line, i) => ({
+        grossLines.map((line) => ({
           workingOrderId,
           lineNo: line.lineNo,
           name: line.name,
@@ -318,8 +316,6 @@ export async function seedSales(
           quantity: stringToThousandths(line.quantity),
           unitPriceGross: decimalToCents(line.grossUnitPrice),
           aLaCarteUnitPrice: decimalToCents(line.grossUnitPrice),
-          vatClass: chosen[i]!.product.vatClass,
-          takeawayVatClass: chosen[i]!.product.takeawayVatClass ?? chosen[i]!.product.vatClass,
           lineTotal: decimalToCents(line.lineGross),
         })),
       );

@@ -124,7 +124,7 @@ describe("a sold variant line carries its product and relative variant names", (
     ]);
   });
 
-  it("brings a held variant line back with the variant's own VAT class, and the variant's allergens as before", async () => {
+  it("brings a held variant line back with the variant's allergens", async () => {
     const { cfg, zoneId, menuId } = await setupVenue();
     const orderId = randomUUID();
     await withTransaction(db, async (tx) => {
@@ -146,9 +146,7 @@ describe("a sold variant line carries its product and relative variant names", (
     });
     const held = await getHeldOrder({ db }, orderId);
 
-    expect(
-      held.lines.map((l) => [l.product?.vatClass, Object.keys(l.product?.allergens ?? {})]),
-    ).toEqual([["reduced", ["soybeans"]]]);
+    expect(held.lines.map((l) => Object.keys(l.product?.allergens ?? {}))).toEqual([["soybeans"]]);
   });
 
   it("names the variant's parent product and the offer on the tab line, as the retrieve screen maps them", async () => {
@@ -397,9 +395,8 @@ describe("parkOrder", () => {
     // Each of the two coffees is its own line, carrying its product FK + quantity AND the full
     // display snapshot priceBasket produced: 1.50 gross each. `line_total` on this DRAFT is the
     // GROSS 1.50 (the customer-facing total the held list shows), NOT the net base the FILED sale
-    // line carries; `vat_class` is the product's class, general. Each number is read straight off
-    // the row, so each is the whole number its own scale stores: 150 is that gross 1.50 in cents,
-    // and 1000 is one unit in thousandths.
+    // line carries. Each number is read straight off the row, so each is the whole number its own
+    // scale stores: 150 is that gross 1.50 in cents, and 1000 is one unit in thousandths.
     for (const [at, lineNo] of [
       [0, 1],
       [1, 2],
@@ -410,7 +407,6 @@ describe("parkOrder", () => {
         quantity: 1000,
         descriptions: { [LOCALE]: "Espresso" },
         unitPriceGross: 150,
-        vatClass: "general",
         lineTotal: 150,
         category: "ES drinks",
       });
@@ -448,11 +444,11 @@ describe("parkOrder", () => {
 
     // Read as TEXT rather than through drizzle, so what is asserted is the number the column holds
     // and not a driver's or an engine's rendering of it.
-    const stored = await db.execute<{ quantity: string; vat_class: string }>(sql`
-      select cast(quantity as text) as quantity, vat_class
+    const stored = await db.execute<{ quantity: string }>(sql`
+      select cast(quantity as text) as quantity
       from working_order_lines where working_order_id = ${id}`);
     // 1.500 kg is 1500 thousandths.
-    expect(stored.rows).toEqual([{ quantity: "1500", vat_class: "general" }]);
+    expect(stored.rows).toEqual([{ quantity: "1500" }]);
   });
 
   it("parks a multi-line order without a label, snapshotting a category-less line as null", async () => {
@@ -1460,7 +1456,6 @@ describe("a sale on a Spanish public holiday", () => {
           quantity: workingOrderLines.quantity,
           descriptions: workingOrderLines.descriptions,
           unitPriceGross: workingOrderLines.unitPriceGross,
-          vatClass: workingOrderLines.vatClass,
           lineTotal: workingOrderLines.lineTotal,
           category: workingOrderLines.category,
         })

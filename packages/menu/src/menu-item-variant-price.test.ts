@@ -3,7 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { menuItems, withTransaction, type Transaction } from "@waitron/db";
 import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
-import { saveBodyOf } from "../test/save-body.js";
 import { deleteMenu } from "./delete.js";
 import type { MenuOffer } from "@waitron/shared";
 import { clashesOf } from "./menu-combine.js";
@@ -97,7 +96,7 @@ const addGlassInEditor = (productId: string) =>
     await saveProductEditor(
       tx,
       productId,
-      { ...saveBodyOf(value), variants: [{ ...glass, active: true }] },
+      { ...value, variants: [{ ...glass, active: true }] },
       "en",
     );
   });
@@ -108,7 +107,7 @@ const saveVariantsInEditor = (
   change: (variants: readonly object[]) => readonly object[],
 ) =>
   app(async (tx) => {
-    const body = saveBodyOf(await readProductEditor(tx, productId));
+    const body = await readProductEditor(tx, productId);
     await saveProductEditor(tx, productId, { ...body, variants: change(body.variants) }, "en");
   });
 
@@ -197,7 +196,7 @@ describe("a product's first variant", () => {
     await addGlassInEditor(f.wine);
     await app(async (tx) => {
       const value = await readProductEditor(tx, f.wine);
-      await saveProductEditor(tx, f.wine, { ...saveBodyOf(value), variants: [] }, "en");
+      await saveProductEditor(tx, f.wine, { ...value, variants: [] }, "en");
     });
     expect(await stored(f.lunch, f.wine)).toBeNull();
   });

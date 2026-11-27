@@ -27,7 +27,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A menu patch reprices what is sold from then on; a line already on an open order keeps the price
-// and VAT class it locked when it was added.
+// it locked when it was added.
 const LOCALE = "es-ES";
 const EDITOR = "0000ffff-2222-4000-8000-0000000000cc";
 
@@ -116,7 +116,6 @@ async function stored(workingOrderId: string) {
   return suite.db
     .select({
       id: workingOrderLines.id,
-      vatClass: workingOrderLines.vatClass,
       unitPriceGross: workingOrderLines.unitPriceGross,
     })
     .from(workingOrderLines)
@@ -124,7 +123,7 @@ async function stored(workingOrderId: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 
-/** Patches Beer's price to 3.10 and its class to `general`, from the live version; both ids. */
+/** Patches Beer's price to 3.10, from the live version; both ids. */
 async function patchBeer(v: Venue): Promise<{ before: string; after: string }> {
   return withTransaction(suite.db, async (tx) => {
     await seedPerson(tx, {
@@ -170,18 +169,13 @@ describe("a menu patch and the lines already on open orders", () => {
     const id = await park(v, one(v));
     const [opened] = await stored(id);
     // The values the line locked when it was parked, before any patch.
-    expect([opened!.unitPriceGross, opened!.vatClass]).toEqual([250, "reduced"]);
+    expect(opened!.unitPriceGross).toBe(250);
 
     const { after } = await patchBeer(v);
-    expect((await stored(id)).map((line) => [line.unitPriceGross, line.vatClass])).toEqual([
-      [250, "reduced"],
-    ]);
+    expect((await stored(id)).map((line) => line.unitPriceGross)).toEqual([250]);
 
     await addLine(v, id, after);
-    expect((await stored(id)).map((line) => [line.unitPriceGross, line.vatClass])).toEqual([
-      [250, "reduced"],
-      [310, "reduced"],
-    ]);
+    expect((await stored(id)).map((line) => line.unitPriceGross)).toEqual([250, 310]);
   });
 
   it("a line asserting the version the patch replaced is refused, and the order is unchanged", async () => {
@@ -193,8 +187,6 @@ describe("a menu patch and the lines already on open orders", () => {
       code: "menu.version_changed",
       params: { menus: [{ menuId: v.menuId, liveVersionId: after }] },
     });
-    expect((await stored(id)).map((line) => [line.unitPriceGross, line.vatClass])).toEqual([
-      [250, "reduced"],
-    ]);
+    expect((await stored(id)).map((line) => line.unitPriceGross)).toEqual([250]);
   });
 });

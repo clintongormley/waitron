@@ -11,7 +11,6 @@ import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, ExtraList, OptionList, Product } from "../api/client.js";
 import type { Course } from "../api/kitchen-api.js";
 import type { CategorySummary, Unit } from "../api/catalog-api.js";
-import { withoutVatClass } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
@@ -385,7 +384,7 @@ export class ProductsScreen extends LitElement {
     this.deleteErrorKey = null;
     this.deleteErrorParams = null;
     try {
-      const value = withoutVatClass(await this.api.getProductEditor(product.id));
+      const value = await this.api.getProductEditor(product.id);
       await this.api.updateProductEditor(product.id, { ...value, active: false });
     } catch (error) {
       this.deleteErrorKey = codeOf(error);

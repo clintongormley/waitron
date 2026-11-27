@@ -16,7 +16,6 @@ import { readProductModifiers } from "./product-modifiers.js";
 import type {
   OptionList,
   ProductModifierRef,
-  VatClass,
   OfferedExtraItem,
   OfferedModifier,
 } from "@waitron/shared";
@@ -118,8 +117,6 @@ async function readExtraProducts(
       parentName: parentProducts.name,
       parentCustomerName: parentProducts.customerName,
       parentKitchenName: parentProducts.kitchenName,
-      vatClass: effectiveProductColumns.vatClass,
-      takeawayVatClass: effectiveProductColumns.takeawayVatClass,
       allergens: effectiveProductColumns.allergens,
       dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
@@ -150,8 +147,6 @@ async function readExtraProducts(
               : joinCustomerPresentationText(text.product, text.variant, row.name),
           kitchenName:
             row.parentName === null ? row.kitchenName : kitchenPresentationName(presentation),
-          vatClass: row.vatClass as VatClass,
-          takeawayVatClass: row.takeawayVatClass,
           ...extraDeclarationValues(row),
         },
       ];

@@ -372,8 +372,6 @@ it("groups Soup and Hake into one Daily menu and answers it as exact", async () 
     sentAt: expect.any(String),
     servedAt: expect.any(String),
     servedQuantity: 1000,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
   });
   expect({
     name: row!.name,

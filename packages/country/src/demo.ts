@@ -38,7 +38,6 @@ interface CountryDemoProductFields<L extends string = string> {
   pricingUnit: string;
 
   unitPrice: string;
-  vatClass: string;
   takeawayVatRate?: string;
 
   image: string;
@@ -68,7 +67,6 @@ export type CountryDemoSetMenu<L extends string = string> = ReadonlyDemo<{
   name: DemoPlainText<L>;
   customerName: DemoText<L>;
   price: string;
-  vatClass: "reduced";
   lines: { count: number; courses: DemoCourseKey[] }[];
   dishes: {
     productImage: string;

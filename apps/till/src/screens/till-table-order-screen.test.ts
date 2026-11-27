@@ -3460,7 +3460,6 @@ describe("till-table-order-screen", () => {
             name: "Grande",
             customerName: { es: "Grande carta" },
             kitchenName: "GR",
-            vatClass: "general",
             category: null,
             allergens: null,
             unitPrice: "11.00",

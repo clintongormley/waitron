@@ -17,7 +17,6 @@ const REGIONAL_DISHES = [
     course: "sharing",
     image: "galicia-empanada.png",
     unitPrice: "8.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -35,7 +34,6 @@ const REGIONAL_DISHES = [
     course: "starters",
     image: "galicia-caldo.png",
     unitPrice: "6.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -57,7 +55,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "galicia-lacon.png",
     unitPrice: "14.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -75,7 +72,6 @@ const REGIONAL_DISHES = [
     course: "desserts",
     image: "galicia-filloas.png",
     unitPrice: "5.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -97,7 +93,6 @@ const REGIONAL_DISHES = [
     course: "sharing",
     image: "galicia-xoubas.png",
     unitPrice: "9.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -115,7 +110,6 @@ const REGIONAL_DISHES = [
     course: "sharing",
     image: "galicia-mexillons.png",
     unitPrice: "10.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -125,7 +119,6 @@ const REGIONAL_DISHES = [
     course: "desserts",
     image: "galicia-bica.png",
     unitPrice: "5.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
 ] as const;
@@ -144,7 +137,6 @@ const WINE = {
   course: "drinks",
   image: "galicia-albarino.png",
   unitPrice: "4.50",
-  vatClass: "reduced",
   pricingUnit: "each",
 } as const;
 const REGIONAL_SECTION = {

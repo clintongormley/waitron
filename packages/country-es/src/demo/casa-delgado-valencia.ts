@@ -21,7 +21,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "valencia-all-pebre.png",
     unitPrice: "14.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -43,7 +42,6 @@ const REGIONAL_DISHES = [
     course: "starters",
     image: "valencia-esgarraet.png",
     unitPrice: "8.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -65,7 +63,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "valencia-paella.png",
     unitPrice: "16.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -87,7 +84,6 @@ const REGIONAL_DISHES = [
     course: "drinks",
     image: "valencia-orxata.png",
     unitPrice: "5.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -109,7 +105,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "valencia-arros-forn.png",
     unitPrice: "13.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -131,7 +126,6 @@ const REGIONAL_DISHES = [
     course: "starters",
     image: "valencia-titaina.png",
     unitPrice: "9.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -153,7 +147,6 @@ const REGIONAL_DISHES = [
     course: "desserts",
     image: "valencia-arnadi.png",
     unitPrice: "5.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
 ] as const;
@@ -176,7 +169,6 @@ const WINE = {
   course: "drinks",
   image: "valencia-wine.png",
   unitPrice: "4.00",
-  vatClass: "reduced",
   pricingUnit: "each",
 } as const;
 const REGIONAL_SECTION = {

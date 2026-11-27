@@ -5,9 +5,6 @@ import type { StrictCountryDemoData, SeedProduct } from "./data-set.js";
 export const strictRegistry: Readonly<Record<string, StrictCountryDemoData>> = DEMO_DATA_SETS;
 const base = DEMO_DATA_SETS["casa-delgado-es"];
 const product = base.menus.restaurant.categories[0].products[0];
-const vat = { ...product, vatClass: "unregistered-tax" } as const satisfies CountryDemoProduct;
-// @ts-expect-error The server owns the accepted VAT classes.
-export const invalidVat: SeedProduct = vat;
 const pricing = {
   ...product,
   pricingUnit: "unregistered-unit",

@@ -206,7 +206,6 @@ export async function seedMenus(
                 : [...product.dietaryDeclarations],
             ...(unitId === undefined ? { pricingUnit: product.pricingUnit } : { unitId }),
             unitPrice: product.unitPrice,
-            vatClass: product.vatClass,
             takeawayVatRate: takeawayVatRateOf(product.takeawayVatRate),
           },
           vatRates,

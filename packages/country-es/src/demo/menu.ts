@@ -173,7 +173,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "89.00",
-        vatClass: "reduced",
         image: "jamon-iberico.png",
       },
       {
@@ -200,7 +199,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "24.50",
-        vatClass: "reduced",
         image: "chorizo-iberico.png",
       },
       {
@@ -227,7 +225,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "32.00",
-        vatClass: "reduced",
         image: "lomo-embuchado.png",
       },
       {
@@ -254,7 +251,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "19.90",
-        vatClass: "reduced",
         image: "salchichon.png",
       },
       {
@@ -281,7 +277,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "38.00",
-        vatClass: "reduced",
         image: "cecina.png",
       },
       {
@@ -308,7 +303,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "18.00",
-        vatClass: "reduced",
         image: "sobrasada.png",
       },
     ],
@@ -349,7 +343,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "21.00",
-        vatClass: "super_reduced",
         takeawayVatRate: "4.00",
         image: "manchego-curado.png",
       },
@@ -377,7 +370,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "28.50",
-        vatClass: "super_reduced",
         takeawayVatRate: "4.00",
         image: "cabrales.png",
       },
@@ -405,7 +397,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "26.00",
-        vatClass: "super_reduced",
         takeawayVatRate: "4.00",
         image: "idiazabal.png",
       },
@@ -433,7 +424,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "34.00",
-        vatClass: "super_reduced",
         takeawayVatRate: "4.00",
         image: "torta-del-casar.png",
       },
@@ -455,7 +445,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "19.50",
-        vatClass: "super_reduced",
         takeawayVatRate: "4.00",
         image: "mahon.png",
       },
@@ -497,7 +486,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "72.00",
-        vatClass: "reduced",
         image: "anchoas.png",
       },
       {
@@ -524,7 +512,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "8.50",
-        vatClass: "reduced",
         image: "aceitunas.png",
       },
       {
@@ -551,7 +538,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "46.00",
-        vatClass: "reduced",
         image: "pulpo-en-aceite.png",
       },
       {
@@ -578,7 +564,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "54.00",
-        vatClass: "reduced",
         image: "bonito.png",
       },
     ],
@@ -614,7 +599,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "6.50",
-        vatClass: "reduced",
         image: "patatas-bravas.png",
       },
       {
@@ -641,7 +625,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "7.80",
-        vatClass: "reduced",
         image: "croquetas.png",
       },
       {
@@ -668,7 +651,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "9.90",
-        vatClass: "reduced",
         image: "gambas-al-ajillo.png",
       },
       {
@@ -695,7 +677,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "5.50",
-        vatClass: "reduced",
         image: "tortilla.png",
       },
       {
@@ -716,7 +697,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "2.20",
-        vatClass: "reduced",
         course: "bread",
         image: "pan-de-la-casa.png",
       },
@@ -744,7 +724,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "3.20",
-        vatClass: "reduced",
         image: "pan-con-tomate.png",
       },
     ],
@@ -780,7 +759,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "16.50",
-        vatClass: "reduced",
         image: "pulpo-a-la-gallega.png",
       },
       {
@@ -807,7 +785,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "7.00",
-        vatClass: "reduced",
         image: "pimientos-de-padron.png",
       },
       {
@@ -834,7 +811,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "11.00",
-        vatClass: "reduced",
         image: "calamares.png",
       },
       {
@@ -861,7 +837,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "14.50",
-        vatClass: "reduced",
         image: "tabla-de-quesos.png",
       },
     ],
@@ -903,7 +878,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "18.90",
-        vatClass: "reduced",
         image: "paella.png",
       },
       {
@@ -930,7 +904,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "21.50",
-        vatClass: "reduced",
         image: "solomillo.png",
       },
       {
@@ -957,7 +930,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "19.00",
-        vatClass: "reduced",
         image: "bacalao.png",
       },
       {
@@ -984,7 +956,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "17.50",
-        vatClass: "reduced",
         image: "merluza.png",
       },
     ],
@@ -1026,7 +997,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "5.00",
-        vatClass: "reduced",
         image: "crema-catalana.png",
       },
       {
@@ -1053,7 +1023,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "5.50",
-        vatClass: "reduced",
         image: "tarta-de-santiago.png",
       },
       {
@@ -1074,7 +1043,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "4.50",
-        vatClass: "reduced",
         image: "flan.png",
       },
       {
@@ -1101,7 +1069,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "4.80",
-        vatClass: "reduced",
         image: "arroz-con-leche.png",
       },
     ],
@@ -1143,7 +1110,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "11.00",
-        vatClass: "reduced",
         image: "negroni.png",
       },
     ],
@@ -1185,7 +1151,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "3.50",
-        vatClass: "reduced",
         image: "vino-tinto.png",
       },
       {
@@ -1212,7 +1177,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "2.80",
-        vatClass: "reduced",
         image: "cana-cerveza.png",
       },
       {
@@ -1239,7 +1203,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "1.60",
-        vatClass: "reduced",
         takeawayVatRate: "21.00",
         image: "botellin-cerveza.png",
       },
@@ -1276,7 +1239,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "2.50",
-        vatClass: "reduced",
         takeawayVatRate: "21.00",
         image: "refresco-cola.png",
       },
@@ -1298,7 +1260,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "1.80",
-        vatClass: "reduced",
         image: "agua-mineral.png",
       },
       {
@@ -1325,7 +1286,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "2.90",
-        vatClass: "reduced",
         image: "zumo-naranja.png",
       },
       {
@@ -1352,7 +1312,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "1.80",
-        vatClass: "reduced",
         takeawayVatRate: "21.00",
         image: "coca-cola-zero-lata.png",
       },
@@ -1449,7 +1408,6 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         ],
         pricingUnit: "each",
         unitPrice: "1.60",
-        vatClass: "reduced",
         image: "cafe-solo.png",
       },
     ],
@@ -1594,7 +1552,6 @@ export const MENU_DEL_DIA = {
           },
           pricingUnit: "each",
           unitPrice: "6.00",
-          vatClass: "reduced",
           image: "ensalada-mixta.png",
         },
         {
@@ -1621,7 +1578,6 @@ export const MENU_DEL_DIA = {
           },
           pricingUnit: "each",
           unitPrice: "5.50",
-          vatClass: "reduced",
           image: "gazpacho.png",
         },
         {
@@ -1648,7 +1604,6 @@ export const MENU_DEL_DIA = {
           },
           pricingUnit: "each",
           unitPrice: "6.50",
-          vatClass: "reduced",
           image: "lentejas.png",
         },
       ],
@@ -1697,7 +1652,6 @@ export const MENU_DEL_DIA = {
           },
           pricingUnit: "each",
           unitPrice: "9.50",
-          vatClass: "reduced",
           image: "pollo-asado.png",
         },
         {
@@ -1724,7 +1678,6 @@ export const MENU_DEL_DIA = {
           },
           pricingUnit: "each",
           unitPrice: "10.50",
-          vatClass: "reduced",
           image: "merluza-rebozada.png",
         },
       ],
@@ -1771,7 +1724,6 @@ export const DEMO_SET_MENUS = [
       gl: "Menú do día",
     },
     price: "14.00",
-    vatClass: "reduced",
     lines: [starter, { count: 1, courses: ["mains"] }, ...laterLines],
     dishes: [
       ...sharedDishes,
@@ -1795,7 +1747,6 @@ export const DEMO_SET_MENUS = [
       gl: "Menú especial",
     },
     price: "20.00",
-    vatClass: "reduced",
     lines: [starter, { count: 1, courses: ["mains", "starters"] }, ...laterLines],
     dishes: [
       ...sharedDishes,

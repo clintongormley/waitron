@@ -2188,15 +2188,8 @@ describe("POST /api/parties/:id/groups/split-line", () => {
         .where(eq(workingOrderLines.workingOrderId, party.tabId))
         .orderBy(workingOrderLines.lineNo),
     );
-    expect(
-      rows.map((row) => [row.quantity, row.groupId, row.unitPriceGross, row.vatClass]),
-    ).toEqual(
-      Array.from({ length: 4 }, () => [
-        1000,
-        group.id,
-        original!.unitPriceGross,
-        original!.vatClass,
-      ]),
+    expect(rows.map((row) => [row.quantity, row.groupId, row.unitPriceGross])).toEqual(
+      Array.from({ length: 4 }, () => [1000, group.id, original!.unitPriceGross]),
     );
     expect(
       rows.map((row) => [

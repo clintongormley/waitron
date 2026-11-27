@@ -1288,7 +1288,6 @@ export async function listWorkingLineContexts(
     unitName: Record<string, string>;
     unitPrecision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
-    vatClass: string;
   }[]
 > {
   const rows = await tx
@@ -1304,7 +1303,6 @@ export async function listWorkingLineContexts(
       unitName: workingOrderLines.offerUnitName,
       unitPrecision: workingOrderLines.offerUnitPrecision,
       hardwareUnit: workingOrderLines.hardwareUnit,
-      vatClass: workingOrderLines.offerVatClass,
     })
     .from(workingOrderLines)
     .where(
@@ -1325,7 +1323,6 @@ export async function listWorkingLineContexts(
     unitId: row.unitId!,
     unitName: row.unitName!,
     unitPrecision: row.unitPrecision!,
-    vatClass: row.vatClass!,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
   }));
 }
@@ -1497,7 +1494,9 @@ export async function lineContextColumns(
             seedKey: seedKeyById.get(unitId) ?? null,
           }),
           hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
-          offerVatClass: sold.vatClass,
+          // `working_order_lines_context_ck` requires one beside a menu item; nothing decides
+          // anything by it.
+          offerVatClass: "reduced",
           latePeriodId: line.late?.periodId ?? null,
           lateStationId: line.late?.stationId ?? null,
           latePeriodName: line.late?.periodName ?? null,

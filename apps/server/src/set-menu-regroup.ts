@@ -174,9 +174,6 @@ async function writeBillGrouping(
         servedQuantity: 1000,
         unitPriceGross: priceCents,
         lineTotal: priceCents,
-        // vat_class and takeaway_vat_class are required; no rate reads them.
-        vatClass: "reduced" as const,
-        takeawayVatClass: "reduced" as const,
         creditedTo,
         setMenuRole: "set_menu" as const,
         setMenuId: copy.menuId,

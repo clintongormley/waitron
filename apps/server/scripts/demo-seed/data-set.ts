@@ -1,6 +1,6 @@
 import { readTaxpayer, readVenue, type Database } from "@waitron/db";
 import { resolveCountryDemoIdentity } from "@waitron/country";
-import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/menu";
+import type { DietaryLabel, PricingUnit } from "@waitron/menu";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import type { AdjustmentReasonInput } from "@waitron/adjustments";
 import type {
@@ -36,11 +36,10 @@ export type StaffLanguage = SeedLocale;
 export type StaffText = Readonly<Record<StaffLanguage, string>>;
 export type SeedProduct<L extends string = string> = Omit<
   CountryDemoProduct<L>,
-  "dietaryDeclarations" | "pricingUnit" | "vatClass"
+  "dietaryDeclarations" | "pricingUnit"
 > & {
   readonly dietaryDeclarations?: readonly DietaryLabel[];
   readonly pricingUnit: PricingUnit;
-  readonly vatClass: VatClass;
 };
 export type SeedCategory<L extends string = string> = Omit<
   CountryDemoCategory<L>,

@@ -3358,7 +3358,6 @@ it("saves course with a new product, without a separate routing event", async ()
     active: true,
     available: true,
     ordering: "public",
-    vatClass: null,
     takeawayVatRate: "21.00",
     variants: [],
     primaryCategoryId: null,
@@ -4899,7 +4898,6 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
   expect(value).toMatchObject({
     name: "Glass of coffee",
     unitPrice: null,
-    vatClass: null,
     unitId: null,
     courseId: null,
     description: null,

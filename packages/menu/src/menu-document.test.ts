@@ -27,12 +27,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import {
-  decimal,
-  DEFAULT_HOME_ORDER,
-  expandDietaryDeclarations,
-  shownMembers,
-} from "@waitron/shared";
+import { DEFAULT_HOME_ORDER, expandDietaryDeclarations, shownMembers } from "@waitron/shared";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
@@ -55,7 +50,6 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import { BATCH_SIZE } from "./batches.js";
-import * as vatRates from "@waitron/shared";
 import { createCategory, updateCategory } from "./categories.js";
 import * as settings from "./settings.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -384,39 +378,11 @@ describe("buildMenuDocument", () => {
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
   });
 
-  it("freezes the VAT class, and no rate, of the dish, each variant and each extras item", async () => {
+  it("freezes no VAT label and no rate on the dish, a variant or an extras item", async () => {
     const f = await menusFixture(fx.db);
-    await app(async (tx) => {
-      await updateProduct(tx, f.large, { vatClass: "general" });
-      await updateProduct(tx, f.extraLemon, { vatClass: "super_reduced" });
-    });
     const document = await build(f.lunch);
-    const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    expect(offer).toMatchObject({ vatClass: "reduced" });
-    expect(offer.variants[0]).toMatchObject({ vatClass: "general" });
-    const extras = offer.offeredModifiers[0]!;
-    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
-      vatClass: "super_reduced",
-    });
+    expect(JSON.stringify(document)).not.toMatch(/vatClass|takeawayVatClass/);
     expect(JSON.stringify(document)).not.toMatch(/vatRate/);
-  });
-
-  it("freezes each copy's served class as its takeaway class, whatever its takeaway rate", async () => {
-    const f = await menusFixture(fx.db);
-    await app(async (tx) => {
-      await updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" });
-      await updateProduct(tx, f.large, { vatClass: "general" });
-      await updateProduct(tx, f.extraLemon, { takeawayVatRate: "4.00" });
-    });
-    const document = await build(f.lunch);
-    const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    expect(offer).toMatchObject({ vatClass: "reduced", takeawayVatClass: "reduced" });
-    expect(offer.variants[0]).toMatchObject({ vatClass: "general", takeawayVatClass: "general" });
-    const extras = offer.offeredModifiers[0]!;
-    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
-    });
   });
 
   it("holds an extras item and an option label whatever their availability", async () => {
@@ -732,9 +698,6 @@ describe("menuDocumentHash", () => {
     string,
     (tx: Transaction, f: Awaited<ReturnType<typeof menusFixture>>) => Promise<unknown>,
   ][] = [
-    ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
-    ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
-    ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
     [
       "the dish's allergens",
       (tx, f) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }),
@@ -808,19 +771,10 @@ describe("menuDocumentHash", () => {
     await app((tx) => change(tx, f));
     expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
   });
-
-  it("stays when the rate of a class the menu uses changes", async () => {
-    const f = await menusFixture(fx.db);
-    const before = menuDocumentHash(await build(f.dinner));
-    vi.spyOn(vatRates, "vatRateOn").mockImplementation((vatClass) =>
-      decimal(vatClass === "reduced" ? "11.00" : "21.00"),
-    );
-    expect(menuDocumentHash(await build(f.dinner))).toBe(before);
-  });
 });
 
 describe("applyLiveFields", () => {
-  it("puts availability, course and category back from the current rows, and not VAT", async () => {
+  it("puts availability, course and category back from the current rows", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) =>
       updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "4.20" }),
@@ -851,7 +805,6 @@ describe("applyLiveFields", () => {
     expect(lunchOffers[2]!.unitPrice).toBe("4.20");
     const lemonade = lunchOffers[0]!;
     expect(lemonade).toMatchObject({
-      vatClass: "reduced",
       courseId: f.course,
       category: "Cold drinks",
       menuName: "Lunch Menu",
@@ -860,15 +813,12 @@ describe("applyLiveFields", () => {
     expect(lemonade.variants[0]).toMatchObject({
       id: f.large,
       available: false,
-      vatClass: "reduced",
       courseId: f.course,
       category: "Cold drinks",
     });
     const [extras, options] = lemonade.offeredModifiers;
     if (extras?.kind !== "extras" || options?.kind !== "options") throw new Error("lists");
-    expect(extras.items).toMatchObject([
-      { productId: f.extraLemon, available: false, vatClass: "reduced" },
-    ]);
+    expect(extras.items).toMatchObject([{ productId: f.extraLemon, available: false }]);
     const dinnerExtras = live.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!
       .offeredModifiers[0]!;
     expect(dinnerExtras.kind === "extras" && dinnerExtras.items[0]!.available).toBe(false);
@@ -886,21 +836,6 @@ describe("applyLiveFields", () => {
     const lemonade = live.get(f.lunch)!.find((offer) => offer.productId === f.lemonade)!;
     expect(lemonade.category).toBe("Soft drinks");
     expect(lemonade.variants[0]).toMatchObject({ id: f.large, category: "Soft drinks" });
-  });
-
-  it("serves the VAT class the version froze, whatever each product's class is now", async () => {
-    const f = await menusFixture(fx.db);
-    const document = await build(f.lunch);
-    await app(async (tx) => {
-      await updateProduct(tx, f.lemonade, { vatClass: "general" });
-      await updateProduct(tx, f.large, { vatClass: "zero" });
-      await updateProduct(tx, f.extraLemon, { vatClass: "general" });
-    });
-    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).offers.get(f.lunch)!;
-    expect(lemonade).toMatchObject({ vatClass: "reduced" });
-    expect(lemonade!.variants[0]).toMatchObject({ vatClass: "reduced" });
-    const extras = lemonade!.offeredModifiers[0]!;
-    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({ vatClass: "reduced" });
   });
 
   it("offers a label unavailable when the document was built once it is available again", async () => {
@@ -1989,42 +1924,6 @@ describe("diffMenuDocuments", () => {
         productId: f.extraLemon,
         name: "Lemon wedge",
         fields: ["names", "allergens", "diet"],
-        source: "shared_product",
-      },
-    ]);
-  });
-
-  it("names a VAT change against the dish, a variant's own as VAT in the variants, and an extra's against the extra", async () => {
-    const f = await menusFixture(fx.db);
-    const live = await build(f.dinner);
-    await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
-    const dish = await build(f.dinner);
-    expect(changeBodies(diffMenuDocuments(live, dish))).toEqual([
-      {
-        kind: "product_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        fields: ["vat"],
-        source: "shared_product",
-      },
-    ]);
-    await app(async (tx) => {
-      await updateProduct(tx, f.large, { vatClass: "zero" });
-      await updateProduct(tx, f.extraLemon, { vatClass: "general" });
-    });
-    expect(changeBodies(diffMenuDocuments(dish, await build(f.dinner)))).toEqual([
-      {
-        kind: "product_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        fields: ["vat", "variants"],
-        source: "shared_product",
-      },
-      {
-        kind: "product_changed",
-        productId: f.extraLemon,
-        name: "Extra lemon",
-        fields: ["vat"],
         source: "shared_product",
       },
     ]);

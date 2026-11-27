@@ -111,7 +111,7 @@ export const products = table(
     dietaryDeclarations: json<string[]>("dietary_declarations").default([]),
     unitId: id("unit_id").references(() => units.id, { onDelete: "restrict" }),
     unitPrice: money("unit_price"),
-    vatClass: label("vat_class"),
+    vatClass: label("vat_class").$defaultFn(() => "reduced"),
     // Not written: a product line taken away files at its product's takeaway rate
     // (`product_takeaway_vat_rates`).
     takeawayVatClass: label("takeaway_vat_class"),

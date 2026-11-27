@@ -1140,7 +1140,7 @@ describe("order path — extras and options", () => {
     ]);
   });
 
-  it("an extra child line carries product_id and the extra product's OWN VAT class", async () => {
+  it("an extra child line carries product_id and the extra product's own names", async () => {
     const seeded = await seedDish();
     const id = randomUUID();
     await parkProducts(seeded.cfg, {
@@ -1166,7 +1166,6 @@ describe("order path — extras and options", () => {
         kitchenName: workingOrderLines.kitchenName,
         quantity: workingOrderLines.quantity,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatClass: workingOrderLines.vatClass,
         lineTotal: workingOrderLines.lineTotal,
       })
       .from(workingOrderLines)
@@ -1185,7 +1184,6 @@ describe("order path — extras and options", () => {
     ]) {
       expect(dish.parentLineId).toBeNull();
       expect(dish.productId).toBe(seeded.dishId);
-      expect(dish.vatClass).toBe("reduced");
       expect(child.parentLineId).toBe(idOf(dish.lineNo));
       // The child IS the wine, by id.
       expect(child.productId).toBe(seeded.wineId);
@@ -1194,8 +1192,6 @@ describe("order path — extras and options", () => {
       expect(child.name).toBe("Wine staff");
       expect(child.descriptions).toEqual({ [LOCALE]: "Wine customer" });
       expect(child.kitchenName).toBe("Wine kitchen");
-      // The extra PRODUCT's own VAT, never the 10% dish's.
-      expect(child.vatClass).toBe("general");
       // The list ITEM's price, not the wine's own 3.00; dish ×1 × pick ×1 = 1. All three columns
       // are read straight off the row, each at its own scale: 450 is that 4.50 in whole cents, and
       // 1000 is the one pick in thousandths; the two children together are the 9.00 one wine line of two was.

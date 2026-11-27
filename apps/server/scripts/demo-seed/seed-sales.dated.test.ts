@@ -100,7 +100,6 @@ describe("seedSales across a rate change", () => {
           name: "Pan de la casa",
           customerName: { es: "Pan de la casa" },
           unitPrice: "2.40",
-          vatClass: "reduced",
         },
       ],
     });

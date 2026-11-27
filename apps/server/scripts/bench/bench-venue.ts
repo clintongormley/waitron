@@ -376,7 +376,6 @@ async function seed(
             kitchenName: label.toUpperCase().replace(/\s+/g, "-"),
             pricingUnit: "each",
             unitPrice: price(course.from, course.to),
-            vatClass: "general",
           },
           vatRates,
         );

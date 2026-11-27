@@ -575,10 +575,10 @@ describe("a request that does not say how the order is sold", () => {
   });
 });
 
-describe("the classes a line keeps", () => {
+describe("a takeaway order's lines", () => {
   beforeEach(() => departmentsSell("till_choice"));
 
-  it("stores its served class as the takeaway class on every line of a takeaway order, an extra too", async () => {
+  it("stores a line for each product it sells, an extra too", async () => {
     const parked = await park({
       dining: "takeaway",
       lines: [
@@ -597,19 +597,51 @@ describe("the classes a line keeps", () => {
     const rows = await inTx(venue, (tx) =>
       tx
         .select({
+          id: workingOrderLines.id,
           productId: workingOrderLines.productId,
-          vatClass: workingOrderLines.vatClass,
-          takeawayVatClass: workingOrderLines.takeawayVatClass,
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          lineTotal: workingOrderLines.lineTotal,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, parked.json.id as string))
         .orderBy(workingOrderLines.lineNo),
     );
+    const burgerLine = rows.find((row) => row.productId === menu.burger)?.id;
     expect(rows).toEqual([
-      { productId: menu.cola, vatClass: "reduced", takeawayVatClass: "reduced" },
-      { productId: menu.cheese, vatClass: "super_reduced", takeawayVatClass: "super_reduced" },
-      { productId: menu.burger, vatClass: "general", takeawayVatClass: "general" },
-      { productId: menu.lemonSoda, vatClass: "reduced", takeawayVatClass: "reduced" },
+      {
+        id: expect.any(String),
+        productId: menu.cola,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 180,
+        lineTotal: 180,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.cheese,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 400,
+        lineTotal: 400,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.burger,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 1000,
+        lineTotal: 1000,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.lemonSoda,
+        parentLineId: burgerLine,
+        quantity: 1000,
+        unitPriceGross: 200,
+        lineTotal: 200,
+      },
     ]);
   });
 });

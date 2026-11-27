@@ -72,9 +72,7 @@ export interface TillProduct {
   };
   pricingUnit?: "each" | "weight";
   unitPrice: string;
-  vatClass: "general" | "reduced" | "super_reduced" | "zero";
-  /** The takeaway label the published menu holds; not what a product line taken away files at,
-   * which is its product's takeaway rate. Absent on a product synthesised from a retrieved held line. */
+  vatClass?: "general" | "reduced" | "super_reduced" | "zero";
   takeawayVatClass?: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
   /** EU-14 allergen declaration keyed by allergen code; null = not reviewed. */
@@ -106,8 +104,6 @@ export type TillSellingValues = Pick<
   TillProduct,
   | "unit"
   | "pricingUnit"
-  | "vatClass"
-  | "takeawayVatClass"
   | "category"
   | "allergens"
   | "courseId"
@@ -121,8 +117,6 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
   return {
     unit: source.unit,
     pricingUnit: source.pricingUnit,
-    vatClass: source.vatClass,
-    takeawayVatClass: source.takeawayVatClass,
     category: source.category,
     allergens: source.allergens,
     courseId: source.courseId,
@@ -209,8 +203,6 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always
     // carries its `unit`.
     unitPrice: offer.unitPrice,
-    vatClass: offer.vatClass,
-    takeawayVatClass: offer.takeawayVatClass,
     category: offer.category,
     allergens: offer.allergens,
     courseId: offer.courseId,

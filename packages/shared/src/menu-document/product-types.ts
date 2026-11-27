@@ -73,7 +73,7 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 /**
  * One variant as the product list nests it under its parent: the variant as the editor reads it
  * (`unitPrice` and `courseId` its OWN, null where it takes its parent's) and, in `effective`, what
- * it actually carries: its allergens, price and VAT class once its blanks read as its parent's, its
+ * it actually carries: its allergens and price once its blanks read as its parent's, its
  * takeaway VAT rate today (its own, else its parent's: `readTakeawayVatSchedules`,
  * `packages/menu/src/takeaway-vat-rates.ts`), its parent's main category, and the course it is fired
  * in (`variant-fallback.ts`).
@@ -84,7 +84,7 @@ export interface ListedVariant extends ProductVariant {
   effective: {
     allergens: ProductAllergens | null;
     unitPrice: string;
-    vatClass: VatClass;
+    vatClass?: VatClass;
     takeawayVatRate: string;
     primaryCategoryId: string | null;
     courseId: string | null;
@@ -119,7 +119,7 @@ export interface Product {
   pricingUnit: PricingUnit;
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
-  vatClass: VatClass;
+  vatClass?: VatClass;
   /** The takeaway VAT rate in force on the venue's date today ("10.00"): a variant's own, else its
    * parent's. */
   takeawayVatRate: string;
@@ -151,8 +151,8 @@ export interface Product {
  * as {@link ProductEditorBody}. Saves use {@link ProductEditorSaveBody}.
  *
  * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
- * On a product with no parent, `unitPrice`, `vatClass`, `takeawayVatRate`
- * and `dietaryDeclarations` are required.
+ * On a product with no parent, `unitPrice`, `takeawayVatRate` and `dietaryDeclarations` are
+ * required.
  */
 export interface ProductEditorInput {
   /** A product's parent never changes: absent, or the stored parent, is accepted. */
@@ -173,7 +173,7 @@ export interface ProductEditorInput {
   active: boolean;
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
-  vatClass: VatClass | null;
+  vatClass?: VatClass | null;
   /** One of the area's pickable rates ("10.00"), required in the body. Null only on a variant, which
    * then takes its parent's. Read back, it is the rate in force on the venue's date today. A save
    * that sends back that rate keeps the product's rates; any other replaces them with this one from
@@ -216,7 +216,7 @@ export interface InheritedValues {
   description: Record<string, string> | null;
   image: string | null;
   unitPrice: string;
-  vatClass: VatClass;
+  vatClass?: VatClass;
   /** The parent's takeaway rate today, which a variant without one of its own takes. */
   takeawayVatRate: string;
   /** The parent's unit, which is always the variant's. */

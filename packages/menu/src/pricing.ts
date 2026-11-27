@@ -41,8 +41,9 @@ export interface PriceableProduct {
   unit: UnitSnapshot;
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
-  vatClass: VatClass;
-  /** The product's dated rates; absent, the rates of its `vatClass` in the shipped table. */
+  vatClass?: VatClass;
+  /** The product's dated rates; absent, the rates of its `vatClass` in the shipped table, and with
+   * neither, none, which rating refuses. */
   vatRates?: readonly DatedRate[];
   /** Snapshotted analytics label, copied onto the sale line. */
   category: string | null;
@@ -449,9 +450,9 @@ export function shareFreeItems(gross: GrossLines, on: string): GrossLines {
   return { lines, total: gross.total };
 }
 
-/** The product's own rates, else its `vatClass`'s in the shipped table. */
 function productRates(product: PriceableProduct): readonly DatedRate[] {
-  return product.vatRates ?? VAT_RATE_TABLE[product.vatClass];
+  if (product.vatRates !== undefined) return product.vatRates;
+  return product.vatClass === undefined ? [] : VAT_RATE_TABLE[product.vatClass];
 }
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate the product's on `on`, a

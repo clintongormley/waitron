@@ -200,7 +200,6 @@ export type MenuField =
         | "unit"
         | "allergens"
         | "diet"
-        | "vat"
         | "ordering"
         | "direct";
     }
@@ -336,7 +335,6 @@ export type ProductChangeField =
   | "unit"
   | "allergens"
   | "diet"
-  | "vat"
   | "ordering"
   | "variants"
   | "extras"

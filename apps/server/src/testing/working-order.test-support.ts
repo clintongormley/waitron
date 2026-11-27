@@ -467,6 +467,7 @@ export async function grossBasketTotal(
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
     const { products: available } = await listAvailableProducts(tx);
+    const { dineIn } = await menu.readVenueVatRates(tx);
     const byId = new Map(available.map((p) => [p.id, p]));
     // A menu row is not priceable as read: its customer-facing text is resolved from
     // `name`/`customerName` by `product-presentation.ts` first, exactly as `priceOrderLines` does.
@@ -475,6 +476,7 @@ export async function grossBasketTotal(
       return {
         product: {
           ...product,
+          vatRates: dineIn,
           descriptions: menu.customerPresentationText(
             {
               name: product.name,

@@ -248,7 +248,6 @@ describe("future order customer fallback", () => {
       expect(line.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
       expect(line.unitName).toEqual({ en: "sp" });
       expect(line.offerUnitName).toEqual({ en: "Staff portion" });
-      expect(line.vatClass).toBe("general");
     }
   });
 

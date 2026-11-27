@@ -36,10 +36,6 @@ import { seedDemoRestaurant } from "./seed.js";
 import { demoMediaPath } from "./seed-media.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-name-changes.js";
-import {
-  madridWithVatClassChanges,
-  type MadridVatClassChange,
-} from "./testing/madrid-vat-class-changes.js";
 import { madridWithSharedOffers, type MadridSharedOffers } from "./testing/madrid-shared-offers.js";
 import {
   madridWithPeriodChanges,
@@ -52,33 +48,14 @@ import {
 
 const madridProduct = (image: string) => `@products:${JSON.stringify([`${image}.webp`])}`;
 const NEGRONI_PHOTO = "8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e";
-// Food and drink served to consume on the spot take the reduced rate (LIVA art. 91.Uno.2.2.º);
-// cheese sold as takeaway goods takes the super-reduced rate (art. 91.Dos.1.1.º d).
-const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
-  ...[
-    "280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1", // cola
-    "3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc", // beer
-    "6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c", // house red
-    "881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9", // orange juice
-    NEGRONI_PHOTO,
-    "b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c", // coffee
-  ].map((image) => ({ product: madridProduct(image), old: "general", new: "reduced" })),
-  {
-    product: madridProduct("f4ae2b215528535991520043d04b31ec065084db5e64ad95c0649588d9f1cd0a"), // house bread
-    old: "super_reduced",
-    new: "reduced",
-  },
-  ...[
-    "9aac018dd11a92b4e5ebd758d6b20546e8950d4afe302ba785b8c1b1d55ad4c7", // Manchego
-    "e3b26cf7fdac8abf2376845694333860c2d1ea55879192c260da50e5ee753b60", // Cabrales
-    "480a3dcb16ce22d82ffbffbd33eb533533371bf424ebc3cdd3a447bae089e721", // Idiazábal
-    "97ea61c280d89434fd67716ef312f28862c9b689c8d8fb397408cff31a39c1f0", // Torta del Casar
-    "d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401", // Mahón
-  ].map((image) => ({ product: madridProduct(image), old: "reduced", new: "super_reduced" })),
-];
-const CHEESE_PRODUCTS = VAT_CLASS_CHANGES.filter((change) => change.new === "super_reduced").map(
-  (change) => change.product,
-);
+// Cheese sold as takeaway goods takes the super-reduced rate (LIVA art. 91.Dos.1.1.º d).
+const CHEESE_PRODUCTS = [
+  "9aac018dd11a92b4e5ebd758d6b20546e8950d4afe302ba785b8c1b1d55ad4c7", // Manchego
+  "e3b26cf7fdac8abf2376845694333860c2d1ea55879192c260da50e5ee753b60", // Cabrales
+  "480a3dcb16ce22d82ffbffbd33eb533533371bf424ebc3cdd3a447bae089e721", // Idiazábal
+  "97ea61c280d89434fd67716ef312f28862c9b689c8d8fb397408cff31a39c1f0", // Torta del Casar
+  "d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401", // Mahón
+].map(madridProduct);
 
 const DRINK_IMAGES = {
   cola: "280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1.webp",
@@ -160,8 +137,6 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
         category: names.categories.soft,
         courseId: courseKey(NEW_COURSES[1]),
-        vatClass: "reduced",
-        takeawayVatClass: null,
         unitPrice: 180,
         pricingUnit: "each",
       },
@@ -171,8 +146,6 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
         category: names.categories.wineAndBeer,
         courseId: courseKey(NEW_COURSES[1]),
-        vatClass: "reduced",
-        takeawayVatClass: null,
         unitPrice: 160,
         pricingUnit: "each",
       },
@@ -958,7 +931,6 @@ for (const locale of ["en", "es"] as const) {
       await readFile(new URL(`plain-name-changes.${locale}.json`, root), "utf8"),
     ) as MadridNameChange[];
     expected.seeded = madridWithNameChanges(expected.seeded, nameChanges);
-    expected.seeded = madridWithVatClassChanges(expected.seeded, VAT_CLASS_CHANGES);
     if (locale === "en") {
       const department = '@departments:["Deli"]';
       for (const [position, name] of ["Set up", "Take order", "Anything else?"].entries()) {
@@ -1518,7 +1490,9 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "custom_item_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
+      // No writer names a label, so every row holds the schema's insert-time default.
       for (const row of Object.values(products.rows)) {
+        row.vat_class = "reduced";
         row.takeaway_vat_class = null;
         row.custom_item_key = null;
       }
@@ -1646,7 +1620,10 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "takeaway_vat_class", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(orderLines.rows)) row.takeaway_vat_class = row.vat_class;
+      for (const row of Object.values(orderLines.rows)) {
+        row.vat_class = "reduced";
+        row.takeaway_vat_class = "reduced";
+      }
       orderLines.columns.splice(
         orderLines.columns.findIndex((column) => column.name === "list_unit_price_gross") + 1,
         0,
@@ -1755,7 +1732,7 @@ for (const locale of ["en", "es"] as const) {
         },
         ...saleLines.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
       ];
-      type Classed = { vatClass: string; takeawayVatClass?: string };
+      type Classed = { vatClass?: string };
       const menuNames = new Map(
         Object.values(expected[phase].tables.sections!.rows)
           .filter(({ role }) => role === "menu_root")
@@ -1791,7 +1768,7 @@ for (const locale of ["en", "es"] as const) {
             ...offer.variants,
             ...offer.offeredModifiers.flatMap((list) => (list.kind === "extras" ? list.items : [])),
           ])
-            copy.takeawayVatClass = copy.vatClass;
+            delete copy.vatClass;
         }
       }
       expected[phase] = madridWithNameChanges(expected[phase], []);

@@ -12,7 +12,6 @@ export interface MadridAddedProduct {
   name: string;
   customerName: Record<string, string>;
   kitchenName: string;
-  vatClass: string;
   /** Whole cents, VAT included. */
   unitPrice: number;
   pricingUnit: string;
@@ -62,7 +61,7 @@ interface MenuDocument {
  * zone) row and a `section_members` row placing the section in its menu's root; per product a
  * `products`, `menu_items` (its declared menu), `section_members` (its declared section),
  * `media_images` and `media_blobs` row, and a `menu_version_images` row
- * for each published version of its menu. The declared facts (names, VAT class, price, pricing
+ * for each published version of its menu. The declared facts (names, price, pricing
  * unit, category, menu, image) are checked against the seeded rows, the section's names against
  * its seeded row, and all but the category against the published offer, whose placement must be
  * the declared section and whose variants and offered modifiers must be empty. Each declared
@@ -158,7 +157,6 @@ export function madridWithAddedRows(
         ["name", product.name, row.name],
         ["customerName", product.customerName, row.customer_name],
         ["kitchenName", product.kitchenName, row.kitchen_name],
-        ["vatClass", product.vatClass, row.vat_class],
         ["unitPrice", product.unitPrice, row.unit_price],
         ["pricingUnit", product.pricingUnit, row.pricing_unit],
         ["category", categoryKey, row.category_id],
@@ -211,7 +209,6 @@ export function madridWithAddedRows(
           ["name", product.name, offer.name],
           ["customerName", product.customerName, offer.customerName],
           ["kitchenName", product.kitchenName, offer.kitchenName],
-          ["vatClass", product.vatClass, offer.vatClass],
           ["unitPrice", (product.unitPrice / 100).toFixed(2), offer.unitPrice],
           ["pricingUnit", product.pricingUnit, offer.pricingUnit],
           ["menu", menuId, offer.menuId],

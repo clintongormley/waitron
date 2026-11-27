@@ -71,8 +71,7 @@ function validateFlag(value: unknown, field: string): void {
 }
 
 /**
- * Every inherited field `written` does not set, stored blank so it reads the parent's (a blank
- * takeaway class reads the variant's own VAT class first). Explicitly
+ * Every inherited field `written` does not set, stored blank so it reads the parent's. Explicitly
  * null rather than omitted: a column default (`dietary_declarations`' is `[]`) would be a value of
  * the variant's own.
  */
@@ -488,15 +487,10 @@ export interface SelectedName extends ProductPresentation {
   unitPrice: string;
 }
 
-/** The selling values the order path prices, taxes and routes a line by, typed as the caller's
- * offer types them (the module contract's offer carries `vatClass` as a plain string). */
-export interface SellingValues<
-  Unit = MenuOffer["unit"],
-  Vat extends string = MenuOffer["vatClass"],
-> {
+/** The selling values the order path prices and routes a line by, typed as the caller's offer types
+ * them. */
+export interface SellingValues<Unit = MenuOffer["unit"]> {
   unit: Unit;
-  vatClass: Vat;
-  takeawayVatClass: Vat;
   category: string | null;
   courseId: string | null;
 }
@@ -505,24 +499,21 @@ export interface SellingValues<
  * {@link SelectedName} plus the chosen row's EFFECTIVE selling values — a variant's own, or its
  * parent's where it leaves one blank (`variant-fallback.ts`), as the offer carries them.
  */
-export type SelectedVariant<
-  Unit = MenuOffer["unit"],
-  Vat extends string = MenuOffer["vatClass"],
-> = SelectedName & SellingValues<Unit, Vat>;
+export type SelectedVariant<Unit = MenuOffer["unit"]> = SelectedName & SellingValues<Unit>;
 
 /**
  * The line an offer sells: the chosen variant, or the offer's product itself when it
  * lists no variant. Decided from the offer alone: `offer.variants` holds only Active
  * variants, each flagged `available` when it may be sold on this menu now.
  */
-export function selectMenuVariant<Unit, Vat extends string>(
-  offer: SellingValues<Unit, Vat> & {
+export function selectMenuVariant<Unit>(
+  offer: SellingValues<Unit> & {
     productId: string;
     name: string;
     customerName: Readonly<Record<string, string>> | null;
     kitchenName: string | null;
     unitPrice: string;
-    variants: readonly (SellingValues<Unit, Vat> & {
+    variants: readonly (SellingValues<Unit> & {
       id: string;
       name: string;
       customerName: Readonly<Record<string, string>> | null;
@@ -532,7 +523,7 @@ export function selectMenuVariant<Unit, Vat extends string>(
     })[];
   },
   variantId: string | null,
-): SelectedVariant<Unit, Vat> {
+): SelectedVariant<Unit> {
   const parentNames = {
     name: offer.name,
     customerName: offer.customerName,
@@ -550,8 +541,6 @@ export function selectMenuVariant<Unit, Vat extends string>(
       variantKitchenName: null,
       unitPrice: offer.unitPrice,
       unit: offer.unit,
-      vatClass: offer.vatClass,
-      takeawayVatClass: offer.takeawayVatClass,
       category: offer.category,
       courseId: offer.courseId,
     };
@@ -566,8 +555,6 @@ export function selectMenuVariant<Unit, Vat extends string>(
     variantKitchenName: variant.kitchenName,
     unitPrice: variant.unitPrice,
     unit: variant.unit,
-    vatClass: variant.vatClass,
-    takeawayVatClass: variant.takeawayVatClass,
     category: variant.category,
     courseId: variant.courseId,
   };

@@ -991,7 +991,6 @@ describe("till-modifier-picker", () => {
         variantId: "125 ml",
         unit: chosen.unit,
         pricingUnit: "weight",
-        vatClass: "reduced",
         category: "125 ml category",
         allergens: { sulphites: {} },
         diet: chosen.diet,

@@ -15,7 +15,7 @@ import {
 } from "./operations.js";
 import { createUnit } from "./units.js";
 import { priceBasket } from "./pricing.js";
-import { customerPresentationText, deviceOrigin } from "@waitron/shared";
+import { customerPresentationText, deviceOrigin, VAT_RATE_TABLE } from "@waitron/shared";
 import { seedVenueWithSeries } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
@@ -130,7 +130,12 @@ describe("menu → priceBasket → recordSale (end-to-end)", () => {
         "en",
       ).product;
       priced = priceBasket(
-        [{ product: { ...ham!, descriptions }, quantity: "0.320" }],
+        [
+          {
+            product: { ...ham!, descriptions, vatRates: VAT_RATE_TABLE.reduced },
+            quantity: "0.320",
+          },
+        ],
         "2026-09-27",
       );
 

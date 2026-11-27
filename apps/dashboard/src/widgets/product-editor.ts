@@ -211,7 +211,6 @@ function emptyDraft(defaultTakeawayVatRate = ""): ProductEditorDraft {
     active: true,
     available: true,
     ordering: "public",
-    vatClass: null,
     takeawayVatRate: defaultTakeawayVatRate,
     variants: [],
     primaryCategoryId: null,

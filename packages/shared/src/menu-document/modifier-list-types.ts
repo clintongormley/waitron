@@ -45,7 +45,7 @@ export type OptionListSaveBody = Omit<OptionListInput, "labels"> & {
 
 /**
  * One product a list offers. The row holds nothing that duplicates the product: its three names,
- * VAT class, allergens, dietary labels and photo all come from the product it names, so this
+ * allergens, dietary labels and photo all come from the product it names, so this
  * carries only the terms of the OFFER — how many the diner may take, whether it starts picked, and a
  * price that overrides the product's own.
  */

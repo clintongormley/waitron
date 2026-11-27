@@ -461,27 +461,13 @@ it.each(demoSets)("defines two set menus with eligible dishes in $id", (set) => 
   }
 });
 
-describe("Casa Delgado VAT classes", () => {
+describe("Casa Delgado VAT rates", () => {
   const sets: CountryDemoData[] = [
     CASA_DELGADO_ES,
     CASA_DELGADO_CA,
     CASA_DELGADO_VALENCIA,
     CASA_DELGADO_GL,
   ];
-
-  // LIVA art. 91.Uno.2.2.º: food and drink served to consume on the spot is taxed at the reduced rate.
-  it("puts every product sold to eat or drink in at the reduced rate, in every regional variant", () => {
-    const offenders = sets.flatMap((set) =>
-      [set.menus.restaurant, set.menus.lunch].flatMap((menu) =>
-        menu.categories.flatMap((category) =>
-          category.products
-            .filter((product) => product.vatClass !== "reduced")
-            .map((product) => `${set.id}: ${product.staffName?.en ?? product.image}`),
-        ),
-      ),
-    );
-    expect(offenders).toEqual([]);
-  });
 
   // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the deli's other food is at 10% (art. 91.Uno.1.1.º).
   it("sells the takeaway cheeses at 4% and the other deli goods at the area's takeaway rate, 10%", () => {
@@ -490,21 +476,21 @@ describe("Casa Delgado VAT classes", () => {
     )?.defaultTakeawayVatRate;
     expect(areaDefault).toBe("10.00");
     const expected = {
-      "Iberian ham": ["reduced", "10.00"],
-      Chorizo: ["reduced", "10.00"],
-      "Pork loin": ["reduced", "10.00"],
-      Salchichón: ["reduced", "10.00"],
-      Cecina: ["reduced", "10.00"],
-      Sobrasada: ["reduced", "10.00"],
-      Manchego: ["super_reduced", "4.00"],
-      Cabrales: ["super_reduced", "4.00"],
-      Idiazábal: ["super_reduced", "4.00"],
-      "Torta cheese": ["super_reduced", "4.00"],
-      Mahón: ["super_reduced", "4.00"],
-      Anchovies: ["reduced", "10.00"],
-      Olives: ["reduced", "10.00"],
-      "Octopus in oil": ["reduced", "10.00"],
-      "Tuna belly": ["reduced", "10.00"],
+      "Iberian ham": "10.00",
+      Chorizo: "10.00",
+      "Pork loin": "10.00",
+      Salchichón: "10.00",
+      Cecina: "10.00",
+      Sobrasada: "10.00",
+      Manchego: "4.00",
+      Cabrales: "4.00",
+      Idiazábal: "4.00",
+      "Torta cheese": "4.00",
+      Mahón: "4.00",
+      Anchovies: "10.00",
+      Olives: "10.00",
+      "Octopus in oil": "10.00",
+      "Tuna belly": "10.00",
     };
     for (const set of sets)
       expect(
@@ -512,7 +498,7 @@ describe("Casa Delgado VAT classes", () => {
           set.menus.deli.categories.flatMap((category) =>
             category.products.map((product) => [
               product.staffName?.en ?? product.image,
-              [product.vatClass, product.takeawayVatRate ?? areaDefault],
+              product.takeawayVatRate ?? areaDefault,
             ]),
           ),
         ),
@@ -528,19 +514,15 @@ describe("Casa Delgado VAT classes", () => {
       expect(
         drinks.map((image) => {
           const product = restaurant.find((candidate) => candidate.image === image);
-          return [image, product?.vatClass, product?.takeawayVatRate];
+          return [image, product?.takeawayVatRate];
         }),
         set.id,
-      ).toEqual(drinks.map((image) => [image, "reduced", "21.00"]));
+      ).toEqual(drinks.map((image) => [image, "21.00"]));
       expect(set.menus.deli.listedSection?.productImages, set.id).toEqual(drinks);
       expect(set.menus.deli.listedSection?.name.en, set.id).toBe("Drinks");
       const deliOwn = set.menus.deli.categories.flatMap((category) => category.products);
       expect(
-        deliOwn.filter(
-          (product) =>
-            product.vatClass === "general" ||
-            /cola|beer/i.test(product.staffName?.en ?? product.image),
-        ),
+        deliOwn.filter((product) => /cola|beer/i.test(product.staffName?.en ?? product.image)),
         set.id,
       ).toEqual([]);
     }

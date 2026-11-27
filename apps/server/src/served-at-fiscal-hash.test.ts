@@ -446,13 +446,11 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
 
 /**
  * Offer a ONE-item extras list on this shop's `water` product and return the list's id with the
- * offered product's. The picked product's fiscal-bearing fields — names, the offer's price and the
- * VAT class — are the constants below, so only `overlay`'s allergen declaration varies between
- * shops.
+ * offered product's. The picked product's fiscal-bearing fields — names and the offer's price — are
+ * the constants below, so only `overlay`'s allergen declaration varies between shops.
  */
 const EXTRA_PRODUCT_NAME = "Panecillo";
 const EXTRA_PRICE = "0.50";
-const EXTRA_VAT_CLASS = "general" as const;
 
 type OverlayAllergens = import("@waitron/shared").ProductAllergens;
 
@@ -466,7 +464,6 @@ async function attachExtra(
       name: EXTRA_PRODUCT_NAME,
       pricingUnit: "each",
       unitPrice: EXTRA_PRICE,
-      vatClass: EXTRA_VAT_CLASS,
       ...(overlay.allergens === null ? {} : { allergens: overlay.allergens }),
     });
     const list = await createExtraList(

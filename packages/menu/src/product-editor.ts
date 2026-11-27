@@ -1,12 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import {
-  decodeSettingsRow,
-  now,
-  products,
-  settings,
-  VENUE_SETTINGS,
-  type Transaction,
-} from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { now, products, readSettings, VENUE_SETTINGS, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { contentLanguagesOr, savedContentLanguagesIn } from "./content-languages.js";
@@ -19,7 +12,6 @@ import {
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { priceOrNull } from "./offer-price.js";
 import { deleteProducts } from "./delete.js";
-import { MENU_SETTINGS } from "./settings.js";
 import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
@@ -30,7 +22,7 @@ import {
   takeawayVatRatesToday,
 } from "./takeaway-vat-rates.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
-import type { InheritedValues, ProductEditorValue, VatClass } from "@waitron/shared";
+import type { InheritedValues, ProductEditorValue } from "@waitron/shared";
 export type { InheritedValues, ProductEditorValue } from "@waitron/shared";
 import "./errors.js";
 
@@ -47,7 +39,6 @@ const columns = {
   unitPrice: products.unitPrice,
   active: products.active,
   available: products.available,
-  vatClass: products.vatClass,
   allergens: products.allergens,
   dietaryDeclarations: products.dietaryDeclarations,
   courseId: products.courseId,
@@ -64,7 +55,6 @@ async function readStored(tx: Transaction, productId: string) {
     stored: {
       ...stored,
       unitPrice: priceOrNull(stored.unitPrice),
-      vatClass: stored.vatClass as VatClass | null,
       dietaryDeclarations:
         stored.dietaryDeclarations === null
           ? null
@@ -73,8 +63,8 @@ async function readStored(tx: Transaction, productId: string) {
   };
 }
 
-/** A parent has no parent of its own, so `products_top_level_owns_ck` sets its price, VAT class
- * and dietary declarations. */
+/** A parent has no parent of its own, so `products_top_level_owns_ck` sets its price and dietary
+ * declarations. */
 async function readInherited(
   tx: Transaction,
   parentId: string,
@@ -86,7 +76,6 @@ async function readInherited(
     description: parent.description,
     image: parent.image,
     unitPrice: parent.unitPrice!,
-    vatClass: parent.vatClass!,
     takeawayVatRate,
     unitId: parent.unitId,
     primaryCategoryId: parent.primaryCategoryId,
@@ -170,18 +159,7 @@ export async function saveProductEditor(
     await deleteProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
-  // One read for both documents: a create also needs the menu settings' hidden eat-in class.
-  const settingsRows = await tx
-    .select({
-      module: settings.module,
-      version: settings.version,
-      revision: settings.revision,
-      doc: settings.doc,
-    })
-    .from(settings)
-    .where(inArray(settings.module, [VENUE_SETTINGS.module, MENU_SETTINGS.module]));
-  const settingsRow = (module: string) => settingsRows.find((row) => row.module === module);
-  const venue = decodeSettingsRow(settingsRow(VENUE_SETTINGS.module), VENUE_SETTINGS);
+  const venue = await readSettings(tx, VENUE_SETTINGS);
   const config = contentLanguagesOr(savedContentLanguagesIn(venue.doc), fallbackLanguage);
   const body = input as Record<string, unknown>;
   if (productId !== null) {
@@ -225,8 +203,6 @@ export async function saveProductEditor(
         unitId: value.unitId,
         // The parser refuses a blank on a product with no parent, which every created one is.
         unitPrice: value.unitPrice!,
-        vatClass: decodeSettingsRow(settingsRow(MENU_SETTINGS.module), MENU_SETTINGS).doc
-          .defaultProductVatClass,
         takeawayVatRate: value.takeawayVatRate!,
         active: value.active,
         available: value.available ?? true,

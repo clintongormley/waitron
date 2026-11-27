@@ -193,8 +193,6 @@ const declared: MadridSharedOffers = {
       kitchenName: "ZERO",
       category: "Soft",
       courseId: null,
-      vatClass: "reduced",
-      takeawayVatClass: "general",
       unitPrice: 180,
       pricingUnit: "each",
     },
@@ -339,10 +337,10 @@ it("refuses an added row nobody declared, and a declared one the seed did not ad
 it("refuses a declared product whose seeded row or published offer differs", () => {
   const wrongRow = {
     ...declared,
-    products: [{ ...declared.products[0]!, takeawayVatClass: "reduced" }],
+    products: [{ ...declared.products[0]!, pricingUnit: "kg" }],
   };
   expect(() => madridWithSharedOffers(semantics(false), semantics(true), wrongRow)).toThrow(
-    "Madrid declared takeawayVatClass differs: zero.webp",
+    "Madrid declared pricingUnit differs: zero.webp",
   );
 });
 

@@ -27,7 +27,6 @@ import {
   type OptionList,
   type ContentLanguages,
   newCustomerPresentation,
-  type VatClass,
   AppError,
   isUuid,
   type ExtraSelection,
@@ -134,8 +133,6 @@ export function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): 
           ]),
         ),
         kitchenName: item.kitchenName,
-        vatClass: item.vatClass as VatClass,
-        takeawayVatClass: item.takeawayVatClass as VatClass,
       });
     }
     extras.push({
@@ -645,8 +642,6 @@ export async function priceOrderLines(
         countsAsCourseId: string | null;
         setMenuId?: string;
         late?: LineContextInput["late"];
-        vatClass: VatClass;
-        takeawayVatClass: VatClass;
       }
     | {
         kind: "child";
@@ -655,8 +650,6 @@ export async function priceOrderLines(
         extraListId: string;
         unit?: ExtraChild["unitContext"];
         late?: LineContextInput["late"];
-        vatClass: VatClass;
-        takeawayVatClass: VatClass;
       }
   );
   const items: BasketItemWithOptions[] = [];
@@ -670,10 +663,6 @@ export async function priceOrderLines(
       contentConfig.defaultLanguage,
       contentConfig.languages,
     );
-    const classes = {
-      vatClass: selection.vatClass as VatClass,
-      takeawayVatClass: selection.takeawayVatClass as VatClass,
-    };
     const aLaCarteCents = aLaCarte[index]!;
     const product = {
       name: selection.name,
@@ -682,7 +671,6 @@ export async function priceOrderLines(
       unitPrice: aLaCarteCents === null ? selection.unitPrice : centsToDecimal(aLaCarteCents),
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
-      vatClass: classes.vatClass,
       // Empty, so rating these lines refuses: a line's rate is read when its order is issued.
       vatRates: [] as readonly DatedRate[],
       category: selection.category,
@@ -768,7 +756,6 @@ export async function priceOrderLines(
       portionable,
       aLaCarteCents,
       countsAsCourseId: countsAs[index]!,
-      ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
         id: selection.unit.id,
@@ -792,8 +779,6 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
-        vatClass: child.vatClass,
-        takeawayVatClass: child.takeawayVatClass,
         ...(mark === undefined ? {} : { late: mark }),
       });
     }
@@ -861,8 +846,6 @@ export async function priceOrderLines(
       aLaCarteUnitPrice:
         meta.kind === "parent" ? (meta.aLaCarteCents ?? decimalToCents(line.grossUnitPrice)) : null,
       countsAsCourseId: meta.kind === "parent" ? meta.countsAsCourseId : null,
-      vatClass: meta.vatClass,
-      takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),

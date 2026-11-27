@@ -291,7 +291,7 @@ function fiscalRecordCount(billId: string): number {
 }
 
 describe("move a bill to another party (after Split a table, or guests joining)", () => {
-  it("keeps its id, its lines' prices and VAT class, and lands as a separate bill when it has been paid towards", async () => {
+  it("keeps its id and its lines' prices, and lands as a separate bill when it has been paid towards", async () => {
     const table4 = await v.table("Table 4");
     const table7 = await v.table("Table 7");
     const anna = await seat(v, table4);
@@ -310,9 +310,7 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect(await linesOf(v, checkId)).toEqual(
       linesBefore.map((l) => ({ ...l, groupId: lastGroupOf(lewis.partyId) })),
     );
-    expect(linesBefore.map((l) => [l.name, l.unitPriceGross, l.vatClass])).toEqual([
-      ["Red wine bottle", 3000, "general"],
-    ]);
+    expect(linesBefore.map((l) => [l.name, l.unitPriceGross])).toEqual([["Red wine bottle", 3000]]);
     expect(await paymentsOf(v, checkId)).toHaveLength(1);
     expect(await openingBillOfParty(v, lewis.partyId)).toBe(lewis.tabId);
     expect(await openingBillOfParty(v, anna.partyId)).toBe(anna.tabId);
@@ -1044,7 +1042,7 @@ describe("move a counter order into a party", () => {
 });
 
 describe("the service area of a moved bill", () => {
-  it("keeps an item's price and VAT class, and prices what is added later from the receiving zone", async () => {
+  it("keeps an item's price, and prices what is added later from the receiving zone", async () => {
     const table = await v.table("Table zone");
     const anna = await seat(v, table);
     await order(v, anna.tabId, "Caña");
@@ -1056,17 +1054,15 @@ describe("the service area of a moved bill", () => {
       operatorId: OPERATOR,
     });
     // The fixture: one dish, two prices in two zones.
-    expect((await linesOf(v, orderId)).map((l) => [l.unitPriceGross, l.vatClass])).toEqual([
-      [350, "general"],
-    ]);
+    expect((await linesOf(v, orderId)).map((l) => l.unitPriceGross)).toEqual([350]);
     expect((await linesOf(v, anna.tabId)).map((l) => l.unitPriceGross)).toEqual([300]);
 
     await move(orderId, { tableId: table });
     await orderForParty(v, anna.partyId, ["Caña"], orderId);
 
-    expect((await linesOf(v, orderId)).map((l) => [l.name, l.unitPriceGross, l.vatClass])).toEqual([
-      ["Caña", 350, "general"],
-      ["Caña", 300, "general"],
+    expect((await linesOf(v, orderId)).map((l) => [l.name, l.unitPriceGross])).toEqual([
+      ["Caña", 350],
+      ["Caña", 300],
     ]);
     expect(await zoneOf(v, orderId)).toBe(v.tables.zoneId);
     // The counter's own offer is no longer served on it.

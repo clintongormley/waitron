@@ -36,7 +36,7 @@ const expected = JSON.parse(
   wine: string;
   drinks: string;
   menus: { restaurant: string; lunch: string };
-  products: { staff: string; price: string; vatClass: string }[];
+  products: { staff: string; price: string }[];
 };
 function regionalProduct(set: selections.DemoDataSet, language: string, name: string) {
   const product = [set.menus.restaurant, set.menus.deli, set.menus.lunch]
@@ -126,7 +126,6 @@ for (const [province, postalCode, invoiceLocale] of [
         const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
         expect(offers.find((offer) => offer.name === wineName)).toMatchObject({
           unitPrice: "4.50",
-          vatClass: "reduced",
         });
         if (name === selection.dataSet.menus.restaurant.name[locale])
           for (const product of expected.products)
@@ -137,7 +136,7 @@ for (const [province, postalCode, invoiceLocale] of [
                   regionalProduct(selection.dataSet, "ca", product.staff).staffName![locale],
               ),
               product.staff,
-            ).toMatchObject({ unitPrice: product.price, vatClass: product.vatClass });
+            ).toMatchObject({ unitPrice: product.price });
       }
 
       for (const row of rows) expect(row.image).toMatch(/^[0-9a-f]{64}\.webp$/);
@@ -225,7 +224,6 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
         name: product.name,
         customerName: product.customerName,
         unitPrice: product.unitPrice,
-        vatClass: product.vatClass,
       },
     ],
   });
@@ -304,7 +302,6 @@ for (const locale of ["en", "es"] as const)
       const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
       expect(offers.find((p) => p.name === staffName(VALENCIA_DEMO_TEXT.wine))).toMatchObject({
         unitPrice: "4.00",
-        vatClass: "reduced",
       });
       if (name === selection.dataSet.menus.restaurant.name[locale])
         for (const [dish, price] of [
@@ -319,7 +316,7 @@ for (const locale of ["en", "es"] as const)
           expect(
             offers.find((p) => p.name === staffName(dish)),
             dish,
-          ).toMatchObject({ unitPrice: price, vatClass: "reduced" });
+          ).toMatchObject({ unitPrice: price });
       if (name === selection.dataSet.menus.drinksName[locale])
         expect(offers.some((p) => p.name === dishNames.staffName![locale])).toBe(false);
     }
@@ -464,7 +461,6 @@ it.each([
         name: product.name,
         customerName: product.customerName,
         unitPrice: product.unitPrice,
-        vatClass: product.vatClass,
       },
     ],
   });
@@ -542,7 +538,6 @@ for (const locale of ["en", "es"] as const)
       const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
       expect(offers.find((p) => p.name === staffName(GALICIA_DEMO_TEXT.wine))).toMatchObject({
         unitPrice: "4.50",
-        vatClass: "reduced",
       });
       if (name === selection.dataSet.menus.restaurant.name[locale])
         for (const [dish, price] of [
@@ -557,7 +552,7 @@ for (const locale of ["en", "es"] as const)
           expect(
             offers.find((p) => p.name === staffName(dish)),
             dish,
-          ).toMatchObject({ unitPrice: price, vatClass: "reduced" });
+          ).toMatchObject({ unitPrice: price });
       if (name === selection.dataSet.menus.drinksName[locale])
         expect(offers.some((p) => p.name === dishNames.staffName![locale])).toBe(false);
     }
@@ -674,7 +669,6 @@ it.each([
         name: product.name,
         customerName: product.customerName,
         unitPrice: product.unitPrice,
-        vatClass: product.vatClass,
       },
     ],
   });

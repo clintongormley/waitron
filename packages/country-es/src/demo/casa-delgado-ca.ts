@@ -17,7 +17,6 @@ const REGIONAL_DISHES = [
     course: "starters",
     image: "catalonia-escalivada.png",
     unitPrice: "8.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -35,7 +34,6 @@ const REGIONAL_DISHES = [
     course: "starters",
     image: "catalonia-esqueixada.png",
     unitPrice: "11.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -53,7 +51,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "catalonia-botifarra.png",
     unitPrice: "13.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -63,7 +60,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "catalonia-fideua.png",
     unitPrice: "15.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -81,7 +77,6 @@ const REGIONAL_DISHES = [
     course: "desserts",
     image: "catalonia-mel-mato.png",
     unitPrice: "5.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -99,7 +94,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "catalonia-canelons.png",
     unitPrice: "12.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
   {
@@ -117,7 +111,6 @@ const REGIONAL_DISHES = [
     course: "mains",
     image: "catalonia-suquet.png",
     unitPrice: "17.50",
-    vatClass: "reduced",
     pricingUnit: "each",
   },
 ] as const;
@@ -132,7 +125,6 @@ const CAVA = {
   course: "drinks",
   image: "catalonia-cava.png",
   unitPrice: "4.50",
-  vatClass: "reduced",
   pricingUnit: "each",
 } as const;
 const REGIONAL_SECTION = {

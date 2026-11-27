@@ -16,7 +16,6 @@ import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
-import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 /**
@@ -406,7 +405,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const ordered = [...modifiers].reverse();
   const editor = await send(app, "GET", `/management-api/products/${product.id}/editor`, cookie);
   expect(editor.status).toBe(200);
-  const editorBody = saveBodyOf((await editor.json()) as Record<string, unknown>);
+  const editorBody = (await editor.json()) as Record<string, unknown>;
   delete editorBody.courseId;
   expect(
     (

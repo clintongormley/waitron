@@ -29,7 +29,7 @@ import type {
 
 const each = (
   unitPrice: string,
-  vatClass: PriceableProduct["vatClass"],
+  vatClass: NonNullable<PriceableProduct["vatClass"]>,
   category: string | null = null,
 ): PriceableProduct => ({
   name: "item",
@@ -45,7 +45,10 @@ const each = (
   vatClass,
   category,
 });
-const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
+const weight = (
+  unitPrice: string,
+  vatClass: NonNullable<PriceableProduct["vatClass"]>,
+): PriceableProduct => ({
   name: "sliced ham",
   descriptions: { en: "sliced ham" },
   unit: {
@@ -412,6 +415,14 @@ describe("rateLines — each line's own list of dated rates", () => {
     );
   });
 
+  it("priceBasket refuses a product with neither its own rates nor a label", () => {
+    const unlabelled = { ...each("1.00", "general") };
+    delete unlabelled.vatClass;
+    expect(() => priceBasket([{ product: unlabelled, quantity: "1" }], ON)).toThrow(
+      expect.objectContaining({ code: "vat_rate.unavailable", params: { lineNo: 1 } }),
+    );
+  });
+
   it("grossLockedLines without rates gives every line an empty list", () => {
     const stored = {
       grossUnitPrice: "1.00",
@@ -514,7 +525,7 @@ describe("a VAT class", () => {
 describe("rateLines over grossBasketWithOptions — parent + child lines", () => {
   const opt = (
     priceDelta: string,
-    vatClass: PriceableProduct["vatClass"] | null,
+    vatClass: NonNullable<PriceableProduct["vatClass"]> | null,
     name = "Option",
     descriptions: Record<string, string> = { es: "Option" },
   ): SelectedOption => ({
@@ -898,7 +909,10 @@ const cents = (n: number): Decimal => {
   return decimal(`${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`);
 };
 
-const grossOf = (amounts: readonly string[], vatClass: PriceableProduct["vatClass"]) => {
+const grossOf = (
+  amounts: readonly string[],
+  vatClass: NonNullable<PriceableProduct["vatClass"]>,
+) => {
   const lines = amounts.map((amount, i) => ({
     lineNo: i + 1,
     name: `line ${i + 1}`,

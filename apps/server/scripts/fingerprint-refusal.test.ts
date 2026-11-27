@@ -121,7 +121,6 @@ it("demo seeding stops at a refused issuance without keeping that sale", async (
           name: "Test meal",
           customerName: { es: "Test meal" },
           unitPrice: "10.00",
-          vatClass: "general",
         },
       ],
     }),

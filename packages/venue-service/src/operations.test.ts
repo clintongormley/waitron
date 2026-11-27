@@ -979,7 +979,6 @@ describe("venue service routing", () => {
           unitName: { en: "kg" },
           unitPrecision: 3,
           hardwareUnit: "kg",
-          vatClass: "reduced",
         }),
       ]);
       const attribution = await tx.execute<{
@@ -2515,60 +2514,17 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("records a variant line with the variant's own VAT class, and a plain line with the dish's", async () => {
+  it("serves no VAT label and no rate on the dish, its variant or its extra", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      await updateProduct(tx, venue.large, { vatClass: "reduced" });
-      await publish(tx, venue.dinner);
-      const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, orderId, venue.diningZone);
-      const plain = await addLine(tx, venue, orderId, 1);
-      const large = await addLine(tx, venue, orderId, 2);
-      await stampFixtureLineContexts(
-        tx,
-        orderId,
-        [
-          { workingOrderLineId: plain, menuItemId: venue.lemonadeOffer },
-          { workingOrderLineId: large, menuItemId: venue.lemonadeOffer, variantId: venue.large },
-        ],
-        await listZoneOffers(tx, venue.diningZone),
-      );
-
-      const recorded = new Map(
-        (await listWorkingLineContexts(tx, orderId)).map((row) => [
-          row.workingOrderLineId,
-          row.vatClass,
-        ]),
-      );
-      expect([recorded.get(plain), recorded.get(large)]).toEqual(["general", "reduced"]);
-    });
-  });
-
-  it("serves the VAT class the live version froze, and no rate, until the menu is republished", async () => {
-    const venue = await seedTwoMenuVenue();
-    await scoped(async (tx) => {
-      await updateProduct(tx, venue.lemonade, { vatClass: "reduced" });
-      await updateProduct(tx, venue.extraLemon, { vatClass: "super_reduced" });
-      const lemonadeOf = async () =>
-        (await listZoneOffers(tx, venue.diningZone)).offers.find(
-          (offer) => offer.id === venue.lemonadeOffer,
-        )!;
-      const frozen = { vatClass: "general" };
-      const served = await lemonadeOf();
-      expect(served).toMatchObject(frozen);
+      const served = (await listZoneOffers(tx, venue.diningZone)).offers.find(
+        (offer) => offer.id === venue.lemonadeOffer,
+      )!;
+      expect(served).not.toHaveProperty("vatClass");
       expect(served).not.toHaveProperty("vatRate");
-      expect(served.variants[0]).toMatchObject(frozen);
+      expect(served.variants[0]).not.toHaveProperty("vatClass");
       const extras = served.offeredModifiers[0]!;
-      expect(extras.kind === "extras" && extras.items[0]).toMatchObject(frozen);
-
-      await publish(tx, venue.dinner);
-      const republished = await lemonadeOf();
-      expect(republished).toMatchObject({ vatClass: "reduced" });
-      expect(republished.variants[0]).toMatchObject({ vatClass: "reduced" });
-      const after = republished.offeredModifiers[0]!;
-      expect(after.kind === "extras" && after.items[0]).toMatchObject({
-        vatClass: "super_reduced",
-      });
+      expect(extras.kind === "extras" && extras.items[0]).not.toHaveProperty("vatClass");
     });
   });
 

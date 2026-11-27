@@ -17,14 +17,11 @@ import type {
 import type { ProductItemsRoutingPreview, RoutingView } from "@waitron/venue-service/routing";
 import { MenuApi } from "./menu-api.js";
 
-/** A product editor write: the editor's read still carries `vatClass`, which the save refuses. */
 export type ProductSaveBody = Omit<ProductEditorSaveBody, "vatClass">;
 export type ProductEditorUpdate = ProductEditorValue & { declarationMenus: DeclarationMenu[] };
 // ── Menu-management types ──────────────────────────────────────────────────────────────────
 
 export type PricingUnit = "each" | "weight";
-
-export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
 
 export interface CategorySummary {
   id: string;

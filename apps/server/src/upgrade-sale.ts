@@ -97,7 +97,6 @@ async function prepareSale(config: ServerConfig) {
         customerName: { [venue.invoiceLocales[0]!]: "Upgrade check item" },
         kitchenName: "Upgrade check kitchen item",
         unitPrice: "1.00",
-        vatClass: "general",
       });
       const item = await addProductToMenu(tx, {
         menuId: menu.id,

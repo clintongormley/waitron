@@ -226,6 +226,27 @@ describe("a takeaway line files its product's rate as it stands at issue", () =>
     expect(filedRates(venue.db, id)).toEqual([2100]);
   });
 
+  it("files at its product's rate whatever its line's label columns hold", async () => {
+    const { venue, tea, counter } = await counterVenue();
+    const id = await park(venue, counter, "takeaway", [
+      { menuItemId: counter.offerFor(tea), quantity: "1" },
+    ]);
+    await inTx(venue, async (tx) => {
+      await setTakeawayVatRate(tx, tea, "21.00");
+      await tx.run(
+        sql`update working_order_lines set vat_class = 'zero', takeaway_vat_class = 'zero'
+            where working_order_id = ${id}`,
+      );
+      await tx.run(
+        sql`update products set vat_class = 'zero', takeaway_vat_class = 'zero' where id = ${tea}`,
+      );
+    });
+
+    await paidInCash(venue, id, "1.80");
+
+    expect(filedRates(venue.db, id)).toEqual([2100]);
+  });
+
   it("a variant without a rate of its own files its parent's new rate", async () => {
     const { venue, coffee, double, counter } = await counterVenue();
     const id = await park(venue, counter, "takeaway", [

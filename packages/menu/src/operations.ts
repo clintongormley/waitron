@@ -34,7 +34,7 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { readDefaultProductVatClass, readNewProductVatRates } from "./settings.js";
+import { readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
   insertFirstTakeawayVatRate,
@@ -140,8 +140,7 @@ export interface CreateProductInput {
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   unitPrice: string;
-  /** Omitted takes the menu settings' `defaultProductVatClass`: `products_top_level_owns_ck`
-   * requires one on a product with no parent. */
+  /** Ignored: nothing reads a product's VAT label. */
   vatClass?: VatClass;
   /** One of the area's pickable rates ("10.00"); omitted takes the venue's default for new
    * products. */
@@ -169,8 +168,9 @@ export interface UpdateProductInput {
   name?: string;
   customerName?: Record<string, string> | null;
   /** `null` is a variant's blank, read as its parent's; `products_top_level_owns_ck` refuses it on a
-   * product with no parent, as it does a blank `vatClass` and `dietaryDeclarations`. */
+   * product with no parent, as it does a blank `dietaryDeclarations`. */
   unitPrice?: string | null;
+  /** Ignored: nothing reads a product's VAT label. */
   vatClass?: VatClass | null;
   /** Replaces the product's takeaway rates with this one from the beginning of time
    * (`setTakeawayVatRate`); `null` clears a variant's, which then takes its parent's. */
@@ -223,7 +223,6 @@ const PRODUCT_BASE_COLUMNS = {
   customerName: products.customerName,
   ordering: products.ordering,
   unitPrice: effective.unitPrice,
-  vatClass: effective.vatClass,
   active: products.active,
   available: products.available,
   allergens: effective.allergens,
@@ -266,7 +265,6 @@ interface RawProduct {
   dietaryDeclarations: string[];
   /** Cents, as the column stores it; `toProduct` is where it becomes the amount callers see. */
   unitPrice: number;
-  vatClass: string;
   active: boolean;
   available: boolean;
   allergens: ProductAllergens | null;
@@ -319,7 +317,6 @@ function toProduct(
     unit,
     unitId: unit.id,
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
-    vatClass: row.vatClass as VatClass,
     takeawayVatRate,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
@@ -500,8 +497,6 @@ const offerLineColumns = {
   unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
-  vatClass: effective.vatClass,
-  takeawayVatClass: effective.takeawayVatClass,
   category: categories.name,
   allergens: effective.allergens,
   dietOverride: effective.dietOverride,
@@ -522,8 +517,6 @@ interface OfferLineRow {
   unitAbbreviation: UnitRow["abbreviation"] | null;
   unitPrecision: UnitRow["precision"] | null;
   hardwareUnit: UnitRow["hardwareUnit"] | null;
-  vatClass: NonNullable<ProductRow["vatClass"]>;
-  takeawayVatClass: VatClass;
   category: (typeof categories.$inferSelect)["name"] | null;
   allergens: ProductRow["allergens"];
   dietOverride: ProductRow["dietOverride"];
@@ -545,8 +538,6 @@ function offerLineValues(row: OfferLineRow) {
       row.unitMeasure,
     ),
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
-    vatClass: row.vatClass as VatClass,
-    takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     ...productDeclarationValues(row),
     courseId: row.courseId,
@@ -1005,7 +996,6 @@ async function insertProduct(
     kitchenName: input.kitchenName?.trim() || null,
     dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
     unitPrice: stringToCents(input.unitPrice),
-    vatClass: input.vatClass ?? (await readDefaultProductVatClass(tx)),
     active: input.active ?? true,
     available: input.available ?? true,
     ordering: input.ordering ?? "public",
@@ -1083,7 +1073,6 @@ async function listedVariantRows(tx: Transaction, productIds: readonly string[])
       available: products.available,
       active: products.active,
       unitPrice: effective.unitPrice,
-      vatClass: effective.vatClass,
       primaryCategoryId: effective.categoryId,
       courseId: products.courseId,
       effectiveCourseId: effective.courseId,
@@ -1106,7 +1095,6 @@ function groupListedVariants(
     ownAllergens,
     allergens,
     unitPrice,
-    vatClass,
     primaryCategoryId,
     effectiveCourseId,
     ...row
@@ -1119,7 +1107,6 @@ function groupListedVariants(
       effective: {
         allergens,
         unitPrice: centsToDecimal(unitPrice),
-        vatClass: vatClass as VatClass,
         takeawayVatRate: rates.get(row.id)!,
         primaryCategoryId,
         courseId: effectiveCourseId,
@@ -1181,8 +1168,10 @@ async function patchProduct(
     pricingUnit,
     unitPrice,
     takeawayVatRate,
+    vatClass,
     ...rest
   } = patch;
+  void vatClass;
   const assertColor = () => {
     if (color !== undefined)
       colorOrNull(color, () => {
@@ -1285,8 +1274,6 @@ export async function listAvailableProducts(
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
       unitPrice: effective.unitPrice,
-      vatClass: effective.vatClass,
-      takeawayVatClass: effective.takeawayVatClass,
       category: categories.name,
       allergens: effective.allergens,
       dietOverride: effective.dietOverride,
@@ -1333,8 +1320,6 @@ export async function listAvailableProducts(
     ),
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     unitPrice: centsToDecimal(row.unitPrice),
-    vatClass: row.vatClass as VatClass,
-    takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     ...productDeclarationValues(row),
     courseId: row.courseId,
