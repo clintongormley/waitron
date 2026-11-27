@@ -41,8 +41,9 @@ Correct the payment amount and try again, or park the order to save the edits wi
 ## Record cash in or out {#drawer-cash-entry}
 
 When you top up change or take cash out, open **More** and choose **Cash in or out** on a till
-assigned to the drawer. Choose **Open drawer**, or use the key if the drawer stays shut.
-Choose **Cash in** or **Cash out**, enter the amount and why you moved it, and choose **Save**.
+assigned to the drawer. Choose **Cash in** or **Cash out**, enter the amount and why you're moving
+it, then press **Add** or **Take out** with the amount. Waitron records the movement and opens the
+drawer. If it stays shut, use the key.
 
 ## Close a cash drawer {#close-drawer}
 

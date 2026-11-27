@@ -97,6 +97,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
   @property() value = "";
 
   @property() mode: "decimal" | "pin" = "decimal";
+  @property({ type: Boolean }) ascending = false;
 
   #unregister?: () => void;
 
@@ -146,16 +147,9 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
         { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
       ];
     }
+    const digits = this.ascending ? "123456789" : "789456123";
     return [
-      { key: "7", glyph: "7" },
-      { key: "8", glyph: "8" },
-      { key: "9", glyph: "9" },
-      { key: "4", glyph: "4" },
-      { key: "5", glyph: "5" },
-      { key: "6", glyph: "6" },
-      { key: "1", glyph: "1" },
-      { key: "2", glyph: "2" },
-      { key: "3", glyph: "3" },
+      ...Array.from(digits, (key) => ({ key, glyph: key })),
       { key: ".", glyph: decimalMark(currentLocale()), label: t("pad.decimal") },
       { key: "0", glyph: "0" },
       { key: "backspace", glyph: "⌫", label: t("pad.backspace") },

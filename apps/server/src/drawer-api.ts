@@ -12,7 +12,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { authorize } from "@waitron/identity";
+import { authorize, type Authorization } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveVenueClock } from "@waitron/reporting";
 import { readJsonBody } from "@waitron/server-kit";
@@ -28,7 +28,13 @@ import { readDrawerCloseForPrint } from "./drawer-close-report.js";
 import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { printerLookup, resolveDrawerAssignment, type PrinterLookup } from "./receipt-print.js";
+import {
+  enqueueManualDrawerOpen,
+  printerLookup,
+  resolveDrawerAssignment,
+  type PrinterLookup,
+} from "./receipt-print.js";
+import { requestCfg } from "./request-config.js";
 import type { Run } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, canonicaliseUuid, requireSession } from "./till-session.js";
@@ -57,13 +63,18 @@ function firstCountId(c: Context) {
   return id;
 }
 
-type Actor = Parameters<typeof saveDrawerCount>[1];
+type Actor = Parameters<typeof saveDrawerCount>[1] & { deviceId: string };
 
 function invalidEntry(field: string): never {
   throw new AppError("drawer.entry_invalid_field", { field });
 }
 
-async function recordCashEntry(tx: Transaction, actor: Actor, body: Record<string, unknown>) {
+async function recordCashEntry(
+  tx: Transaction,
+  actor: Actor,
+  body: Record<string, unknown>,
+  open: () => Promise<void>,
+) {
   const printerId = canonicaliseUuid(body.printerId) ?? invalidEntry("printerId");
   if (printerId !== actor.printerId) throw new AppError("drawer.assignment_changed", {});
   const id = canonicaliseUuid(body.submissionId) ?? invalidEntry("submissionId");
@@ -78,6 +89,7 @@ async function recordCashEntry(tx: Transaction, actor: Actor, body: Record<strin
   const [earlier] = await tx.select().from(drawerEntries).where(eq(drawerEntries.id, id));
   if (earlier === undefined) {
     await appendDrawerEntry(tx, { ...actor, id, kind, amount: signed, facts: { reason } });
+    await open();
   } else if (
     earlier.printerId !== printerId ||
     earlier.personId !== actor.personId ||
@@ -99,6 +111,7 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
       actor: Actor,
       body: Record<string, unknown>,
       lookup: PrinterLookup,
+      authority: Authorization,
     ) => Promise<T>,
   ) {
     return run(c, log, async () => {
@@ -106,7 +119,10 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
       const body = c.req.method === "GET" ? {} : await readJsonBody<Record<string, unknown>>(c);
       const result = await withTransaction(deps.db, async (tx) => {
         await assertStillSignedIn(tx, session);
-        await authorize(tx, { sessionId: session.sessionId, permission: "cash.drawer" });
+        const authority = await authorize(tx, {
+          sessionId: session.sessionId,
+          permission: "cash.drawer",
+        });
         const lookup = printerLookup(tx, deviceOrigin(session.deviceId));
         const printer = await resolveDrawerAssignment(lookup);
         if (printer === undefined)
@@ -122,6 +138,7 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
           },
           body,
           lookup,
+          authority,
         );
         return { ...answer, printerId: printer.id };
       });
@@ -129,7 +146,21 @@ export function mountDrawerApi(app: Hono, deps: TillApiDeps, log: Logger, run: R
     });
   }
 
-  app.post("/api/drawer/entries", (c) => onDrawer(c, recordCashEntry));
+  app.post("/api/drawer/entries", (c) =>
+    onDrawer(c, (tx, actor, body, lookup, { authorizedBy, viaOverride }) =>
+      recordCashEntry(tx, actor, body, async () => {
+        if ((await lookup("cash_drawer"))?.id === actor.printerId)
+          await enqueueManualDrawerOpen(
+            tx,
+            requestCfg(deps.cfg, actor),
+            actor.printerId,
+            actor.personId,
+            authorizedBy,
+            viaOverride,
+          );
+      }),
+    ),
+  );
 
   app.get(DRAWER_CLOSE, (c) => onDrawer(c, (tx, actor) => readDrawerClose(tx, actor.printerId)));
   app.post(`${DRAWER_CLOSE}/count`, (c) =>

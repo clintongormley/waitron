@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { devices, drawerEntries, personRoles, printers, printJobs } from "@waitron/db";
+import { devices, drawerEntries, drawerOpens, personRoles, printers, printJobs } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setPersonLocale } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -53,7 +53,7 @@ function postEntry(fields: Record<string, unknown> = {}) {
   });
 }
 
-it("records signed movement once per submission and leaves the drawer mechanism alone", async () => {
+it("records signed movements and queues one audited kick across retries and a switched-off withdrawal", async () => {
   const submissionId = randomUUID();
   const first = await postEntry({ submissionId });
   expect(first).toEqual({ status: 200, json: { id: submissionId, printerId } });
@@ -93,7 +93,19 @@ it("records signed movement once per submission and leaves the drawer mechanism 
     },
   ]);
   expect(entries[0]?.recordedAt).toBe(new Date(entries[0]!.recordedAt).toISOString());
-  expect(await store.db.select().from(printJobs)).toEqual([]);
+  expect(
+    await store.db.select({ printerId: printJobs.printerId, kind: printJobs.kind }).from(printJobs),
+  ).toEqual([{ printerId, kind: "drawer" }]);
+  expect(await store.db.select().from(drawerOpens)).toMatchObject([
+    {
+      printerId,
+      personId: venue.operatorId,
+      deviceId: venue.deviceId,
+      reason: "manual",
+      authorizedBy: venue.operatorId,
+      viaOverride: false,
+    },
+  ]);
 });
 
 it.each([
@@ -111,6 +123,8 @@ it.each([
     json: { code: "drawer.entry_invalid_field", params: { field } },
   });
   expect(await store.db.select().from(drawerEntries)).toEqual([]);
+  expect(await store.db.select().from(printJobs)).toEqual([]);
+  expect(await store.db.select().from(drawerOpens)).toEqual([]);
 });
 
 it("refuses cash entry for a different drawer and for staff without the drawer grant", async () => {
@@ -126,6 +140,8 @@ it("refuses cash entry for a different drawer and for staff without the drawer g
     json: { code: "authorization.not_permitted", params: { permission: "cash.drawer" } },
   });
   expect(await store.db.select().from(drawerEntries)).toEqual([]);
+  expect(await store.db.select().from(printJobs)).toEqual([]);
+  expect(await store.db.select().from(drawerOpens)).toEqual([]);
 });
 
 it("keeps the audited Open drawer action bound to the drawer the cash-entry form names", async () => {
