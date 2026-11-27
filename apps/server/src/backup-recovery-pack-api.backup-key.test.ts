@@ -767,6 +767,40 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     expect((await f.status()).newKeyWaiting).toBe(true);
   });
 
+  it("a confirm whose request is gone while it waits for the venue's write lock changes nothing", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    const before = await snapshot(stateDir, f);
+    const lockCalls = vi.spyOn(suite.db, "withWriteLock");
+    let held!: () => void;
+    const holding = new Promise<void>((resolve) => (held = resolve));
+    let release!: () => void;
+    const lock = suite.db.withWriteLock(async () => {
+      held();
+      await new Promise<void>((resolve) => (release = resolve));
+    });
+    await holding;
+    const aborted = new AbortController();
+    const confirming = f.confirm(made, { signal: aborted.signal });
+    try {
+      await vi.waitFor(() => expect(lockCalls).toHaveBeenCalledTimes(2), { timeout: 30_000 });
+    } finally {
+      aborted.abort();
+      release();
+      await lock;
+      lockCalls.mockRestore();
+    }
+    const response = await confirming;
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect((await f.status()).newKeyWaiting).toBe(true);
+  });
+
   it("a repeated confirm, after the first answer was lost, answers again and writes nothing more", async () => {
     const stateDir = await stateFolder(3);
     let at = Date.parse(MADE_AT);

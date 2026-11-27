@@ -470,7 +470,7 @@ export function mountBackupRecoveryPackMakeApi(
         permission: "system.manage",
       });
       if (waiting.personId !== authorizedBy) invalid("unknown_pack");
-      // A browser already gone would never learn that the box took the key.
+      // A tab already closed would never learn that the box took the key.
       if (signal.aborted) invalid("unknown_pack");
       await insertMasterKey(tx, {
         name: waiting.name,
