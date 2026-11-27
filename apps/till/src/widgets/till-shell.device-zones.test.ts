@@ -511,6 +511,80 @@ it.each([
   },
 );
 
+it("walks from the last floor zone to the kitchen action with the arrow key", async () => {
+  setLocale("en-GB");
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      operatorName: "Ana",
+      affordances: ["expo"],
+      ...{ floorKitchenRows: [{ label: "Pass" }] },
+    });
+    const floor = document.createElement("till-floor-screen");
+    floor.zones = [
+      {
+        id: "room",
+        name: "Dining room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        closesAt: null,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ];
+    el.append(floor);
+    const chooser = await vi.waitFor(() => {
+      const menu = el.shadowRoot!.querySelector("[data-floor-zone-chooser]");
+      expect(menu).not.toBeNull();
+      return menu!;
+    });
+    const opened = vi.fn();
+    el.addEventListener("show-expo", opened);
+    await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
+    const zone = chooser.querySelector<HTMLButtonElement>('[data-floor-zone="room"]')!;
+    const kitchen = chooser.querySelector<HTMLButtonElement>("[data-floor-kitchen-row]")!;
+    const nameInset = (row: HTMLButtonElement, name: string) => {
+      const label = row.querySelector("wt-menu-row")?.shadowRoot?.querySelector(".label") ?? row;
+      const text = Array.from(label.childNodes).find((node) => node.textContent === name)!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      return range.getBoundingClientRect().left - row.getBoundingClientRect().left;
+    };
+    expect(nameInset(zone, "Dining room")).toBe(56);
+    expect(nameInset(kitchen, "Pass")).toBe(56);
+    expect(getComputedStyle(zone.querySelector("wt-menu-row")!).borderBlockEndWidth).toBe("0px");
+    const kitchenHeading = chooser.querySelector("[data-menu-heading]")!;
+    expect(getComputedStyle(kitchenHeading).borderBlockEndWidth).toBe("1px");
+    zone.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(
+      chooser.querySelector('[role="menuitem"]:focus wt-menu-row')?.getAttribute("label"),
+    ).toBe("Pass");
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toHaveBeenCalledOnce();
+    expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("still announces pending transfers with a floor chooser board open", async () => {
+  setLocale("en-GB");
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "phone-portrait",
+    floorKitchenOpen: true,
+    transferCount: 1,
+  });
+  const announcement = el.shadowRoot!.querySelector(
+    '[role="status"][data-test="department-transfers-status"]',
+  );
+  expect(announcement?.textContent).toBe("Transfers (1 pending)");
+});
+
 it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);

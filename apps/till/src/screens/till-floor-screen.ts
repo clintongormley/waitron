@@ -4,6 +4,7 @@ import {
   floorZoneControls,
   zoneTabMarks,
   type ZoneTabMark,
+  type FloorChooserActions,
 } from "../widgets/floor-bar.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "../state/live-gate.js";
@@ -2355,8 +2356,7 @@ export class TillFloorScreen extends LitElement {
       };
     return this.#mapCopy.copy;
   }
-
-  footerControls(choose: () => void) {
+  footerControls(actions: FloorChooserActions) {
     if (!this.#zone) return nothing;
     const { tabs, marks, activeKey, view } = this.#zone;
     return floorZoneControls(
@@ -2366,7 +2366,7 @@ export class TillFloorScreen extends LitElement {
       view,
       (key) => this.#selectZone(key),
       () => this.#toggleView(view),
-      choose,
+      actions,
     );
   }
 
@@ -3162,7 +3162,7 @@ export class TillFloorScreen extends LitElement {
         >${fill(t("floor.station_tables"), { station: station.stationName, tables })}</span
       >
       ${
-        this.canOpenStation
+        this.canOpenStation && !this.useFloorFooter
           ? html`<wt-button
               size="sm"
               variant="secondary"

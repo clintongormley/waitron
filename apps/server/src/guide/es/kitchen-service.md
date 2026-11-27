@@ -197,6 +197,9 @@ y puedes volver a entrar al regresar. La pantalla ofrece **Entrar** cuando su pe
 
 ## Trabaja con la pantalla de estación {#kitchen-screen}
 
+En el plano estrecho, toca el nombre de la zona abajo. Elige tu estación en **Pantallas de cocina**.
+Toca **Atrás** para volver a la misma zona.
+
 La pantalla de estación muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
 cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
 mesa dice **Mostrador #12**. Busca el nombre que se escribió junto al número de pedido o la mesa
@@ -334,8 +337,9 @@ como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil de
 En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
 Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de
-listo ni **Reimprimir**. Elige **Pase** o **Pantalla de pase (solo lectura)** en el perfil del
-dispositivo antes de abrir **Pase** en él.
+listo ni **Reimprimir**. En el perfil del dispositivo, elige **Pase** o **Pantalla de pase (solo
+lectura)**. En el plano estrecho, toca el nombre de la zona abajo y elige **Pase** o **Pantalla de
+pase** en **Pantallas de cocina**.
 
 Toca la cabecera de una columna para plegarla en una franja estrecha que conserva su nombre y su
 número; tócala otra vez para abrirla. **Columnas**, al final de la fila encima de las columnas, lista

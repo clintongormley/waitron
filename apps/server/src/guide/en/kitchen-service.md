@@ -176,6 +176,9 @@ The display offers **Log in** when its profile admits staff.
 
 ## Work the station screen {#kitchen-screen}
 
+On the narrow floor, tap the zone name at the bottom. Under **Kitchen screens**, choose your
+station. Tap **Back** to return to the same zone.
+
 The station screen shows a card for each group of dishes a table sent, and one for each counter
 order. A card names its table by the table's short name; a counter order with no table reads
 **Counter #12**. Look for the name staff typed beside the order number or delivery table.
@@ -301,8 +304,9 @@ need **Runs the pass** on the device's profile.
 On a till, a card that is not held also offers **Reprint** for each of its bills.
 
 A pass display (view only) shows the same board for watching, with no **Fire**, Ready or **Reprint**
-buttons. Choose **Pass** or **Pass display (view only)** in the device's profile before opening
-**Pass** on that device.
+buttons. In the device profile, choose **Pass** or **Pass display (view only)**. On the narrow
+floor, tap the zone name at the bottom and choose **Pass** or **Pass display** under **Kitchen
+screens**.
 
 Tap a column's heading to collapse it to a narrow strip that keeps its name and count; tap it again
 to open it. **Columns**, at the end of the row above the columns, lists **Overview**, **Held + To

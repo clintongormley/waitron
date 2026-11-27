@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
+import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
@@ -11,7 +12,7 @@ import type { TillPassBoard } from "./widgets/pass-board.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillApi } from "./api/client.js";
 import type { DevicePassBoard } from "./api/kitchen-api.js";
-import type { KitchenScreenKind } from "./api/device-session-api.js";
+import type { DeviceEquipmentRead, KitchenScreenKind } from "./api/device-session-api.js";
 import type { ZoneOffers } from "./api/menu-api.js";
 
 const previousLocale = currentLocale();
@@ -152,20 +153,68 @@ async function mountDisplay(kind: KitchenScreenKind, capabilities: CapabilityFla
 
 describe("A773 pass screen: app", () => {
   it.each([
-    ["station", ["show-station", "show-expo"], true, false],
-    ["pass", ["show-station", "show-expo"], false, true],
-    ["pass_monitor", ["show-station", "show-expo"], false, true],
-    [null, ["show-station", "show-expo"], false, false],
-    ["station", [], false, false],
-    ["pass", [], false, false],
-    ["pass_monitor", [], false, false],
+    ["station", ["show-station", "show-expo"], ["Grill", "Cold"]],
+    ["pass", ["show-station", "show-expo"], ["Pase"]],
+    ["pass_monitor", ["show-station", "show-expo"], ["Pantalla de pase"]],
+    [null, ["show-station", "show-expo"], []],
+    ["station", [], []],
+    ["pass", [], []],
+    ["pass_monitor", [], []],
+    ["pass", ["show-station", "show-expo"], [], false],
   ] as const)(
-    "offers only %s navigation allowed by capabilities %j",
-    async (kind, capabilities, stationShown, passShown) => {
+    "offers the narrow floor kitchen rows for %s with %j: %j",
+    async (kind, capabilities, rows, screenAvailable: boolean = true) => {
       const viewport = [innerWidth, innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));
       await page.viewport(390, 844);
+      const stations = [
+        { id: "grill", name: "Grill", displayOrder: 0, isDefault: true, active: true, open: true },
+        { id: "cold", name: "Cold", displayOrder: 1, isDefault: false, active: true, open: true },
+        {
+          id: "closed",
+          name: "Closed",
+          displayOrder: 2,
+          isDefault: false,
+          active: true,
+          open: true,
+        },
+      ];
+      const slots = stations.map(({ id, name }) => ({ id, name, available: id !== "closed" }));
+      const room = {
+        id: "room",
+        name: "Room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+        closesAt: null,
+      };
+      const checkTimeOnPass = kind === "pass" && rows.length > 0;
       const api = stubApi({
+        ...(checkTimeOnPass && {
+          getDeviceEquipment: vi.fn().mockResolvedValue({
+            ...NFC_EQUIPMENT,
+            notices: [
+              {
+                owner: "box-clock",
+                key: "clock.check_time",
+                code: "clock.check_time",
+                severity: "error",
+                params: {},
+              },
+              {
+                owner: "fiscal",
+                key: "clock.unusable",
+                code: "clock.unusable",
+                severity: "error",
+                params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
+              },
+            ],
+          } satisfies DeviceEquipmentRead),
+        }),
         getTill: vi.fn().mockResolvedValue({
           ...till,
           formFactor: "phone-portrait",
@@ -176,9 +225,23 @@ describe("A773 pass screen: app", () => {
           formFactor: "phone-portrait",
           name: "Handheld",
           kitchenScreens:
-            kind === null ? [] : [{ kind, available: true, stations: [], zones: null }],
+            kind === null
+              ? []
+              : [
+                  {
+                    kind,
+                    available: screenAvailable,
+                    stations: slots,
+                    zones: null,
+                    showNonPassStations: true,
+                  },
+                ],
         }),
-        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room"])),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room", "terrace"])),
+        listZones: vi
+          .fn()
+          .mockResolvedValue([room, { ...room, id: "terrace", name: "Terrace", displayOrder: 1 }]),
+        listStations: vi.fn().mockResolvedValue(stations),
       });
       const { el } = await mountWidget<TillApp>("till-app", { api });
       await flush(el);
@@ -189,15 +252,50 @@ describe("A773 pass screen: app", () => {
       });
       await flush(el);
       const shell = el.shadowRoot!.querySelector("till-shell")!;
-      const menu = await vi.waitFor(() => {
-        const floorMenu = shell.shadowRoot!.querySelector("wt-row-actions.floor-menu");
-        expect(floorMenu).not.toBeNull();
-        return floorMenu!;
-      });
-      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      expect(Boolean(menu.querySelector(".station"))).toBe(stationShown);
-      expect(Boolean(menu.querySelector(".expo"))).toBe(passShown);
+      const chooser = () => shell.shadowRoot!.querySelector("[data-floor-zone-chooser]");
+      const trigger = () => chooser()?.shadowRoot?.querySelector("button");
+      await vi.waitFor(() => expect(trigger()).toBeInstanceOf(HTMLButtonElement));
+      const checkTime = page.getByRole("button", { name: "Comprobar la hora" });
+      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible();
+      const more = shell.shadowRoot!.querySelector("[data-floor-bar] .floor-menu")!;
+      await userEvent.click(trigger()!);
+      if (checkTimeOnPass) {
+        await page.getByRole("menuitemradio", { name: "Terrace" }).click();
+        await vi.waitFor(() => expect(chooser()?.getAttribute("label")).toBe("Terrace"));
+        await userEvent.click(trigger()!);
+      }
+      const kitchen = page.getByRole("group", { name: "Pantallas de cocina" });
+      expect(
+        kitchen
+          .elements()
+          .flatMap((group) =>
+            Array.from(group.querySelectorAll("wt-menu-row"), (row) => row.getAttribute("label")),
+          ),
+      ).toEqual(rows);
+      expect(more.querySelector(".station, .expo")).toBeNull();
+      if (rows.length === 0) return;
+      if (kind === "station") {
+        await kitchen.getByRole("menuitem", { name: "Cold", exact: true }).click();
+        await vi.waitFor(() => {
+          const screen = el.shadowRoot!.querySelector("till-station-screen");
+          expect(screen?.shadowRoot!.querySelector("till-station-queue")).toHaveProperty(
+            "stationId",
+            "cold",
+          );
+        });
+        expect(location.pathname).toMatch(/\/view\/station\/station\/cold$/u);
+      } else {
+        await kitchen.getByRole("menuitem", { name: rows[0], exact: true }).click();
+        await vi.waitFor(() =>
+          expect(boardOf(el)).toHaveProperty("mode", kind === "pass" ? "pass" : "monitor"),
+        );
+      }
+      expect(shell.shadowRoot!.querySelector(".head")).toBeNull();
+      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible();
+      await page.getByRole("button", { name: "Atrás", exact: true }).click();
+      await vi.waitFor(() => expect(trigger()?.matches(":focus")).toBe(true));
+      expect(location.pathname).not.toContain("/view/");
+      expect(chooser()?.getAttribute("label")).toBe(checkTimeOnPass ? "Terrace" : "Room");
     },
   );
 
