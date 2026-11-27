@@ -25,8 +25,10 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
 ## The frames it builds to
 
 - **Stepper** (§14.2), drawn in `g` 3 and measured from `base.css`'s `.stepper`, which `d` 2, `f` 1
-  and `h` 3 share: one outlined box 44 tall, radius 8; − and + cells 44 wide, the number 16, weight
-  600, in a 32-wide cell between them; + in teal.
+  and `h` 3 share: one outlined box 44 tall outside its 1px border, radius 8; inside it − and +
+  cells 44 wide and 42 tall (`base.css:64–65`), the number 16, weight 600, in a 32-wide cell between
+  them; + in teal. Built as `--wt-font-size-lg`, which is 18 (§14's 16–18 rule): a listed difference,
+  as in PR 6.
 - **Opened row**: `g` 3 (`.open`, `.acts`): a 2px teal border, radius 8, margin 4 and 8, on the
   surface colour; the row inside it has no line under it; the controls are outlined, 44 tall, 15
   bold, padded 0 12, 8 apart, and wrap. Remove and “Split into 3” in `f` 2, `f` 3 and `g` 3 are not
@@ -35,7 +37,8 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
   `af` 1's Burger row (“3 Burger”, “2 Chips · 1 Salad”, €43.50) and §4's text.
 - **Unfolded**: `g` 2's group row, its arrow turned up and teal (`.chev.on`). The portions are drawn
   as `af` 3's `.r.sub`: indented 22, on the page background. §14.4's text (“indented under their
-  row, on the page background”) wins over `g` 2's white `.kid`.
+  row, on the page background”) wins over `g` 2's white `.kid`, which is indented 30. Built as
+  `--wt-space-5` (24): a listed difference against both. A portion carries no stepper (item 9).
 
 ## The change
 
@@ -46,8 +49,8 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
    floating label and 24px buttons by the owner's A263 decision (design-system.md, its table row);
    the frame's stepper is a count with 44-wide buttons and nothing to type. Properties: `value` (a
    whole number), `min` (default 0), `max` (optional), `label`, `disabled`, and `decreaseLabel` and
-   `increaseLabel` as on `wt-number-stepper`. Drawn: `--wt-tap-min` tall, 1px `--wt-color-border`,
-   `--wt-radius-md`, `--wt-color-surface`; − and + `--wt-tap-min` square, `wt-icon` `minus` in
+   `increaseLabel` as on `wt-number-stepper`. Drawn: `--wt-tap-min` tall outside its border, 1px
+   `--wt-color-border`, `--wt-radius-md`, `--wt-color-surface`; − and + `--wt-tap-min` square, `wt-icon` `minus` in
    `--wt-color-text` and `plus` in `--wt-color-primary`; the number at least `--wt-space-6` wide,
    `--wt-font-size-lg`, `--wt-font-weight-bold`, tabular figures. − is disabled at `min` and + at
    `max`; a disabled button fades its icon through `--wt-opacity-disabled`. A group named by
@@ -63,22 +66,29 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
    line in place of opening details (`basket.ts:887`), and the basket passes `opened`.
 3. **The screen holds which row is open**, one at a time. The row closes when its line leaves the
    order, the order is swapped (another bill, a re-read), while sending, while edits are locked, or
-   while an order is in flight. The order screen (7,396 of its 7,500 cap) must not grow:
-   `#draftLine`'s split arrow and family header markup move into the new file to make room.
+   while an order is in flight. The order screen (7,396 of its 7,500 cap) must not grow: 7a also
+   creates `apps/till/src/widgets/draft-portions.ts` and moves `#draftLine`'s split arrow, its
+   family header (`:4698`) and `#splitDraftLine` and `#foldDraftFamily` (`:4810–4845`) there,
+   unchanged, once. 7b then changes them in that file. N 8 (sent rows) reuses it for their arrow.
+   `basket.ts` grows by at most 10 lines in 7a.
 4. **The stepper acts at once**, as today's row stepper did (`basket.ts:1206–1236`):
    `store.setLineQuantity(index, String(value))`. − stops at 1, because Remove in the draft bar takes
-   a dish off. + is disabled when `store.canSelectProduct?.(line.product)` is false. There is no draft
+   a dish off. + is disabled when `store.canSelectProduct?.(line.product)` is false, and also on a
+   line holding a pick the menu no longer offers. `setLineQuantity` refuses that step by sending a
+   `"refused"` event (`working-order.ts:678`), and only the counter's store is listened to
+   (`till-app.ts:3183`), so on a table today's + would do nothing and say nothing. There is no draft
    scope and no Save: the step reaches the server with the draft, like any other change to it, and
    design-system.md (“Protect an edited dialog before closing it”) says “automatically saved forms
-   need no draft scope”. The row's price
-   stays `draftLinePrice` and the total `lineGross`; neither changes, and `setLineQuantity` keeps its
-   spending-limit check.
+   need no draft scope”. The row's price stays `draftLinePrice` and the total `lineGross`; neither
+   changes. (`setLineQuantity`'s simplified-invoice limit applies only to the counter's store, the one
+   `till-app.ts:11718` gives a limit; a table's draft has none set, today as after this change.)
 5. **Weighed and set-menu dishes get no stepper**, only Options and Note.
    - A weighed dish's amount (“250 ml”) is typed in today's details, as now: today's row gave a
      stepper only to a dish sold by the unit (`basket.ts:1195`).
-   - A set-menu dish's count is changed in today's details, because `setLineQuantity` checks a larger
-     count against the dish without its set menu (`working-order.ts:674`), while `setLineDetails`
-     checks it against the line's own set menu (`:626`). Read in the code, not run.
+   - A set-menu dish's count is changed in today's details, as now: today's row draws no stepper on
+     a set-menu line (`basket.ts:1189`). Also, `setLineQuantity` checks a larger count against the
+     dish without its set menu (`working-order.ts:674`), where `setLineDetails` passes the line's
+     own set menu (`:626`). Read in the code, not run.
 6. **Options** calls `basket.openLineDetails(line)`. **Note** calls it with `{ note: true }`, and the
    picker gains `focusNote`, which opens and focuses its note field through the existing Add note
    path (`modifier-picker.ts:1056`). Both are disabled exactly when the row button is.
@@ -93,16 +103,33 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
    Families stay in memory, as today: they are kept by line object (`#splitFamilies`, a `WeakMap`,
    `working-order.ts:271`), and a re-read of the draft builds new line objects, so its portions then
    show as rows of one. Read in the code, not run.
-9. **A new file, `apps/till/src/widgets/draft-portions.ts`**, takes the group row, the summary, and
-   the split and fold handlers out of the screen (`#splitDraftLine` and `#foldDraftFamily`,
-   `:4810–4845`; the family header, `:4698`).
+9. **`draft-portions.ts`** (made in 7a, item 3) gains the group row, the summary and the fold of
+   portions that differ. `basket.ts` must not grow in 7b: the compact row's view assembly
+   (`basket.ts:873–889`, the `draftRow({...})` call) moves into `draft-row.ts` as one function that
+   also takes the folded family's count, summary and price, so the basket keeps one call.
    - **Unfolded**: the group row goes in `before-<first>`, in place of today's `data-fold-draft-family`
      header: count, name, summary, the portions' price, and the `chevron-down` turned up, in
      `--wt-color-primary`, with `aria-expanded="true"`. It has no box until PR 9d. Each portion is a
-     row of one with `portion` set: indented `--wt-space-5`, `--wt-color-bg`, no arrow.
+     row of one with `portion` set: indented `--wt-space-5`, `--wt-color-bg`, no arrow, and, opened,
+     no stepper: + would make it a row of two, and the summary counts rows. `g` 3 draws “− 1 +” on
+     a portion; a listed difference. Options and Note stay.
    - **Fold**: if the portions are alike, `foldSplitFamily`, as today. If not, the screen marks the
      family folded. The basket then draws the first portion's row with the family's count, summary
      and price, and the screen leaves the other portions out of that basket's `lineIndexes`.
+   - **Never hidden behind a fold**: each portion's allergy mark, flag choice and routing warning
+     are drawn on its own row (screen `:4683–4690`, `:4754–4755`), and so are its not-offered,
+     blocked, period-ended and server marks (`lineMarks`, `draft-row.ts`). So portions that differ
+     fold into one row only while none of them carries any of these and none is the last added
+     dish (whose reveal and `#openLastAdded` look for its row). Otherwise the arrow is not offered
+     and the portions stay unfolded; one that gains a mark while folded unfolds the family. The
+     summary keeps each extra's own allergen and diet icons, drawn by the same code as the row's
+     second line.
+   - **Who reads `lineIndexes`** (the basket's property), each checked against a hidden portion:
+     `basket.ts:438` (declared) and `:857` (the rows it draws); the screen's `:4650` (sets it per
+     section), `:2194` (`#openHeldDraftLine` finds a row's basket) and `:4272` (`#openLastAdded`);
+     and the test helper `till-table-order-screen.test-helpers.ts:195` (`openDraftLine`). The
+     `lineIndexes` of a sent group (screen `:4949`, `state/draft-groups.ts:11`, `till-app.ts:15368`)
+     is another field of the same name, not affected.
    - **The summary** lists each different second line with how many portions carry it, in order of
      first appearance (“2 Chips · 1 Salad”). Portions with nothing on their second line are not
      listed, since the row's count covers them.
@@ -134,7 +161,8 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
 - New `till-table-order-screen.open-row.test.ts`: a tap opens the row with a stepper, Options, Note
   and `aria-expanded`, a second tap closes it, opening another closes the first; + and − change the
   line, its row's price and the total, and leave the draft unsaved (`store.dirty`); − is disabled at
-  1 and + when the dish cannot be added; a weighed and a set-menu dish have no stepper; Options opens
+  1 and + when the dish cannot be added or holds a pick no longer offered; a weighed and a set-menu
+  dish have no stepper; Options opens
   the details, Note opens them with focus in the note field; the row closes and its controls are
   disabled while sending or locked; holding opens the details; a drag opens nothing.
 - `draft-row.a11y.test.ts` gains an opened row in light and dark. The picker's test gains
@@ -152,7 +180,11 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
   (the existing check stays); different ones fold into “3 Burger”, “2 Chips · 1 Salad” at the summed
   price, and a tap unfolds them; ticking it ticks all three, Remove removes all three and a drag
   moves all three; with a portion in another fire group there is no group row; a re-read draft shows
-  rows of one.
+  rows of one; an opened portion has no stepper.
+- Safety, in the same file: portions where one carries an allergy mark, a flag, a routing warning
+  or a not-offered mark offer no fold and show each mark on its own row; a folded family unfolds
+  when one of its portions gains a mark; a folded row with a Salad extra shows the extra's allergen
+  icons.
 - `till-table-order-screen.split-units.a11y.test.ts`: the group row folded and unfolded, and a
   portion, in light and dark.
 
@@ -161,7 +193,9 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
 The English and Spanish `table-service.md` change in `{#portions}`'s last two paragraphs. 7a: a tap
 opens a dish in place, where − and + change how many, Options its options and Note its note, and
 holding opens all its details. 7b: the arrow on a row of several gives one row per dish, the arrow
-again folds them, and a folded row of different dishes says how many of each.
+again folds them, and a folded row of different dishes says how many of each. 7a also changes
+`{#portions}`'s weighed-dish paragraph (English `:522–523`, Spanish `:551`), which says to tap a
+weighed dish's row at a table to edit it: a tap now opens it, and Options edits the amount.
 `docs/developers/design-system.md` gains `wt-stepper`'s row in the primitives table, and its order
 row paragraph gains the opened row and the portions.
 
@@ -180,7 +214,9 @@ the differences listed against each frame and against §14.2 and §14.4's sizes:
 till 1280 px, portrait and landscape, light and dark, English and Spanish, and the order panel at
 800 × 1280, where PR 6's names wrapped (the opened row's controls must wrap inside the box).
 
-Each lands after the owner's recorded OK and green CI on the current head.
+Then lane P's Impeccable finish review, which the watcher asks for, must say “ready for the owner”
+before the owner sees the PR (queue rule B). Each lands after the owner's recorded OK and green CI
+on the current head.
 
 ## Questions for the watcher
 
