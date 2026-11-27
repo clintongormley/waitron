@@ -10,8 +10,10 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   appendToChain,
+  attendanceDays,
   timeEntries,
 } from "@waitron/workforce";
+import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 import { readTillClockState } from "./till-clock-state.js";
 
 const suite = useVenueDb({
@@ -49,7 +51,10 @@ function event(at: string, subject = personId, node = nodeId) {
 }
 
 async function read(at = "2026-01-05T12:00:00Z") {
-  return withTransaction(suite.db, (tx) => readTillClockState(tx, { personId }, new Date(at)));
+  return withTransaction(
+    suite.db,
+    async (tx) => (await readTillClockState(tx, { personId }, new Date(at))).state,
+  );
 }
 
 async function lastId() {
@@ -97,13 +102,15 @@ describe("till own clock state", () => {
     await append("requested", "in", "2026-01-05T09:00:00Z");
     expect(await read()).toMatchObject({ state: "out", lastEntryId: null, firstClockIn: true });
     const missing = await append("approved", "in", "2026-01-05T09:00:00Z");
+    const shiftStart = { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 };
     expect(await read()).toMatchObject({
       state: "working",
       lastEntryId: missing.id,
       firstClockIn: false,
+      shiftStart,
     });
     await append("approved", "in", "2026-01-05T12:00:00Z", missing.id);
-    expect(await read()).toMatchObject({ state: "working", lastEntryId: missing.id });
+    expect(await read()).toMatchObject({ state: "working", lastEntryId: missing.id, shiftStart });
     await withTransaction(suite.db, (tx) => backend.clockOut(tx, event("2026-01-05T10:00:00Z")));
     expect(await read()).toMatchObject({
       state: "out",
@@ -113,6 +120,61 @@ describe("till own clock state", () => {
     await expect(
       withTransaction(suite.db, (tx) => backend.breakEnd(tx, event("2026-01-05T13:00:00Z"))),
     ).rejects.toMatchObject({ code: "attendance.no_open_entry" });
+  });
+
+  it.each(["working", "on_break"])("keeps the reconciliation day while %s", async (status) => {
+    const newNode = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      appendToChain(
+        tx,
+        { nodeId },
+        {
+          personId,
+          entryKind: "correction",
+          eventAt: "2026-01-06T09:00:00Z",
+          eventOffsetMinutes: 60,
+          recordedByPersonId: otherPersonId,
+          origin: jobOrigin("dashboard"),
+          correctionReason: "Missing time",
+          correctionStatus: "approved",
+          correctionActorId: otherPersonId,
+          extension: {
+            authorKind: "manager",
+            direction: "worker_request",
+            missingEntryKind: "in",
+            respondsToEntryId: null,
+            payPeriodClosureId: null,
+          },
+        },
+      ),
+    );
+    await withTransaction(suite.db, (tx) => backend.clockOut(tx, event("2026-01-05T09:00:00Z")));
+    await withTransaction(suite.db, (tx) =>
+      backend.clockIn(tx, event("2026-01-05T10:00:00Z", personId, newNode)),
+    );
+    expect(await read()).toMatchObject({
+      state: "working",
+      shiftStart: { eventAt: "2026-01-05T10:00:00.000Z", offsetMinutes: 60 },
+    });
+    if (status === "on_break") {
+      await withTransaction(suite.db, (tx) =>
+        backend.breakStart(tx, event("2026-01-05T11:00:00Z", personId, newNode)),
+      );
+      expect(await read()).toMatchObject({ state: "on_break", shiftStart: null });
+    }
+
+    await suite.db.delete(attendanceDays);
+    await withTransaction(suite.db, (tx) =>
+      reconcileAttendanceBeforeClock(
+        tx,
+        { nodeId: newNode, personId },
+        new Date("2026-01-07T05:00:00Z"),
+      ),
+    );
+    // Reconciliation follows the filtered clock-in's day even when the display differs.
+    expect((await suite.db.select().from(attendanceDays)).map((day) => day.businessDay)).toEqual([
+      "2026-01-06",
+    ]);
   });
 
   it("reads an automatic out and ignores its later acknowledgment", async () => {
@@ -178,6 +240,7 @@ describe("till own clock state", () => {
       state: "out",
       lastEntryId: null,
       firstClockIn: true,
+      shiftStart: null,
     });
     for (const [method, at, state] of [
       ["clockIn", "2026-01-05T09:00:00Z", "working"],
@@ -192,6 +255,8 @@ describe("till own clock state", () => {
         state,
         lastEntryId: await lastId(),
         firstClockIn: false,
+        shiftStart:
+          state === "out" ? null : { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
       });
     }
     expect((await read("2026-01-06T03:59:59Z")).firstClockIn).toBe(false);
@@ -202,16 +267,13 @@ describe("till own clock state", () => {
   });
 
   it("reads the state for the venue without being told a venue", async () => {
-    expect(
-      await withTransaction(suite.db, (tx) =>
-        readTillClockState(tx, { personId }, new Date("2026-01-05T03:59:59Z")),
-      ),
-    ).toEqual({
+    expect(await read("2026-01-05T03:59:59Z")).toEqual({
       personId,
       businessDay: "2026-01-04",
       state: "out",
       lastEntryId: null,
       firstClockIn: true,
+      shiftStart: null,
     });
   });
 

@@ -70,6 +70,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
                         state,
                         lastEntryId: "entry",
                         firstClockIn: false,
+                        shiftStart: null,
                       },
               },
               theme,

@@ -555,7 +555,8 @@ to reach a table shortcut and Enter to open it.
 Choose **Floor** after a table to open that table's zone, if this device shows it. On a narrow
 floor, tap the zone name at the bottom and look for the check beside your current zone. Tap another
 zone to switch, or use Up and Down and press Enter. Open **More** (☰) from the same bar for your clock actions, changes to today's floor,
-bills and cash, hours and schedule, Help and settings.
+bills and cash, hours and schedule, Help and settings. Your clock-in time appears under your name
+beside **Clock out**.
 On a wide handheld floor, open **More** at the top for **Equipment**, **Language** and
 **Theme** under **Settings**.
 

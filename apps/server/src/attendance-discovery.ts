@@ -7,7 +7,6 @@ import {
   enqueueAttendanceDay,
   retireObsoleteRotaQuestions,
   processAttendanceDay,
-  readLatestLiveEntry,
   type AttendanceDay,
   type AttendanceDayResult,
   rosterVersions,
@@ -23,12 +22,10 @@ export async function reconcileAttendanceBeforeClock(
   scope: { nodeId: string; personId: string },
   at: Date,
 ): Promise<TillClockState | null> {
-  const state = await readTillClockState(tx, scope, at);
-  if (state.state === "out") return state;
-  const start = await readLatestLiveEntry(tx, scope.personId, { kind: "in" });
-  if (!start) return state;
+  const { state, clockInAt } = await readTillClockState(tx, scope, at);
+  if (clockInAt === undefined) return state;
   const clock = await readVenueClock(tx);
-  const businessDay = businessDayAt(clock, new Date(start.eventAt));
+  const businessDay = businessDayAt(clock, new Date(clockInAt));
   const day = {
     businessDay,
     ...businessDayBounds(clock, businessDay),

@@ -110,6 +110,10 @@ describe("signed-in own till clock routes", () => {
       instant = new Date(`2026-01-05T09:0${minute}:00Z`);
       const response = await request(path, { expectedEntryId: (await state()).lastEntryId });
       expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        shiftStart:
+          path === "out" ? null : { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
+      });
     }
     expect(await state()).toMatchObject({ state: "out" });
     expect(await count()).toBe(4);
@@ -273,7 +277,9 @@ describe("signed-in own till clock routes", () => {
       state: "out",
       lastEntryId: null,
       firstClockIn: true,
+      shiftStart: null,
     });
+    const shiftStart = { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 };
     for (const [path, want] of [
       ["in", "working"],
       ["break-start", "on_break"],
@@ -283,12 +289,15 @@ describe("signed-in own till clock routes", () => {
       const previous = await state();
       const response = await request(path, { expectedEntryId: previous.lastEntryId });
       expect(response.status, path).toBe(200);
-      expect(await response.json()).toEqual({
+      const written = await response.json();
+      expect(written).toEqual({
         ...previous,
         state: want,
         lastEntryId: expect.any(String),
         firstClockIn: false,
+        shiftStart: want === "out" ? null : shiftStart,
       });
+      expect(await state()).toEqual(written);
       instant = new Date(instant.getTime() + 60_000);
     }
     const chain = await readChain(suite.db, {

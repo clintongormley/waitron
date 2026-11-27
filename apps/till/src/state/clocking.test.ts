@@ -16,6 +16,7 @@ function clock(
     state,
     lastEntryId,
     firstClockIn: lastEntryId === null,
+    shiftStart: null,
   };
 }
 function deferred<T>() {

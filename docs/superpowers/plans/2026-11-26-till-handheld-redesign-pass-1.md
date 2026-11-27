@@ -42,7 +42,7 @@ Claude reads the plan before the watcher clears a slice to build. Aim for three 
 | F · 5f Seat walk-ins | Seat from a full-screen guest count and optional name. Open the new order with Menu up. | 5d, N 10 |
 | F · 5g Seat a booking | Read name, size and note only when opening seating for that table. Seat and link the booking, or seat a walk-in and offer to move the booking if it comes due against an occupied table. | 5b, 5f |
 | F · 5h, 5i Dashboard bookings | **5h** See bookings from the change’s effective time move to the joined group on save (A550). **5i** See a refusal naming the layout that puts a table away at the booking time (A857). | Each lands separately |
-| F · 5j Wide floor | From about 800 px, see the active map and jobs for all selected zones together, with the bar, name and help below. Open an order across the full width. | 3a–b, 5b–c |
+| F · 5j Wide floor | From about 800 px, see the active map and jobs for all selected zones together, with the bar and help below. See who's signed in and when they clocked in on the wide floor bar (§9.10). Open an order across the full width. | 3a–b, 5b–c |
 | F · 5k Offline floor | See the last floor with its read time and a reconnect instruction. Gate actions while the box is out of reach. | 5a–b |
 | F · 5l, 5m Floor fixes | **5l** Clear a service step when its last bill leaves (A1333). **5m** Reproduce and fix the device verification warning that survived reload in the demo (bar-seat point 8). | Each lands separately |
 | N · 6, 7 New rows | **6** Read compact rows, see matching repeat picks group and the last dish light up. **7** Unfold portions and edit quantity, options and note inline. Keep existing actions while their new foot is built. | 7 follows 6 |

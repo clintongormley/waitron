@@ -18,6 +18,7 @@ export interface TillClockState {
   state: TillClockStatus;
   lastEntryId: string | null;
   firstClockIn: boolean;
+  shiftStart: { eventAt: string; offsetMinutes: number } | null;
 }
 /** The `absence_kind` members; the server re-validates against the real enum. */
 export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";

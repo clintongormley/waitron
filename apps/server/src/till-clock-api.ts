@@ -96,7 +96,7 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
           { nodeId: deps.cfg.nodeId, personId: session.personId },
           at,
         );
-        return read ?? readTillClockState(tx, { personId: session.personId }, at);
+        return read ?? (await readTillClockState(tx, { personId: session.personId }, at)).state;
       });
       return c.json(state);
     }),
@@ -116,7 +116,7 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
               tx,
               { nodeId: deps.cfg.nodeId, personId: session.personId },
               at,
-            )) ?? (await readTillClockState(tx, { personId: session.personId }, at));
+            )) ?? (await readTillClockState(tx, { personId: session.personId }, at)).state;
           if (before.lastEntryId !== expectedEntryId)
             // Commit reconciliation even when its new end makes the submitted action stale.
             return { error: new AppError("attendance.state_changed", {}) };
@@ -153,5 +153,5 @@ async function writeClock(
     if (before.state === "on_break") await backend.breakEnd(tx, input);
     await backend.clockOut(tx, input);
   }
-  return readTillClockState(tx, { personId: session.personId }, at);
+  return (await readTillClockState(tx, { personId: session.personId }, at)).state;
 }

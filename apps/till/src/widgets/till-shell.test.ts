@@ -57,6 +57,7 @@ describe("till-shell", () => {
           state,
           lastEntryId: "entry",
           firstClockIn: false,
+          shiftStart: null,
         },
       });
       const menu = el.shadowRoot!.querySelector<HTMLElement>("wt-row-actions.operator-menu")!;
@@ -112,6 +113,7 @@ describe("till-shell", () => {
           state: "on_break",
           lastEntryId: "entry",
           firstClockIn: false,
+          shiftStart: null,
         },
       });
       const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
@@ -522,6 +524,7 @@ describe("till-shell", () => {
               state: "working",
               lastEntryId: "entry",
               firstClockIn: false,
+              shiftStart: null,
             },
           },
           theme,
@@ -886,6 +889,7 @@ describe("a handheld's More", () => {
       state: "working",
       lastEntryId: "entry",
       firstClockIn: false,
+      shiftStart: null,
     },
   };
 
@@ -1437,6 +1441,7 @@ describe("till-shell at phone width", () => {
       state: "working",
       lastEntryId: "entry",
       firstClockIn: false,
+      shiftStart: null,
     },
   };
 
@@ -2033,6 +2038,7 @@ describe("till-shell above phone width", () => {
             state: "working",
             lastEntryId: "entry",
             firstClockIn: false,
+            shiftStart: null,
           },
         });
         await settle(el);
