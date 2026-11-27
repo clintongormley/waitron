@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WtDialog } from "@waitron/ui";
+import type { LitElement } from "lit";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import type { WtDialog, WtMasterKeyInput } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
 import type { RecoveryPackStatus } from "../api/backup-api.js";
 import { setLocale } from "../i18n/t.js";
@@ -29,6 +31,9 @@ const STATUS: RecoveryPackStatus = {
 
 type State =
   | "empty"
+  | "typed"
+  | "wrong key"
+  | "rate limited"
   | "master key"
   | "busy"
   | "refused"
@@ -37,7 +42,18 @@ type State =
   | "key copied"
   | "key downloaded";
 
+/** The states that draw Print the recovery pack; the rest draw Make a new master key. */
+const PRINT: readonly State[] = ["empty", "typed", "wrong key", "rate limited"];
+
 function makeFor(state: State) {
+  if (state === "wrong key")
+    return vi.fn().mockRejectedValue({
+      code: "master_key.wrong",
+      params: { keyName: "2026-10-12 · QZJV" },
+      status: 403,
+    });
+  if (state === "rate limited")
+    return vi.fn().mockRejectedValue({ code: "recovery.rate_limited", status: 429 });
   if (state === "busy") return vi.fn(() => new Promise(() => undefined));
   if (state === "refused")
     return vi.fn().mockRejectedValue({ code: "password.throttled", status: 429 });
@@ -52,6 +68,9 @@ function makeFor(state: State) {
 
 const STATES: State[] = [
   "empty",
+  "typed",
+  "wrong key",
+  "rate limited",
   "master key",
   "busy",
   "refused",
@@ -79,15 +98,33 @@ describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%
       { api },
       theme,
     );
-    el.show(STATUS, state === "empty" ? "pack" : "master-key");
+    el.show(STATUS, PRINT.includes(state) ? "pack" : "master-key");
     await el.updateComplete;
     const root = el.shadowRoot!;
     const dialog = root.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => dialog.open).toBe(true);
-    const make = () => root.querySelector<HTMLElement>("wt-button[data-test=make-pack]")!.click();
-    if (state !== "empty" && state !== "master key") make();
+    const keyField = () => root.querySelector<WtMasterKeyInput>("wt-master-key-input")!;
+    if (PRINT.includes(state) && state !== "empty") {
+      const input = keyField().shadowRoot!.querySelector<LitElement>("wt-input")!;
+      await input.updateComplete;
+      input.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: encodeMasterKeyCode(new Uint8Array(16).fill(7)) },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await keyField().updateComplete;
+      await el.updateComplete;
+    }
+    const button = () =>
+      root.querySelector<HTMLElement & { disabled: boolean }>("wt-button[data-test=make-pack]")!;
+    if (state === "typed") expect(button().disabled).toBe(false);
+    const make = () => button().click();
+    if (!["empty", "typed", "master key"].includes(state)) make();
+    if (state === "wrong key") await expect.poll(() => keyField().error).not.toBe("");
     if (state === "busy") await expect.poll(() => api.makeRecoveryPack).toHaveBeenCalled();
-    if (state === "refused")
+    if (state === "refused" || state === "rate limited")
       await expect.poll(() => root.querySelector("wt-form-actions")!.error).not.toBe("");
     if (state === "lost")
       await expect.poll(() => root.querySelector("[data-test=lost]")).toBeTruthy();

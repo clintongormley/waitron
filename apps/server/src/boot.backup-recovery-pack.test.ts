@@ -41,19 +41,41 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-/** Which turn queue, by the order the start created it, each turn was handed to. */
-const turnsUsed = vi.hoisted(() => ({ created: 0, handed: [] as number[] }));
+/**
+ * Which turn queue, by the order the start created it, each turn was handed to. The spare follow's
+ * own queue is left out: its pass takes a turn every few seconds, whatever the requests do.
+ */
+const turnsUsed = vi.hoisted(() => ({
+  created: 0,
+  handed: [] as number[],
+  inSpareFollow: false,
+}));
 vi.mock("./backup-turns.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./backup-turns.js")>();
   return {
     ...actual,
     createTurns: (): Turns => {
-      const queue = (turnsUsed.created += 1);
       const turns = actual.createTurns();
+      if (turnsUsed.inSpareFollow) return turns;
+      const queue = (turnsUsed.created += 1);
       return (body) => {
         turnsUsed.handed.push(queue);
         return turns(body);
       };
+    },
+  };
+});
+vi.mock("./spare-follow.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-follow.js")>();
+  return {
+    ...actual,
+    startSpareFollow: (...args: Parameters<typeof actual.startSpareFollow>) => {
+      turnsUsed.inSpareFollow = true;
+      try {
+        return actual.startSpareFollow(...args);
+      } finally {
+        turnsUsed.inSpareFollow = false;
+      }
     },
   };
 });
@@ -164,7 +186,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         headers: json,
         body: JSON.stringify({
           locale: "es",
-          newMasterKey: false,
+          masterKey: master.secret,
         }),
       });
       expect(made.status).toBe(200);
@@ -202,6 +224,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         { part: "emergency", state: "absent" },
         { part: "bucket", state: "included" },
         { part: "archives", state: "included" },
+        { part: "master-key", state: "included" },
       ]);
       expect(fresh.upToDate).toBe(true);
 

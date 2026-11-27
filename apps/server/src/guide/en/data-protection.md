@@ -436,13 +436,10 @@ own, can also make scheduled backups, and can export your setup to start another
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
   as that passphrase.
-  Read the recovery pack's pages before you need it: they may name an older pack you also need.
-  Keep that pack and the packs for any older backups you may still need. Keep every recovery
+  Keep the packs for any older backups you may still need. Keep every recovery
   pack locked away, off the box.
 
-The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
-
-If **Backups** says the emergency code changed, make a new pack. If the code is missing, ask someone with permission to manage the box to make it.
+When emergency start in Cloud is available, the recovery pack also holds a QR code for the venue's Cloud address. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
 
 ## If personal data is lost or exposed {#breach}
 
@@ -554,7 +551,7 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery pack.** The pack made during first setup holds the master key.
+**A lost recovery pack.** Every recovery pack holds the master key.
 A recovery needs the master key alongside access to a copy; to replace it, see the end of this section. A pack made
 on **Backups** after you set up the bucket copy holds your bucket's access
 key and secret and the backup encryption key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
@@ -565,7 +562,7 @@ wherever that person can reach them. Revoke the old access keys at your bucket p
 Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. Scheduled
 backups to a bucket keep their own keys, which **Change bucket** does not change: if they used the
 old keys, also choose **Change destination or schedule**, enter the new keys in **Access key ID**
-and **Secret access key**, and choose **Save changes**. Then, on the **Recovery pack** card, choose **Change the backup key** so new backups use a key that person does not have; if they may also have the recovery pack that holds the master key, choose **Make a new master key** instead, which also changes the backup key. A new backup key does not change the passwords and keys for your other providers,
+and **Secret access key**, and choose **Save changes**. Then, on the **Recovery pack** card, choose **Make a new master key**, which also changes the backup key, so new backups use a key that person does not have. A new backup key does not change the passwords and keys for your other providers,
 so change those at each provider too. Keep the matching recovery pack for any older copy you may need to restore.
 To replace the master key, choose **Make a new master key**: restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
 

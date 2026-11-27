@@ -6,6 +6,7 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type MasterKeyChangeDetail,
   type MasterKeyUsedDetail,
   type WtDialog,
 } from "@waitron/ui";
@@ -13,6 +14,10 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-master-key-box.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import type { DashboardApi } from "../api/client.js";
 import type { RecoveryPackStatus } from "../api/backup-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -20,7 +25,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { keepDate, packDate } from "./recovery-pack-words.js";
 
-/** A plain pack, or a new master key and its pack. */
+/** A copy of the pack with the current master key typed in, or a new master key and its pack. */
 export type RecoveryPackDialogKind = "pack" | "master-key";
 
 /** The detail of `recovery-pack-made`: the pack's PDF, and whether the box has it marked received. */
@@ -41,13 +46,12 @@ function answeredByBox(error: unknown): boolean {
 }
 
 type Step = "form" | "lost" | "shown";
-/** A shown master key whose pack was not yet downloaded or printed is lost when the dialog closes. */
-type Draft = { unkept: boolean };
-
 /**
- * Makes a recovery pack, or a new master key, after a fresh sign-in. Fires `recovery-pack-closed`
- * on closing only when it sent a make, which may have changed the status.
+ * A typed master key, and a shown master key whose pack was not yet downloaded or printed, which is
+ * lost when the dialog closes.
  */
+type Draft = { key: string; unkept: boolean };
+
 @customElement("dashboard-recovery-pack-dialog")
 export class RecoveryPackDialog extends LitElement {
   static override styles = [
@@ -86,6 +90,10 @@ export class RecoveryPackDialog extends LitElement {
   @state() private lostMasterKey = false;
   @state() private shown: { key: string; name: string; url: string; number: number } | null = null;
   @state() private used = false;
+  /** The master key typed for a copy, as printed; empty while the field holds no whole key. */
+  @state() private key = "";
+  /** The box's wrong-key refusal, shown on the field until the key changes; null names no key. */
+  @state() private keyRefusal: { keyName: string | null } | null = null;
 
   #generation = 0;
   #sent = false;
@@ -114,18 +122,22 @@ export class RecoveryPackDialog extends LitElement {
     this.step = "form";
     this.refusal = "";
     this.reread = null;
+    this.key = "";
+    this.keyRefusal = null;
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
-      id: {},
+      id: this,
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) => a.unkept === b.unkept,
+      equal: (a, b) => a.key === b.key && a.unkept === b.unkept,
       restore: () => {
         this.refusal = "";
+        this.key = "";
+        this.keyRefusal = null;
       },
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    scope.commit({ unkept: false });
+    scope.commit({ key: "", unkept: false });
   }
 
   /** Closes without asking, forgetting everything typed. */
@@ -158,7 +170,7 @@ export class RecoveryPackDialog extends LitElement {
   }
 
   #draft(): Draft {
-    return { unkept: this.step === "shown" && !this.used };
+    return { key: this.key, unkept: this.step === "shown" && !this.used };
   }
 
   #close(announce = true): void {
@@ -172,6 +184,8 @@ export class RecoveryPackDialog extends LitElement {
     this.step = "form";
     this.refusal = "";
     this.reread = null;
+    this.key = "";
+    this.keyRefusal = null;
     this.#forgetShown();
     if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
@@ -196,24 +210,33 @@ export class RecoveryPackDialog extends LitElement {
     (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) === "proceeded";
 
   async #make(): Promise<void> {
-    if (!this.opened || this.busy) return;
-    const generation = this.#generation;
     const newMasterKey = this.kind === "master-key";
+    if (!this.opened || this.busy || (!newMasterKey && this.key === "")) return;
+    const generation = this.#generation;
     const api = this.api;
+    const locale = currentLocale().startsWith("es") ? "es" : "en";
     this.refusal = "";
+    this.keyRefusal = null;
     this.busy = true;
     let made;
     this.#sent = true;
     try {
-      made = await api.makeRecoveryPack({
-        locale: currentLocale().startsWith("es") ? "es" : "en",
-        newMasterKey,
-      });
+      made = await api.makeRecoveryPack(
+        newMasterKey ? { locale, newMasterKey: true } : { locale, masterKey: this.key },
+      );
     } catch (error) {
       if (generation !== this.#generation) return;
       if (answeredByBox(error)) {
         this.busy = false;
-        this.refusal = codeMessage(codeOf(error, "server.internal"));
+        const code = codeOf(error, "server.internal");
+        if (code === "master_key.wrong") {
+          const keyName = (error as { params?: { keyName?: unknown } }).params?.keyName;
+          this.keyRefusal = { keyName: typeof keyName === "string" ? keyName : null };
+        } else
+          this.refusal =
+            code === "recovery.rate_limited"
+              ? t("recovery_pack_dialog.limited")
+              : codeMessage(code);
         return;
       }
       this.reread = await this.#readStatus(api, generation);
@@ -338,11 +361,41 @@ export class RecoveryPackDialog extends LitElement {
                   date: keepDate(this.status!.keepOldPackUntil, this.#zone),
                 })}
               </p>`
-            : html`<p data-test="intro">${t("recovery_pack_dialog.intro")}</p>`
+            : html`<p data-test="intro">${t("recovery_pack_dialog.intro")}</p>
+                ${this.#keyField()}`
         }
       </div>
       ${this.step === "lost" ? this.#lost() : nothing}
       ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
+  }
+
+  /** Kept on the page while a lost answer is shown, so Try again sends the same key. */
+  #keyField(): TemplateResult {
+    const words = MASTER_KEY_FIELD_WORDS[currentLocale().startsWith("es") ? "es" : "en"];
+    const refusal = this.keyRefusal;
+    return html`<wt-master-key-input
+      required
+      .draftParent=${this}
+      .copy=${words}
+      .readPack=${loadRecoveryPackReader}
+      .maxPdfBytes=${MAX_PACK_PDF}
+      .keyName=${this.status?.masterKey?.name}
+      .disabled=${this.busy}
+      .error=${
+        refusal === null
+          ? ""
+          : refusal.keyName === null
+            ? codeMessage("master_key.wrong")
+            : words.wrongKey(refusal.keyName)
+      }
+      @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+        // The field empties itself as it leaves, on closing.
+        if (!this.opened) return;
+        this.key = event.detail.masterKey ?? "";
+        this.keyRefusal = null;
+        this.#scope?.changed();
+      }}
+    ></wt-master-key-input>`;
   }
 
   #shown(shown: { key: string; name: string; url: string; number: number }): TemplateResult {
@@ -437,8 +490,8 @@ export class RecoveryPackDialog extends LitElement {
       >
       <wt-button
         data-test="make-pack"
-        variant=${master ? "danger" : "primary"}
-        ?disabled=${this.busy}
+        variant=${master ? "danger" : this.busy || this.key !== "" ? "primary" : "secondary"}
+        ?disabled=${this.busy || (!master && this.key === "")}
         @click=${() => void this.#make()}
         >${t(master ? "master_key_dialog.make" : "recovery_pack_dialog.make")}</wt-button
       >

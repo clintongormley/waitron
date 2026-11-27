@@ -11,8 +11,8 @@ export type StatusRecord = RecoveryPackRecord & { madeByName: string | null };
 export type CurrentChecks = {
   /** The backup key's latest change time; `undefined` when nothing has changed it. */
   keyChangedAt: string | undefined;
-  /** Undefined without an applicable Cloud read; null when current facts could not be checked. */
-  emergency?: { asOf: string; open: boolean; codeIssuedAt: string | null } | null;
+  /** True only when a fresh Cloud read says emergency start is open with an address. */
+  cloudOpen?: boolean;
   /** `null` when the box has no bucket copy. */
   bucket: { revision: string } | null;
   /** `null` when the box makes no archives. */
@@ -27,8 +27,8 @@ export type PackStatusInput = {
   retention: { count: number; days: number } | undefined;
   schedule: BackupSchedule | undefined;
   backupsUseOlderKey: boolean;
-  /** The pack in `records` that showed the current master key, when one is known. */
-  masterKeyPack: number | null;
+  /** The packs in `records` that showed the current master key, newest first. */
+  masterKeyPacks: readonly number[];
   now: Date;
 };
 
@@ -36,11 +36,8 @@ export type PackStatusInput = {
 type Reason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: "bucket" | "archives"; kind: "set_up_after" }
-  | { part: "bucket" | "archives" | "emergency"; kind: "removed" }
-  | { part: "emergency"; kind: "code_changed"; at: string }
-  | { part: "emergency"; kind: "code_missing" }
-  | { part: "emergency"; kind: "cannot_check" };
+  | { part: "bucket" | "archives" | "emergency"; kind: "set_up_after" }
+  | { part: "bucket" | "archives"; kind: "removed" };
 
 type Keep = {
   number: number;
@@ -58,7 +55,6 @@ export type PackStatus = {
     parts: {
       part: RecoveryPackPartRecord["part"];
       state: RecoveryPackPartRecord["state"];
-      codeIssuedAt?: string;
     }[];
   };
   upToDate: boolean;
@@ -103,17 +99,8 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       reasons.push({ part, kind: "key_changed", at: current.keyChangedAt });
     }
   }
-  const recorded = partOf(record, "emergency");
-  if (recorded?.state === "failed") return reasons;
-  const emergency = current.emergency;
-  if (recorded?.state === "included") {
-    if (!emergency?.open || emergency.codeIssuedAt !== recorded.codeIssuedAt) {
-      if (emergency == null || !later(emergency.asOf, record.madeAt.toISOString()))
-        reasons.push({ part: "emergency", kind: "cannot_check" });
-      else if (!emergency.open) reasons.push({ part: "emergency", kind: "removed" });
-      else reasons.push({ part: "emergency", kind: "code_changed", at: emergency.codeIssuedAt! });
-    }
-  } else if (emergency?.open) reasons.push({ part: "emergency", kind: "code_missing" });
+  if (current.cloudOpen === true && partOf(record, "emergency")?.state !== "included")
+    reasons.push({ part: "emergency", kind: "set_up_after" });
   return reasons;
 }
 
@@ -187,9 +174,21 @@ function keepList(input: PackStatusInput): Keep[] {
   return keep.sort((a, b) => a.number - b.number);
 }
 
+const holdersIn = (records: readonly RecoveryPackRecord[], numbers: readonly number[]) =>
+  records.filter((r) => numbers.includes(r.number));
+
+/** The pack to name as holding the current master key: the newest received one, else the newest. */
+export function namedMasterKeyPack(
+  records: readonly RecoveryPackRecord[],
+  masterKeyPacks: readonly number[],
+): number | null {
+  const holders = holdersIn(records, masterKeyPacks);
+  return (holders.find((r) => r.receivedAt !== null) ?? holders[0])?.number ?? null;
+}
+
 /**
- * The box keeps no copy of the key restore asks for, so a later pack, received or not, never hides
- * that the pack showing the current master key was not confirmed received.
+ * The box keeps no copy of the key restore asks for, so while no pack showing the current master
+ * key was confirmed received, a later pack, received or not, never hides the newest that showed it.
  */
 function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
   const view = (record: RecoveryPackRecord, holdsCurrentMasterKey: boolean) => ({
@@ -198,10 +197,10 @@ function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
     ...(record.madeBy === null ? { offeredAtSetup: true as const } : {}),
     ...(holdsCurrentMasterKey ? { holdsCurrentMasterKey: true as const } : {}),
   });
-  const holder = input.records.find(
-    (r) => r.receivedAt === null && r.number === input.masterKeyPack,
-  );
-  if (holder !== undefined) return view(holder, true);
+  const holders = holdersIn(input.records, input.masterKeyPacks);
+  const holder = holders[0];
+  if (holder !== undefined && holders.every((r) => r.receivedAt === null))
+    return view(holder, true);
   const newest = input.records[0];
   return newest !== undefined && newest.receivedAt === null ? view(newest, false) : null;
 }
@@ -209,7 +208,10 @@ function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
 export function packStatus(input: PackStatusInput): PackStatus {
   const latest = input.records[0];
   const reasons = latest === undefined ? [] : reasonsFor(latest, input.current);
-  const incomplete = latest?.parts.some((p) => p.state === "failed") ?? false;
+  // A failed `emergency` entry is the retired emergency page's; while Cloud is open, `reasonsFor`
+  // already says the pack lacks the Cloud QR code.
+  const incomplete =
+    latest?.parts.some((p) => p.state === "failed" && p.part !== "emergency") ?? false;
   return {
     latest:
       latest === undefined
@@ -219,11 +221,7 @@ export function packStatus(input: PackStatusInput): PackStatus {
             madeAt: latest.madeAt.toISOString(),
             madeByName: latest.madeByName,
             received: latest.receivedAt !== null,
-            parts: latest.parts.map(({ part, state, codeIssuedAt }) => ({
-              part,
-              state,
-              ...(codeIssuedAt === undefined ? {} : { codeIssuedAt }),
-            })),
+            parts: latest.parts.map(({ part, state }) => ({ part, state })),
           },
     upToDate:
       latest !== undefined && latest.receivedAt !== null && !incomplete && reasons.length === 0,

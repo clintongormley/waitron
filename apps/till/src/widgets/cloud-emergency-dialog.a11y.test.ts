@@ -12,15 +12,10 @@ afterEach(() => {
   setLocale(locale);
 });
 describe.each(["light", "dark"] as const)("Cloud emergency dialog (%s)", (theme) => {
-  it.each([false, true])("has no accessibility violations with roles %s", async (withRoles) => {
+  it("has no accessibility violations", async () => {
     const { host } = await mountWidget<TillCloudEmergencyDialog>(
       "till-cloud-emergency-dialog",
-      {
-        entrance: {
-          address: "https://emergency.example.test",
-          roles: withRoles ? [{ builtInKey: "admin", name: null }] : [],
-        },
-      },
+      { entrance: { address: "https://emergency.example.test" } },
       theme,
     );
     await expectNoA11yViolations(host);

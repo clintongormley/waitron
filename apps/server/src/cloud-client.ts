@@ -49,7 +49,6 @@ import {
   type CloudObservation,
 } from "./cloud-installation.js";
 import {
-  fetchEmergencyCode,
   fetchEmergencyDisplay,
   instant,
   validEmergencyAddress,
@@ -1113,17 +1112,6 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       return hints?.staffOrigin === staffOrigin && hints.open && hints.address !== null
         ? { address: hints.address }
         : null;
-    },
-    async emergencyCode(staffOrigin: string, signal?: AbortSignal) {
-      const state = await leaseState(),
-        registration = registrationOf(state);
-      const code = await fetchEmergencyCode(state, staffOrigin, {
-        signal,
-        onRefusal: recordRefusal,
-      });
-      if (!registration || registrationOf(await read()) !== registration)
-        throw new AppError("cloud.unavailable", {});
-      return code;
     },
     async emergency(
       staffOrigin: string,

@@ -2336,6 +2336,9 @@ describe("the recovery pack calls", () => {
   const MINIMAL_PDF =
     "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
 
+  /** The current master key, as typed for a copy of the pack. */
+  const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+
   it("makes a pack, handing back the PDF, its number and its time", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       packResponse(MINIMAL_PDF, {
@@ -2377,6 +2380,50 @@ describe("the recovery pack calls", () => {
     });
   });
 
+  it("prints a copy with the typed master key, sending only the locale and the key", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(MINIMAL_PDF, {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "5",
+        "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
+      }),
+    );
+
+    const made = await new DashboardApi("", fetchImpl).makeRecoveryPack({
+      locale: "en",
+      masterKey: KEY,
+    });
+
+    expect(made.number).toBe(5);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/recovery-pack", "POST", { locale: "en", masterKey: KEY }],
+    ]);
+  });
+
+  it("passes the box's wrong-key refusal through with the key's name", async () => {
+    const api = new DashboardApi(
+      "",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: "master_key.wrong",
+              params: { keyName: "2026-11-23 · QZJV" },
+            },
+          },
+          false,
+          403,
+        ),
+      ),
+    );
+
+    await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toMatchObject({
+      code: "master_key.wrong",
+      params: { keyName: "2026-11-23 · QZJV" },
+      status: 403,
+    });
+  });
+
   it("hands back no master key when the box made none", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       packResponse(MINIMAL_PDF, {
@@ -2387,7 +2434,7 @@ describe("the recovery pack calls", () => {
     );
     const made = await new DashboardApi("", fetchImpl).makeRecoveryPack({
       locale: "en",
-      newMasterKey: false,
+      masterKey: KEY,
     });
     expect(made).not.toHaveProperty("masterKey");
   });
@@ -2441,7 +2488,7 @@ describe("the recovery pack calls", () => {
     headers["X-Waitron-Recovery-Pack-Made-At"] = "2026-10-30T23:30:00.000Z";
     const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(body, headers)));
 
-    await expect(api.makeRecoveryPack({ locale: "en", newMasterKey: false })).rejects.toEqual({
+    await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toEqual({
       code: "recovery.pack_invalid",
     });
   });
@@ -2458,7 +2505,7 @@ describe("the recovery pack calls", () => {
     if (madeAt !== null) headers["X-Waitron-Recovery-Pack-Made-At"] = madeAt;
     const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(MINIMAL_PDF, headers)));
 
-    await expect(api.makeRecoveryPack({ locale: "en", newMasterKey: false })).rejects.toEqual({
+    await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toEqual({
       code: "recovery.pack_invalid",
     });
   });
@@ -2475,7 +2522,7 @@ describe("the recovery pack calls", () => {
       ),
     );
 
-    await expect(api.makeRecoveryPack({ locale: "en", newMasterKey: false })).rejects.toEqual({
+    await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toEqual({
       code: "recovery.pack_invalid",
     });
   });
@@ -2499,7 +2546,7 @@ describe("the recovery pack calls", () => {
 
       const made = await api.makeRecoveryPack({
         locale: "en",
-        newMasterKey: false,
+        masterKey: KEY,
       });
 
       expect(made.number).toBe(4);
@@ -2524,7 +2571,7 @@ describe("the recovery pack calls", () => {
   it("passes a refusal through with its code", async () => {
     const api = new DashboardApi("", vi.fn().mockResolvedValue(refusal("password.invalid", 401)));
 
-    await expect(api.makeRecoveryPack({ locale: "en", newMasterKey: false })).rejects.toEqual({
+    await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toEqual({
       code: "password.invalid",
       status: 401,
     });

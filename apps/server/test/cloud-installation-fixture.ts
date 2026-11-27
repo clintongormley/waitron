@@ -15,7 +15,6 @@ export async function installationFixture(
     environment?: "test" | "production";
     billing?: MachineHandler;
     emergency?: MachineHandler;
-    emergencyCode?: MachineHandler;
     staffCertificate?: MachineHandler;
     ownerRecovery?: MachineHandler;
     addressLookup?: MachineHandler;
@@ -85,10 +84,6 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("owner-recovery-") && options.ownerRecovery) {
       await options.ownerRecovery(values, saved, req, res, sent);
-      return;
-    }
-    if (values[2] === "emergency-hosting-code" && options.emergencyCode) {
-      await options.emergencyCode(values, saved, req, res, sent);
       return;
     }
     if (values[2] === "emergency-hosting-display") {

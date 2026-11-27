@@ -13,7 +13,6 @@ export const emergencyReply = (
     open: true,
     closedReason: null,
     address: "https://emergency.example.test/",
-    codeIssuedAt: "2026-11-01T09:00:00.000Z",
   },
   prices: { status: "unavailable", reason: "not_published" },
 });

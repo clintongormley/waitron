@@ -2,8 +2,7 @@ import { venueCredentials } from "@waitron/credentials";
 import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
-import { readSettings, readTaxpayer, roles, type Transaction } from "@waitron/db";
-import { authorityForRoles, holds, BUILT_IN_ROLE_KEYS } from "@waitron/identity";
+import { readSettings, readTaxpayer, type Transaction } from "@waitron/db";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
 import { cardReaders, readPaymentsSettings, resolveDeviceReaderId } from "@waitron/payments";
@@ -35,24 +34,7 @@ export async function readTillSetup(
 ) {
   const setup = await readSetupFields(tx, deps, device);
   const venueTheme = await readVenueThemeSource(tx);
-  const accessRoles = await tx.select().from(roles);
-  const emergencyRoles = accessRoles
-    .filter((role) => holds(authorityForRoles("", [role]), "node.manage"))
-    .sort((a, b) => {
-      const rank = (key: typeof a.builtInKey) =>
-        key === null ? BUILT_IN_ROLE_KEYS.length : BUILT_IN_ROLE_KEYS.indexOf(key);
-      const order = rank(a.builtInKey) - rank(b.builtInKey);
-      return (
-        order ||
-        ((a.nameFolded ?? "") < (b.nameFolded ?? "")
-          ? -1
-          : (a.nameFolded ?? "") > (b.nameFolded ?? "")
-            ? 1
-            : 0)
-      );
-    })
-    .map(({ builtInKey, name }) => ({ builtInKey, name }));
-  return { setup, venueTheme, emergencyRoles };
+  return { setup, venueTheme };
 }
 
 export type TillSetupRead = Awaited<ReturnType<typeof readTillSetup>>;
@@ -162,9 +144,7 @@ export function completeTillSetup(read: TillSetupRead, hint: { address: string }
   return {
     ...read.setup,
     themeHash: venueThemeAnswer(read.venueTheme).hash,
-    ...(hint === null
-      ? {}
-      : { cloudEmergency: { address: hint.address, roles: read.emergencyRoles } }),
+    ...(hint === null ? {} : { cloudEmergency: { address: hint.address } }),
   };
 }
 

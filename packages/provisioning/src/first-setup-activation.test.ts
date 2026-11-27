@@ -688,6 +688,7 @@ it("retains the caller's legacy key adapter for a module without the recovery-do
 
 it("publication records recovery pack 1, received, for the node it sets up", async () => {
   const f = await publicationFixture();
+  const { masterKeyName } = await f.runtime.keys.readStage(f.owner);
   await f.publish(f.state, f.checked);
   expect(await readRecoveryPacks(venue.db, f.checked.venue.nodeId)).toMatchObject([
     {
@@ -697,6 +698,7 @@ it("publication records recovery pack 1, received, for the node it sets up", asy
       parts: [
         { part: "bucket", state: "not-set-up" },
         { part: "archives", state: "not-set-up" },
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName },
       ],
     },
   ]);

@@ -740,10 +740,7 @@ describe("A768 the till follows the venue's setup revision", () => {
   });
 
   it("A1188 retains entrance facts on a failed refresh and removes them when settings close it", async () => {
-    const cloudEmergency = {
-      address: "https://emergency.example.test/",
-      roles: [{ builtInKey: "admin", name: null }],
-    };
+    const cloudEmergency = { address: "https://emergency.example.test/" };
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...noCourses, cloudEmergency }),
     });
@@ -759,10 +756,7 @@ describe("A768 the till follows the venue's setup revision", () => {
   });
 
   it("A1188 entrance facts belong to the server, surviving sign-out but not a server change", async () => {
-    const cloudEmergency = {
-      address: "https://emergency.example.test/",
-      roles: [{ builtInKey: "admin", name: null }],
-    };
+    const cloudEmergency = { address: "https://emergency.example.test/" };
     const { el, switchServer } = await mountWithRouter({
       getTill: vi.fn().mockResolvedValue({ ...noCourses, cloudEmergency }),
     });

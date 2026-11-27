@@ -718,7 +718,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "backup.recovery_key_missing" },
-    "This box has no backup key, which a spare needs. Use “Change the backup key” on the Recovery pack card under Backups, then choose Check again.",
+    "This box has no backup key, which a spare needs. Use “Change the backup key” on the Recovery pack card under Backups, or “Make a new master key” if that is the card's only choice, then choose Check again.",
   ],
   [
     "check",

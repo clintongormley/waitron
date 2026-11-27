@@ -779,20 +779,18 @@ export const en = {
   "cloud.billing_daily": "{price} per 30 days, charged by the day + {vat} VAT",
   "cloud.account": "Open Cloud account",
   "cloud.emergency": "Emergency start in Cloud",
-  "cloud.emergency_show_code": "Show code",
-  "cloud.emergency_code_unavailable":
-    "The emergency code could not be read. Showing it may not be available in Cloud yet. Open your Cloud account to check, or try again later.",
-  "cloud.emergency_hide_code": "Hide code",
-  "cloud.emergency_people": "Have permission and an authenticator",
-  "cloud.emergency_needs_authenticator": "Need to set up an authenticator first",
+  "cloud.emergency_first_step": "To start the venue in Cloud, open its Cloud address.",
+  "cloud.emergency_address": "Cloud address",
+  "cloud.emergency_people": "Authorised users:",
+  "cloud.emergency_needs_authenticator":
+    "The following users have permission but still need to set up two-factor authorisation:",
   "cloud.emergency_nobody": "Nobody",
   "cloud.emergency_people_unavailable":
     "Who can start could not be read. Reload this page to try again.",
   "cloud.emergency_permission":
-    "To see the code and who can start the venue, sign in with permission to manage the box.",
+    "To see who can start the venue, sign in with permission to manage the box.",
   "cloud.emergency_sign_in": "Sign in as an administrator",
-  "cloud.emergency_open":
-    "Cloud reports that emergency start is available. Cloud checks again before starting the venue.",
+  "cloud.emergency_open": "Cloud reports that emergency start is available.",
   "cloud.emergency_setting_off":
     "Emergency start is switched off. The Cloud account owner can switch it on in the Cloud account.",
   "cloud.emergency_level_inactive":
@@ -803,10 +801,8 @@ export const en = {
     "Cloud cannot start this venue yet. Check availability in the Cloud account.",
   "cloud.emergency_unavailable":
     "Emergency-start details are not available. Cloud may not provide emergency hosting for this venue yet. Open the Cloud account to check availability, or try again later.",
-  "cloud.emergency_stale":
-    "These details may have changed. Cloud checks again before starting the venue.",
+  "cloud.emergency_stale": "These details may have changed.",
   "cloud.emergency_checked": "Last checked",
-  "cloud.emergency_issued": "Current code issued",
   "cloud.emergency_daily": "About {amount} per day, excluding VAT ({vat})",
 
   "cloud.signup": "Create a Cloud account",
@@ -1686,9 +1682,11 @@ export const en = {
   "fresh_sign_in.profile_failed":
     "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
   "fresh_sign_in.retry": "Try again",
-  "recovery_pack_dialog.heading": "Make recovery pack",
-  "recovery_pack_dialog.intro": "The pack is made once, for this download; the box keeps no copy.",
-  "recovery_pack_dialog.make": "Make pack",
+  "recovery_pack_dialog.heading": "Print the recovery pack",
+  "recovery_pack_dialog.intro": "Type your master key to print a new copy of the recovery pack.",
+  "recovery_pack_dialog.make": "Print the recovery pack",
+  "recovery_pack_dialog.limited":
+    "Too many recovery requests are running or have arrived recently. Wait a minute and try again, or choose Cancel.",
   "recovery_pack_dialog.lost_new_key":
     "The box may have made a new master key that did not reach this browser. If it did, the only copy of your current master key is on a pack you do not have.",
   "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
@@ -1700,27 +1698,23 @@ export const en = {
     "Try again asks the box for a new pack. Stop closes this window and changes nothing.",
   "recovery_pack_dialog.try_again": "Try again",
   "recovery_pack_dialog.stop": "Stop",
-  "cloud.emergency_print_pack": "Print recovery pack",
-  "recovery_pack.reason.emergency_changed": "The emergency code changed on {date}.",
-  "recovery_pack.reason.emergency_missing":
-    "A person with permission to manage the box must make the pack to include the emergency code.",
-  "recovery_pack.reason.emergency_unknown":
-    "The emergency code could not be checked. Try again later.",
-  "recovery_pack.reason.emergency_removed": "Emergency start is closed.",
-  "recovery_pack.cannot_check":
-    "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
+  "cloud.emergency_print_pack": "Print the recovery pack",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro": "Keep the recovery pack somewhere safe, away from the box.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
   "recovery_pack.out_of_date": "Recovery pack {number}, made on {date}, is out of date.",
+  "recovery_pack.out_of_date_cloud":
+    "Recovery pack {number}, made on {date}, is out of date: it has no Waitron Cloud QR code.",
   "recovery_pack.incomplete":
-    "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
+    "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why.",
   "recovery_pack.offered_at_setup":
     "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new master key.",
   "recovery_pack.not_received":
-    "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
+    "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, print the recovery pack.",
+  "recovery_pack.not_received_no_master_key":
+    "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new master key.",
   "recovery_pack.master_key_not_received":
     "The current master key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
@@ -1730,7 +1724,11 @@ export const en = {
   "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
   "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
   "recovery_pack.reason.archives_removed": "Archives were turned off.",
-  "recovery_pack.make_new": "Make a new pack.",
+  "recovery_pack.reason.cloud_missing": "The pack has no Waitron Cloud QR code.",
+  "recovery_pack.make_new": "Print the recovery pack.",
+  "recovery_pack.make_new_master_key": "Make a new master key.",
+  "recovery_pack.make_new_once_fixed": "Print the recovery pack once the cause is fixed.",
+  "recovery_pack.make_new_master_key_once_fixed": "Make a new master key once the cause is fixed.",
   "recovery_pack.keep_backup_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
@@ -1754,7 +1752,7 @@ export const en = {
     "Saved, but the box could not load the new settings. Reload the page.",
   "backup_key_dialog.unconfirmed":
     "Backup key {number} is saved, but the box could not confirm that backups use it. Reload the page. If this comes back, stop changing backup settings here.",
-  "recovery_pack.make": "Make recovery pack",
+  "recovery_pack.make": "Print the recovery pack",
   "recovery_pack.ready":
     "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
   "recovery_pack.download": "Download PDF",
@@ -2444,7 +2442,7 @@ export const en = {
   "servers.join_waiting": "Now choose Join on the new box.",
   "servers.join_approved": "Added. The new box finishes joining while its join page is open.",
   "servers.join_recovery_key_missing":
-    "This box has no backup key, which a spare needs. Use “Change the backup key” on the Recovery pack card under Backups, then choose Check again.",
+    "This box has no backup key, which a spare needs. Use “Change the backup key” on the Recovery pack card under Backups, or “Make a new master key” if that is the card's only choice, then choose Check again.",
   "servers.join_module_config_invalid":
     "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
@@ -2758,7 +2756,7 @@ export const en = {
     "Use only unaccented letters, digits, spaces and basic keyboard symbols. A single quote (') cannot be used.",
   "stream.field.check": "Check this value.",
   "stream.error.recovery_key_too_short":
-    "The backup key this box holds is too short, so the bucket copy cannot use it. Use “Change the backup key” on the Recovery pack card above: the new key replaces the short one.",
+    "The backup key this box holds is too short, so the bucket copy cannot use it. Use “Change the backup key” on the Recovery pack card above: the new key replaces the short one. If the card offers only “Make a new master key”, use that instead.",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
   "stream.restart": "Start the copy again",
@@ -5649,35 +5647,31 @@ export const es: Record<StringKey, string> = {
   "cloud.billing_monthly": "{price} al mes + {vat} de IVA",
   "cloud.billing_daily": "{price} cada 30 días, cobrado por día + {vat} de IVA",
   "cloud.account": "Abrir la cuenta de Cloud",
-  "cloud.emergency": "Inicio de emergencia en Cloud",
-  "cloud.emergency_show_code": "Mostrar código",
-  "cloud.emergency_code_unavailable":
-    "No se pudo consultar el código de emergencia. Puede que Cloud aún no permita mostrarlo. Abre tu cuenta de Cloud para comprobarlo o inténtalo más tarde.",
-  "cloud.emergency_hide_code": "Ocultar código",
-  "cloud.emergency_people": "Tienen permiso y autenticador",
-  "cloud.emergency_needs_authenticator": "Necesitan configurar un autenticador primero",
+  "cloud.emergency": "Arranque de emergencia en Cloud",
+  "cloud.emergency_first_step": "Para iniciar el local en Cloud, abre su dirección de Cloud.",
+  "cloud.emergency_address": "Dirección de Cloud",
+  "cloud.emergency_people": "Usuarios autorizados:",
+  "cloud.emergency_needs_authenticator":
+    "Los siguientes usuarios tienen permiso, pero todavía tienen que configurar la verificación en dos pasos:",
   "cloud.emergency_nobody": "Nadie",
   "cloud.emergency_people_unavailable":
     "No se pudo consultar quién puede iniciar el local. Recarga esta página para volver a intentarlo.",
   "cloud.emergency_permission":
-    "Para ver el código y quién puede iniciar el local, inicia sesión con permiso para gestionar el servidor.",
+    "Para ver quién puede iniciar el local, inicia sesión con permiso para gestionar el servidor.",
   "cloud.emergency_sign_in": "Iniciar sesión como administrador",
-  "cloud.emergency_open":
-    "Cloud indica que el inicio de emergencia está disponible. Cloud lo comprueba de nuevo antes de iniciar el local.",
+  "cloud.emergency_open": "Cloud indica que el arranque de emergencia está disponible.",
   "cloud.emergency_setting_off":
-    "El inicio de emergencia está desactivado. El titular de la cuenta de Cloud puede activarlo en su cuenta.",
+    "El arranque de emergencia está desactivado. El titular de la cuenta de Cloud puede activarlo en su cuenta.",
   "cloud.emergency_level_inactive":
-    "El inicio de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
+    "El arranque de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
   "cloud.emergency_no_payment_method":
-    "El inicio de emergencia necesita un método de pago. El titular puede añadirlo en la cuenta de Cloud.",
+    "El arranque de emergencia necesita un método de pago. El titular puede añadirlo en la cuenta de Cloud.",
   "cloud.emergency_not_provisioned":
     "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
   "cloud.emergency_unavailable":
-    "Los datos del inicio de emergencia no están disponibles. Es posible que Cloud aún no ofrezca alojamiento de emergencia para este local. Consulta la disponibilidad en la cuenta de Cloud o vuelve a intentarlo más tarde.",
-  "cloud.emergency_stale":
-    "Estos datos pueden haber cambiado. Cloud los comprueba de nuevo antes de iniciar el local.",
+    "Los datos del arranque de emergencia no están disponibles. Es posible que Cloud aún no ofrezca alojamiento de emergencia para este local. Consulta la disponibilidad en la cuenta de Cloud o vuelve a intentarlo más tarde.",
+  "cloud.emergency_stale": "Estos datos pueden haber cambiado.",
   "cloud.emergency_checked": "Última consulta",
-  "cloud.emergency_issued": "Emisión del código actual",
   "cloud.emergency_daily": "Aproximadamente {amount} al día, sin IVA ({vat})",
 
   "cloud.signup": "Crear una cuenta de Cloud",
@@ -6573,10 +6567,12 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.profile_failed":
     "No se han podido leer tus datos de acceso, así que este formulario aún no puede pedirte que vuelvas a identificarte. Volver a intentarlo los lee otra vez.",
   "fresh_sign_in.retry": "Volver a intentarlo",
-  "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
+  "recovery_pack_dialog.heading": "Imprimir el paquete de recuperación",
   "recovery_pack_dialog.intro":
-    "El paquete se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
-  "recovery_pack_dialog.make": "Hacer paquete",
+    "Escribe tu clave maestra para imprimir una copia nueva del paquete de recuperación.",
+  "recovery_pack_dialog.make": "Imprimir el paquete de recuperación",
+  "recovery_pack_dialog.limited":
+    "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto e inténtalo de nuevo, o elige Cancelar.",
   "recovery_pack_dialog.lost_new_key":
     "Puede que el servidor haya creado una clave maestra nueva que no llegó a este navegador. Si fue así, la única copia de tu clave maestra actual está en un paquete que no tienes.",
   "recovery_pack_dialog.lost_new_key_named":
@@ -6589,15 +6585,7 @@ export const es: Record<StringKey, string> = {
     "Volver a intentarlo pide al servidor un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
   "recovery_pack_dialog.try_again": "Volver a intentarlo",
   "recovery_pack_dialog.stop": "Parar",
-  "cloud.emergency_print_pack": "Imprimir paquete de recuperación",
-  "recovery_pack.reason.emergency_changed": "El código de emergencia cambió el {date}.",
-  "recovery_pack.reason.emergency_missing":
-    "Una persona con permiso para gestionar el servidor debe hacer el paquete para incluir el código de emergencia.",
-  "recovery_pack.reason.emergency_unknown":
-    "No se pudo comprobar el código de emergencia. Vuelve a intentarlo más tarde.",
-  "recovery_pack.reason.emergency_removed": "El inicio de emergencia está cerrado.",
-  "recovery_pack.cannot_check":
-    "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",
+  "cloud.emergency_print_pack": "Imprimir el paquete de recuperación",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
     "Guarda el paquete de recuperación en un lugar seguro, lejos del servidor.",
@@ -6608,12 +6596,16 @@ export const es: Record<StringKey, string> = {
     "El paquete de recuperación {number}, hecho el {date}, está al día.",
   "recovery_pack.out_of_date":
     "El paquete de recuperación {number}, hecho el {date}, está desactualizado.",
+  "recovery_pack.out_of_date_cloud":
+    "El paquete de recuperación {number}, hecho el {date}, no está al día: no tiene el código QR de Waitron Cloud.",
   "recovery_pack.incomplete":
-    "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
+    "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué.",
   "recovery_pack.offered_at_setup":
     "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea una clave maestra nueva.",
   "recovery_pack.not_received":
-    "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
+    "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, imprime el paquete de recuperación.",
+  "recovery_pack.not_received_no_master_key":
+    "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, crea una clave maestra nueva.",
   "recovery_pack.master_key_not_received":
     "La clave maestra actual está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
@@ -6624,7 +6616,13 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.reason.archives_set_up": "Los archivos se configuraron después de este paquete.",
   "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
   "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
-  "recovery_pack.make_new": "Haz un paquete nuevo.",
+  "recovery_pack.reason.cloud_missing": "El paquete no tiene el código QR de Waitron Cloud.",
+  "recovery_pack.make_new": "Imprime el paquete de recuperación.",
+  "recovery_pack.make_new_master_key": "Crea una clave maestra nueva.",
+  "recovery_pack.make_new_once_fixed":
+    "Imprime el paquete de recuperación cuando se haya resuelto la causa.",
+  "recovery_pack.make_new_master_key_once_fixed":
+    "Crea una clave maestra nueva cuando se haya resuelto la causa.",
   "recovery_pack.keep_backup_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
@@ -6647,7 +6645,7 @@ export const es: Record<StringKey, string> = {
     "Guardada, pero el servidor no ha podido cargar los ajustes nuevos. Recarga la página.",
   "backup_key_dialog.unconfirmed":
     "La clave de las copias número {number} está guardada, pero el servidor no ha podido confirmar que las copias la usen. Recarga la página. Si vuelve a pasar, no sigas cambiando los ajustes de las copias aquí.",
-  "recovery_pack.make": "Hacer paquete de recuperación",
+  "recovery_pack.make": "Imprimir el paquete de recuperación",
   "recovery_pack.ready":
     "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",
   "recovery_pack.download": "Descargar PDF",
@@ -7349,7 +7347,7 @@ export const es: Record<StringKey, string> = {
   "servers.join_approved":
     "Añadido. El servidor nuevo termina de unirse mientras su página de unión está abierta.",
   "servers.join_recovery_key_missing":
-    "Este servidor no tiene clave de las copias, que el servidor de reserva necesita. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación de Copias de seguridad y vuelve a elegir Comprobar.",
+    "Este servidor no tiene clave de las copias, que el servidor de reserva necesita. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación de Copias de seguridad, o «Crear una clave maestra nueva» si es la única opción de la tarjeta, y vuelve a elegir Comprobar.",
   "servers.join_module_config_invalid":
     "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
@@ -7678,7 +7676,7 @@ export const es: Record<StringKey, string> = {
     "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado. No se puede usar la comilla simple (').",
   "stream.field.check": "Revisa este valor.",
   "stream.error.recovery_key_too_short":
-    "La clave de las copias de este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación, más arriba: la clave nueva sustituye a la corta.",
+    "La clave de las copias de este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación, más arriba: la clave nueva sustituye a la corta. Si la tarjeta solo ofrece «Crear una clave maestra nueva», usa esa opción.",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.restart": "Volver a iniciar la copia",

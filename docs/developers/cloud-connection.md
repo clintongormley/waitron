@@ -243,20 +243,20 @@ contract's.
 The box saves the emergency address, whether the entrance is open and the reply's `asOf`
 in `cloud/connection.json`, tied to its registration and management origin. Emergency refresh replaces them
 when the address or open state changes; lifecycle saves retain them. The saved time prevents an older reply replacing those
-facts after restart. Prices and the emergency code are not saved; the dashboard still needs
+facts after restart. Prices are not saved; the dashboard still needs
 Cloud after restart. The minute worker refreshes emergency facts separately from other services.
 
 Before serving tills, boot warms a memory projection through a local state read. Invalid optional
 hints are discarded. Invalid Cloud state leaves the projection empty and the till can still load.
 `/api/till` and `/api/menu-state` use that projection without reading the credential file or asking
-Cloud. An open entrance adds only its address and the roles holding `node.manage` to setup;
+Cloud. An open entrance adds only its address to setup;
 unchanged facts leave its revision unchanged. A loaded till keeps these values through failed
 reads and sign-out, and clears them when its server changes. The PIN-screen poll adds no setup read.
 
 A loaded till with these facts offers Cloud after 20 seconds of router-observed main silence,
 including without a spare. The separate precheck asks the main's known addresses and page origin
 for its node id, without changing routing or the spare check. The dialog closes on recovery,
-a server change or a cleared entrance. It names role labels, shows the address/QR and leaves
+a server change or a cleared entrance. It shows a QR code for the address and the master-key line, and leaves
 navigation to an explicit Open here. Cloud's display endpoint and hosting are still required
 before a real venue receives an open entrance; this path starts no venue itself.
 

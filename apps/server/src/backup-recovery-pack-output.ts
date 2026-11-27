@@ -1,73 +1,65 @@
 import {
   insertRecoveryPack,
+  nextMasterKeyNumber,
   nextRecoveryPackNumber,
-  readCurrentMasterKey,
   readVenue,
   withTransaction,
   type Database,
   type MasterKeyRecord,
   type RecoveryPackRecord,
-  type Transaction,
 } from "@waitron/db";
 import type { MadeMasterKey } from "@waitron/provisioning";
-import {
-  renderRecoveryPack,
-  type PackLocale,
-  type RecoveryPackFile,
-  type RenderPackInput,
-} from "@waitron/recovery-pack";
+import { renderRecoveryPack, type PackLocale, type RenderPackInput } from "@waitron/recovery-pack";
 import { isAppError } from "@waitron/shared";
 import { notSetUp, type BuiltPart } from "./backup-recovery-pack-parts.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import type { Logger } from "./logger.js";
 
-/** What a pack's attached file says of the master key. */
-export type PackMasterKey = Pick<
-  RecoveryPackFile,
-  "masterKey" | "masterKeyName" | "masterKeyHeldBy"
->;
+/** The master key a pack shows, spelled as `encodeMasterKeyCode` spells it, and its row number. */
+export type PackMasterKey = { masterKey: string; masterKeyName: string; number: number };
 
-/** A pack that shows a master key made with it. */
-export function shownMasterKey(made: MadeMasterKey): PackMasterKey {
-  return { masterKey: made.masterKey, masterKeyName: made.masterKeyName, masterKeyHeldBy: null };
+/**
+ * The pack numbers among `packs` that showed the `current` master key, newest first: those whose
+ * `master-key` entry names its row number and its name, and a pack written before packs had that entry when it
+ * was made at the key's instant, since every site that made a key and a pack saved the key with its
+ * pack's `madeAt`; when another such pack shares that instant neither is counted.
+ */
+export function masterKeyHolders(
+  current: MasterKeyRecord,
+  packs: readonly RecoveryPackRecord[],
+): number[] {
+  const entryOf = (pack: RecoveryPackRecord) => pack.parts.find((p) => p.part === "master-key");
+  const shown = packs.filter((pack) => {
+    const entry = entryOf(pack);
+    return entry?.masterKeyNumber === current.number && entry.masterKeyName === current.name;
+  });
+  const at = current.madeAt.getTime();
+  const atInstant = packs.filter(
+    (pack) => entryOf(pack) === undefined && pack.madeAt.getTime() === at,
+  );
+  const holders = atInstant.length === 1 ? [...shown, atInstant[0]!] : shown;
+  return holders.map((pack) => pack.number).sort((a, b) => b - a);
 }
 
 /**
- * A pack that does not show the master key names the current one, and the pack among `packs` (this
- * box's) that showed it: the one made at the same instant, since every site that makes a key and a
- * pack saves the key with its pack's `madeAt`. When another pack shares that instant nothing tells
- * which showed the key, so none is named.
+ * `cloudAddress` is given only by packs that could print the Cloud QR code: `null` records that this
+ * one did not.
  */
-export async function currentMasterKeyElsewhere(
-  tx: Transaction,
-  packs: readonly RecoveryPackRecord[],
-): Promise<PackMasterKey> {
-  return masterKeyElsewhere(await readCurrentMasterKey(tx), packs);
-}
-
-/** {@link currentMasterKeyElsewhere} for a current master key row already read. */
-export function masterKeyElsewhere(
-  current: MasterKeyRecord | null,
-  packs: readonly RecoveryPackRecord[],
-): PackMasterKey {
-  if (current === null) return { masterKey: null, masterKeyName: null, masterKeyHeldBy: null };
-  const at = current.madeAt.getTime();
-  const holders = packs.filter((pack) => pack.madeAt.getTime() === at);
-  return {
-    masterKey: null,
-    masterKeyName: current.name,
-    masterKeyHeldBy: holders.length === 1 ? holders[0]!.number : null,
-  };
-}
-
 export async function drawRecoveryPack(
-  input: Omit<RenderPackInput, "parts" | "file">,
-  details: { nodeId: string; madeBy: string | null; parts: BuiltPart[]; masterKey: PackMasterKey },
+  input: Omit<RenderPackInput, "parts" | "file" | "cloudAddress">,
+  details: {
+    nodeId: string;
+    madeBy: string | null;
+    parts: BuiltPart[];
+    masterKey: PackMasterKey;
+    cloudAddress?: string | null;
+  },
 ): Promise<{ pdf: Uint8Array<ArrayBuffer>; record: Omit<RecoveryPackRecord, "receivedAt"> }> {
   const { number, madeAt } = input.pack;
-  const { nodeId, madeBy, parts } = details;
+  const { nodeId, madeBy, parts, cloudAddress } = details;
   const pdf = await renderRecoveryPack({
     ...input,
+    ...(typeof cloudAddress === "string" ? { cloudAddress } : {}),
     parts: parts.map((part) => part.part),
     file: {
       kind: "waitron-recovery-pack",
@@ -77,13 +69,37 @@ export async function drawRecoveryPack(
       bucketCode: null,
       archiveCode: null,
       backupKey: null,
-      ...details.masterKey,
+      masterKey: details.masterKey.masterKey,
+      masterKeyName: details.masterKey.masterKeyName,
+      masterKeyHeldBy: null,
       ...Object.assign({}, ...parts.map((part) => part.file)),
     },
   });
   return {
     pdf,
-    record: { nodeId, number, madeAt: new Date(madeAt), madeBy, parts: parts.map((p) => p.record) },
+    record: {
+      nodeId,
+      number,
+      madeAt: new Date(madeAt),
+      madeBy,
+      parts: [
+        ...(cloudAddress === undefined
+          ? []
+          : [
+              {
+                part: "emergency" as const,
+                state: cloudAddress === null ? ("absent" as const) : ("included" as const),
+              },
+            ]),
+        ...parts.map((p) => p.record),
+        {
+          part: "master-key",
+          state: "included",
+          masterKeyNumber: details.masterKey.number,
+          masterKeyName: details.masterKey.masterKeyName,
+        },
+      ],
+    },
   };
 }
 
@@ -101,6 +117,9 @@ export async function makeMasterKeyRecoveryPack(
   return withTransaction(db, async (tx) => {
     const { name: venueName, timeZone } = await readVenue(tx);
     const number = await nextRecoveryPackNumber(tx, nodeId);
+    // The setup route writes the key's row after this pack, in a later transaction, so it takes
+    // this number.
+    const masterKeyNumber = await nextMasterKeyNumber(tx);
     const { madeAt } = shown;
     let output: Awaited<ReturnType<typeof drawRecoveryPack>>;
     try {
@@ -110,7 +129,7 @@ export async function makeMasterKeyRecoveryPack(
           nodeId,
           madeBy: null,
           parts: [notSetUp("bucket"), notSetUp("archives")],
-          masterKey: shownMasterKey(shown.made),
+          masterKey: { ...shown.made, number: masterKeyNumber },
         },
       );
     } catch (error) {

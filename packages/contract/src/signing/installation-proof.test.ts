@@ -231,25 +231,21 @@ it.each([1, "x".repeat(257)])("refuses an origin outside its wire type or size",
   );
 });
 
-it.each(["emergency-hosting-display", "emergency-hosting-code"] as const)(
-  "authenticates %s separately from billing and the other emergency action",
-  (action) => {
-    const value = { ...claims, action },
-      signed = proof(value);
-    expect(verifyMachine(signed, publicKey, claims.origin, action, now)).toEqual(value);
-    expect(() =>
-      verifyMachine(
-        signed,
-        publicKey,
-        claims.origin,
-        action === "emergency-hosting-display"
-          ? "emergency-hosting-code"
-          : "emergency-hosting-display",
-        now,
-      ),
-    ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
-  },
-);
+it("authenticates emergency-hosting-display separately from billing, and reads no code action", () => {
+  const value = { ...claims, action: "emergency-hosting-display" as const },
+    signed = proof(value);
+  expect(verifyMachine(signed, publicKey, claims.origin, "emergency-hosting-display", now)).toEqual(
+    value,
+  );
+  expect(() =>
+    verifyMachine(signed, publicKey, claims.origin, "billing-display", now),
+  ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
+  expect(() =>
+    readMachineClaims(
+      proof({ ...claims, action: "emergency-hosting-code" } as unknown as MachineClaims),
+    ),
+  ).toThrow(InstallationError);
+});
 
 it.each(["owner-recovery-read", "owner-recovery-approve", "owner-recovery-refuse"] as const)(
   "authenticates %s without allowing another recovery action",

@@ -3585,6 +3585,56 @@ async function recoveryPack(
   });
 }
 /**
+ * A pack PDF from before every pack showed the master key, which the renderer no longer draws: its
+ * attached file and the digest naming it, on an otherwise blank page.
+ */
+async function olderRecoveryPack(
+  file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const { buildRecoveryPackFile, PACK_ATTACHMENT } = await import("@waitron/recovery-pack");
+  const { default: PDFKit } = await import("pdfkit");
+  const madeAt = "2026-10-17T12:40:00.000Z";
+  const bytes = buildRecoveryPackFile({
+    kind: "waitron-recovery-pack",
+    version: 2,
+    number: 3,
+    madeAt,
+    bucketCode: null,
+    archiveCode: null,
+    backupKey: null,
+    masterKey: MASTER_KEY,
+    masterKeyName: selection.keyName,
+    masterKeyHeldBy: null,
+    ...file,
+  });
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
+  const digest = "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
+  const fontUrl = (await import("../assets/register-noto-sans.ttf?url")).default;
+  const font = new Uint8Array(await (await fetch(fontUrl)).arrayBuffer());
+  // The font is given so the document never loads PDFKit's built-in one from disk.
+  const pdf = new PDFKit({
+    info: { WaitronRecoveryDigest: digest } as never,
+    font: font as unknown as string,
+  });
+  const chunks: Uint8Array[] = [];
+  const done = new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
+    pdf.on("data", (chunk: Uint8Array) => chunks.push(chunk));
+    pdf.on("error", reject);
+    pdf.on("end", () => {
+      const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+      let offset = 0;
+      for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+      }
+      resolve(out);
+    });
+  });
+  pdf.file(bytes.buffer as never, { name: PACK_ATTACHMENT, type: "application/json" });
+  pdf.end();
+  return done;
+}
+/**
  * Chooses a PDF through the field's own file input, as the button's file dialog would, and waits
  * for the field to show what it read.
  */
@@ -3666,7 +3716,7 @@ it.each([
   ],
   [
     "a pack that does not hold the master key",
-    () => recoveryPack({ masterKey: null, masterKeyHeldBy: 1 }),
+    () => olderRecoveryPack({ masterKey: null, masterKeyHeldBy: 1 }),
     "This recovery pack does not hold the master key. It is on recovery pack 1: choose that pack, or type the key from it.",
   ],
   [

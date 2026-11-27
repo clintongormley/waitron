@@ -12,13 +12,18 @@ export type MasterKeyRecord = {
   madeBy: string | null;
 };
 
+/** The number {@link insertMasterKey} gives the next key written in this transaction. */
+export async function nextMasterKeyNumber(tx: Transaction): Promise<number> {
+  const [latest] = await tx.select({ number: max(masterKeys.number) }).from(masterKeys);
+  return (latest?.number ?? 0) + 1;
+}
+
 /** Writes the next master key and answers its number. */
 export async function insertMasterKey(
   tx: Transaction,
   row: Omit<MasterKeyRecord, "number">,
 ): Promise<number> {
-  const [latest] = await tx.select({ number: max(masterKeys.number) }).from(masterKeys);
-  const number = (latest?.number ?? 0) + 1;
+  const number = await nextMasterKeyNumber(tx);
   await tx.insert(masterKeys).values({ ...row, number });
   return number;
 }

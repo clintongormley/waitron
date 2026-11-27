@@ -1,5 +1,4 @@
 import { isIP } from "node:net";
-import { AppError } from "@waitron/shared";
 import {
   exactKeys,
   fetchCloudDisplay,
@@ -11,7 +10,6 @@ import {
 import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import type { OnRefusal } from "./cloud-translation.js";
-import "./errors.js";
 
 const closureReasons = [
   "setting_off",
@@ -23,102 +21,12 @@ type ClosureReason = (typeof closureReasons)[number];
 const isClosureReason = (value: unknown): value is ClosureReason =>
   closureReasons.some((reason) => reason === value);
 
-export interface EmergencyCode {
-  version: 1;
-  installationId: string;
-  venueId: string;
-  countryCode: "ES";
-  asOf: string;
-  code: string;
-  codeIssuedAt: string;
-  address: string;
-}
-export function readEmergencyCode(
-  value: unknown,
-  expected: Parameters<typeof readEmergencyDisplay>[1],
-  exchange?: { sentAt: number; receivedAt: number },
-): EmergencyCode {
-  exactKeys(value, [
-    "version",
-    "installationId",
-    "venueId",
-    "countryCode",
-    "asOf",
-    "code",
-    "codeIssuedAt",
-    "address",
-  ]);
-  if (
-    value.version !== 1 ||
-    value.installationId !== expected.installationId ||
-    value.venueId !== expected.venueId ||
-    value.countryCode !== "ES" ||
-    !instant(value.asOf) ||
-    (exchange &&
-      (Date.parse(value.asOf) < exchange.sentAt - 60000 ||
-        Date.parse(value.asOf) > exchange.receivedAt + 60000)) ||
-    typeof value.code !== "string" ||
-    !/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){5}$/.test(value.code) ||
-    !instant(value.codeIssuedAt) ||
-    value.codeIssuedAt > value.asOf ||
-    !validEmergencyAddress(value.address, expected.cloudOrigin, expected.staffOrigin)
-  )
-    unavailable();
-  return value as unknown as EmergencyCode;
-}
-export function fetchEmergencyCode(
-  state: SavedCloudState,
-  staffOrigin: string,
-  options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},
-): Promise<EmergencyCode> {
-  return fetchCloudDisplay(
-    state,
-    "emergency-hosting-code",
-    (value, exchange) =>
-      readEmergencyCode(
-        value,
-        {
-          installationId: state.view!.registration!.installationId,
-          venueId: state.view!.registration!.venueId,
-          cloudOrigin: state.origin,
-          staffOrigin,
-        },
-        exchange,
-      ),
-    {
-      ...options,
-      refusal: (status, value, retryAfter) => {
-        if (status === 403 && object(value) && value.error === "emergency_hosting_closed") {
-          exactKeys(value, ["error", "reason"]);
-          if (!isClosureReason(value.reason)) unavailable();
-          return new AppError("cloud.emergency_hosting_closed", { reason: value.reason });
-        }
-        const seconds =
-          retryAfter !== null && /^[1-9]\d*$/.test(retryAfter) ? Number(retryAfter) : NaN;
-        if (
-          status === 429 &&
-          Number.isSafeInteger(seconds) &&
-          object(value) &&
-          value.error === "rate_limited" &&
-          Object.keys(value).length === 1
-        )
-          return new AppError("cloud.emergency_code_rate_limited", { seconds });
-        return new AppError(
-          [400, 405, 413, 415].includes(status) ? "cloud.request_invalid" : "cloud.unavailable",
-          {},
-        );
-      },
-    },
-  );
-}
-
 export type EmergencyFacts =
   | {
       status: "ready";
       open: boolean;
       closedReason: null | ClosureReason;
       address: string | null;
-      codeIssuedAt: string | null;
     }
   | { status: "unavailable"; reason: "state_not_ready" };
 export interface EmergencyDisplay {
@@ -186,16 +94,13 @@ export function readEmergencyDisplay(
     exactKeys(e, ["status", "reason"]);
     if (e.reason !== "state_not_ready") unavailable();
   } else {
-    exactKeys(e, ["status", "open", "closedReason", "address", "codeIssuedAt"]);
+    exactKeys(e, ["status", "open", "closedReason", "address"]);
     if (
       e.status !== "ready" ||
       typeof e.open !== "boolean" ||
-      (e.open
-        ? e.closedReason !== null || e.address === null || e.codeIssuedAt === null
-        : !isClosureReason(e.closedReason)) ||
+      (e.open ? e.closedReason !== null || e.address === null : !isClosureReason(e.closedReason)) ||
       (e.address !== null &&
-        !validEmergencyAddress(e.address, expected.cloudOrigin, expected.staffOrigin)) ||
-      (e.codeIssuedAt !== null && (!instant(e.codeIssuedAt) || e.codeIssuedAt > value.asOf))
+        !validEmergencyAddress(e.address, expected.cloudOrigin, expected.staffOrigin))
     )
       unavailable();
   }

@@ -196,6 +196,13 @@ export function createFirstSetupNodeKeys(options: Options) {
             return;
           }
           const at = new Date();
+          const masterKeyNumber = await insertMasterKey(tx, {
+            name: stage.masterKeyName,
+            checkValue: stage.masterKeyCheckValue,
+            publicKey: Buffer.from(stage.masterKeyPublicKey, "base64"),
+            madeAt: at,
+            madeBy: null,
+          });
           await insertRecoveryPack(tx, {
             nodeId: stage.nodeId,
             number: 1,
@@ -204,17 +211,16 @@ export function createFirstSetupNodeKeys(options: Options) {
             parts: [
               { part: "bucket", state: "not-set-up" },
               { part: "archives", state: "not-set-up" },
+              {
+                part: "master-key",
+                state: "included",
+                masterKeyNumber,
+                masterKeyName: stage.masterKeyName,
+              },
             ],
           });
           // The first-hour step's Continue confirmed this pack reached the person.
           await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
-          await insertMasterKey(tx, {
-            name: stage.masterKeyName,
-            checkValue: stage.masterKeyCheckValue,
-            publicKey: Buffer.from(stage.masterKeyPublicKey, "base64"),
-            madeAt: at,
-            madeBy: null,
-          });
         });
       });
     },

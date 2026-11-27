@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
+import PDFKit from "pdfkit";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import {
   buildRecoveryPackFile,
+  PACK_ATTACHMENT,
   renderRecoveryPack,
   type RecoveryPackFile,
 } from "@waitron/recovery-pack";
@@ -23,8 +26,8 @@ export async function recoveryPackPdf(codes: {
     bucketCode: codes.bucketCode,
     archiveCode: codes.archiveCode,
     backupKey: null,
-    masterKey: codes.masterKey ?? null,
-    masterKeyName: codes.masterKeyName ?? null,
+    masterKey: codes.masterKey ?? encodeMasterKeyCode(new Uint8Array(16).fill(1)),
+    masterKeyName: codes.masterKeyName ?? "2026-10-29 · QZJV",
     masterKeyHeldBy: null,
   };
   buildRecoveryPackFile(file);
@@ -42,6 +45,39 @@ export async function recoveryPackPdf(codes: {
     parts: [],
     file,
   });
+}
+
+/**
+ * A pack PDF whose attached file holds no master key, as packs printed before every pack showed
+ * the key were. The renderer now refuses such a file, so this carrier attaches it directly.
+ */
+export async function packPdfWithoutMasterKey(): Promise<Uint8Array<ArrayBuffer>> {
+  const fileBytes = buildRecoveryPackFile({
+    kind: "waitron-recovery-pack",
+    version: 2,
+    number: 2,
+    madeAt: "2026-10-29T17:00:00.000Z",
+    bucketCode: null,
+    archiveCode: null,
+    backupKey: null,
+    masterKey: null,
+    masterKeyName: null,
+    masterKeyHeldBy: null,
+  });
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(fileBytes)));
+  const digest = "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
+  const pdf = new PDFKit();
+  Object.assign(pdf.info, { WaitronRecoveryDigest: digest });
+  const done = new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    pdf.on("data", (chunk: Buffer) => chunks.push(chunk));
+    pdf.on("error", reject);
+    pdf.on("end", () => resolve(new Uint8Array(Buffer.concat(chunks))));
+  });
+  pdf.text("Recovery pack");
+  pdf.file(Buffer.from(fileBytes), { name: PACK_ATTACHMENT, type: "application/json" });
+  pdf.end();
+  return done;
 }
 
 /**

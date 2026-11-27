@@ -32,26 +32,6 @@ it("names the deleted menu and menu list in the shared Spanish refusal", () => {
   expect(message).toContain("la lista de cartas");
 });
 
-it("explains each emergency closure and the code-read wait in both languages", () => {
-  for (const locale of ["en", "es"] as const) {
-    for (const reason of [
-      "setting_off",
-      "level_inactive",
-      "no_payment_method",
-      "not_provisioned",
-    ] as const)
-      expect(codeMessage("cloud.emergency_hosting_closed", locale, { reason })).toBe(
-        { en, es }[locale][`cloud.emergency_${reason}`],
-      );
-    expect(codeMessage("cloud.emergency_code_rate_limited", locale, { seconds: 17 })).toContain(
-      "17",
-    );
-    expect(codeMessage("cloud.emergency_code_rate_limited", locale, { seconds: 17 })).toContain(
-      locale === "en" ? "seconds" : "segundos",
-    );
-  }
-});
-
 it.each([
   ["en", "pair", "Pairing", "try again then"],
   ["es", "forget", "La desvinculación", "inténtalo de nuevo entonces"],
@@ -921,12 +901,27 @@ it("has English and Spanish copy for every refusal of Print invoice and Download
   }
 });
 
-it("says a box holds no backup key and points at Change the backup key on the recovery pack card", () => {
+it("says a box holds no backup key and points at Change the backup key, or Make a new master key when the card offers only that", () => {
   expect(codeMessage("backup.recovery_key_missing", "en")).toBe(
-    "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
+    "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one. If the card offers only “Make a new master key”, use that: it makes a backup key too.",
   );
   expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
-    "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
+    "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla. Si la tarjeta solo ofrece «Crear una clave maestra nueva», usa esa opción: también crea una clave de las copias.",
+  );
+});
+
+it("names Print the recovery pack and Make a new master key, never an old action, for a pack asked for insecurely or unreadably", () => {
+  expect(codeMessage("recovery.pack_connection_insecure", "en")).toBe(
+    "Open the dashboard at its secure address (https://…) to print the recovery pack or make a new master key.",
+  );
+  expect(codeMessage("recovery.pack_connection_insecure", "es")).toBe(
+    "Abre el panel en su dirección segura (https://…) para imprimir el paquete de recuperación o crear una clave maestra nueva.",
+  );
+  expect(codeMessage("recovery.pack_invalid", "en")).toBe(
+    "The box could not read the request for a recovery pack. This is a fault in Waitron. Reload the page and try again.",
+  );
+  expect(codeMessage("recovery.pack_invalid", "es")).toBe(
+    "El servidor no pudo leer la solicitud de un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a intentarlo.",
   );
 });
 
@@ -937,8 +932,11 @@ it("words the backup key change's refusals: a wrong master key when the venue ha
   expect(codeMessage("master_key.wrong", "es")).toBe(
     "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   );
+  expect(codeMessage("backup.recovery_key_too_short", "en")).toBe(
+    "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it. If the card offers only “Make a new master key”, use that: it replaces the backup key too.",
+  );
   expect(codeMessage("backup.recovery_key_too_short", "es")).toBe(
-    "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
+    "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla. Si la tarjeta solo ofrece «Crear una clave maestra nueva», usa esa opción: también sustituye la clave de las copias.",
   );
 });
 

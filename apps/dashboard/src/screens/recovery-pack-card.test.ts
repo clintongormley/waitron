@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import type { WtDialog } from "@waitron/ui";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import type { WtDialog, WtMasterKeyInput } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import type { OwnProfile } from "../api/account-api.js";
 import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { fill, setLocale, t } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import type { RecoveryPackDialog } from "../widgets/recovery-pack-dialog.js";
 import type { RecoveryPackCard } from "./recovery-pack-card.js";
@@ -34,7 +36,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
-    masterKey: null,
+    masterKey: { name: "2026-09-02 · QZJV", pack: null },
     keepOldPackUntil: "2026-11-11T12:00:00.000Z",
     timeZone: "Europe/Madrid",
     backupKey: BACKUP_KEY,
@@ -225,6 +227,24 @@ const row = (el: RecoveryPackCard, name: string) =>
 const dialogOf = (el: RecoveryPackCard) =>
   el.shadowRoot!.querySelector<RecoveryPackDialog>("dashboard-recovery-pack-dialog")!;
 
+/** Types a whole master key into the Print dialog's field, as a person does. */
+async function typeKey(dialog: RecoveryPackDialog): Promise<void> {
+  const field = dialog.shadowRoot!.querySelector<WtMasterKeyInput>("wt-master-key-input")!;
+  const input = field.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-input",
+  )!;
+  await input.updateComplete;
+  input.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: encodeMasterKeyCode(new Uint8Array(16).fill(7)) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await field.updateComplete;
+  await dialog.updateComplete;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -301,7 +321,11 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
   it("says the last pack is incomplete", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.incomplete));
-    expect(line(el)).toBe(fill("recovery_pack.incomplete", { number: "3", date: day.made }));
+    expect(line(el)).toBe(
+      `${fill("recovery_pack.incomplete", { number: "3", date: day.made })} ${t(
+        "recovery_pack.make_new_once_fixed",
+      )}`,
+    );
   });
 
   it("calmly points back to the pack offered at the end of setup", async () => {
@@ -702,6 +726,7 @@ describe("making a pack", () => {
     const wt = dialog.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => wt.open).toBe(true);
     await dialog.updateComplete;
+    await typeKey(dialog);
     const make = () =>
       dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-pack]")!.click();
     const cancel = () =>
@@ -724,7 +749,7 @@ describe("making a pack", () => {
     expect(show).toHaveBeenCalledWith(STATES["up to date"], "master-key");
   });
 
-  it("offers Make a new master key beside Make pack", async () => {
+  it("offers Make a new master key beside Print the recovery pack", async () => {
     const el = await mount(stubApi(status()));
     expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
@@ -1316,34 +1341,192 @@ it("Change the backup key opens the dialog on the next key, and a change reads t
   await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
 });
 
-it("does not call an unknown emergency code out of date or ask for another pack", async () => {
-  const el = await mount(
-    stubApi(status({ latest: latest(), reasons: [{ part: "emergency", kind: "cannot_check" }] })),
-  );
-  expect(line(el)).toContain(
-    fill("recovery_pack.cannot_check", { number: "3", date: DAYS["en-GB"].made }),
-  );
-  expect(line(el)).not.toContain(t("recovery_pack.make_new"));
-});
-
-it.each(["en-GB", "es-ES"] as const)(
-  "explains changed and missing emergency codes (%s)",
-  async (locale) => {
+it.each([
+  [
+    "en-GB",
+    "Recovery pack 3, made on 12 October, is out of date: it has no Waitron Cloud QR code. Print the recovery pack.",
+  ],
+  [
+    "es-ES",
+    "El paquete de recuperación 3, hecho el 12 de octubre, no está al día: no tiene el código QR de Waitron Cloud. Imprime el paquete de recuperación.",
+  ],
+] as const)(
+  "a pack without the Cloud QR code is out of date once Cloud is open, in the plan's words (%s)",
+  async (locale, words) => {
     setLocale(locale);
-    for (const reason of [
-      { part: "emergency", kind: "code_changed", at: MADE_AT },
-      { part: "emergency", kind: "code_missing" },
-    ] as const) {
-      const el = await mount(stubApi(status({ latest: latest(), reasons: [reason] })));
-      expect(line(el)).toContain(
-        reason.kind === "code_changed"
-          ? fill("recovery_pack.reason.emergency_changed", { date: DAYS[locale].made })
-          : t("recovery_pack.reason.emergency_missing"),
-      );
-      expect(line(el)).toContain(t("recovery_pack.make_new"));
-    }
+    const el = await mount(
+      stubApi(status({ latest: latest(), reasons: [{ part: "emergency", kind: "set_up_after" }] })),
+    );
+    expect(line(el)).toBe(words);
   },
 );
+
+const KEY_CHANGED: RecoveryPackStatus["reasons"] = [
+  { part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
+];
+const FAILED_PART = latest({
+  parts: [
+    { part: "bucket", state: "included" },
+    { part: "archives", state: "failed" },
+  ],
+});
+
+it.each([
+  [
+    "en-GB",
+    {
+      outOfDate:
+        "Recovery pack 3, made on 12 October, is out of date. The backup key changed on 20 October. Make a new master key.",
+      incomplete:
+        "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. Make a new master key once the cause is fixed.",
+      notReceived:
+        "Recovery pack 4, made on 12 October: the box was never told it arrived. If you do not have it, make a new master key.",
+    },
+  ],
+  [
+    "es-ES",
+    {
+      outOfDate:
+        "El paquete de recuperación 3, hecho el 12 de octubre, está desactualizado. La clave de las copias cambió el 20 de octubre. Crea una clave maestra nueva.",
+      incomplete:
+        "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Crea una clave maestra nueva cuando se haya resuelto la causa.",
+      notReceived:
+        "El paquete de recuperación 4, hecho el 12 de octubre: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, crea una clave maestra nueva.",
+    },
+  ],
+] as const)(
+  "with no master key the status line sends the person to Make a new master key, the card's only button (%s)",
+  async (locale, sentences) => {
+    setLocale(locale);
+    const outOfDate = await mount(
+      stubApi(status({ latest: latest(), reasons: KEY_CHANGED, masterKey: null })),
+    );
+    expect(line(outOfDate)).toBe(sentences.outOfDate);
+    const incomplete = await mount(
+      stubApi(status({ latest: FAILED_PART, incomplete: true, masterKey: null })),
+    );
+    expect(line(incomplete)).toBe(sentences.incomplete);
+    const notReceived = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4, received: false }),
+          unreceived: { number: 4, madeAt: MADE_AT },
+          masterKey: null,
+        }),
+      ),
+    );
+    expect(line(notReceived)).toBe(sentences.notReceived);
+  },
+);
+
+it.each([
+  [
+    "en-GB",
+    {
+      incomplete:
+        "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. Print the recovery pack once the cause is fixed.",
+      notReceived:
+        "Recovery pack 4, made on 12 October: the box was never told it arrived. If you do not have it, print the recovery pack.",
+    },
+  ],
+  [
+    "es-ES",
+    {
+      incomplete:
+        "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Imprime el paquete de recuperación cuando se haya resuelto la causa.",
+      notReceived:
+        "El paquete de recuperación 4, hecho el 12 de octubre: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, imprime el paquete de recuperación.",
+    },
+  ],
+] as const)(
+  "with a master key the incomplete and unreceived lines name Print the recovery pack (%s)",
+  async (locale, sentences) => {
+    setLocale(locale);
+    const incomplete = await mount(stubApi(status({ latest: FAILED_PART, incomplete: true })));
+    expect(line(incomplete)).toBe(sentences.incomplete);
+    const notReceived = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4, received: false }),
+          unreceived: { number: 4, madeAt: MADE_AT },
+        }),
+      ),
+    );
+    expect(line(notReceived)).toBe(sentences.notReceived);
+  },
+);
+
+it.each([
+  [
+    "en-GB",
+    "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. The backup key changed on 20 October. The pack has no Waitron Cloud QR code. Print the recovery pack once the cause is fixed.",
+  ],
+  [
+    "es-ES",
+    "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. La clave de las copias cambió el 20 de octubre. El paquete no tiene el código QR de Waitron Cloud. Imprime el paquete de recuperación cuando se haya resuelto la causa.",
+  ],
+] as const)(
+  "an incomplete pack's line lists the missing Cloud QR code with its other reasons (%s)",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: FAILED_PART,
+          incomplete: true,
+          reasons: [...KEY_CHANGED, { part: "emergency", kind: "set_up_after" }],
+        }),
+      ),
+    );
+    expect(line(el)).toBe(sentence);
+  },
+);
+
+it.each([
+  ["en-GB", "Print the recovery pack"],
+  ["es-ES", "Imprimir el paquete de recuperación"],
+] as const)("the card's button reads Print the recovery pack (%s)", async (locale, words) => {
+  setLocale(locale);
+  const el = await mount(stubApi(STATES["up to date"]));
+  expect(
+    el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")?.textContent?.trim(),
+  ).toBe(words);
+});
+
+it("with no master key the card offers only Make a new master key", async () => {
+  const el = await mount(stubApi(status({ latest: latest(), masterKey: null })));
+  const buttons = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement & { variant: string }>(".actions wt-button"),
+  ];
+  expect(buttons.map((b) => b.dataset.test)).toEqual(["make-master-key"]);
+  expect(buttons[0]!.variant).toBe("primary");
+});
+
+it("the linked Print opens Make a new master key when the venue has no master key", async () => {
+  const value = status({ latest: latest(), masterKey: null });
+  const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+    api: stubApi(value) as unknown as DashboardApi,
+    canManage: true,
+    openRequested: true,
+  });
+  const dialog = dialogOf(el);
+  await expect.poll(() => dialog.isOpen).toBe(true);
+  await dialog.updateComplete;
+  expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+    t("master_key_dialog.heading"),
+  );
+});
+
+it.each([
+  ["en", en],
+  ["es", es],
+] as const)("no card string mentions an emergency code (%s)", (_locale, table) => {
+  const card = Object.entries(table).filter(([key]) => key.startsWith("recovery_pack."));
+  expect(card.length).toBeGreaterThan(0);
+  expect(
+    card.filter(([, text]) => /emergenc|could not be checked|no se pudo comprobar/i.test(text)),
+  ).toEqual([]);
+});
 
 it("waits for the status before opening the linked maker", async () => {
   const value = status({ latest: latest() });
@@ -1399,10 +1582,10 @@ it("opens the linked maker after the initial status read fails", async () => {
 it.each([
   ...Object.entries(STATES),
   [
-    "an emergency code printed",
+    "the Cloud QR code printed",
     status({
       latest: latest({
-        parts: [...PARTS, { part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
+        parts: [...PARTS, { part: "emergency", state: "included" }],
       }),
       upToDate: true,
     }),

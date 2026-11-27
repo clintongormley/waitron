@@ -2,7 +2,12 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { triggerRaised } from "./constraint-target.js";
 import { liveBackupQuery } from "./live-backup-query.js";
-import { insertMasterKey, readCurrentMasterKey, readCurrentMasterKeyCheck } from "./master-keys.js";
+import {
+  insertMasterKey,
+  nextMasterKeyNumber,
+  readCurrentMasterKey,
+  readCurrentMasterKeyCheck,
+} from "./master-keys.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { masterKeys } from "./schema/master-keys.js";
 import { FOREIGN_KEY_VIOLATION } from "./sql-state.js";
@@ -31,6 +36,13 @@ const insert = (row: ReturnType<typeof key>) =>
 describe("master keys", () => {
   it("has none before the first is written", async () => {
     expect(await readCurrentMasterKey(suite.db)).toBeNull();
+  });
+
+  it("names the number the next key written will take", async () => {
+    expect(await withTransaction(suite.db, (tx) => nextMasterKeyNumber(tx))).toBe(1);
+    await insert(key(1));
+    await insert(key(2));
+    expect(await withTransaction(suite.db, (tx) => nextMasterKeyNumber(tx))).toBe(3);
   });
 
   it("numbers keys from 1 and reads back what was written, public key bytes included", async () => {

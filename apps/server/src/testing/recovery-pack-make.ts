@@ -104,10 +104,13 @@ export function packRequests(
   }
   return {
     post,
+    /** `true` makes a new master key; a string prints with it as the master key. */
     make: (
-      newMasterKey = false,
+      key: true | string,
       extra: PackPostOptions = {},
-      body: unknown = { locale: "en", newMasterKey },
+      body: unknown = key === true
+        ? { locale: "en", newMasterKey: true }
+        : { locale: "en", masterKey: key },
     ) => post("/api/backup/recovery-pack", body, extra),
     received: (number: number, extra: PackPostOptions = {}) =>
       post(`/api/backup/recovery-pack/${number}/received`, {}, extra),

@@ -15,7 +15,12 @@ import "../widgets/backup-key-dialog.js";
 import { keepDate, packDate, withStrong } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
-type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" | "code_changed" }>;
+/** The Cloud reason is worded into the out-of-date sentence itself. */
+type CloudReason = Extract<RecoveryPackReason, { part: "emergency" }>;
+type Listed = Exclude<RecoveryPackReason, CloudReason>;
+type Worded = Exclude<Listed, { kind: "key_changed" }>;
+
+const isCloud = (reason: RecoveryPackReason): reason is CloudReason => reason.part === "emergency";
 
 const REASON_WORDS: {
   [K in Worded["kind"]]: Record<Extract<Worded, { kind: K }>["part"], StringKey>;
@@ -31,10 +36,7 @@ const REASON_WORDS: {
   removed: {
     bucket: "recovery_pack.reason.bucket_removed",
     archives: "recovery_pack.reason.archives_removed",
-    emergency: "recovery_pack.reason.emergency_removed",
   },
-  code_missing: { emergency: "recovery_pack.reason.emergency_missing" },
-  cannot_check: { emergency: "recovery_pack.reason.emergency_unknown" },
 };
 
 function reasonWords(reason: Worded): StringKey {
@@ -45,23 +47,14 @@ function reasonWords(reason: Worded): StringKey {
       return REASON_WORDS.set_up_after[reason.part];
     case "removed":
       return REASON_WORDS.removed[reason.part];
-    case "code_missing":
-      return REASON_WORDS.code_missing.emergency;
-    case "cannot_check":
-      return REASON_WORDS.cannot_check.emergency;
   }
 }
 
 /** Each reason's sentence once: the bucket copy and the archives share one recovery key. */
-function reasonSentences(reasons: Status["reasons"], date: (iso: string) => string): string[] {
+function reasonSentences(reasons: Listed[], date: (iso: string) => string): string[] {
   const sentences = reasons.map((reason) =>
-    reason.kind === "key_changed" || reason.kind === "code_changed"
-      ? fill(
-          reason.kind === "key_changed"
-            ? "recovery_pack.reason.key_changed"
-            : "recovery_pack.reason.emergency_changed",
-          { date: date(reason.at) },
-        )
+    reason.kind === "key_changed"
+      ? fill("recovery_pack.reason.key_changed", { date: date(reason.at) })
       : t(reasonWords(reason)),
   );
   return [...new Set(sentences)];
@@ -280,8 +273,17 @@ export class RecoveryPackCard extends LitElement {
   }
 
   #make(): void {
+    if (this.#noMasterKey) {
+      this.#makeMasterKey();
+      return;
+    }
     this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
     this.dialog?.show(this.failed ? null : this.status, "pack");
+  }
+
+  /** Known only once a status has loaded: with no master key there is nothing to print a copy with. */
+  get #noMasterKey(): boolean {
+    return this.status !== null && !this.failed && this.status.masterKey === null;
   }
 
   /** Offered only once a status has loaded: the dialog's keep date comes from that status. */
@@ -329,7 +331,17 @@ export class RecoveryPackCard extends LitElement {
             : nothing
         }
         ${
-          this.status !== null && !this.failed
+          this.#noMasterKey
+            ? html`<wt-button
+                data-test="make-master-key"
+                variant="primary"
+                @click=${() => this.#makeMasterKey()}
+                >${t("recovery_pack.make_master_key")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          this.status !== null && !this.failed && !this.#noMasterKey
             ? html`<wt-button
                   data-test="change-backup-key"
                   variant="secondary"
@@ -343,9 +355,16 @@ export class RecoveryPackCard extends LitElement {
                 >`
             : nothing
         }
-        <wt-button data-test="make-recovery-pack" variant="primary" @click=${() => this.#make()}
-          >${t("recovery_pack.make")}</wt-button
-        >
+        ${
+          this.#noMasterKey
+            ? nothing
+            : html`<wt-button
+                data-test="make-recovery-pack"
+                variant="primary"
+                @click=${() => this.#make()}
+                >${t("recovery_pack.make")}</wt-button
+              >`
+        }
       </div>
       ${this.#made()}
       <dashboard-recovery-pack-dialog
@@ -368,32 +387,40 @@ export class RecoveryPackCard extends LitElement {
     const offered = holder?.offeredAtSetup ? holder : null;
     const lines: (string | TemplateResult)[] = [];
     let warn = true;
+    const noMasterKey = status.masterKey === null;
     if (latest === null) {
       lines.push(t("recovery_pack.none"));
     } else if (holder === null && !latest.received) {
       lines.push(
-        fill("recovery_pack.not_received", {
-          number: String(latest.number),
-          date: date(latest.madeAt),
-        }),
+        fill(
+          noMasterKey ? "recovery_pack.not_received_no_master_key" : "recovery_pack.not_received",
+          { number: String(latest.number), date: date(latest.madeAt) },
+        ),
       );
     } else if (latest.received || offered?.number === latest.number) {
       const pack = { number: String(latest.number), date: date(latest.madeAt) };
-      const reasons = reasonSentences(status.reasons, date);
+      const listed = status.reasons.filter((reason): reason is Listed => !isCloud(reason));
+      const cloud = listed.length < status.reasons.length;
+      const reasons = reasonSentences(listed, date);
       if (status.incomplete) {
+        const fixed = noMasterKey
+          ? "recovery_pack.make_new_master_key_once_fixed"
+          : "recovery_pack.make_new_once_fixed";
         lines.push(
-          html`<strong>${fill("recovery_pack.incomplete", pack)}</strong> ${reasons.join(" ")}`,
-        );
-      } else if (
-        status.reasons.length > 0 &&
-        status.reasons.every((reason) => reason.kind === "cannot_check")
-      ) {
-        lines.push(fill("recovery_pack.cannot_check", pack));
-      } else if ((latest.received && !status.upToDate) || reasons.length > 0) {
-        lines.push(
-          html`<strong>${fill("recovery_pack.out_of_date", pack)}</strong> ${[
+          html`<strong>${fill("recovery_pack.incomplete", pack)}</strong> ${[
               ...reasons,
-              t("recovery_pack.make_new"),
+              ...(cloud ? [t("recovery_pack.reason.cloud_missing")] : []),
+              t(fixed),
+            ].join(" ")}`,
+        );
+      } else if ((latest.received && !status.upToDate) || reasons.length > 0 || cloud) {
+        lines.push(
+          html`<strong
+              >${fill(cloud ? "recovery_pack.out_of_date_cloud" : "recovery_pack.out_of_date", pack)}</strong
+            >
+            ${[
+              ...reasons,
+              t(noMasterKey ? "recovery_pack.make_new_master_key" : "recovery_pack.make_new"),
             ].join(" ")}`,
         );
       } else if (holder === null) {

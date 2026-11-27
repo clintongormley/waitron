@@ -52,15 +52,10 @@ const STATES: Record<string, RecoveryPackStatus> = {
     keep: [{ number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" }],
     backupsUseOlderKey: true,
   },
-  "emergency unknown": {
+  "no Cloud QR code": {
     ...BASE,
     latest: LATEST,
-    reasons: [{ part: "emergency", kind: "cannot_check" }],
-  },
-  "emergency missing": {
-    ...BASE,
-    latest: LATEST,
-    reasons: [{ part: "emergency", kind: "code_missing" }],
+    reasons: [{ part: "emergency", kind: "set_up_after" }],
   },
   incomplete: {
     ...BASE,

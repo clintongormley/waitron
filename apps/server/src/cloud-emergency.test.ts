@@ -35,12 +35,21 @@ it("reads open facts and each closed shape without treating unavailable prices a
   ]) {
     const closed = {
       ...value,
-      emergency: { status: "ready", open: false, closedReason, address: null, codeIssuedAt: null },
+      emergency: { status: "ready", open: false, closedReason, address: null },
     };
     expect(readEmergencyDisplay(closed, expected)).toEqual(closed);
   }
   const unavailable = { ...value, emergency: { status: "unavailable", reason: "state_not_ready" } };
   expect(readEmergencyDisplay(unavailable, expected)).toEqual(unavailable);
+});
+it("the display refuses a reply carrying codeIssuedAt", () => {
+  const open = reply().emergency;
+  const closed = { status: "ready", open: false, closedReason: "setting_off", address: null };
+  for (const emergency of [open, closed])
+    for (const codeIssuedAt of [null, "2026-11-01T09:00:00.000Z"])
+      expect(() =>
+        readEmergencyDisplay({ ...reply(), emergency: { ...emergency, codeIssuedAt } }, expected),
+      ).toThrowError(expect.objectContaining({ code: "cloud.unavailable" }));
 });
 it("validates published prices without inventing their calendar day", () => {
   const value = {
@@ -80,9 +89,6 @@ it.each([
     { open: false },
     { open: "true" },
     { address: null },
-    { codeIssuedAt: null },
-    { codeIssuedAt: "2026-11-11T12:00:00.000Z" },
-    { codeIssuedAt: "invalid" },
     { extra: true },
   ].map((patch) => ({ emergency: { ...reply().emergency, ...patch } })),
 ])("refuses inconsistent or non-closed facts %j", (patch) => {
@@ -133,10 +139,6 @@ it.each([
   [
     "emergency-hosting-display",
     "ZlI6sjLzNukjrGYE7dhEfxRaqgpNKTiUTYKRbmfVwv3uOx_PITz9MAXiCTB6od077fAja270f2mqtJoCKjTcDA",
-  ],
-  [
-    "emergency-hosting-code",
-    "nH8zlNQI9NrZASWbw607w-fa6hn6PJfLjI5EAoK_uvFHk4TM82Q8jqdSiUBRocJ--TN2fmBxmCwpjWjH7bXKDA",
   ],
 ] as const)("matches Cloud 417aa6f's fixed %s primitive signature", (action, signature) => {
   const privateKey = Buffer.concat([

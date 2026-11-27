@@ -57,11 +57,25 @@ describe("part failure words", () => {
     expect(es).not.toMatch(/vuelve a guardarlos/);
   });
 
+  it.each(["en", "es"] as const)(
+    "names the card's Print the recovery pack, never the old make-a-new-pack action, in every %s to-do",
+    (locale) => {
+      const action = { en: "print the recovery pack", es: "imprime el paquete de recuperación" }[
+        locale
+      ];
+      for (const code of CODES) {
+        const { todo } = partFailure(locale, code);
+        expect(todo.toLowerCase(), code).toContain(action);
+        expect(todo, code).not.toMatch(/new pack|paquete nuevo/i);
+      }
+    },
+  );
+
   it("answers the general wording for any other code", () => {
     const general = partFailure("en", "anything.else");
     expect(general).toEqual({
       what: "This part could not be read when this pack was made.",
-      todo: "Check Backups and make a new pack.",
+      todo: "Check Backups and print the recovery pack.",
     });
     expect(partFailure("en", "sif.allocation_invalid")).toEqual(general);
     expect(partFailure("en", "recovery.pack_invalid")).toEqual(general);

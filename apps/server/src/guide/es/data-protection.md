@@ -471,13 +471,10 @@ configuración para poner en marcha otro local.
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase.
-  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior que
-  también necesites. Conserva ese paquete y los paquetes de las copias anteriores que puedas
+  Conserva los paquetes de las copias anteriores que puedas
   necesitar. Guarda cada paquete de recuperación bajo llave, fuera del servidor.
 
-El paquete de recuperación también puede contener la dirección y el código de emergencia para una copia bloqueada en Cloud. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Inicio de emergencia en Cloud](servers.md#cloud-emergency).
-
-Si **Copias de seguridad** indica que el código de emergencia ha cambiado, haz un paquete nuevo. Si falta el código, pide a alguien con permiso para gestionar el servidor que lo haga.
+Cuando el arranque de emergencia en Cloud está disponible, el paquete de recuperación también contiene un código QR de la dirección de Cloud del local. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Arranque de emergencia en Cloud](servers.md#cloud-emergency).
 
 ## Si se pierden o se exponen datos personales {#breach}
 
@@ -603,7 +600,7 @@ dos pasos. Waitron no permite **Restablecer acceso** para el único administrado
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
-**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración contiene
+**Un paquete de recuperación perdido.** Todos los paquetes de recuperación contienen
 la clave maestra. Una recuperación necesita la clave maestra junto con
 el acceso a una copia; para sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia en el bucket contiene la clave de acceso y el
@@ -620,10 +617,8 @@ e introduce las claves nuevas. Las copias programadas en un bucket
 conservan sus propias claves, que **Cambiar de bucket** no cambia: si usaban las claves antiguas,
 elige también **Cambiar el destino o la programación**, escribe las claves nuevas en **ID de la
 clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Después, en la tarjeta
-**Paquete de recuperación**, elige **Cambiar la clave de las copias** para que las copias nuevas usen
-una clave que esa persona no tiene; si también puede tener el paquete de recuperación con la clave
-maestra, elige en su lugar **Crear una clave maestra nueva**, que también cambia la clave de las
-copias. Una clave de las copias
+**Paquete de recuperación**, elige **Crear una clave maestra nueva**, que también cambia la clave de las
+copias, para que las copias nuevas usen una clave que esa persona no tiene. Una clave de las copias
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar.
