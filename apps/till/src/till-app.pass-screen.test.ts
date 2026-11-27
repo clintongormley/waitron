@@ -160,9 +160,10 @@ describe("A773 pass screen: app", () => {
     ["station", [], []],
     ["pass", [], []],
     ["pass_monitor", [], []],
+    ["pass", ["show-expo"], [], false],
   ] as const)(
     "offers the narrow floor kitchen rows for %s with %j",
-    async (kind, capabilities, rows) => {
+    async (kind, capabilities, rows, screenAvailable = true) => {
       const viewport = [innerWidth, innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));
       await page.viewport(390, 844);
@@ -179,6 +180,18 @@ describe("A773 pass screen: app", () => {
         },
       ];
       const slots = stations.map(({ id, name }) => ({ id, name, available: id !== "closed" }));
+      const room = {
+        id: "room",
+        name: "Room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+        closesAt: null,
+      };
       const checkTimeOnPass = kind === "pass" && rows.length > 0;
       const api = stubApi({
         ...(checkTimeOnPass && {
@@ -217,28 +230,17 @@ describe("A773 pass screen: app", () => {
               : [
                   {
                     kind,
-                    available: true,
+                    available: screenAvailable,
                     stations: slots,
                     zones: null,
                     showNonPassStations: true,
                   },
                 ],
         }),
-        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room"])),
-        listZones: vi.fn().mockResolvedValue([
-          {
-            id: "room",
-            name: "Room",
-            displayOrder: 0,
-            active: true,
-            closed: false,
-            hasPlan: true,
-            layoutSetName: null,
-            layoutDue: null,
-            serviceMode: "table_tab",
-            closesAt: null,
-          },
-        ]),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room", "terrace"])),
+        listZones: vi
+          .fn()
+          .mockResolvedValue([room, { ...room, id: "terrace", name: "Terrace", displayOrder: 1 }]),
         listStations: vi.fn().mockResolvedValue(stations),
       });
       const { el } = await mountWidget<TillApp>("till-app", { api });
@@ -257,6 +259,11 @@ describe("A773 pass screen: app", () => {
       if (checkTimeOnPass) await expect.element(checkTime).toBeVisible();
       const more = shell.shadowRoot!.querySelector("[data-floor-bar] .floor-menu")!;
       await userEvent.click(trigger()!);
+      if (checkTimeOnPass) {
+        await page.getByRole("menuitemradio", { name: "Terrace" }).click();
+        await vi.waitFor(() => expect(chooser()?.getAttribute("label")).toBe("Terrace"));
+        await userEvent.click(trigger()!);
+      }
       const kitchen = page.getByRole("group", { name: "Pantallas de cocina" });
       expect(
         kitchen
@@ -288,7 +295,7 @@ describe("A773 pass screen: app", () => {
       await page.getByRole("button", { name: "Atrás", exact: true }).click();
       await vi.waitFor(() => expect(trigger()?.matches(":focus")).toBe(true));
       expect(location.pathname).not.toContain("/view/");
-      expect(chooser()?.textContent).toContain("Room");
+      expect(chooser()?.getAttribute("label")).toBe(checkTimeOnPass ? "Terrace" : "Room");
     },
   );
 
