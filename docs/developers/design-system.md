@@ -899,6 +899,11 @@ immediately above your foot actions. In a wide till order, set `--wt-dialog-inse
 on the full-screen dialog to the measured edge of the order column. The dialog covers the order
 and its backdrop dims the display. Leave the inset at zero on a narrow screen.
 
+Set `rising` to make the panel a sheet risen from the bottom of the screen: rounded top corners,
+a handle above the header and an upward shadow. It slides up into place as it first appears,
+unless the device asks for reduced motion. It is for the till's menu over the order, which the
+till redesign's PR 10b adds.
+
 `wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
 `heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
 and handle `wt-back` to navigate. Set `back-disabled` while the editor is saving. The `action`

@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { syncScrollTabStop } from "../scroll-tab-stop.js";
@@ -15,6 +15,37 @@ export class WtFullScreenPanel extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      :host([rising]) {
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        border-radius: var(--wt-radius-lg) var(--wt-radius-lg) 0 0;
+        box-shadow: var(--wt-menu-sheet-shadow);
+      }
+
+      .handle {
+        justify-self: center;
+        width: var(--wt-menu-sheet-handle-width);
+        height: var(--wt-menu-sheet-handle-height);
+        margin-block: var(--wt-space-2) calc(var(--wt-space-1) / 2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface-sunken);
+      }
+
+      @media (forced-colors: active) {
+        :host([rising]) {
+          border-block-start: var(--wt-field-line-width) solid CanvasText;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        :host([rising]) {
+          transition: translate var(--wt-duration-move);
+          translate: 0 0;
+          @starting-style {
+            translate: 0 var(--wt-space-4);
+          }
+        }
+      }
+
       .body {
         overflow: auto;
         overscroll-behavior: contain;
@@ -27,6 +58,7 @@ export class WtFullScreenPanel extends LitElement {
   ];
 
   @property({ attribute: "body-label" }) bodyLabel = "";
+  @property({ type: Boolean, reflect: true }) rising = false;
   @query(".body") private body!: HTMLElement;
   @query(".content") private content!: HTMLElement;
 
@@ -55,7 +87,8 @@ export class WtFullScreenPanel extends LitElement {
   }
 
   override render() {
-    return html`<slot name="header"></slot>
+    return html`${this.rising ? html`<div class="handle" data-handle aria-hidden="true"></div>` : nothing}
+      <slot name="header"></slot>
       <div class="body" part="body">
         <div class="content"><slot></slot></div>
       </div>
