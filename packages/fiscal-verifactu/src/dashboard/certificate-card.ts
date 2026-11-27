@@ -48,6 +48,16 @@ function statusLine(c: Installed, timeZone: string): string {
   return t(`aeat_certificate.warning_${c.kind}`, { date });
 }
 
+function cardStatus(c: Installed, timeZone: string): { stage: string; text: string } | null {
+  if (c.notAcceptedAt !== undefined) {
+    return {
+      stage: "not-accepted",
+      text: t("aeat_certificate.not_accepted_on", { date: day(c.notAcceptedAt, timeZone) }),
+    };
+  }
+  return c.stage === null ? null : { stage: c.stage, text: statusLine(c, timeZone) };
+}
+
 @customElement("dashboard-aeat-certificate-card")
 export class AeatCertificateCard extends LitElement {
   static override styles = [
@@ -201,10 +211,9 @@ export class AeatCertificateCard extends LitElement {
 
   #action(card: CertificateCardView): TemplateResult | typeof nothing {
     if (this.readOnly || !card.filing) return nothing;
-    const urgent =
-      card.installed?.stage === "urgent" ||
-      card.installed?.stage === "expired" ||
-      card.installed?.notAcceptedAt !== undefined;
+    const stage =
+      card.installed === null ? undefined : cardStatus(card.installed, card.timeZone)?.stage;
+    const urgent = stage === "urgent" || stage === "expired" || stage === "not-accepted";
     const label = card.revision === null ? "aeat_certificate.install" : "aeat_certificate.replace";
     return html`<wt-button
       data-test="certificate-action"
@@ -255,6 +264,7 @@ export class AeatCertificateCard extends LitElement {
         : c.notAcceptedAt !== undefined
           ? day(c.validUntil, zone)
           : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
+    const status = cardStatus(c, zone);
     return html`${
         this.checkedAt === undefined
           ? nothing
@@ -265,22 +275,13 @@ export class AeatCertificateCard extends LitElement {
               >
             </p>`
       }${
-        c.notAcceptedAt !== undefined
-          ? html`<wt-notice duration="0">
-              <p class="status" data-test="certificate-status" data-stage="not-accepted">
-                <span class="dot" aria-hidden="true"></span
-                ><span
-                  >${t("aeat_certificate.not_accepted_on", { date: day(c.notAcceptedAt, zone) })}</span
-                >
+        status === null
+          ? nothing
+          : html`<wt-notice duration="0">
+              <p class="status" data-test="certificate-status" data-stage=${status.stage}>
+                <span class="dot" aria-hidden="true"></span><span>${status.text}</span>
               </p>
             </wt-notice>`
-          : c.stage === null
-            ? nothing
-            : html`<wt-notice duration="0">
-                <p class="status" data-test="certificate-status" data-stage=${c.stage}>
-                  <span class="dot" aria-hidden="true"></span><span>${statusLine(c, zone)}</span>
-                </p>
-              </wt-notice>`
       }
       <dl>
         ${this.#row("aeat_certificate.issued_to", "issued-to", c.organisation ?? "—")}
