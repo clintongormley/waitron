@@ -587,7 +587,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Table Pay uses the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   On the narrow floor the zone chooser also opens the device's kitchen boards. **Kitchen-entry
-  counts** still need board data for dishes to send out and dishes cooking.
+  counts** still need board data for dishes to send out and dishes cooking. The kitchen boards need
+  station titles, upright-phone controls and the shared Back treatment.
   The wide floor bar, All zones, table jobs, order, menu,
   table-move and bill action panels, and Send and move allergy prompts remain.
   The saved-invoice summary and presented whole payment follow Table Pay.

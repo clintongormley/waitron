@@ -496,7 +496,7 @@ export function floorZoneControls(
         ><span>${name}</span><span aria-hidden="true">⌃</span></span
       >
       <div role="menu" aria-label=${t("floor.zones")}>
-        ${tabs.map(({ key, name }) => {
+        ${tabs.map(({ key, name }, index) => {
           const mark = marks.get(key);
           return html`<button
             type="button"
@@ -507,7 +507,7 @@ export function floorZoneControls(
             @click=${() => select(key)}
           >
             <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>
-            <wt-menu-row divider label=${name}>
+            <wt-menu-row ?divider=${index < tabs.length - 1 || kitchen.length === 0} label=${name}>
               ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
             </wt-menu-row>
           </button>`;

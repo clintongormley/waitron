@@ -556,6 +556,9 @@ it("walks from the last floor zone to the kitchen action with the arrow key", as
     };
     expect(nameInset(zone, "Dining room")).toBe(56);
     expect(nameInset(kitchen, "Pass")).toBe(56);
+    expect(getComputedStyle(zone.querySelector("wt-menu-row")!).borderBlockEndWidth).toBe("0px");
+    const kitchenHeading = chooser.querySelector("[data-menu-heading]")!;
+    expect(getComputedStyle(kitchenHeading).borderBlockEndWidth).toBe("1px");
     zone.focus();
     await userEvent.keyboard("{ArrowDown}");
     expect(
