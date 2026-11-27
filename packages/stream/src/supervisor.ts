@@ -93,6 +93,7 @@ type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 export interface SupervisorDeps {
   litestreamBin: string;
   preserveBucketProblemSince?: boolean;
+  /** Give each replication process a private socket to confirm its uploaded position for shutdown. */
   prepareShutdownSync?: boolean;
   onStateChange?: () => void;
   /** Absolute path of `venue.db`. */

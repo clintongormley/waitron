@@ -1202,6 +1202,7 @@ const STREAM_JOB = "test-server-stream";
 const STREAM_TEST_FILES = [
   "src/stream-loop.e2e.test.ts",
   "src/stream-pause.e2e.test.ts",
+  "src/direct-bucket-shutdown.e2e.test.ts",
   "src/s3-rehearsal-scenarios.e2e.test.ts",
   "src/aws-send-gate.e2e.test.ts",
   "src/aws-rehearsal-interrupt.e2e.test.ts",

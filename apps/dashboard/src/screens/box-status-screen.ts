@@ -1095,6 +1095,7 @@ export class BoxStatusScreen extends LitElement {
             available: previous?.available ?? false,
             downloadOnly: previous?.downloadOnly,
             paired: previous?.paired,
+            directBucket: previous?.directBucket,
           },
         };
       this.shutdownConfirmation = null;
@@ -1131,7 +1132,9 @@ export class BoxStatusScreen extends LitElement {
               : t(
                   phase === "checking" && status.paired
                     ? "box_status.shutdown.checking_pair"
-                    : `box_status.shutdown.${phase}`,
+                    : phase === "checking" && status.directBucket
+                      ? "box_status.shutdown.checking_bucket"
+                      : `box_status.shutdown.${phase}`,
                 )
         }
         ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
@@ -1227,6 +1230,7 @@ export class BoxStatusScreen extends LitElement {
                   </p>
                   ${status.downloadOnly ? html`<p>${t("box_status.shutdown.keys")}</p>` : nothing}
                   ${status.paired ? html`<p>${t("box_status.shutdown.spare_check")}</p>` : nothing}
+                  ${status.directBucket ? html`<p>${t("box_status.shutdown.bucket_check")}</p>` : nothing}
                   ${this.canMakeRecoveryPack ? html`<p><a href="/backup?recovery-pack=make">${t("recovery_pack.make")}</a></p>` : nothing}
                   ${
                     this.shutdownStaff.length === 0

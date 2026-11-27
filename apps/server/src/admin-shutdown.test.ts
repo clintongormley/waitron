@@ -292,8 +292,8 @@ it.each([
 });
 
 it("retries the spare check after checking a saved backup", async () => {
-  const checkSpare = vi.fn().mockRejectedValueOnce(new Error("The spare is behind"));
-  const check = vi.fn(async () => ({ checkSpare }));
+  const checkReplica = vi.fn().mockRejectedValueOnce(new Error("The spare is behind"));
+  const check = vi.fn(async () => ({ checkReplica }));
   const save = vi.fn(async () => {});
   const shutdown = createAdminShutdown({ check, save, clear: async () => {} });
   try {
@@ -303,7 +303,7 @@ it("retries the spare check after checking a saved backup", async () => {
     shutdown.resolvePaused("retry");
     await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
     expect(check).toHaveBeenCalledTimes(1);
-    expect(checkSpare).toHaveBeenCalledTimes(2);
+    expect(checkReplica).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledTimes(1);
   } finally {
     await shutdown.close();
@@ -330,7 +330,7 @@ it.each(["retry", "cancel", "shut-down-anyway"] as const)(
               removed = true;
             },
           },
-          async checkSpare() {
+          async checkReplica() {
             if (++checkedSpare === 1) throw new Error("The spare did not confirm the upload");
           },
         };

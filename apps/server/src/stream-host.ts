@@ -333,6 +333,7 @@ export class StreamHost {
   /** The link to the spare's store, while the running supervisor streams through it. */
   #pipe: StorePipe | undefined;
   #pairedTarget: { link: PairLink; term: number } | undefined;
+  #directTarget: { settings: StreamSettings; term: number } | undefined;
   #outageSince: string | undefined;
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
@@ -502,7 +503,7 @@ export class StreamHost {
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
         preserveBucketProblemSince: this.#pipe !== undefined,
-        prepareShutdownSync: this.#pairedTarget !== undefined,
+        prepareShutdownSync: true,
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),
@@ -526,6 +527,8 @@ export class StreamHost {
       });
       this.#supervisor = supervisor;
       await supervisor.start();
+      if (this.#supervisor === supervisor && "bucket" in target)
+        this.#directTarget = { settings: target, term: membership.body.term };
     } catch (error) {
       if (this.#supervisor === undefined) await this.#closePipe();
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
@@ -549,6 +552,34 @@ export class StreamHost {
         membership?.body.term === target.term
       );
     });
+  }
+
+  async checkDirectShutdownUpload(settings: StreamSettings, signal: AbortSignal): Promise<boolean> {
+    const supervisor = this.#supervisor;
+    const target = this.#directTarget;
+    if (
+      supervisor === undefined ||
+      target === undefined ||
+      !isDeepStrictEqual(settings, target.settings)
+    )
+      return false;
+    const { db, node, ring, nodeId } = this.#deps;
+    const sameTarget = async () => {
+      const [saved, link, membership] = await Promise.all([
+        readStreamSettings(db, ring),
+        readPairLink(node, nodeId),
+        readNodeMembership(db),
+      ]);
+      return (
+        this.#supervisor === supervisor &&
+        this.#deps.isPrimary() &&
+        link === null &&
+        membership?.body.term === target.term &&
+        membership.body.nodes.every((box) => box.nodeId === nodeId || box.standing === "evicted") &&
+        isDeepStrictEqual(saved, settings)
+      );
+    };
+    return (await sameTarget()) && supervisor.checkShutdownUpload(signal, sameTarget);
   }
 
   async #loadSentPointers(): Promise<void> {
@@ -619,6 +650,7 @@ export class StreamHost {
     this.#supervisor = undefined;
     this.#pipe = undefined;
     this.#pairedTarget = undefined;
+    this.#directTarget = undefined;
     this.#outageSince = undefined;
     if (supervisor !== undefined) {
       // Litestream's last writes on stopping travel through the pipe, so it closes after.

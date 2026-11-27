@@ -1258,14 +1258,16 @@ Not in any track until the standalone primary is done.
   shutdown choices and checking for replacement through Cloud. Other evidence that a box was replaced
   still needs a decision.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
-  for scheduled and manual backups. A standalone main box with streaming and Cloud off can save
+  for scheduled and manual backups. A standalone main box with Cloud off can save
   and check a final copy at every saved backup destination before it records the next-start hold.
   With no saved destination and a numbered backup key, an administrator can download the checked
   final copy and confirm saving it before the box records the next-start hold.
   If that backup check fails, an administrator can retry, cancel or explicitly shut down with
   an unchecked copy. If a saved S3 backup upload times out, the administrator can keep waiting
-  with the same staged backup. The remaining shutdown work covers direct bucket stream catch-up,
-  Cloud backups, shutdown of a spare and appliance power-off. On a paired main box, Box status offers checked shutdown or opens
+  with the same staged backup. A standalone main box that streams to a bucket confirms the bucket
+  has its final update before recording the next-start hold. The administrator can retry the bucket
+  check with the same checked backup. The remaining shutdown work covers Cloud backups, shutdown
+  of a spare and appliance power-off. On a paired main box, Box status offers checked shutdown or opens
   Servers for a controlled handover. Checked shutdown confirms the upload to the spare's store
   before recording the administrator hold. Decide separately whether a spare's answer can ever
   clear that hold when it might have missed an off-box restore. Box status still needs to name the

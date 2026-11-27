@@ -359,6 +359,34 @@ it("lets an administrator retry loading clocked-in staff after a refusal", async
   expect(q(el, ".box-restart [role=alert]")).toBeNull();
 });
 
+it("offers to retry the direct bucket check while keeping bucket lag visible", async () => {
+  const initial = health({
+    stream: { ...health().stream, lagMs: 180_000 },
+    shutdown: {
+      phase: "paused",
+      available: true,
+      directBucket: true,
+      errorCode: "box.shutdown_bucket_unchecked",
+    },
+  });
+  const getBoxHealth = vi
+    .fn()
+    .mockResolvedValueOnce(initial)
+    .mockImplementation(() => new Promise<BoxHealth>(() => {}));
+  const resolveBoxShutdown = vi.fn().mockResolvedValue({ phase: "checking" });
+  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }, initial));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  const retry = q(el, '[data-test="box-shutdown-retry"]')!;
+  expect(text(retry)).toBe("Retry check");
+  expect(text(q(el, "[data-test=row-bucket]"))).toContain("3 min behind");
+  await userEvent.click(retry);
+  await expect
+    .poll(() => text(q(el, "[data-test=box-shutdown-status]")))
+    .toContain("Checking the bucket copy");
+  expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith("retry");
+});
+
 it("keeps the paused shutdown actionable after a refused retry", async () => {
   const paused = { phase: "paused", available: true, errorCode: "backup.archive_invalid" } as const;
   const checking = { phase: "checking", available: true } as const;

@@ -1,16 +1,17 @@
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, writePairLinkTx } from "@waitron/credentials";
 import {
   enqueueMail,
   incidents,
   outgoingMail,
   persons,
   readMail,
+  withNodeTransaction,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
-import { buildNextMembershipDocument } from "@waitron/membership";
+import { buildNextMembershipDocument, endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
@@ -25,7 +26,8 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import type { Hono } from "hono";
-import { expect, it, vi } from "vitest";
+import { expect, it, onTestFinished, vi, type MockInstance } from "vitest";
+import * as shutdownDuties from "./admin-shutdown-duties.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
@@ -79,7 +81,11 @@ const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
 it.each([
   ["drains the scheduled backup and writes only the restart mark if stopped mid-check", "restart"],
-  ["refuses checked shutdown while streaming is configured", "streaming"],
+  ["checks the saved backup before pausing for an unconfirmed direct bucket", "streaming"],
+  [
+    "refuses checked shutdown with both a joined spare and direct bucket settings",
+    "paired-streaming",
+  ],
   ["refuses checked shutdown when saved backups are disabled", "disabled"],
   ["refuses checked shutdown without a destination or backup key", "no-key"],
   ["records and emails a failed final backup while sales stay paused", "failed"],
@@ -90,6 +96,62 @@ it.each([
   const writeMark = scenario === "multiple" ? vi.spyOn(atomic, "writeFileDurable") : null;
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
+  let pairedShutdown: MockInstance<typeof shutdownDuties.adminShutdownDuties> | undefined;
+  if (scenario === "paired-streaming") {
+    const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
+    const spareNodeId = "00000000-0000-4000-8000-000000000034";
+    const spare = generateNodeKeyPair();
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, cfg.nodeId);
+    const key = await readNodeIdentityKey(suite.node, ring, cfg.nodeId);
+    await writeNodeMembership(
+      suite.db,
+      buildNextMembershipDocument({
+        heldDocument: null,
+        nodes: [
+          { nodeId: cfg.nodeId, contactUrl: "https://main.example", standing: "serving-primary" },
+          {
+            nodeId: spareNodeId,
+            contactUrl: "https://spare.example",
+            standing: "serving-secondary",
+          },
+        ],
+        signerNodeId: cfg.nodeId,
+        signerPrivateKey: key,
+        endorsements: [endorseKey(spareNodeId, spare.publicKey, cfg.nodeId, key)],
+      }),
+    );
+    await withNodeTransaction(suite.node, (tx) =>
+      writePairLinkTx(tx, ring, cfg.nodeId, {
+        role: "streams",
+        state: "streaming",
+        peerNodeId: spareNodeId,
+        peerPublicKey: spare.publicKey,
+        storeUrl: "https://spare.example:7443",
+        venueId: "00000000-0000-4000-8000-000000000035",
+        accessKeyId: "pair-access",
+        secretAccessKey: "pair-secret",
+      }),
+    );
+    const buildShutdown = shutdownDuties.adminShutdownDuties;
+    pairedShutdown = vi
+      .spyOn(shutdownDuties, "adminShutdownDuties")
+      .mockImplementationOnce((deps) =>
+        buildShutdown({
+          ...deps,
+          readSpare: async () => ({
+            peerNodeId: spareNodeId,
+            state: "following",
+            generation: `gen-0-${cfg.nodeId}-20261022T093100Z`,
+            appliedTXID: "0000000000000001",
+            uploadedTXID: "0000000000000001",
+            lagMs: 0,
+            lastAppliedAt: heartbeatAt,
+            clockAt: heartbeatAt,
+          }),
+        }),
+      );
+    onTestFinished(() => pairedShutdown?.mockRestore());
+  }
   let releaseScheduled!: () => void;
   const held = new Promise<void>((resolve) => {
     releaseScheduled = resolve;
@@ -138,7 +200,7 @@ it.each([
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
-        if (scenario === "multiple") void checkFinished.then(resolve);
+        if (scenario === "multiple" || scenario === "streaming") void checkFinished.then(resolve);
       });
     });
   const smtp = scenario === "failed" || scenario === "stalled" ? await startFakeSmtp() : null;
@@ -214,7 +276,7 @@ it.each([
                 notAfter: new Date(ordinaryMailDue.getTime() + 60_000),
               });
             }
-            if (scenario === "streaming")
+            if (scenario === "streaming" || scenario === "paired-streaming")
               await writeStreamSettings(
                 tx,
                 ring,
@@ -230,6 +292,15 @@ it.each([
           });
           started = await startServer(env, env, {
             boxHost: synchronisedBoxHost(),
+            ...(scenario === "paired-streaming"
+              ? {
+                  peerCheck: async () => ({
+                    result: "proceed" as const,
+                    successorNodeId: null,
+                    hasCountedPeer: true as const,
+                  }),
+                }
+              : {}),
             stream: { store: new SwitchableStore(() => new Date()) },
             observeApp: (observed) => {
               app = observed;
@@ -241,6 +312,7 @@ it.each([
       },
       async (base) => {
         if (scenario !== "disabled" && scenario !== "no-key") await scheduled;
+        if (scenario === "paired-streaming") expect(pairedShutdown).toHaveBeenCalledOnce();
         const begin = (session: string) =>
           app.request(
             "https://box.example/api/box/shutdown",
@@ -265,7 +337,7 @@ it.each([
           expect(await view.json()).toMatchObject({ shutdown: { available: true, phase: "idle" } });
         }
         const response = await begin(token);
-        if (scenario === "streaming" || scenario === "disabled" || scenario === "no-key") {
+        if (scenario === "disabled" || scenario === "no-key" || scenario === "paired-streaming") {
           releaseScheduled();
           expect(response.status).toBe(409);
           expect(await response.json()).toMatchObject({
@@ -290,6 +362,23 @@ it.each([
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
         await checking;
+        if (scenario === "streaming") {
+          finishCheck();
+          await vi.waitFor(async () => {
+            expect(await (await health()).json()).toMatchObject({
+              shutdown: {
+                directBucket: true,
+                phase: "paused",
+                errorCode: "box.shutdown_bucket_unchecked",
+              },
+            });
+          });
+          await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
+            "code",
+            "ENOENT",
+          );
+          return;
+        }
         if (scenario === "multiple") {
           const mark = join(stateDir, "admin-shutdown.json");
           const wroteMark = () => writeMark!.mock.calls.some(([file]) => file === mark);

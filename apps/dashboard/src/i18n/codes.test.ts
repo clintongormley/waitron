@@ -1214,8 +1214,13 @@ it.each([
   ],
   [
     "box.shutdown_unavailable",
-    "Checked shutdown needs the main box with Cloud off. Keep its joined spare connected, or turn off the bucket copy on a standalone box. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
-    "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Mantén conectado su servidor de reserva vinculado o desactiva la copia en el bucket si solo hay un servidor. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
+    "Checked shutdown needs the main box with Cloud off. If this box has a joined spare and a direct bucket copy, open the Servers page to hand over. If the joined spare is offline, reconnect it before trying again. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
+    "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Si este servidor tiene uno de reserva vinculado y una copia directa en el bucket, abre Servidores para transferir el servicio. Si el servidor de reserva vinculado está desconectado, vuelve a conectarlo antes de intentarlo de nuevo. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
+  ],
+  [
+    "box.shutdown_bucket_unchecked",
+    "Waitron could not confirm that the bucket received the final update. Check the connection and choose Retry check. To restart the bucket copy or change its settings, choose Cancel and resume work, then open Backups.",
+    "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión y elige Volver a comprobar. Para reiniciar la copia en el bucket o cambiar sus ajustes, elige Cancelar y reanudar el trabajo y abre Copias de seguridad.",
   ],
 ])("explains the shutdown refusal %s in both languages", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);

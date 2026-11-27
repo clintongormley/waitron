@@ -4800,6 +4800,10 @@ export const en = {
     "Leave the spare box on. Waitron checks that it received the final update before telling you to switch off this box.",
   "box_status.shutdown.checking_pair":
     "Waiting for work to finish, then checking the final backup and the copy on the spare box. Leave both boxes on.",
+  "box_status.shutdown.bucket_check":
+    "Waitron checks that your bucket has the final update before telling you to switch off.",
+  "box_status.shutdown.checking_bucket":
+    "Checking the bucket copy after the final backup. Leave the box on.",
   "box_status.shutdown.retry_check": "Retry check",
   "box_status.shutdown.download_what":
     "Waitron pauses work and checks a final backup on this box for you to download.",
@@ -9755,6 +9759,10 @@ export const es: Record<StringKey, string> = {
     "Deja encendido el servidor de reserva. Waitron comprueba que ha recibido la última actualización antes de indicarte que apagues este servidor.",
   "box_status.shutdown.checking_pair":
     "Waitron espera a que termine el trabajo y comprueba la copia final y la del servidor de reserva. Deja ambos servidores encendidos.",
+  "box_status.shutdown.bucket_check":
+    "Waitron comprueba que el bucket ha recibido la última actualización antes de indicarte que apagues el servidor.",
+  "box_status.shutdown.checking_bucket":
+    "Waitron comprueba la copia del bucket después de comprobar la copia final. Deja el servidor encendido.",
   "box_status.shutdown.retry_check": "Volver a comprobar",
   "box_status.shutdown.download_what":
     "Waitron pausa el trabajo y comprueba en este servidor una última copia de seguridad que podrás descargar.",
