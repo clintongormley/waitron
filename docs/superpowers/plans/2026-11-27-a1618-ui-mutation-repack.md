@@ -12,28 +12,27 @@ Use the 30 reports from 45962184332 at `d9287f3328` (#4478) and the complete rep
 weights for jobs 27 and 31 are estimates for the current tests. The 15 whole files absent from
 all reports are re-exports or type declarations. Keep the packer's byte fallback for them.
 
-Set the UI matrix in `.github/workflows/mutation.yml` to 37 jobs. The packer keeps the 26
-dedicated source ranges and spreads the whole files over 11 jobs instead of six. Scored with
-fresh weights, the existing layout peaks at 7,193. Repacking with 33 through 38 jobs gives
-5,298, 4,635, 4,122, 3,713, 3,535 and 3,535. At 37, the floor map gets its own job and sets
-that floor. These sums compare workloads. The fresh CI run measures elapsed time. Keep the
-50-minute limit and 90% aggregate floor. Add a dated CI guide receipt superseding the 32-job
-layout, with the input runs and the packing comparison.
+Set the UI matrix in `.github/workflows/mutation.yml` to 39 jobs. Set the data-table entry
+in `scripts/mutation-shard.mjs` to 14 ranges, for 28 dedicated jobs in all. Pack the same 107
+whole files over 11 jobs. On the rebased tree the recorded weights peak at 8,231 seconds for the
+old whole-file layout and 3,535 for the new layout. The floor map gets its own job. Keep each
+job's 50-minute limit and the aggregate's 90% floor.
 
-The dedicated data-table shard 9 finished its three recent jobs in 37:31, 44:41 and 45:30.
-Keep the range boundaries for this PR, subject to the watcher's clearance on that margin. In
-the latest reports, shifting the data table from 12 to 13 or 14 equal ranges would put 12 or 13
-previously reported mutants across new boundaries. Record shard 9's full job time on the fresh
-run. If a job times out, save its logs and report the cause to the watcher before a further change.
+The watcher cleared the repack and shorter data-table ranges at 10:37 CET on 27 November.
+Matching report durations to the current source put the heaviest of 13 ranges at 6,053–6,569
+summed seconds, and 14 ranges at 5,478–6,154, against 7,062–8,313 in the old jobs. The
+instrumenter emits 3,080 mutations from the whole file. Compared with 12 ranges on the same
+source, 14 ranges drop 14 and recover 20. The hosted run measures elapsed time. If a job reaches
+the limit, save its logs and report the cause to the watcher before making a further change.
 
-First update the existing matrix guard in `scripts/ci-workflow.test.mjs` to expect 37 UI jobs and
-run that case against the old matrix. It must fail on the missing five jobs. After the
-configuration change, run that file, `scripts/mutation-shard.test.mjs`,
-`scripts/mutation-break-thresholds.test.mjs` and `scripts/mutation-aggregate.test.mjs`.
-Run the production selector for all 37 jobs. Require every job to be nonempty and the same 133
-targets as the old layout, each once.
+First update the matrix guard in `scripts/ci-workflow.test.mjs` and the range expectations in
+`scripts/mutation-shard.test.mjs`. Run against the old configuration and expect failures for the
+missing seven jobs and two ranges. After the change run both files, plus
+`scripts/mutation-break-thresholds.test.mjs` and `scripts/mutation-aggregate.test.mjs`. Run the
+production selector for all 39 jobs. Verify all are nonempty, each whole-file target appears once,
+and the 14 ranges cover all 3,500 data-table source lines without gaps or overlap.
 
-Allow about 100 configuration lines added and 75 removed, one guard line and six CI guide lines.
+Allow about 100 configuration lines added and 75 removed, eight guard lines and a dated CI guide receipt.
 After review, CI and landing, run `gh workflow run mutation.yml --ref main -f packages=ui`.
-Record the run SHA, 37 reports, longest jobs and aggregate in the lane receipts. Answer the
+Record the run SHA, 39 reports, longest jobs and aggregate in the lane receipts. Answer the
 watcher's questions.md note with the score. A1618 is complete when that run reports at least 90%.
