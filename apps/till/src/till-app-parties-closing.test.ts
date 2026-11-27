@@ -3,7 +3,7 @@ import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.te
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
-import { cancelReason, expectNoA11yViolations } from "./widgets/test-helpers.js";
+import { panelBackButton, cancelReason, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -2740,7 +2740,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             emit(tableOrder(el)!, "finish-table");
             await flush(el, 8);
             const dialog = finishDialog(el)!;
-            expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+            expect(dialog.shadowRoot!.querySelector("wt-top-bar")!.subtitle).toBe(
               locale === "es" ? "2 platos sin servir" : "2 dishes not served",
             );
             await expectNoA11yViolations(dialog);
@@ -2748,7 +2748,11 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             for (const selector of ["[data-confirm]", "[data-close]"]) {
               const button =
                 dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
-              const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              const bounds = (
+                selector === "[data-close]"
+                  ? panelBackButton(button)
+                  : button.shadowRoot!.querySelector("button")!
+              ).getBoundingClientRect();
               expect(bounds.left).toBeGreaterThanOrEqual(0);
               expect(bounds.right).toBeLessThanOrEqual(width);
               expect(bounds.top).toBeGreaterThanOrEqual(0);

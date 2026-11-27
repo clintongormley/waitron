@@ -631,7 +631,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1359. Remaining: pre-bills through A446, not scheduled for
+  picker, has landed. Remaining: pre-bills through A446, not scheduled for
   the foreseeable future (owner, 2026-11-17).
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -688,7 +688,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **For the owner's redesign of the table screens and review of the device screens** (bundle of 17,
   nothing to build before them). Holds A1211, A893, A936, A856, A859, A561, A562, A1101, A550, A857, A672,
-  A1333, A470, A1107, A1108, A1359, A1290.
+  A1333, A470, A1107, A1108, A1290.
   [Detail](backlog/till.md#bundle-for-the-owners-redesign-of-the-table-screens-and-review-of-the-device-screens)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out

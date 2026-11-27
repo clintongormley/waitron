@@ -922,7 +922,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
     expect(sent(0)).toBe(3);
   });
 
-  describe("the foot a refusal brought into view", () => {
+  describe("the refusal foot while rows change", () => {
     const onScreen = (control: HTMLElement) => {
       const box = control.getBoundingClientRect();
       return box.top >= 0 && box.bottom <= innerHeight;
@@ -930,7 +930,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
     /** On screen and above the held Save row, not behind it. */
     const refusalShown = (el: TillApp) => {
       const box = q(el, "[data-split-refusal]")!.getBoundingClientRect();
-      const row = q(el, "[data-split-pick] wt-form-actions")!.getBoundingClientRect();
+      const row = q(el, "[data-split-pick] wt-foot-button-bar")!.getBoundingClientRect();
       return box.top >= 0 && box.bottom <= row.top;
     };
     const longRows = (partyRevision: number): SplitSources => ({
@@ -962,31 +962,18 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       return { el, rows };
     }
 
-    it("comes back into view when the read after it draws sixteen more dishes", async () => {
+    it("stays in view when a late read adds sixteen dishes to the scroll area", async () => {
       const { el, rows } = await refusedWithItsReadOut();
-
       rows.calls[0]!.answer(longRows(9));
       await flush(el);
 
-      expect(q(el, "[data-split-pick]")!.getBoundingClientRect().height).toBeGreaterThan(
-        innerHeight,
-      );
-      await expect.poll(() => refusalShown(el) && onScreen(splitButton(el)!)).toBe(true);
-    });
-
-    it("is left where it is once the waiter has touched the screen", async () => {
-      const { el, rows } = await refusedWithItsReadOut();
-      tableOrder(el)!.dispatchEvent(new WheelEvent("wheel", { bubbles: true, composed: true }));
-
-      rows.calls[0]!.answer(longRows(9));
-      await flush(el);
-
-      expect(q(el, "[data-split-pick]")!.getBoundingClientRect().height).toBeGreaterThan(
-        innerHeight,
-      );
-      await flush(el);
-      // Not Split, which the held row keeps on screen while the panel's foot is below the window.
-      expect(onScreen(q(el, "[data-split-refusal]")!)).toBe(false);
+      const body = q(el, "[data-split-pick]")!.shadowRoot!.querySelector<HTMLElement>(
+        '[part="body"]',
+      )!;
+      expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+      body.scrollTop = body.scrollHeight;
+      expect(body.scrollTop).toBeGreaterThan(0);
+      expect(refusalShown(el) && onScreen(splitButton(el)!)).toBe(true);
     });
   });
 

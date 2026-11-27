@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -182,7 +182,8 @@ describe("the bill actions below Sent and New order", () => {
       if (open) {
         await openPartyMenu(el);
         await userEvent.click(q(el, '[data-party-menu] [data-action="move"]')!);
-      } else await userEvent.click(q(el, "[data-action-panel] [data-action-back]")!);
+      } else
+        await userEvent.click(panelBackButton(q(el, "[data-action-panel] [data-action-back]")!));
       await el.updateComplete;
       expect(q(el, "[data-action-panel]") !== null).toBe(open);
       expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
@@ -422,7 +423,7 @@ describe("A803 no tab panel", () => {
     const panel = q(el, "[data-action-panel]")!;
     expect(panel.parentElement!.classList.contains("layout")).toBe(true);
     expect(panel.querySelector("[data-target-picker]")!.checkVisibility()).toBe(true);
-    await userEvent.click(panel.querySelector<HTMLElement>("[data-action-back]")!);
+    await userEvent.click(panelBackButton(panel.querySelector<HTMLElement>("[data-action-back]")!));
     await el.updateComplete;
     expect(q(el, "[data-action-panel]")).toBeNull();
   });

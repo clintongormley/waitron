@@ -644,7 +644,9 @@ table**, **Join tables** or **Split the table** to change where the party sits. 
 the bottom. On a short screen, scroll the sheet down to reach it.
 
 **Allergies**, **Guests** and **Name the party** open an editor. Tap the table name at the top to
-return to the same bill. If you changed a field, you can keep editing or discard the changes.
+return to the same bill. Use **Back** at the top of **Move to another table**, **Join tables** or
+**Split the table** to go back a step. If you changed a field, you can keep editing or discard the
+changes.
 
 Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
 bill, enter full invoice details, move dishes or change the bill itself. When an action needs a
@@ -826,7 +828,7 @@ Choose **Review** to check your dishes and destination, then choose **Move** aga
 
 When some of a party move to a table of their own, tap the table name, choose **Split the table** and
 tap the table that leaves. Tick what goes with it: whole bills, or single dishes from any bill. Set
-each table's guests, then choose **Split**.
+each table's guests, then confirm at the bottom. The button names the table that leaves.
 
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 

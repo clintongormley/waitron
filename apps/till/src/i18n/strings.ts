@@ -1367,6 +1367,7 @@ export const en = {
   "floor.saved_as": "Saved as {name}",
   "floor.seats": "{n} seats",
   "floor.seats_one": "1 seat",
+  "floor.seats_not_set": "Seats not set",
   "floor.seats_title": "Seats for {table}",
   "floor.seats_staying": "Seats for what stays",
   "floor.seats_label": "Seats",
@@ -1601,7 +1602,7 @@ export const en = {
   "table.name_save": "Save",
   "table.guests_title": "Guests at {tables}",
   "table.guests_save": "Save",
-  "table.split_confirm": "Split",
+  "table.split_confirm": "Split off {table}",
   "table.no_other_bills": "No other bill of this party to choose",
   "table.confirm_different_people_title": "Separate bills for different people?",
   "table.confirm_different_people":
@@ -3834,6 +3835,7 @@ export const es: Record<StringKey, string> = {
   "floor.saved_as": "Guardada como {name}",
   "floor.seats": "{n} plazas",
   "floor.seats_one": "1 plaza",
+  "floor.seats_not_set": "Sin plazas indicadas",
   "floor.seats_title": "Plazas para {table}",
   "floor.seats_staying": "Plazas para lo que queda",
   "floor.seats_label": "Plazas",
@@ -4065,7 +4067,7 @@ export const es: Record<StringKey, string> = {
   "table.name_save": "Guardar",
   "table.guests_title": "Comensales en {tables}",
   "table.guests_save": "Guardar",
-  "table.split_confirm": "Separar",
+  "table.split_confirm": "Separar {table}",
   "table.no_other_bills": "No hay otra cuenta de estos clientes para elegir",
   "table.confirm_different_people_title": "¿Cuentas separadas para distintas personas?",
   "table.confirm_different_people":

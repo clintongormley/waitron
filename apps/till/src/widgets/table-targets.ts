@@ -1,5 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-choice-tile.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { needsMovingToday, shownName, shownUnder } from "../state/floor-today.js";
@@ -78,6 +79,24 @@ export function partyScope(party: TableParty, tables: readonly TableState[]): st
     : fill(t("table.party_scope"), { name: party.name, tables: labels });
 }
 
+export function tableChoice(
+  table: TableState,
+  hint: string,
+  pick: (event: Event) => void,
+  disabled = false,
+): TemplateResult {
+  return html`<wt-choice-tile
+    check-position="none"
+    data-target=${table.id}
+    .label=${shownName(table)}
+    .hint=${hint}
+    .disabled=${disabled}
+    @click=${(event: Event) => {
+      if (!disabled) pick(event);
+    }}
+  ></wt-choice-tile>`;
+}
+
 /** One table a person may name, with its condition. A table that needs clearing or moving is
  * listed but cannot be chosen, and says why. `ownPartyId` names the acting party, whose tables read
  * as theirs. */
@@ -85,6 +104,7 @@ export function tableTarget(
   table: TableState,
   ownPartyId: string | undefined,
   pick: (table: TableState) => void,
+  useTile = false,
 ): TemplateResult {
   const blocked =
     table.condition === "needs_clearing"
@@ -102,18 +122,22 @@ export function tableTarget(
           ? t("table.this_party")
           : t("table.held_by").replace("{party}", () => held.displayName);
   return html`<div class="table-target">
-    <wt-button
-      class="target"
-      data-target=${table.id}
-      variant="secondary"
-      ?disabled=${blocked !== null}
-      @click=${() => {
-        if (blocked === null) pick(table);
-      }}
-    >
-      <span class="target-label">${shownName(table)}</span>
-      <span class="target-state">${state}</span>
-    </wt-button>
+    ${
+      useTile
+        ? tableChoice(table, state, () => pick(table), blocked !== null)
+        : html`<wt-button
+            class="target"
+            data-target=${table.id}
+            variant="secondary"
+            ?disabled=${blocked !== null}
+            @click=${() => {
+              if (blocked === null) pick(table);
+            }}
+          >
+            <span class="target-label">${shownName(table)}</span>
+            <span class="target-state">${state}</span>
+          </wt-button>`
+    }
     ${
       blocked !== null
         ? html`<p class="target-reason" data-target-reason=${table.id}>

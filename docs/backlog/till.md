@@ -803,10 +803,8 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   slice 1 look, `g-details-window1-390-light-es.png` and `h-list-dining-390-light-es.png` in
   `~/waitron-campaign-c/a797-1-shots/`). A1108: "Sent !" and "Held ·"
   ([detail](till.md#a1108-the-till-order-screens-sent-panel-reads-sent--and-held-)).
-- **A1359 and A1290. Table screen panels that open low.** A1359: at 1280 by 800, Split a table's
-  panel heading sits at 579 of 800 px with about three rows showing, because the side panel sits
-  below the order (A803 slice 4c's LOOK). A1290: Back and its action can sit half below the window,
-  and "+ New bill" touches Back
+- **A1290. Bill actions that open low.** Back and its action can sit half below the window, and
+  "+ New bill" touches Back
   ([detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)).
 
 ## Bundle: Table screen panels that do not fit
@@ -2196,7 +2194,7 @@ landed. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1359. Remaining: pre-bills through A446, not
+dishes in one panel, has landed. Remaining: pre-bills through A446, not
 scheduled for the foreseeable future (owner, 2026-11-17). One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval

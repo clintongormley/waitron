@@ -682,8 +682,9 @@ dónde se sienta el grupo. **Cerrar mesa** está al final. En una pantalla baja,
 panel hasta encontrarlo.
 
 **Alergias**, **Comensales** y **Poner nombre a los clientes** abren un editor. Pulsa el nombre
-de la mesa en la parte superior para volver a la misma cuenta. Si cambiaste algún campo, puedes
-seguir editando o descartar los cambios.
+de la mesa en la parte superior para volver a la misma cuenta. Usa **Atrás** en la parte superior
+de **Mover a otra mesa**, **Unir mesas** o **Separar la mesa** para volver al paso anterior. Si
+cambiaste algún campo, puedes seguir editando o descartar los cambios.
 
 Abre **⋮** junto al selector para ver las acciones de la cuenta que tienes en pantalla. Desde ahí
 puedes imprimirla, introducir los datos de la factura completa, mover platos o cambiar la cuenta.
@@ -871,7 +872,7 @@ destino y vuelve a elegir **Mover**.
 
 Cuando parte de un grupo pasa a una mesa propia, toca el nombre de la mesa, elige **Separar la
 mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de cualquier cuenta.
-Indica los comensales de cada mesa y elige **Separar**.
+Indica los comensales de cada mesa y confirma con el botón que lleva el nombre de la mesa que se separa.
 
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
 

@@ -1019,7 +1019,8 @@ describe("Table and bill actions", () => {
     ];
     /** The panel's step heading has focus. */
     const focusOnStep = (el: TillTableOrderScreen) =>
-      el.shadowRoot!.activeElement === el.shadowRoot!.querySelector("[data-action-panel] h2");
+      el.shadowRoot!.activeElement ===
+      el.shadowRoot!.querySelector("[data-action-panel] :is(h2, [data-action-heading])");
 
     it("in Spanish at 1024x768: Merge bills is scrolled into view with its heading focused; Back and Escape return to the ⋮", async () => {
       setLocale("es");
@@ -1072,7 +1073,9 @@ describe("Table and bill actions", () => {
         const list = el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(selector)!;
         const popup = list.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         list.show();
-        el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel] h2")!.focus();
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-action-panel] :is(h2, [data-action-heading])",
+        )!.focus();
         expect(popup.matches(":popover-open")).toBe(true);
         expect(focusOnStep(el)).toBe(true);
 

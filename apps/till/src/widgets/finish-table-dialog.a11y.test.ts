@@ -1,6 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  panelBackButton,
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+} from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
 import "./finish-table-dialog.js";
@@ -79,7 +84,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         const root = el.shadowRoot!;
         const dialog = root.querySelector("wt-dialog")!;
         await dialog.updateComplete;
-        expect(dialog.heading).toBe(
+        expect(root.querySelector("wt-top-bar")!.subtitle).toBe(
           locale === "en-GB" ? "4 dishes not served" : "4 platos sin servir",
         );
         await expectNoA11yViolations(host);
@@ -111,7 +116,11 @@ for (const locale of ["en-GB", "es-ES"]) {
         for (const selector of ["[data-close]", "[data-confirm]", "[data-collect]"]) {
           const button = root.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
           await button.updateComplete;
-          const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+          const bounds = (
+            selector === "[data-close]"
+              ? panelBackButton(button)
+              : button.shadowRoot!.querySelector("button")!
+          ).getBoundingClientRect();
           expect(bounds.width).toBeGreaterThan(40);
           expect(bounds.height).toBeGreaterThan(30);
           expect(bounds.left).toBeGreaterThanOrEqual(0);
