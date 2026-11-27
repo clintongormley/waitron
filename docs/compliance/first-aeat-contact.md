@@ -104,8 +104,9 @@ not following redirects, then showed AEAT's raw answers and added the controls. 
   library throws on that page for a filing as well as a query (run on the real page); that the filing
   pass then backs the batch off was read in `drain.ts`, not run.
   _2026-11-27, A1571 PR 1: the transport no longer follows AEAT's redirect to `erro4011.html` or
-  `erro4033.html`; the check reports `not_accepted`, and a failed filing pass marks the installed
-  certificate refused (`drain.certificate-refused.test.ts`)._
+  `erro4033.html`; the check reports `not_accepted`, and a filing pass that meets that redirect records
+  the fingerprint of the certificate it sent with (`aeat-transport.test.ts`,
+  `drain.certificate-refused.test.ts`)._
 - **The 4112 fault:** HTTP 200, `faultcode` `env:Client`, `faultstring` "Codigo[4112].El titular del
   certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor." A wrong company name
   beside the right tax ID was accepted.

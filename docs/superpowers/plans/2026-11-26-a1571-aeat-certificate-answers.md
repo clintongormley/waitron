@@ -38,7 +38,8 @@ current certificate is unchanged. Choose another certificate, or Cancel to stop.
 
 **Task 3. AEAT's number.** A SOAP fault whose `faultstring` starts `Codigo[4112].` (measured: HTTP
 200, `env:Client`) returns `{ reason: "aeat_refused", details: { codigo: "4112", taxpayerNif } }`,
-shown as "AEAT refused this certificate for {taxpayerNif} ({codigo})." (A795 decision 11; the tax
+shown as "AEAT refused this certificate for {taxpayerNif} ({codigo}). The current certificate is
+unchanged. Choose another certificate, or Cancel to stop." (A795 decision 11; the tax
 number in details follows `other_taxpayer`, `certificate-install.ts:151`). Only 4112 was measured,
 so another number keeps today's raw-fault sentence.
 
@@ -59,8 +60,8 @@ vault's credential revision was the first choice, and rotation changes it; 2026-
 line. Alert `fiscal.certificate_not_accepted` (error, `venue-settings`, since the date) from
 `certificateAlerts`, guarded by `scripts/ongoing-alert-codes.test.ts`, wording EN/ES in
 `apps/dashboard/src/i18n/alert-messages.ts` beside `fiscal.certificate_expiring`.
-`fiscal.submission_delayed` still shows when records are late. Limit: the mark clears at the next
-accepted send or a new install, not when nothing is waiting to send. Schema change:
+`fiscal.submission_delayed` still shows when records are late. Limit: the mark clears only at AEAT's next
+answer, so it stays while nothing is waiting to send; a new install hides it at once. Schema change:
 fiscal-verifactu's starting migration is rebuilt (`migration-baseline rebuild`); **venues reset**
 (PR's first line).
 

@@ -121,7 +121,8 @@ export interface FiscalCertificateSeat {
     body: unknown,
     now: Date,
   ): Promise<FiscalCertificateAnswer>;
-  /** The ongoing expiry alerts for the newest certificate install on `nodeId` or any box it took over from, read in `tx`. */
+  /** AEAT's refusal of, and the ongoing expiry alerts for, the newest certificate install on
+   * `nodeId` or any box it took over from, read in `tx`. */
   alerts(
     tx: Transaction,
     deps: { nodeId: string },

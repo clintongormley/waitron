@@ -1481,8 +1481,8 @@ assertions remain outside the change. See the [implementation plan](https://gith
 
 - **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
   [A760](../operations/a760-migration-squash.md), reinstall its certificate through the
-  certificate card if it shows **Installed: not recorded**. The card's expiry alerts and
-  reminder emails use an install record. A direct `waitron-credentials set --purpose fiscal.aeat`
+  certificate card if it shows **Installed: not recorded**. The card, its certificate alerts (AEAT's
+  refusal and expiry) and the reminder emails use an install record. A direct `waitron-credentials set --purpose fiscal.aeat`
   write still creates no install record; use the card when you need that metadata. Removing
   A889 from open work does not mean the planned A760 reset has run.
 
