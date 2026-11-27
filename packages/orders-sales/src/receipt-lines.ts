@@ -85,6 +85,9 @@ export interface TillSaleLine {
    * whole-invoice credit copies from the line it corrects, though the receipt shows none: the set
    * menu did not cover it. */
   correctsPricedDish?: true;
+  /** Presentation only. On a correction's line given back in part
+   * (`apps/server/src/corrective-lines-in-part.ts`). */
+  givenBackInPart?: true;
 }
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
