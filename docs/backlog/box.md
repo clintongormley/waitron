@@ -1826,6 +1826,10 @@ verification target. The [pinned local trial](https://github.com/clintongormley/
 recovered a checked snapshot with the continuous source absent and Cloud acknowledged it after
 restart. Qualify the published build separately before enabling its snapshots.
 
+In the isolated Juniper rehearsal, identify the check behind the same-key `secret_unavailable`
+result. Then repeat the capture and verification with separate box and Cloud keys on the pinned
+build before enabling snapshots for Juniper.
+
 **A1017, 2026-10-22:** the existing `archiveHost()` / `archiveCommand()` fixture is qualified
 for a separately authorised ordinary restore at Waitron `0ee4ec275461cae439b74ef62bfba884b9466d12`.
 Use the

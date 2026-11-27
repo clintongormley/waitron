@@ -15,6 +15,7 @@ interface CloudArchiveFixture {
   modules: readonly WaitronModule[];
   environment: "preproduction" | "production";
   stateDir: string;
+  sourceNodeId?: string;
   stagingDir?: string;
   stagingTurn?: StagingTurn;
 }
@@ -39,7 +40,7 @@ export async function runCloudArchive(
   signal: AbortSignal,
   upload: (grant: CloudCaptureGrant, file: string, metadata: CloudCaptureMetadata) => Promise<void>,
 ) {
-  const nodeId = randomUUID();
+  const nodeId = deps.sourceNodeId ?? randomUUID();
   const registration = {
     installationId: randomUUID(),
     venueId: randomUUID(),

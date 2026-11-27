@@ -1,4 +1,4 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, readFile, readdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -6,8 +6,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
+import { loadRecoveryKey } from "./backup-config.js";
 import { verifyBackupArtifact } from "./backup-verification-entry.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
+import { loadBoxEnv } from "./box-env.js";
+import { createSealedStateRefresher } from "./sealed-state.js";
 import * as placement from "./backup-data-placement.js";
 import {
   logicalDatabase,
@@ -15,6 +18,7 @@ import {
   useBackupVerificationFixture,
   type BackupVerificationFixture,
 } from "./testing/backup-verification-fixture.js";
+import { runCloudArchive } from "./testing/cloud-archive.js";
 
 async function consume(query: BackupQuery, statement: string) {
   const rows = [];
@@ -32,6 +36,73 @@ async function verify(f: BackupVerificationFixture) {
   expect(answer.activation).toBe("not_attempted");
   return answer;
 }
+
+const boxKey = "synthetic-box-backup-key";
+const cloudKey = "synthetic-cloud-grant-key";
+
+async function captureWithSealedState(f: BackupVerificationFixture, grantKey: string) {
+  await writeFile(join(f.stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${boxKey}\n`);
+  const capture = {
+    db: f.db,
+    node: f.node,
+    modules: ALL_MODULES,
+    environment: "production" as const,
+    stateDir: f.stateDir,
+  };
+  const refresher = createSealedStateRefresher({
+    ...capture,
+    nodeId: f.request.sourceNodeId,
+    resolvers: {},
+    readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, f.stateDir)),
+    now: f.deps.now,
+    log: () => {},
+    status: { failedSince: null, errorCode: null },
+  });
+  expect(await refresher.refresh()).toBe("sealed");
+  await runCloudArchive(
+    { ...capture, sourceNodeId: f.request.sourceNodeId },
+    grantKey,
+    f.deps.now(),
+    f.deps.signal,
+    async (grant, file, metadata) => {
+      await copyFile(file, f.deps.artifactPath);
+      f.request.captureId = grant.id;
+      f.request.pointId = grant.id;
+      f.request.venueId = grant.venueId;
+      f.request.sourceInstallationId = grant.installationId;
+      f.request.sourceNodeId = metadata.sourceNodeId;
+      f.request.capturedAt = metadata.capturedAt;
+      f.request.archive.sha256 = metadata.digest;
+      f.request.archive.bytes = metadata.size;
+      f.request.archive.modules = metadata.modules;
+      f.request.backupKey.version = grant.keyVersion;
+      f.deps.recoveryKey = { ...f.request.backupKey, secret: grant.recoveryKey };
+    },
+  );
+}
+
+it.each([
+  ["the same box and Cloud key", boxKey],
+  ["a separate box key", cloudKey],
+])("verifies a Cloud archive with %s", async (_label, grantKey) => {
+  const f = await suite.create();
+  await captureWithSealedState(f, grantKey);
+  const answer = await verify(f);
+  expect(answer).toMatchObject({ status: "passed", reason: "none" });
+  expect(answer.modules).toHaveLength(f.request.target.modules.length);
+  expect(answer.modules.every((module) => module.status === "passed")).toBe(true);
+});
+
+it("requires the Cloud grant key to open the outer archive", async () => {
+  const f = await suite.create();
+  await captureWithSealedState(f, cloudKey);
+  f.deps.recoveryKey.secret = boxKey;
+  expect(await verify(f)).toMatchObject({
+    status: "unavailable",
+    reason: "decryption_unavailable",
+    modules: [],
+  });
+});
 
 it("accepting control preserves every captured row through every real owner", async () => {
   const f = await suite.create();
