@@ -1264,12 +1264,26 @@ it("says in Money back under way that the business's registered address is missi
   );
 });
 
-it("says the box's receipt and invoice records need checking, true of a receipt and a full invoice", () => {
-  expect(codeMessage("invoice_correction.chain_unsound", "en")).toBe(
-    "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+it("says the box's receipt and invoice records need checking, naming cancelled dishes on a full invoice in Give money back", () => {
+  const receipt = {
+    en: "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
+  };
+  expect(codeMessage("invoice_correction.chain_unsound", "en")).toBe(receipt.en);
+  expect(codeMessage("invoice_correction.chain_unsound", "es")).toBe(receipt.es);
+  for (const locale of ["en", "es"] as const)
+    expect(giveBackReasonMessage("invoice_correction.chain_unsound", locale, {})).toBe(
+      receipt[locale],
+    );
+  expect(
+    giveBackReasonMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
+  ).toBe(
+    "The box's receipt and invoice records need checking, so dishes, cancelled dishes or goodwill cannot be refunded or recorded now; the extra paid on top can be refunded. Money already refunded stays refunded.",
   );
-  expect(codeMessage("invoice_correction.chain_unsound", "es")).toBe(
-    "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
+  expect(
+    giveBackReasonMessage("invoice_correction.chain_unsound", "es", { fullInvoice: true }),
+  ).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos, de platos cancelados o por cortesía; lo pagado de más sí se puede devolver. El dinero ya devuelto queda devuelto.",
   );
 });
 

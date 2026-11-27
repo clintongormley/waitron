@@ -584,6 +584,14 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
   });
 
+  it("within what its cancels owe on a full invoice, reads the invoice's admission once", async () => {
+    const { paid, burger } = await oneCancel(false, true);
+    const admissions = vi.spyOn(venue.backend, "correctionAdmissionFor");
+    onTestFinished(() => admissions.mockRestore());
+    await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
+    expect(admissions).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses €8 naming a cancel that owes €6 as Correct invoice's money on a correctable invoice", async () => {
     const { paid, burger } = await oneCancel();
     const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));

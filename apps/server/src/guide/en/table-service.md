@@ -425,8 +425,8 @@ refund**; a supervisor or manager approves recording it with their PIN. See
 After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens on **A
 dish**, filled in with the cancelled dishes, their amount and the cancel's reason. On a receipt, the
 cancel's approval covers that money, so no new PIN is asked unless you refund more. On a full
-invoice naming a customer it does not: if you cannot both give refunds and issue corrective
-invoices, a supervisor or manager approves it with their PIN. Keep the window open to use it: one
+invoice naming a customer it does not: unless you have both **Refund payments** and **Issue
+corrective receipts and invoices**, a supervisor or manager approves it with their PIN. Keep the window open to use it: one
 opened later from the receipt is not filled in.
 
 When a card refund waits for the card company, choose **Check again** to ask it about that refund,

@@ -19,7 +19,12 @@ import {
   saleSettlements,
   type Transaction,
 } from "@waitron/db";
-import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
+import {
+  prepareIssueClock,
+  type CorrectionAdmission,
+  type FiscalBackend,
+  type TrustedReading,
+} from "@waitron/fiscal";
 import type { Authorization, AuthzInput } from "@waitron/identity";
 import {
   AppError,
@@ -191,10 +196,10 @@ export async function recordsNeedChecking(
  * The payment money still on invoice `saleId` (`refundable`, in cents) and how much of it Correct
  * invoice could give back now (`correctable`): what is left of its lines, capped by that money, or
  * 0 where Correct invoice refuses it for good. Where Correct invoice waits, `waiting` is why.
- * Unlike {@link checkCorrectionOpenable}, the lines are read before the pending-refund check, so a ticket Correct invoice can never take does
- * not wait on another payment's refund; and the chain and clock checks run only when
- * `stillRefused` says the caller would refuse without them. Answers the payments and the lines it
- * read: `lines` is null where it refused them, for good or for now.
+ * Unlike {@link checkCorrectionOpenable}, the lines are read before the pending-refund check, so a
+ * ticket Correct invoice can never take does not wait on another payment's refund; and the chain
+ * and clock checks run only when `stillRefused` says the caller would refuse without them. Answers
+ * the payments and the lines it read: `lines` is null where it refused them, for good or for now.
  */
 export async function readCorrectableNow(
   tx: Transaction,
@@ -206,6 +211,7 @@ export async function readCorrectableNow(
     amounts: { refundable: number; correctable: number },
     fullInvoice: boolean,
   ) => boolean,
+  admission?: CorrectionAdmission,
 ): Promise<{
   tenders: RefundableTender[];
   lines: CorrectableLine[] | null;
@@ -220,6 +226,7 @@ export async function readCorrectableNow(
   let fullInvoice = false;
   const kind = {
     ...AS_ADMITTED,
+    ...(admission === undefined ? {} : { admission }),
     kindSeen: (full: boolean) => {
       fullInvoice = full;
     },

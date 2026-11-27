@@ -1488,6 +1488,14 @@ const GIVE_BACK_FILING_PENDING = {
   },
 };
 
+const GIVE_BACK_CHAIN_UNSOUND = {
+  receipt: CODE_MESSAGES["invoice_correction.chain_unsound"]!,
+  fullInvoice: {
+    en: "The box's receipt and invoice records need checking, so dishes, cancelled dishes or goodwill cannot be refunded or recorded now; the extra paid on top can be refunded. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos, de platos cancelados o por cortesía; lo pagado de más sí se puede devolver. El dinero ya devuelto queda devuelto.",
+  },
+};
+
 /** {@link codeMessage} as Give money back words it, where other choices stay open; `fullInvoice`
  * in `params` names the invoice a full invoice. */
 export function giveBackReasonMessage(
@@ -1495,6 +1503,9 @@ export function giveBackReasonMessage(
   locale: string = currentLocale(),
   params?: Record<string, unknown>,
 ): string {
+  const kind = params?.fullInvoice === true ? "fullInvoice" : "receipt";
+  if (code === "invoice_correction.chain_unsound")
+    return pickLocale(GIVE_BACK_CHAIN_UNSOUND[kind], locale);
   const words =
     code !== "sale.correction_not_admitted"
       ? undefined
@@ -1503,9 +1514,7 @@ export function giveBackReasonMessage(
         : params?.reason === "filing_pending"
           ? GIVE_BACK_FILING_PENDING
           : undefined;
-  return words === undefined
-    ? codeMessage(code, locale, params)
-    : pickLocale(words[params?.fullInvoice === true ? "fullInvoice" : "receipt"], locale);
+  return words === undefined ? codeMessage(code, locale, params) : pickLocale(words[kind], locale);
 }
 
 /** Why Money back under way cannot record the money given back, by the refusal's reason: all but

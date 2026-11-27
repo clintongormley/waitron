@@ -4,7 +4,7 @@ import {
   readCancelsForRefund,
   readCancelsStillOwed,
 } from "@waitron/adjustments";
-import { admittedAsFullInvoice } from "@waitron/core";
+import { admittedAsFullInvoice, readCorrectionAdmission } from "@waitron/core";
 import {
   adjustmentRefunds,
   invoiceCorrectionRefunds,
@@ -173,7 +173,12 @@ async function refuseBeyondPlainRoom(
   owed: number,
 ): Promise<void> {
   const sale = brandSaleId(saleId);
-  if (upTo <= owed && !(await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, AS_ADMITTED)))
+  const admission =
+    upTo <= owed ? await readCorrectionAdmission(tx, fiscal.backend, sale, nodeId) : undefined;
+  if (
+    admission !== undefined &&
+    !(await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, { ...AS_ADMITTED, admission }))
+  )
     return;
   const room = (amounts: { refundable: number; correctable: number }, fullInvoice: boolean) =>
     (fullInvoice ? 0 : owed) + amounts.refundable - amounts.correctable;
@@ -186,6 +191,7 @@ async function refuseBeyondPlainRoom(
     fiscal.reading,
     sale,
     (amounts, fullInvoice) => upTo > room(amounts, fullInvoice),
+    admission,
   );
   if (upTo <= (read.fullInvoice ? 0 : owed)) return;
   if (read.waiting !== null) throw read.waiting;

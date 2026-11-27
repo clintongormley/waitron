@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import {
   decimal,
   deviceOrigin,
@@ -750,6 +750,42 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     backend.setCorrectionAdmission(admitted);
     expect(await kindOf(full.saleId, { fullInvoice: "as_admitted" })).toBe(false);
     expect(await kindOf(full.saleId, FULL)).toBe(true);
+
+    const replaced = await sellSteak();
+    const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+      recordReplacement(tx, backend, {
+        operationDescription: "Sale on premises",
+        origin: deviceOrigin(deviceId),
+        nodeId,
+        seriesId: rectSeriesId,
+        correctsSaleId: replaced.saleId,
+        authz: { sessionId },
+        clock,
+      }),
+    );
+    const regime: Required<Pick<FiscalBackend, "correctionAdmissionFor">> = backend;
+    vi.spyOn(regime, "correctionAdmissionFor").mockImplementation((_tx, id) =>
+      Promise.resolve(id === replacementId ? { ...admitted, fullInvoice: true } : admitted),
+    );
+    expect(await kindOf(replaced.saleId, { fullInvoice: "as_admitted" })).toBe(true);
+  });
+
+  it("with an admission already read, takes the kind and the lines from it without reading it again", async () => {
+    const full = await sellFull();
+    const asRead = { ...admitted, fullInvoice: true } as const;
+    const reads = vi.spyOn(backend, "correctionAdmissionFor");
+    const kind = { fullInvoice: "as_admitted", admission: asRead } as const;
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        admittedAsFullInvoice(tx, backend, full.saleId, nodeId, kind),
+      ),
+    ).toBe(true);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readCorrectableLines(tx, backend, full.saleId, nodeId, kind),
+      ),
+    ).toMatchObject([{ id: full.ids[0], left: "12.10" }]);
+    expect(reads).not.toHaveBeenCalled();
   });
 
   it("with as_admitted, tells kindSeen the kind before refusing an admission that waits", async () => {

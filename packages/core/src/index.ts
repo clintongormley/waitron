@@ -15,6 +15,7 @@ export {
   admittedAsFullInvoice,
   previewCorrectionAmounts,
   readCorrectableLines,
+  readCorrectionAdmission,
 } from "./correction-history.js";
 export type {
   CorrectableLine,

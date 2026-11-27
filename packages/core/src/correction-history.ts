@@ -43,6 +43,9 @@ export interface FullInvoiceCorrection {
   /** Told whether it is a full invoice's correction once the admission is read, before any refusal
    * of it: a refusal Correct invoice waits out carries no kind. */
   kindSeen?: (fullInvoice: boolean) => void;
+  /** The regime's admission of this invoice's correction, as {@link readCorrectionAdmission} read
+   * it earlier in the same transaction; read again when absent. */
+  admission?: CorrectionAdmission;
 }
 
 /**
@@ -129,6 +132,16 @@ const isFullInvoiceCorrection = (kind: FullInvoiceCorrection, admission: Correct
   kind.fullInvoice === true ||
   (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
 
+/** The regime's admission of a correction of the invoice `saleId`, read through its replacement. */
+export async function readCorrectionAdmission(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+): Promise<CorrectionAdmission> {
+  return admissionOf(tx, backend, await correctionTargetFor(tx, saleId), issuingNodeId);
+}
+
 /** Whether a correction of the invoice `saleId` asked for as `kind` is a full invoice's, as
  * {@link previewCorrectionAmounts} decides it, reading the regime's admission alone: none of the
  * preview's refusals is checked. */
@@ -141,7 +154,7 @@ export async function admittedAsFullInvoice(
 ): Promise<boolean> {
   return isFullInvoiceCorrection(
     kind,
-    await admissionOf(tx, backend, await correctionTargetFor(tx, saleId), issuingNodeId),
+    kind.admission ?? (await readCorrectionAdmission(tx, backend, saleId, issuingNodeId)),
   );
 }
 
@@ -161,7 +174,7 @@ async function admittedHistory(
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }
-  const admission = await admissionOf(tx, backend, saleId, issuingNodeId);
+  const admission = kind.admission ?? (await admissionOf(tx, backend, saleId, issuingNodeId));
   const full = isFullInvoiceCorrection(kind, admission);
   kind.kindSeen?.(full);
   if (admission.fullInvoice && !full) {
