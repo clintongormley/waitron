@@ -7,7 +7,7 @@ import { descriptionFor } from "./dish-format.js";
 import { dietLabel } from "./nutrition-icons.js";
 
 /** A dish's description, allergens and diet labels, as the information window and an opened row
- * both show them; the host styles `h3`, `ul`, `li` and `.pending`. */
+ * both show them; the host styles `h3`, `ul` and `li`, and may style `.pending`. */
 export function dishFacts(product: TillProduct): TemplateResult {
   const allergens = product.allergens;
   const description = descriptionFor(product.description ?? {}, "").trim();

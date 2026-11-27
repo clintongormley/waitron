@@ -5,7 +5,8 @@ import { DraftStore, DraftSync } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { cleanupWidgets, draftServer } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
+import { fill, setLocale } from "../i18n/t.js";
 import {
   beer,
   burger,
@@ -154,7 +155,10 @@ describe("the bin in −'s place at a count of 1", () => {
     setLocale("es");
     const { el } = await open();
     await tapRow(el, 1);
-    expect(bin(el, 1)!.getAttribute("aria-label")).toBe("Quitar Flan");
+    expect(es["action.remove_named"]).not.toBe(en["action.remove_named"]);
+    expect(bin(el, 1)!.getAttribute("aria-label")).toBe(
+      fill(es["action.remove_named"], { label: "Flan" }),
+    );
   });
 
   it("removes the dish as the draft bar's Remove does: its tick goes and focus moves to the order's heading", async () => {

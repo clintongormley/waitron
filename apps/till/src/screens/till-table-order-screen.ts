@@ -5018,7 +5018,7 @@ export class TillTableOrderScreen extends LitElement {
       this.#selected.delete(line);
     }
     this.requestUpdate();
-    // Remove turns disabled once nothing is ticked, so focus goes to the order's heading.
+    // The pressed Remove turns disabled, or the pressed bin leaves with its row, so focus goes to the order's heading.
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }

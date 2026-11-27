@@ -6,7 +6,7 @@ foot is built.”). Design: [§4 The order screen](../specs/2026-11-26-till-hand
 §14.2 “Stepper”, §14.4 “Rows”, “Unfolded rows” and “An opened row”. It builds on PR 6 (#4459,
 branch `feat/n-till-order-6-rows`, not yet landed): branch from it, and rebase onto `main` once it
 lands. Line numbers below are PR 6's head (`b51313a980`). Status: cleared by the watcher 2026-11-27 03:03 (questions 1–3 answered as
-proposed); 7a built on `feat/n-till-order-7a-open-row`. It lands as two pull requests, **7a** then **7b**, each about three hours (see Size).
+proposed); 7a built on `feat/n-till-order-7a-open-row`. 2026-11-27: as built, 7a differs from items 1 and 4 and from "What staff can do": the stepper draws its own bold − and + rather than `wt-icon`'s, − at a count of 1 is a bin that removes the dish, and the opened box shows the dish's description, allergens and diet labels (the owner, on 7a's pictures). design-system.md's "The order's new rows (till)" and its `wt-stepper` row describe what was built. It lands as two pull requests, **7a** then **7b**, each about three hours (see Size).
 
 ## What staff can do when it lands
 

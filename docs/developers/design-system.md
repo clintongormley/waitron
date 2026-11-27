@@ -815,7 +815,7 @@ forms the hit target (the inner `button` for `wt-button`; the inner `input` for 
 inner `textarea` for `wt-textarea`; the inner `input` and the unit button for `wt-price-input`; the
 inner `input` for `wt-number-stepper`; both `:host` and `.control` for `wt-switch`; the inner
 range `input` for `wt-slider`;
-the `.trigger` button for `wt-combobox`; the inner `input` for `wt-address-lookup`; the `.trigger` button and each tile for `wt-colour-chooser`; the inner `button` for `wt-help-switch`; the − and + buttons for `wt-stepper`) — never an element that can overflow its own container
+the `.trigger` button for `wt-combobox`; the inner `input` for `wt-address-lookup`; the `.trigger` button and each tile for `wt-colour-chooser`; the inner `button` for `wt-help-switch`; the −, + and bin buttons for `wt-stepper`) — never an element that can overflow its own container
 (see "Hit targets must not overflow their container" below). A field's control (`.field-control`
 in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
 (`wt-textarea` moves the floated label's share of that height into its field box's top padding,

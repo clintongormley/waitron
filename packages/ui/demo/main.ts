@@ -282,7 +282,7 @@ const panel = (theme: "light" | "dark") => `
     </div>
     <div class="row" style="margin-top:16px">
       <wt-stepper label="Burger" value="2" min="1"></wt-stepper>
-      <wt-stepper label="Burger" value="1" min="1" max="1"></wt-stepper>
+      <wt-stepper class="demo-stepper-bin" label="Burger" value="1" min="1" max="1"></wt-stepper>
       <wt-stepper label="Burger" value="2" disabled></wt-stepper>
     </div>
     <wt-file-input name="photo" label="Photo" required accept="image/jpeg,image/png,image/webp" hint="JPEG, PNG or WebP, up to 20 MB"></wt-file-input>
@@ -637,6 +637,9 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   )) {
     stepper.decreaseLabel = (label) => `Decrease ${label}`;
     stepper.increaseLabel = (label) => `Increase ${label}`;
+  }
+  for (const s of el.querySelectorAll<HTMLElementTagNameMap["wt-stepper"]>(".demo-stepper-bin")) {
+    s.removeLabel = (label) => `Remove ${label}`;
   }
 }
 
