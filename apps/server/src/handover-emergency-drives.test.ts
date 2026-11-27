@@ -153,14 +153,14 @@ function service(options: {
     },
     log,
   );
-  const post = async (step: string, body: unknown, https = true) => {
+  const post = async (step: string, body: unknown, https = true, type = "application/json") => {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
       `${ORIGIN}/api/node/handover/emergency/${step}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", origin: ORIGIN },
+        headers: { "content-type": type, origin: ORIGIN },
         body: typeof body === "string" ? body : JSON.stringify(body),
       },
       https ? { incoming: { socket } } : {},
@@ -241,6 +241,24 @@ it.each([
   expect(resolveDriveFile).not.toHaveBeenCalled();
 });
 
+it.each(["application/json-seq", "application/jsonl"])(
+  "the backup route takes a %s body as an upload, never as a drive request",
+  async (type) => {
+    const { drivesRoot, name } = await backupOnDrive();
+    const s = service({ drivesRoot });
+    const answer = await s.post(
+      "backup",
+      { signIn: SIGN_IN, file: { drive: "sda1", path: `backups/${name}` } },
+      true,
+      type,
+    );
+    expect(answer.status).toBe(400);
+    expect(answer.body).toMatchObject({ error: { code: "setup.request_invalid" } });
+    expect(resolveDriveFile).not.toHaveBeenCalled();
+    expect(stageBackupAsCopy).not.toHaveBeenCalled();
+  },
+);
+
 it("a drive path outside the drive is refused after the sign-in", async () => {
   const { drivesRoot } = await backupOnDrive();
   const s = service({ drivesRoot });
@@ -270,7 +288,10 @@ it("a stick pulled after the file is checked answers restore.drive_file_unreadab
     signIn: SIGN_IN,
     file: { drive: "sda1", path: `backups/${name}` },
   });
-  expect(answer.body).toEqual({ error: { code: "restore.drive_file_unreadable", params: {} } });
+  expect([answer.status, answer.body]).toEqual([
+    409,
+    { error: { code: "restore.drive_file_unreadable", params: {} } },
+  ]);
   expect(vi.mocked(stageBackupAsCopy).mock.calls).toHaveLength(1);
   expect(s.host.storageRelease).not.toHaveBeenCalled();
   expect(restart).not.toHaveBeenCalled();

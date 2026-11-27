@@ -139,11 +139,16 @@ export async function listDriveBackups(
   drives: readonly StorageDrive[],
   { root = STORAGE_DRIVES_ROOT, log }: { root?: string; log: Logger },
 ): Promise<DriveBackupList> {
-  const found: DriveBackupFile[] = [];
-  for (const { drive, readable } of drives) {
-    if (readable && STORAGE_DRIVE_NAME.test(drive))
-      await walk(drive, join(root, drive), [], found, log);
-  }
+  const perDrive = await Promise.all(
+    drives
+      .filter(({ drive, readable }) => readable && STORAGE_DRIVE_NAME.test(drive))
+      .map(async ({ drive }) => {
+        const found: DriveBackupFile[] = [];
+        await walk(drive, join(root, drive), [], found, log);
+        return found;
+      }),
+  );
+  const found = perDrive.flat();
   found.sort(
     (a, b) =>
       b.takenAt.localeCompare(a.takenAt) ||
@@ -227,7 +232,9 @@ export async function readingDriveFile<T>(
 }
 
 export function isJsonRequest(request: Request): boolean {
-  return request.headers.get("content-type")?.toLowerCase().startsWith("application/json") ?? false;
+  return (
+    request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() === "application/json"
+  );
 }
 
 /** A copy of the drive file in its own `drive-<uuid>` folder under `stagingDir`, so the stick can
@@ -332,6 +339,7 @@ export async function receiveDriveArchive(
     else if (typeof value === "object" && value !== null) fields.set(name, JSON.stringify(value));
     else throw refuse("setup.request_invalid", name);
   }
+  options.check?.(fields);
   if (options.moves) {
     const taken = await takeDriveFile(record.file, {
       stagingDir: deps.stagingDir,
@@ -351,10 +359,11 @@ export async function receiveDriveArchive(
   };
 }
 
-/** Setup's receiver: a JSON body names a file on a drive, and anything else is an upload. */
+/** Setup's receiver: for a route that takes a drive file, a JSON body names one; anything else
+ * is an upload. */
 export function receiveRestoreArchive(stagingDir: string, root?: string): ReceiveArchive {
   return (request, options = {}) =>
-    isJsonRequest(request)
+    options.drive && isJsonRequest(request)
       ? receiveDriveArchive(request, options, {
           stagingDir,
           limitBytes: SETUP_DRIVE_BODY_MAX,

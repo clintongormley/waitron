@@ -184,7 +184,11 @@ export function mountRecoveryPreparationApi(
       options.setBusy(true);
       let upload;
       try {
-        upload = await deps.receiveArchive(c.req.raw, { fields: ["request"], exactFields: true });
+        upload = await deps.receiveArchive(c.req.raw, {
+          fields: ["request"],
+          exactFields: true,
+          drive: true,
+        });
         const rawRequest = text(upload.fields.get("request"), "body", 131072);
         let payload: unknown;
         try {

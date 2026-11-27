@@ -118,6 +118,7 @@ const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   "restore.unexpected_entry": 422,
   "restore.unsafe_entry_path": 422,
   "restore.identity_incomplete": 422,
+  "restore.drive_file_unreadable": 409,
   // The 503 cloud-api.ts and cloud-locked-start.ts already give this code, not this file's 502.
   "cloud.unavailable": 503,
 };

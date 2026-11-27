@@ -78,6 +78,8 @@ it("the drive list needs the owner's transport and asks the host as the server",
 
 it.each([
   ["a body that is not JSON", { "content-type": "text/plain" }, "{}"],
+  ["a JSON text sequence", { "content-type": "application/json-seq" }, "{}"],
+  ["JSON lines", { "content-type": "application/jsonl" }, "{}"],
   ["a body with a key", { "content-type": "application/json" }, '{"drive":"sda1"}'],
   ["a body over its limit", { "content-type": "application/json" }, `"${"x".repeat(5000)}"`],
 ])("the drive list refuses %s before asking the host", async (_label, headers, body) => {

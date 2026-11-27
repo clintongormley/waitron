@@ -102,6 +102,55 @@ function recoveryCredentials(
     ...(selected === undefined ? {} : { recoveryContext: selected }),
   };
 }
+/** A restore's small fields, from its form, or from its headers when it is a bare upload. */
+function restoreFields(
+  form: ReadonlyMap<string, string> | undefined,
+  headers: {
+    masterKey: string | undefined;
+    environment: string | undefined;
+    oldBoxGone: string | undefined;
+    recoveryOperationPath: string | undefined;
+  },
+) {
+  if (form) {
+    const answer = form.get("oldBoxGone");
+    if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
+  }
+  const masterKey =
+    form === undefined ? headers.masterKey! : asMasterKey(form.get("masterKey"), "masterKey");
+  const rawEnvironment = form === undefined ? headers.environment : form.get("environment");
+  if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
+    invalidRequest("environment");
+  const oldBoxGone = (form === undefined ? headers.oldBoxGone : form.get("oldBoxGone")) === "1";
+  let suppliedOperation: unknown;
+  const rawOperation = form?.get("recoveryOperation");
+  if (rawOperation !== undefined && rawOperation !== null) {
+    if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
+      invalidRequest("recoveryOperation");
+    try {
+      suppliedOperation = JSON.parse(rawOperation);
+    } catch {
+      invalidRequest("recoveryOperation");
+    }
+  }
+  const credentials = recoveryCredentials(
+    headers.recoveryOperationPath,
+    suppliedOperation,
+    form?.get("nodeRecoverySecret") ?? (rawOperation == null ? undefined : masterKey),
+    (() => {
+      const raw = form?.get("recoveryContext");
+      if (raw === undefined || raw === null) return undefined;
+      if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+        invalidRequest("recoveryContext");
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return invalidRequest("recoveryContext");
+      }
+    })(),
+  );
+  return { masterKey, rawEnvironment, oldBoxGone, credentials } as const;
+}
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 // Finish joining reads nothing from its body, so every resend counts as the same request.
 const JOIN_ADOPT_REQUEST_HASH = createHash("sha256").update("adopt-joined").digest("hex");
@@ -720,21 +769,29 @@ export function mountSetupOperationRoutes(
         try {
           const type = c.req.header("content-type")?.toLowerCase() ?? "";
           const drive = isJsonRequest(c.req.raw);
-          const multipart = drive || type.startsWith("multipart/form-data");
-          if (!multipart && !type.startsWith("application/octet-stream"))
+          const fieldsInBody = drive || type.startsWith("multipart/form-data");
+          if (!fieldsInBody && !type.startsWith("application/octet-stream"))
             invalidRequest("artifact");
-          const headerKey = multipart
+          const headerKey = fieldsInBody
             ? undefined
             : asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
           const headerEnvironment = c.req.header("x-waitron-restore-environment");
           if (
-            !multipart &&
+            !fieldsInBody &&
             headerEnvironment !== "production" &&
             headerEnvironment !== "preproduction"
           )
             invalidRequest("environment");
-          if (!multipart && isUnset(deps.recoveryOperationPath))
+          if (!fieldsInBody && isUnset(deps.recoveryOperationPath))
             invalidRequest("recoveryOperation");
+          const readFields = (form: ReadonlyMap<string, string> | undefined) =>
+            restoreFields(form, {
+              masterKey: headerKey,
+              environment: headerEnvironment,
+              oldBoxGone: c.req.header("x-waitron-old-box-gone"),
+              recoveryOperationPath: deps.recoveryOperationPath,
+            });
+          let checked: ReturnType<typeof restoreFields> | undefined;
           upload = await deps.receiveArchive!(c.req.raw, {
             fields: [
               "masterKey",
@@ -745,49 +802,14 @@ export function mountSetupOperationRoutes(
               "recoveryContext",
             ],
             exactFields: drive,
+            drive: true,
             moves: true,
+            check: (fields) => {
+              checked = readFields(fields);
+            },
           });
-          const form = multipart ? upload.fields : undefined;
-          if (form) {
-            const answer = form.get("oldBoxGone");
-            if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
-          }
-          const masterKey =
-            form === undefined ? headerKey! : asMasterKey(form.get("masterKey"), "masterKey");
-          const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
-          if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
-            invalidRequest("environment");
-          const oldBoxGone =
-            (form === undefined
-              ? c.req.header("x-waitron-old-box-gone")
-              : form.get("oldBoxGone")) === "1";
-          let suppliedOperation: unknown;
-          const rawOperation = form?.get("recoveryOperation");
-          if (rawOperation !== undefined && rawOperation !== null) {
-            if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
-              invalidRequest("recoveryOperation");
-            try {
-              suppliedOperation = JSON.parse(rawOperation);
-            } catch {
-              invalidRequest("recoveryOperation");
-            }
-          }
-          const credentials = recoveryCredentials(
-            deps.recoveryOperationPath,
-            suppliedOperation,
-            form?.get("nodeRecoverySecret") ?? (rawOperation == null ? undefined : masterKey),
-            (() => {
-              const raw = form?.get("recoveryContext");
-              if (raw === undefined || raw === null) return undefined;
-              if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
-                invalidRequest("recoveryContext");
-              try {
-                return JSON.parse(raw) as unknown;
-              } catch {
-                return invalidRequest("recoveryContext");
-              }
-            })(),
-          );
+          const { masterKey, rawEnvironment, oldBoxGone, credentials } =
+            checked ?? readFields(fieldsInBody ? upload.fields : undefined);
           c.header("Cache-Control", "no-store");
           const hash = createHash("sha256")
             .update(rawEnvironment)

@@ -72,6 +72,7 @@ export function mountSetupDriveRoutes(
         const upload = await deps.receiveArchive!(c.req.raw, {
           fields: ["masterKey", "environment"],
           exactFields: json,
+          drive: true,
         });
         try {
           const { masterKey, environment } = read(json ? upload.fields : undefined);

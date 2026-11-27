@@ -20,8 +20,10 @@ import type { StorageDrive } from "./box-host-client.js";
 import {
   listDriveBackups,
   readDriveJson,
+  isJsonRequest,
   readingDriveFile,
   receiveDriveArchive,
+  receiveRestoreArchive,
   releaseDrives,
   resolveDriveFile,
   takeDriveFile,
@@ -98,6 +100,37 @@ describe("listDriveBackups", () => {
       { drive: "sda1", path: `backups/${middle}`, size: 6, takenAt: "2026-03-01T10:00:00.000Z" },
       { drive: "sda1", path: oldest, size: 6, takenAt: "2026-01-01T10:00:00.000Z" },
     ]);
+  });
+
+  it("reads two drives at once", async () => {
+    await put("sda1", name("2026-06-01T10:00:00Z"));
+    await put("sdb1", name("2026-05-01T10:00:00Z"));
+    const real = nativeFs.promises.readdir;
+    let secondStarted!: () => void;
+    const second = new Promise<void>((resolve) => (secondStarted = resolve));
+    let overlapped = false;
+    const spy = vi
+      .spyOn(nativeFs.promises, "readdir")
+      .mockImplementation(async (...args: Parameters<typeof real>) => {
+        if (args[0] === join(root, "sdb1")) secondStarted();
+        if (args[0] === join(root, "sda1")) {
+          // Held until the second drive's read starts, or a second at most.
+          overlapped = await Promise.race([
+            second.then(() => true),
+            new Promise<false>((resolve) => setTimeout(() => resolve(false), 1000)),
+          ]);
+        }
+        return real(...args);
+      });
+    syncBuiltinESMExports();
+    try {
+      const listed = await listDriveBackups([drive("sda1"), drive("sdb1")], { root, log: vi.fn() });
+      expect(listed.files.map((file) => file.drive)).toEqual(["sda1", "sdb1"]);
+    } finally {
+      spy.mockRestore();
+      syncBuiltinESMExports();
+    }
+    expect(overlapped).toBe(true);
   });
 
   it("a drive whose folder is missing lists no files", async () => {
@@ -440,6 +473,68 @@ describe("receiveDriveArchive", () => {
         { root, stagingDir: staging, limitBytes: 4096 },
       ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field } });
+  });
+});
+
+describe("receiveDriveArchive's check", () => {
+  const good = name("2026-06-01T10:00:00Z");
+
+  it("runs on the body's fields before the file is looked for", async () => {
+    const check = vi.fn(() => {
+      throw new Error("refused by the route");
+    });
+    await expect(
+      receiveDriveArchive(
+        jsonRequest(JSON.stringify({ file: { drive: "sda1", path: good }, masterKey: "k" })),
+        { fields: ["masterKey"], moves: true, check },
+        { root, stagingDir: staging, limitBytes: 4096, freeBytes: PLENTY },
+      ),
+    ).rejects.toThrow("refused by the route");
+    expect(check).toHaveBeenCalledExactlyOnceWith(new Map([["masterKey", "k"]]));
+  });
+});
+
+describe("receiveRestoreArchive", () => {
+  const good = name("2026-06-01T10:00:00Z");
+  const body = JSON.stringify({ file: { drive: "sda1", path: good } });
+
+  it("takes a drive file only for a route that asks for one", async () => {
+    await put("sda1", good);
+    const receive = receiveRestoreArchive(staging, root);
+    const taken = await receive(jsonRequest(body), { drive: true });
+    expect(taken.drivePath).toBe(join(root, "sda1", good));
+    await taken.dispose();
+
+    const upload = await receive(jsonRequest(body), {});
+    expect(upload.drivePath).toBeUndefined();
+    expect(upload.artifactPath.startsWith(join(staging, "upload-"))).toBe(true);
+    expect(await readFile(upload.artifactPath, "utf8")).toBe(body);
+    await upload.dispose();
+  });
+
+  it.each(["application/json-seq", "application/jsonl"])(
+    "treats a %s body as an upload, not a drive request",
+    async (type) => {
+      await put("sda1", good);
+      const upload = await receiveRestoreArchive(staging, root)(
+        jsonRequest(body, { "content-type": type }),
+        { drive: true },
+      );
+      expect(upload.drivePath).toBeUndefined();
+      await upload.dispose();
+    },
+  );
+});
+
+describe("isJsonRequest", () => {
+  it.each([
+    ["application/json", true],
+    ["Application/JSON; charset=utf-8", true],
+    ["application/json-seq", false],
+    ["application/jsonl", false],
+    ["text/plain", false],
+  ])("%s is %s", (type, expected) => {
+    expect(isJsonRequest(jsonRequest("{}", { "content-type": type }))).toBe(expected);
   });
 });
 

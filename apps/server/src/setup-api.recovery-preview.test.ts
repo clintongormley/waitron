@@ -152,7 +152,7 @@ it("preview answers restore.drive_file_unreadable for a stick pulled during its 
     answers.push([response.status, await response.json()]);
   }
   expect(answers).toEqual([
-    [400, { error: { code: "restore.drive_file_unreadable", params: {} } }],
+    [409, { error: { code: "restore.drive_file_unreadable", params: {} } }],
     [500, { error: { code: "server.internal" } }],
   ]);
 });

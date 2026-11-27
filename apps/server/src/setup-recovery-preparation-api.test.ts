@@ -439,7 +439,7 @@ it("stage answers restore.drive_file_unreadable for a stick pulled during its re
     tls(),
   );
   expect([response.status, await response.json()]).toEqual([
-    400,
+    409,
     { error: { code: "restore.drive_file_unreadable", params: {} } },
   ]);
 });

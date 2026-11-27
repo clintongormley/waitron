@@ -24,8 +24,13 @@ export interface ArchiveUploadOptions {
   maxBytes?: number;
   oversizeIsInvalid?: boolean;
   reserveBytes?: number;
+  /** The route takes a JSON body naming a file on a USB drive in place of an upload. */
+  drive?: boolean;
   /** The route moves its file away, so a file on a drive is copied onto the box's own disk. */
   moves?: boolean;
+  /** Called with a drive request's fields before its file is checked or copied, so a refusal of
+   * a small field costs no copy. An upload's fields are the route's to check once received. */
+  check?(fields: ReadonlyMap<string, string>): void;
 }
 function invalid(field = "artifact"): AppError {
   return new AppError("setup.request_invalid", { field });

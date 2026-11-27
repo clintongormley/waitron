@@ -189,6 +189,7 @@ const STATUS = {
   "restore.environment_mismatch": 409,
   "restore.schema_too_new": 409,
   "provisioning.database_ahead": 409,
+  "restore.drive_file_unreadable": 409,
   "box_host.unavailable": 409,
   "box_host.busy": 409,
   "box_host.failed": 502,
@@ -428,16 +429,13 @@ export function mountHandoverEmergencyApi(
       return c.json(await inTurn(deps.node, "handover-emergency", () => preview(c, body)));
     }),
   );
+  app.use("/api/node/handover/emergency/drives", peerBodyLimit(SWITCH_DRIVE_BODY_MAX));
   app.post("/api/node/handover/emergency/drives", (c) =>
     boundary(c, log, async () => {
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
       if (!isJsonRequest(c.req.raw)) refuseRequest("body");
-      const body = await readDriveJson(
-        c.req.raw,
-        SWITCH_DRIVE_BODY_MAX,
-        "handover.request_invalid",
-      );
+      const body = await readJsonBody<unknown>(c);
       if (!isRecord(body) || Object.keys(body).some((key) => key !== "signIn"))
         refuseRequest("body");
       const { personId } = await inTurn(deps.node, "handover-emergency", async () => {
