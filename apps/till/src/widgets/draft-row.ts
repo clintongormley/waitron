@@ -192,6 +192,13 @@ export const draftRowStyles = css`
     /* Drawn inside the row, so the selection and split targets reach its full height. */
     box-shadow: inset 0 -1px 0 var(--wt-color-border);
   }
+  /* In a narrow order panel the empty end column would squeeze names into pieces, so it holds only
+     the split control there, and prices line up only where the panel is wider. */
+  @container (width < 360px) {
+    :host .order-lines > .entry.draft-row {
+      grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
+    }
+  }
   :host .order-lines > .entry.draft-row[data-last-added] {
     background: var(--wt-color-surface-lifted);
   }

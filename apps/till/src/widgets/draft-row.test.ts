@@ -278,6 +278,8 @@ describe("a new dish's compact row", () => {
         { product: steak, quantity: "2" },
         { product: hake, quantity: "1" },
       ]);
+      // The phone's row width; under 360 the empty column gives way (the next case).
+      el.style.width = "374px";
       const end = document.createElement("button");
       end.slot = "end-0";
       end.className = "draft-row-split";
@@ -293,5 +295,20 @@ describe("a new dish's compact row", () => {
         (sheet) => sheet !== draftRowSlotStyles.styleSheet,
       );
     }
+  });
+
+  it("gives a row with no split control its end column back in a narrow order panel", async () => {
+    const { el } = await rows([
+      { product: product("croquettes", "Croquettes"), quantity: "1" },
+      { product: product("gazpacho", "Gazpacho"), quantity: "1" },
+    ]);
+    // The order panel beside the menu at 800×1280.
+    el.style.width = "260px";
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".product-name")];
+    expect(names.map((name) => [name.textContent, name.getClientRects().length])).toEqual([
+      ["Croquettes", 1],
+      ["Gazpacho", 1],
+    ]);
   });
 });
