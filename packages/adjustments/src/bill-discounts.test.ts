@@ -760,6 +760,52 @@ describe("workOutBillDiscounts: bound portions", () => {
     expectHonest(lines, result);
   });
 
+  // Bound dishes filed apart file their measured extras apart too, each rounded on its own: two
+  // 0.125 of a sauce at 10.04 are 1.26 each, filed together 2.51; two 0.333 at 1.01 are 0.34 each,
+  // filed together 0.67.
+  const measured = (id: string, lineNo: number, unit: number, quantity: number, parent: string) =>
+    line(id, lineNo, unit, {
+      parentLineId: parent,
+      quantity,
+      unitPrecision: 3,
+      portion: { group: `extra-${unit}-${id.slice(0, 1)}`, ordinal: 0 },
+    });
+  const boundDish = (id: string, lineNo: number, unit: number, ordinal: number) =>
+    line(id, lineNo, unit, { portion: { group: "steak", ordinal } });
+
+  it("holds a bound pair at one price where splitting it would refile its extras higher", () => {
+    const lines = [
+      boundDish("d1", 1, 1250, 0),
+      boundDish("d2", 2, 1250, 1),
+      measured("s1", 3, 1004, 125, "d1"),
+      measured("o1", 4, 101, 333, "d1"),
+      measured("s2", 5, 1004, 125, "d2"),
+      measured("o2", 6, 101, 333, "d2"),
+      line("wine", 7, 699),
+    ];
+    const result = workOutBillDiscounts(lines, [amount("one", bill, 1, 1)]);
+    expect(worked(result, "one")).toMatchObject({ holds: "yes", takes: 1 });
+    expect(rowsOf(worked(result, "one"))).toEqual({ wine: ["1000@698"] });
+    expectHonest(lines, result);
+  });
+
+  it("leaves a bound dish as it is where its own discount would refile its extras no lower", () => {
+    for (const oil of [true, false]) {
+      const lines = [
+        boundDish("d1", 1, 100, 0),
+        boundDish("d2", 2, 100, 1),
+        measured("s1", 3, 101, 333, "d1"),
+        measured("s2", 4, 101, 333, "d2"),
+        ...(oil ? [measured("o1", 5, 101, 333, "d1"), measured("o2", 6, 101, 333, "d2")] : []),
+      ];
+      // 0.5% of the first dish's 1.00 and its extras is 0.01; at 0.99 it files apart from the
+      // second, and its sauce and oil with it: the invoice would rise 0.01, or with no oil stay.
+      const result = workOutBillDiscounts(lines, [percent("half", on("d1"), 50, 1)]);
+      expect(worked(result, "half")).toEqual({ id: "half", holds: "yes", takes: 0, lines: [] });
+      expectHonest(lines, result);
+    }
+  });
+
   it("files bound portions together again once a discount brings them to one price", () => {
     const lines = [
       line("p1", 1, 1000, { portion: { group: "croquettes", ordinal: 0 } }),
