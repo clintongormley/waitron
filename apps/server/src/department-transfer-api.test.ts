@@ -92,7 +92,7 @@ let personId: string;
 /** `personId`'s open session on `v.cfg`'s device, which a bill payment is taken under. */
 let operator: { personId: string; sessionId: string };
 
-async function login(profileId: string) {
+async function login(profileId: string, operatorId = personId) {
   const d = await enrolDeviceForTest(suite.db, v.cfg, { name: randomUUID(), profileId });
   const response = await app.request("/api/session", {
     method: "POST",
@@ -100,7 +100,7 @@ async function login(profileId: string) {
       "content-type": "application/json",
       cookie: `${DEVICE_COOKIE}=${d.deviceId}.${d.token}`,
     },
-    body: JSON.stringify({ personId, pin: "5555" }),
+    body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(response.status).toBe(200);
   return {
@@ -329,6 +329,12 @@ describe("department transfer till writes", () => {
     try {
       const f = await ready();
       const id = await pending(f);
+      const [receiver] = await seedPersons(suite.db, {
+        displayName: "Receiving waiter",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
+      const desk = await login(f.deskProfile, receiver!.id);
       await withTransaction(suite.db, async (tx) => {
         const menu = await createMenu(tx, { name: "Dinner" });
         const period = await saveMenuPeriod(tx, f.b, {
@@ -360,11 +366,11 @@ describe("department transfer till writes", () => {
       });
       const route = resolutionPath(id, "accept");
       const choice = { revision: 0, zoneId: f.bz };
-      expect(await post(f.desk.cookie, route, choice)).toMatchObject({
+      expect(await post(desk.cookie, route, choice)).toMatchObject({
         status: 409,
         body: { error: { code: "service_zone.closed" } },
       });
-      expect(await post(f.desk.cookie, route, { ...choice, closedZoneId: f.bz })).toMatchObject({
+      expect(await post(desk.cookie, route, { ...choice, closedZoneId: f.bz })).toMatchObject({
         status: 200,
         body: { status: "accepted" },
       });
@@ -378,7 +384,7 @@ describe("department transfer till writes", () => {
               eq(activityLog.subjectId, f.bz),
             ),
           ),
-      ).toEqual([{ personId }]);
+      ).toEqual([{ personId: receiver!.id }]);
     } finally {
       vi.useRealTimers();
     }

@@ -2440,11 +2440,12 @@ describe("counter place and park", () => {
   });
 
   it.each([
-    ["parks", park, {}, "save"],
-    ["places", place, PLACE, "send"],
+    ["parks", "save", park, {}],
+    ["places", "send", place, PLACE],
+    ["places", null, place, PLACE],
   ] as const)(
-    "%s the first Counter order after one question about its closed zone and ended period",
-    async (_, act, options, verb) => {
+    "%s the first Counter order after one closed-zone question (%s)",
+    async (_, verb, act, options) => {
       const parkOrder = vi
         .fn()
         .mockRejectedValueOnce({
@@ -2452,25 +2453,36 @@ describe("counter place and park", () => {
           zoneId: "zone-bar",
           closedZoneName: "Bar",
           closesAt: "22:00",
-          lateSend: {
-            ...BREAKFAST_ENDED,
-            menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
-          },
+          ...(verb === null
+            ? {}
+            : {
+                lateSend: {
+                  ...BREAKFAST_ENDED,
+                  menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
+                },
+              }),
         })
         .mockResolvedValue({ id: "wo-new", orderNumber: 7, serviceMode: "ticket_then_pay" });
-      const el = await lateCounter(parking({ parkOrder }), options);
+      const mountBasket = verb === null ? counterBasket : lateCounter;
+      const el = await mountBasket(parking({ parkOrder }), options);
       counterMenus = { ...counterMenus, service: { ...counterMenus.service, zoneOpen: false } };
       await poll(el);
       await act(el);
 
       expect(heading(el)).toBe("Bar closed at 22:00");
-      expect(windowOf(el)!.shadowRoot!.textContent).toContain("Breakfast has ended");
-      expect(agreedText(el)).toBe(`Station agreed — ${verb}`);
+      expect(windowOf(el)!.shadowRoot!.textContent!.includes("Breakfast has ended")).toBe(
+        verb !== null,
+      );
+      expect(agreedText(el)).toBe(verb === null ? "Continue" : `Station agreed — ${verb}`);
       expect(parkOrder).toHaveBeenCalledOnce();
       expect(api.placeOrder).not.toHaveBeenCalled();
       await choose(el, "data-late-agreed");
       expect(parkOrder.mock.calls[1]).toEqual([
-        { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar", lateSend: BREAKFAST_CONFIRMED },
+        {
+          ...parkOrder.mock.calls[0]![0],
+          closedZoneId: "zone-bar",
+          ...(verb === null ? {} : { lateSend: BREAKFAST_CONFIRMED }),
+        },
       ]);
       expect(api.placeOrder).toHaveBeenCalledTimes(act === place ? 1 : 0);
     },

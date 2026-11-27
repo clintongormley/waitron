@@ -7,7 +7,6 @@ import { reminderDueAt } from "../state/release-reminder.js";
 import { byPrecedence, lateBand, type TableStateKind } from "../state/table-precedence.js";
 import { chipState, heldChip, signalChips } from "../widgets/signal-chips.js";
 
-/** The words of a table that needs clearing or moving. */
 export const WAITING = {
   clear: {
     state: "floor.needs_clearing",

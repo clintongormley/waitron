@@ -555,7 +555,7 @@ describe("departmental tab transfers", () => {
 
   it.each([
     ["after confirmation", true],
-    ["after reopening", false],
+    ["after the last period ends", false],
   ] as const)("accepts a transfer %s", async (_, confirmed) => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {

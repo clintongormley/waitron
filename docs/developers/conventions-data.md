@@ -831,7 +831,7 @@ The till learns which menus ended from each menu's `endedPeriodName` on the zone
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`).
 For extras added to a sent dish through Change dish, it opens the window
-from the refusal alone (`lateExtrasDish`, `apps/till/src/state/sent-line-change.ts`). For stored dishes it
+from the refusal alone (`#lateExtrasDish`, `apps/till/src/till-app.ts`). For stored dishes it
 lists the refusal's `workingOrderLineIds` (`storedLinesAsked`, `apps/till/src/state/late-send.ts`). It sends `lateSend` only after the waiter chooses Station agreed in its late-send window
 (`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:
 the till gates additions and increases, and the server checks the window when the order is sent. A

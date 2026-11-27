@@ -7170,7 +7170,6 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** Each destination keeps its table condition and the zone's closing status visible. */
   #tablePicker(): TemplateResult {
     const toCounter = this.actionVerb === "move-bill";
     const closed = (zoneId: string | null) =>
