@@ -239,7 +239,7 @@ describe("itemsRefusal", () => {
     );
     setLocale("es");
     expect(refusalText(itemsRefusal({ code: "fiscal.original_unanswered" }))).toBe(
-      "Este ticket está esperando la respuesta de la Agencia Tributaria, o su envío a la Agencia está detenido, así que la cuenta aún no se puede reabrir. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
+      t("split.refused_receipt_unanswered"),
     );
   });
 
