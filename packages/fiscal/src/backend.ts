@@ -46,9 +46,9 @@ export interface FiledReceipt {
  * marks an answer about the newest filed version of a full invoice (one naming its customer),
  * whose corrective is itself a full invoice; a `voided` or `filing_versions_unusable` answer, or
  * one about a sale with no records, carries no mark. A caller that cannot issue a full invoice's
- * corrective refuses a marked answer as `not_simplified`, except a `wrong_node` one, which keeps
- * its reason. `filing_refused` waits for
- * the filing to be fixed; `refused_no_fix` is a refusal nothing on this box offers to fix.
+ * corrective refuses a marked answer as `not_simplified`. `filing_refused` waits for the filing
+ * to be fixed; `filing_pending` waits for the authority to answer an original filed on another
+ * chain; `refused_no_fix` is a refusal nothing on this box offers to fix.
  */
 export type CorrectionAdmission =
   | {
@@ -62,10 +62,10 @@ export type CorrectionAdmission =
       reason:
         | "unsupported"
         | "missing"
-        | "wrong_node"
         | "voided"
         | "not_simplified"
         | "filing_refused"
+        | "filing_pending"
         | "refused_no_fix"
         | "filing_versions_unusable";
       fullInvoice?: true;
@@ -488,9 +488,11 @@ export interface FiscalBackend {
   /**
    * Throws this regime's refusal when the authority refused the current version of the invoice
    * `saleId`, the one a corrective would be filed against: its newest version, which nothing
-   * replaced. Reads only. Absent when the regime has no such refusal.
+   * replaced; or when a version filed on a chain other than `issuingNodeId`'s open one is still
+   * unanswered (with no open one it refuses nothing for that, and the corrective's write refuses).
+   * Reads only. Absent when the regime has no such refusal.
    */
-  refuseCreditOf?(tx: Transaction, saleId: SaleId): Promise<void>;
+  refuseCreditOf?(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<void>;
 
   /** The filed figures of each sale in `saleIds`; a sale with nothing filed is absent. Reads only. */
   filedFiguresFor?(

@@ -111,9 +111,10 @@ export async function giveBackBody(
   saleId: string,
   request: GiveBackRequest,
   reasonId: string,
+  app = venue.app,
 ) {
   const previewed = await send(
-    venue.app,
+    app,
     cookie,
     "POST",
     `/api/transactions/${saleId}/give-back/preview`,

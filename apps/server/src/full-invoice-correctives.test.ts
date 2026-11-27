@@ -1,14 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordReplacement } from "@waitron/core";
 import { loadKeyRing } from "@waitron/credentials";
 import { incidents, invoiceCorrections, readLiveSeriesIdTx, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
-import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import {
+  correctiveRecordsOf,
+  filedInvoiceOf,
+  onOpenChainOf,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  acceptedByAeat,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -21,6 +28,8 @@ import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import * as fixture from "./testing/full-invoice-give-back.js";
 import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
+import { takeOver } from "./testing/taken-over.js";
+import { clockAt } from "./testing/deferred-close-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
 let venue: BillVenue;
@@ -60,17 +69,11 @@ const tenderOf = (saleId: string, method: "cash" | "card") =>
 const goodwill = (amount: string, way = "cash") => ask("goodwill", amount, { way });
 
 /** Previews `request` on the till and presses Give back with what it planned; the correction. */
-async function giveBack(saleId: string, request: GiveBackRequest) {
-  const answer = await send(
-    venue.app,
-    adminCookie,
-    "POST",
-    `/api/transactions/${saleId}/give-back`,
-    {
-      ...(await fixture.giveBackBody(venue, adminCookie, saleId, request, reasonId)),
-      ...(request.way === "cash" ? {} : { manualConfirmed: true, override: supervisor() }),
-    },
-  );
+async function giveBack(saleId: string, request: GiveBackRequest, app = venue.app) {
+  const answer = await send(app, adminCookie, "POST", `/api/transactions/${saleId}/give-back`, {
+    ...(await fixture.giveBackBody(venue, adminCookie, saleId, request, reasonId, app)),
+    ...(request.way === "cash" ? {} : { manualConfirmed: true, override: supervisor() }),
+  });
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   const parts = (answer.json as { parts: { correctionId?: string }[] }).parts;
   return { correctionId: parts.find((each) => each.correctionId !== undefined)!.correctionId! };
@@ -261,33 +264,61 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
   });
 });
 
-describe("a correction that can no longer be filed ends unrecorded", () => {
-  it("on an invoice another box issued, Finish ends it with its refunds kept and no corrective", async () => {
-    const saleId = await fullInvoice({ cash: "20.00" }, { card: "17.00" });
-    const { correctionId } = await giveBack(saleId, goodwill("25.00"));
-    expect(refundStates(saleId)).toEqual([{ applied: 2000, state: "completed" }]);
-    const admission = vi
-      .spyOn(venue.backend, "correctionAdmissionFor")
-      .mockResolvedValue({ eligible: false, reason: "wrong_node", fullInvoice: true });
-    onTestFinished(() => admission.mockRestore());
+/** Expects the correction's corrective on `box`'s open chain, naming `saleId`'s issuer, number
+ * and issue day; answers the corrective's own issue day. */
+async function filedOnChainOf(correctionId: string, box: string, saleId: string) {
+  const { corrective } = await correctionOf(correctionId);
+  expect(onOpenChainOf(venue.db, corrective!, box)).toBe(true);
+  const original = filedInvoiceOf(venue.db, saleId);
+  const filed = filedInvoiceOf(venue.db, corrective!);
+  expect(filed.corrects).toEqual([
+    { issuerTaxId: original.issuerTaxId, number: original.number, issuedOn: original.issuedOn },
+  ]);
+  return { issuedOn: filed.issuedOn, originalIssuedOn: original.issuedOn };
+}
 
-    const finished = await send(
-      venue.app,
-      adminCookie,
-      "POST",
-      `/api/invoice-corrections/${correctionId}/close`,
-      {},
-    );
-    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
-    expect(finished.json).toMatchObject({
-      state: "closed",
-      moneyBack: "20.00",
-      correctiveSaleId: null,
-    });
-    expect(correctivesOf(saleId)).toEqual([]);
-    expect(refundStates(saleId)).toEqual([{ applied: 2000, state: "completed" }]);
+describe("a full invoice another box issued", () => {
+  it("once AEAT accepted it, Give back files one R1 on this box's chain naming it", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await acceptedByAeat(venue.db, saleId);
+    const box = await takeOver(venue);
+
+    const later = venue.appWith({ clock: clockAt(Date.now() + 3 * 86_400_000) });
+    const { correctionId } = await giveBack(saleId, goodwill("10.00"), later);
+
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
+    const days = await filedOnChainOf(correctionId, box, saleId);
+    expect(days.issuedOn).not.toBe(days.originalIssuedOn);
   });
 
+  it("while AEAT has not answered it, the leg completing files nothing and raises no alert; the sweep files one R1 once AEAT accepts it", async () => {
+    const { saleId, correctionId, refundId } = await readerLegUnanswered();
+    const box = await takeOver(venue);
+    providerMadeIt(refundId);
+    await recoverTenderRefunds(refundDeps());
+    await sweep();
+
+    expect(refundStates(saleId)).toEqual([{ applied: 1000, state: "completed" }]);
+    expect(correctivesOf(saleId)).toEqual([]);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
+    expect(
+      await venue.db
+        .select({ code: incidents.code })
+        .from(incidents)
+        .where(eq(incidents.saleId, saleId)),
+    ).toEqual([]);
+
+    await acceptedByAeat(venue.db, saleId);
+    await sweep();
+
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
+    await filedOnChainOf(correctionId, box, saleId);
+  });
+});
+
+describe("a correction that can no longer be filed ends unrecorded", () => {
   // `refusedByAeat` opens no filing case, so no fix is on offer whatever FULL_INVOICE_REPLACEMENT_ON
   // says: the refusal is one with no fix (`refused_no_fix`).
   it("opened while queued, a leg pending when AEAT refuses the invoice (1112) with no fix on offer: nothing filed, one alert, Finish ends it", async () => {

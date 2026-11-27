@@ -46,6 +46,7 @@ import { parkOrder } from "./working-order-open.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import { takeOver } from "./testing/taken-over.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
   openCorrection,
@@ -1089,8 +1090,14 @@ async function pendingTipRefund(saleId: string) {
 }
 
 /** Refund a payment, naming no correction and no cancelled dishes. */
-function plainRefund(saleId: string, tenderId: string, appliedAmount: string, tipAmount = "0.00") {
-  return send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/refunds`, {
+function plainRefund(
+  saleId: string,
+  tenderId: string,
+  appliedAmount: string,
+  tipAmount = "0.00",
+  app = venue.app,
+) {
+  return send(app, venue.cookie, "POST", `/api/transactions/${saleId}/refunds`, {
     submissionId: randomUUID(),
     tenderId,
     appliedAmount,
@@ -1121,9 +1128,10 @@ describe("Refund a payment gives back only what Correct invoice would not take n
     appliedAmount: string,
     json: object,
     tipAmount = "0.00",
+    app = venue.app,
   ) {
     const before = counts();
-    expect(await plainRefund(saleId, tenderId, appliedAmount, tipAmount)).toEqual({
+    expect(await plainRefund(saleId, tenderId, appliedAmount, tipAmount, app)).toEqual({
       status: 409,
       json,
     });
@@ -1143,7 +1151,7 @@ describe("Refund a payment gives back only what Correct invoice would not take n
     });
   });
 
-  it.each(["missing", "wrong_node", "voided"])(
+  it.each(["missing", "voided"])(
     "takes it where Correct invoice refuses the ticket for good (%s)",
     async (reason) => {
       const saleId = await sold(["10.00"]);
@@ -1212,6 +1220,19 @@ describe("Refund a payment gives back only what Correct invoice would not take n
       code: "sale.correction_not_admitted",
       params: { reason: "filing_refused" },
     });
+  });
+
+  it("waits while the tax agency has not answered a ticket another box filed", async () => {
+    const saleId = await sold(["10.00"]);
+    await takeOver(venue);
+    await refusedWithNothingWritten(
+      saleId,
+      await cashOf(saleId),
+      "10.00",
+      { code: "sale.correction_not_admitted", params: { reason: "filing_pending" } },
+      "0.00",
+      venue.appWith({}),
+    );
   });
 
   it("waits while another payment's refund is pending on a ticket Correct invoice can correct", async () => {

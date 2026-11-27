@@ -134,6 +134,8 @@ export interface FiledInvoiceRecord {
   issuerTaxId: string;
   /** `NumSerieFactura`. */
   number: string;
+  /** `FechaExpedicionFactura`, the issue day. */
+  issuedOn: string;
   /** `TipoFactura`: F1, F2, F3, R4 or R5. */
   kind: string;
   /** `TipoRectificativa`, or null on an invoice that corrects nothing. */
@@ -156,6 +158,7 @@ export function filedInvoiceOf(db: Database, saleId: string): FiledInvoiceRecord
   return {
     issuerTaxId: record.IDFactura.IDEmisorFactura,
     number: record.IDFactura.NumSerieFactura,
+    issuedOn: record.IDFactura.FechaExpedicionFactura,
     kind: record.TipoFactura,
     correctionKind: record.TipoRectificativa ?? null,
     total: record.ImporteTotal,
@@ -174,6 +177,15 @@ export function filedInvoiceOf(db: Database, saleId: string): FiledInvoiceRecord
       issuedOn: invoice.FechaExpedicionFactura,
     })),
   };
+}
+
+/** Whether the sale's one record sits on the chain `nodeId` holds open now. */
+export function onOpenChainOf(db: Database, saleId: string, nodeId: string): boolean {
+  const rows = db.all<{ open: number }>(sql`
+    select i.revocado_en is null and i.node_id = ${nodeId} as open
+    from verifactu_records r join verifactu_identities i on i.id = r.sif_id
+    where r.sale_id = ${saleId}`);
+  return rows.length === 1 && rows[0]!.open === 1;
 }
 
 /** Each record filed for the sale in chain order: an invoice or a cancellation, and its stored

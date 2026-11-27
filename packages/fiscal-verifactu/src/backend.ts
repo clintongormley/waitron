@@ -49,7 +49,7 @@ import type {
   SistemaInformatico,
 } from "@waitron/verifactu";
 import { appendToChain, latestRecord, refuseUnlessServingPrimary } from "./chain.js";
-import { currentSif } from "./registro-sif.js";
+import { currentSif, openSifId } from "./registro-sif.js";
 import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
@@ -155,6 +155,27 @@ export function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput 
     TipoImpositivo: line.rate,
     CuotaRepercutida: line.tax,
   };
+}
+
+/**
+ * Throws `fiscal.original_unanswered` while a version of the sale's receipt on a chain other than
+ * `sifId` has no final answer from AEAT: queued, sending, stopped or held, or with no submission at
+ * all (which no writer leaves). "Another chain" is another installation, as the drain's `originalSettled`
+ * reads it: an earlier installation on this same box is another chain too.
+ */
+async function refuseUnansweredElsewhere(
+  tx: Transaction,
+  saleId: SaleId,
+  sifId: string,
+): Promise<void> {
+  const { rows } = await tx.execute(sql`
+    select 1 from verifactu_records r indexed by verifactu_records_sale_idx
+    left join verifactu_submissions s on s.registro_id = r.id
+    where r.sale_id = ${saleId} and r.tipo_registro = 'alta' and r.sif_id <> ${sifId}
+      and coalesce(s.estado, '') not in ('aceptado', 'aceptado_con_errores', 'rechazado')
+    limit 1
+  `);
+  if (rows.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
 }
 
 /**
@@ -462,7 +483,7 @@ export class VerifactuBackend implements FiscalBackend {
     return filedFiguresFor(tx, saleIds);
   }
 
-  async refuseCreditOf(tx: Transaction, saleId: SaleId): Promise<void> {
+  async refuseCreditOf(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<void> {
     const { rows } = await tx.execute(sql`
       select 1 from verifactu_records receipt indexed by verifactu_records_sale_idx
       where receipt.sale_id = ${saleId} and receipt.tipo_registro = 'alta'
@@ -475,6 +496,9 @@ export class VerifactuBackend implements FiscalBackend {
       limit 1
     `);
     if (rows.length > 0) throw new AppError("fiscal.original_refused", { saleId });
+    // With no open installation the corrective's own write refuses.
+    const open = await openSifId(tx, issuingNodeId);
+    if (open !== undefined) await refuseUnansweredElsewhere(tx, saleId, open);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */
@@ -507,16 +531,7 @@ export class VerifactuBackend implements FiscalBackend {
 
     // Another chain's receipt still waiting on AEAT can end held, and a cancellation of a held
     // receipt stops every later record here (docs/superpowers/plans/2026-11-25-cancel-unserved.md §2).
-    // "Another chain" is another installation, as the drain's `originalSettled` reads it: an earlier
-    // installation on this same box is another chain too.
-    const { rows: unanswered } = await tx.execute(sql`
-      select 1 from verifactu_records r indexed by verifactu_records_sale_idx
-      left join verifactu_submissions s on s.registro_id = r.id
-      where r.sale_id = ${saleId} and r.tipo_registro = 'alta' and r.sif_id <> ${sif.id}
-        and coalesce(s.estado, '') not in ('aceptado', 'aceptado_con_errores', 'rechazado')
-      limit 1
-    `);
-    if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
+    await refuseUnansweredElsewhere(tx, saleId, sif.id);
     const { rows: refused } = await tx.execute(
       sql`select 1 where ${currentAltaRefused({
         idEmisorFactura: original.id_emisor_factura,

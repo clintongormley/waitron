@@ -48,6 +48,7 @@ import { fireGroup } from "./order-group-release.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { takeOver } from "./testing/taken-over.js";
 import { servedOrCharged } from "./served-dishes.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
@@ -649,6 +650,27 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       status: 409,
       code: "fiscal.original_refused",
     });
+  });
+
+  it("refuses a ticket another box issued while AEAT has not answered it, writing nothing, and reopens it once AEAT accepts it", async () => {
+    const party = await printed("Tarta");
+    const saleId = (await invoiceOf(party.tabId)).id;
+    await takeOver(venue);
+    const app = venue.appWith({});
+
+    const answer = await expectRefused(
+      party.tabId,
+      () => split(party.tabId, venue.supervisorTill, app),
+      { status: 409, code: "fiscal.original_unanswered" },
+    );
+    expect(answer.json.params).toEqual({ saleId });
+    expect(await creditsOf(saleId)).toEqual([]);
+
+    await inTx(venue, (tx) => acceptedByAeat(tx, saleId));
+    const reopened = await split(party.tabId, venue.supervisorTill, app);
+
+    expect(reopened.status, JSON.stringify(reopened.json)).toBe(200);
+    expect(await creditsOf(saleId)).toHaveLength(1);
   });
 
   it("reopens a ticket AEAT accepted", async () => {

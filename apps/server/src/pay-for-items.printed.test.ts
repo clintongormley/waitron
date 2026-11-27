@@ -6,7 +6,10 @@ import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
-import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import {
+  heldFromSending,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   inTx,
@@ -18,6 +21,7 @@ import {
 } from "./testing/bill-venue.js";
 import { provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
 import * as fixture from "./testing/split-after-print-fixture.js";
+import { takeOver } from "./testing/taken-over.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -518,6 +522,34 @@ describe("Pay for items on a printed bill", () => {
       status: 409,
       code: "fiscal.original_refused",
     });
+    expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
+    expect(await reopenedFrom(party.tabId)).toEqual([]);
+  });
+
+  it("a ticket another box issued whose filing is held from sending reopens nothing", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const original = await fixture.invoiceOf(venue, party.tabId);
+    await inTx(venue, (tx) => heldFromSending(tx, original.id));
+    await takeOver(venue);
+    const body = await itemsBody(
+      party,
+      [{ lineId: await lineOf(party.tabId, "hake") }],
+      cashFor("15.00", "20.00"),
+    );
+    const onNewBox = () =>
+      send(
+        venue.appWith({}),
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${party.tabId}/item-payments`,
+        body,
+      );
+
+    const answer = await fixture.expectRefused(venue, party.tabId, onNewBox, {
+      status: 409,
+      code: "fiscal.original_unanswered",
+    });
+    expect(answer.json.params).toEqual({ saleId: original.id });
     expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
     expect(await reopenedFrom(party.tabId)).toEqual([]);
   });

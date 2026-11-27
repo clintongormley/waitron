@@ -1210,6 +1210,9 @@ refund of money Correct invoice could give back is refused before the terminal s
 (2026-11-26: a full invoice naming a customer is corrected with an R1 unless the tax agency refused it
 with no fix, which Refund a payment keeps open; while the business has no registered address, Refund a
 payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
+(2026-11-27, A1614: another box's ticket is no longer refused for good. It is judged by its filing
+like this box's own, and while the tax agency has not answered it Correct invoice waits
+(`filing_pending`), so Refund a payment waits too for that money.)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
 
@@ -1276,6 +1279,8 @@ refuse a receipt whose current version AEAT refused and that nothing replaced
 (`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
 the corrective would be filed against a receipt AEAT refused, after which Fiscal filing's replacement is
 refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
+(2026-11-27, A1614 D5: they also refuse while a version on another chain is unanswered or held,
+`fiscal.original_unanswered`.)
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

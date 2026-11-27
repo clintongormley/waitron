@@ -57,7 +57,7 @@ receipts' without looking); The builder picks R1 or R5 from the customer alone a
 | 3 | The sweep, after a late card answer and at start: `invoice-correction-alerts.ts:101-109` | R1 | Task 8 |
 | 4 | `POST /api/tender-refunds/:id/retry` (`tender-refund-api.ts:231`; the till reaches it from all three Check agains: the outcome's, `give-back-dialog.ts:636` to `state/give-back.ts:315`; the choices', `give-back-dialog.ts:660` through `checkReceipt` to `state/tender-refund.ts:368`; and Money back under way's, `give-back-under-way.ts:217` to the same line; till lines at `c19dad836f`): settles a leg, files nothing | the sweep files one R1 | Task 8 |
 | 5 | The dashboard's `/payments/tender-refunds/:id/resolve` (`payments-api.ts:2083`): the same | as row 4 | Task 8 |
-| 6 | An open give-back on an invoice another box issued (handover, promotion): `wrong_node` | **Finish** ends it unrecorded, on the accountant's list; as a receipt's today | Task 8 |
+| 6 | An open give-back on an invoice another box issued (handover, promotion): `wrong_node` | **Finish** ends it unrecorded, on the accountant's list; as a receipt's today (2026-11-27, A1614: now an R1 on this box once AEAT has accepted it, and a wait while it is unanswered) | Task 8 |
 | 7 | The old window's routes, `POST …/corrections`, `…/preview`, `GET …/lines` (`invoice-correction-api.ts:76-133`) | deleted | PR 0 |
 | 8 | Refund a payment's route | refused (D5) | Task 6 |
 | 9 | Cancel and credit (`working-order-counter.ts:190`), Reopen to split (refused at `split-after-print.ts:142`) | `sale.correction_unsupported`, as today | existing + no record written |

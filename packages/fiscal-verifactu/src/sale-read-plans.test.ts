@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { newId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -31,15 +31,18 @@ function sessionOf(tx: Transaction): Session {
 
 const BY_SALE = /sale_id"? (= \?|in \()/;
 
-/** The plan of the one statement `read` sends that filters by sale id. */
-async function planOf(read: (tx: Transaction) => Promise<unknown>): Promise<string[]> {
+/** The plan of the one statement `read` sends that filters by sale id, or matches `which`. */
+async function planOf(
+  read: (tx: Transaction) => Promise<unknown>,
+  which = BY_SALE,
+): Promise<string[]> {
   return withTransaction(suite.db, async (tx) => {
     const session = sessionOf(tx);
     const prepare = vi.spyOn(session, "prepareQuery");
     let sent: Query[];
     try {
       await read(tx);
-      sent = prepare.mock.calls.map(([query]) => query).filter((query) => BY_SALE.test(query.sql));
+      sent = prepare.mock.calls.map(([query]) => query).filter((query) => which.test(query.sql));
     } finally {
       prepare.mockRestore();
     }
@@ -112,7 +115,10 @@ describe("reads of a sale's filed alta", () => {
   });
 
   it("finds the alta a credit's refusal judges through the sale index, and its versions through the first alta's sale", async () => {
-    const plan = await planOf((tx) => backend().refuseCreditOf(tx, brandSaleId(newId())));
+    // A node with no open installation: the unanswered check, a second statement by sale, is skipped.
+    const plan = await planOf((tx) =>
+      backend().refuseCreditOf(tx, brandSaleId(newId()), brandNodeId(newId())),
+    );
     expect(plan).toEqual([
       "SEARCH receipt USING INDEX verifactu_records_sale_idx (sale_id=?)",
       "CORRELATED SCALAR SUBQUERY 2",
@@ -121,6 +127,18 @@ describe("reads of a sale's filed alta", () => {
       "CORRELATED SCALAR SUBQUERY 1",
       "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
       "SEARCH original_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)",
+    ]);
+  });
+
+  it("finds the versions a credit waits on AEAT for through the sale index", async () => {
+    const node = await seedNode(suite.db);
+    const plan = await planOf(
+      (tx) => backend().refuseCreditOf(tx, brandSaleId(newId()), node.nodeId),
+      /sif_id <> \?/,
+    );
+    expect(plan).toEqual([
+      "SEARCH r USING INDEX verifactu_records_sale_idx (sale_id=?)",
+      "SEARCH s USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
 

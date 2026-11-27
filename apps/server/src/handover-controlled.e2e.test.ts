@@ -1527,8 +1527,17 @@ interface InheritedSeen {
   overview: Attempt;
   dailyClose: Attempt;
   refundSaleNode: string | null;
+  refundTargetFiling: string | undefined;
+  refundedInvoice: { emisor: string; serie: string; fecha: string } | null;
   refund: Attempt | null;
   refundRows: { node_id: string; state: string }[];
+  correctiveRecords: {
+    state: string;
+    node_id: string;
+    sif_id: string;
+    tipo_factura: string;
+    corrects: unknown;
+  }[];
   m1RecordsAroundRefund: { before: number; after: number };
   voidedInvoice: { serie: string; emisor: string; fecha: string } | null;
   m2SifId: string | null;
@@ -1737,17 +1746,31 @@ async function inheritedWork(
     [],
   );
 
-  // A cash refund of an M1 sale other than the one cancelled below.
+  // Goodwill in cash on an M1 sale other than the one cancelled below, given back through Give
+  // money back: AEAT accepted it from M1, so it is corrected on M2's chain.
   const [refundTarget] = guard(
     "refund target",
     () =>
-      readRows<{ sale_id: string; node_id: string; tender_id: string; amount: number }>(
+      readRows<{
+        sale_id: string;
+        node_id: string;
+        amount: number;
+        id_emisor_factura: string;
+        num_serie_factura: string;
+        fecha_expedicion_factura: string;
+      }>(
         m2.venueFile,
-        `select r.sale_id, r.node_id, t.id as tender_id, t.amount from verifactu_records r
+        `select r.sale_id, r.node_id, t.amount, r.id_emisor_factura,
+         r.num_serie_factura, r.fecha_expedicion_factura from verifactu_records r
          join tenders t on t.sale_id = r.sale_id and t.method = 'cash' where r.id = ?`,
         stepdown.records.inFlight,
       ),
     [],
+  );
+  const refundTargetFiling = guard(
+    "refund target's filing",
+    () => filingStateOf(m2.venueFile, stepdown.records.inFlight),
+    undefined,
   );
   const m1Records = () =>
     guard(
@@ -1761,17 +1784,42 @@ async function inheritedWork(
       -1,
     );
   const m1RecordsBeforeRefund = m1Records();
-  const refund =
+  const reasons = await attempt(m2, "/api/adjustment-reasons", { cookie: venue.cookie });
+  const reasonId = Array.isArray(reasons.body)
+    ? ((reasons.body as { id: string }[])[0]?.id ?? null)
+    : null;
+  const giveBackAsk =
     refundTarget === undefined
       ? null
-      : await attempt(m2, `/api/transactions/${refundTarget.sale_id}/refunds`, {
+      : {
+          purpose: "goodwill",
+          amount: (refundTarget.amount / 100).toFixed(2),
+          extra: "0.00",
+          way: "cash",
+        };
+  const giveBackPreview =
+    refundTarget === undefined
+      ? null
+      : await attempt(m2, `/api/transactions/${refundTarget.sale_id}/give-back/preview`, {
+          cookie: venue.cookie,
+          body: giveBackAsk,
+        });
+  const refund =
+    refundTarget === undefined || giveBackPreview?.status !== 200
+      ? giveBackPreview
+      : await attempt(m2, `/api/transactions/${refundTarget.sale_id}/give-back`, {
           cookie: venue.cookie,
           body: {
-            submissionId: randomUUID(),
-            tenderId: refundTarget.tender_id,
-            appliedAmount: (refundTarget.amount / 100).toFixed(2),
-            tipAmount: "0.00",
-            reason: "Goodwill",
+            ...giveBackAsk,
+            reasonId,
+            note: "Goodwill",
+            submissionIds: {
+              refund: randomUUID(),
+              extra: randomUUID(),
+              correction: randomUUID(),
+              leg: randomUUID(),
+            },
+            expected: (giveBackPreview.body as { parts: unknown[] }).parts,
             override: { personId: venue.adminId, pin: "1234" },
           },
         });
@@ -1783,6 +1831,27 @@ async function inheritedWork(
         "select node_id, state from refunds where sale_id = ?",
         refundTarget?.sale_id ?? "",
       ),
+    [],
+  );
+  const correctiveRecords = guard(
+    "corrective records",
+    () =>
+      readRows<{
+        state: string;
+        node_id: string;
+        sif_id: string;
+        tipo_factura: string;
+        facturas_rectificadas: string;
+      }>(
+        m2.venueFile,
+        `select c.state, r.node_id, r.sif_id, r.tipo_factura, r.facturas_rectificadas
+         from invoice_corrections c join verifactu_records r on r.sale_id = c.corrective_sale_id
+         where c.original_sale_id = ?`,
+        refundTarget?.sale_id ?? "",
+      ).map(({ facturas_rectificadas, ...row }) => ({
+        ...row,
+        corrects: JSON.parse(facturas_rectificadas) as unknown,
+      })),
     [],
   );
   const m1RecordsAroundRefund = { before: m1RecordsBeforeRefund, after: m1Records() };
@@ -1908,8 +1977,18 @@ async function inheritedWork(
     overview,
     dailyClose,
     refundSaleNode: refundTarget?.node_id ?? null,
+    refundTargetFiling,
+    refundedInvoice:
+      refundTarget === undefined
+        ? null
+        : {
+            emisor: refundTarget.id_emisor_factura,
+            serie: refundTarget.num_serie_factura,
+            fecha: refundTarget.fecha_expedicion_factura,
+          },
     refund,
     refundRows,
+    correctiveRecords,
     m1RecordsAroundRefund,
     voidedInvoice:
       voidTarget === undefined
@@ -2501,12 +2580,33 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(new Set(onM2).size, JSON.stringify(w.m2Orders)).toBe(onM2.length);
   });
 
-  it("M2 refunds in cash one of M1's sales", () => {
+  it("M2 gives money back in cash on one of M1's accepted sales with a corrective on its own chain", () => {
     const { b, w } = inheritedRun();
     expect(w.refundSaleNode).toBe(b.m1.nodeId);
+    expect(w.refundTargetFiling).toBe("aceptado");
     expect(w.refund?.status, JSON.stringify(w.refund?.body)).toBe(200);
-    expect(w.refund?.body).toMatchObject({ state: "completed" });
+    expect(w.refund?.body).toMatchObject({
+      parts: [{ kind: "correction", state: "completed" }],
+      refusal: null,
+    });
     expect(w.refundRows).toEqual([{ node_id: b.m2.nodeId, state: "completed" }]);
+    expect(w.correctiveRecords).toEqual([
+      {
+        state: "filed",
+        node_id: b.m2.nodeId,
+        sif_id: w.m2SifId,
+        tipo_factura: "R5",
+        corrects: {
+          IDFacturaRectificada: [
+            {
+              IDEmisorFactura: w.refundedInvoice?.emisor,
+              NumSerieFactura: w.refundedInvoice?.serie,
+              FechaExpedicionFactura: w.refundedInvoice && toAeatDate(w.refundedInvoice.fecha),
+            },
+          ],
+        },
+      },
+    ]);
     expect(w.m1RecordsAroundRefund.after).toBe(w.m1RecordsAroundRefund.before);
   });
 

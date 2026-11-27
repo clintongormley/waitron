@@ -649,7 +649,7 @@ it("words each refusal Nothing was served can meet, in both languages, naming no
   }
 });
 
-it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered or refused, in both languages", () => {
+it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered, holds or refused, in both languages", () => {
   expect(codeMessage("bill.served_dishes", "en")).toBe(
     "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
   );
@@ -657,10 +657,10 @@ it("words Nothing was served's refusals of served dishes and of a receipt AEAT h
     "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
   );
   expect(codeMessage("fiscal.original_unanswered", "en")).toBe(
-    "AEAT has not answered for this receipt yet. Try again later.",
+    "This receipt is waiting for the tax agency's answer, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
   );
   expect(codeMessage("fiscal.original_unanswered", "es")).toBe(
-    "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+    "Este ticket está esperando la respuesta de la Agencia Tributaria, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   );
   expect(codeMessage("fiscal.original_refused", "en")).toBe(
     "AEAT refused this receipt, so it cannot be cancelled. Take payment.",
@@ -1169,6 +1169,32 @@ it("words a full invoice made from receipts, and one the tax agency refused with
   }
 });
 
+it("words an invoice still being sent to the tax agency in Correct invoice, Refund and Refund under way", () => {
+  const pending = { reason: "filing_pending" };
+  const pins: [string, string, string][] = [
+    [
+      "codeMessage",
+      "This invoice is still being sent to the tax agency, so it cannot be corrected yet. Try again in a few minutes.",
+      "Esta factura aún se está enviando a la Agencia Tributaria, así que todavía no se puede rectificar. Vuelve a intentarlo en unos minutos.",
+    ],
+    [
+      "giveBackReasonMessage",
+      "This receipt is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
+      "Este ticket aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+    ],
+    [
+      "giveBackFilingMessage",
+      "This receipt is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
+      "Este ticket aún se está enviando a la Agencia Tributaria, así que el dinero devuelto todavía no se puede registrar en él. Pulsa Comprobar de nuevo en unos minutos.",
+    ],
+  ];
+  const words = { codeMessage, giveBackReasonMessage, giveBackFilingMessage };
+  for (const [fn, en, es] of pins) {
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "en", pending)).toBe(en);
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "es", pending)).toBe(es);
+  }
+});
+
 it("names a full invoice, not a receipt, in Give money back's and Money back under way's refusals", () => {
   const full = (reason?: string) => ({
     ...(reason === undefined ? {} : { reason }),
@@ -1188,10 +1214,16 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
       "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
     ],
     [
+      "giveBackReasonMessage",
+      "filing_pending",
+      "This full invoice is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
+      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+    ],
+    [
       "giveBackFilingMessage",
-      "wrong_node",
-      "Another box issued this full invoice, so this box cannot record the refund on it.",
-      "Otro servidor emitió esta factura completa, así que este servidor no puede registrar en ella el dinero devuelto.",
+      "filing_pending",
+      "This full invoice is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
+      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero devuelto todavía no se puede registrar en ella. Pulsa Comprobar de nuevo en unos minutos.",
     ],
     [
       "giveBackFilingMessage",
@@ -1244,7 +1276,7 @@ it("leaves Refund a payment out of the correction refusals other flows share", (
       "replaced",
       "unsupported",
       "missing",
-      "wrong_node",
+      "filing_pending",
       "not_simplified",
       "filing_versions_unusable",
     ].map((reason) => ["sale.correction_not_admitted", { reason }] as const),
@@ -1260,10 +1292,10 @@ it("words each reason a correction is not admitted, and any other reason as the 
     "replaced",
     "unsupported",
     "missing",
-    "wrong_node",
     "voided",
     "not_simplified",
     "filing_refused",
+    "filing_pending",
     "filing_versions_unusable",
     "filed_figures_unreadable",
     "filed_figures_changed",

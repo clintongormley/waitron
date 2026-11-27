@@ -130,12 +130,10 @@ async function admittedHistory(
   const admission: CorrectionAdmission = backend.correctionAdmissionFor
     ? await backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
     : { eligible: false, reason: "unsupported" };
-  // Another box's invoice is refused as another box's whatever its type, as the regime judges it.
-  const otherBox = !admission.eligible && admission.reason === "wrong_node";
   const full =
     kind.fullInvoice === true ||
     (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
-  if (admission.fullInvoice && !full && !otherBox) {
+  if (admission.fullInvoice && !full) {
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }
   if (!admission.eligible) {

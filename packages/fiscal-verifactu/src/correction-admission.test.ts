@@ -4,14 +4,21 @@ import { captureError, newId, withTransaction } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
-import { saleId as brandSaleId, decimal, type SaleId } from "@waitron/shared";
+import {
+  saleId as brandSaleId,
+  nodeId as brandNodeId,
+  decimal,
+  type SaleId,
+} from "@waitron/shared";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { seedFixtureSif } from "../test/sif-fixture.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { recordCaseEvent } from "./filing-cases.js";
+import { currentSif } from "./registro-sif.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -238,10 +245,10 @@ describe("a full invoice, an F1 or an R4 by replacement, says so in every answer
     expect(await admission(saleId)).toStrictEqual(full(refused("filing_refused")));
   });
 
-  it("another node's", async () => {
+  it("another node's, accepted, is admitted", async () => {
     const other = await seedNode(suite.db, "B");
-    const { saleId } = await file({ tipo: "F1", on: other });
-    expect(await admission(saleId)).toStrictEqual(full(refused("wrong_node")));
+    const { saleId, number } = await file({ tipo: "F1", on: other, estado: "aceptado" });
+    expect(await admission(saleId)).toStrictEqual(full(eligible("accepted", number)));
   });
 
   it.each([
@@ -258,13 +265,13 @@ describe("a full invoice, an F1 or an R4 by replacement, says so in every answer
         withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, node.nodeId)),
     ],
   ] as const)(
-    "another node's, read by %s without fullInvoice, is refused as another node's",
+    "another node's, read by %s without fullInvoice, is refused as not simplified",
     async (_name, read) => {
       const other = await seedNode(suite.db, "B");
-      const { saleId } = await file({ tipo: "F1", on: other });
+      const { saleId } = await file({ tipo: "F1", on: other, estado: "aceptado" });
       expect(await captureError(() => read(saleId))).toMatchObject({
         code: "sale.correction_not_admitted",
-        params: { reason: "wrong_node" },
+        params: { reason: "not_simplified" },
       });
     },
   );
@@ -272,6 +279,113 @@ describe("a full invoice, an F1 or an R4 by replacement, says so in every answer
   it("with no submission", async () => {
     const { saleId } = await file({ tipo: "F1", estado: null });
     expect(await admission(saleId)).toStrictEqual(full(refused("missing")));
+  });
+});
+
+describe("an invoice filed on another chain is judged by its filing, as this box's own", () => {
+  const full = (answer: object) => ({ ...answer, fullInvoice: true });
+  const kinds = [
+    ["a receipt", {}, (answer: object) => answer],
+    ["a full invoice", { tipo: "F1" }, full],
+  ] as const;
+
+  async function openNewInstallation(on: SeededNode) {
+    await withTransaction(suite.db, async (tx) => {
+      const { nif, idSistemaInformatico } = await currentSif(tx, on.nodeId);
+      await seedFixtureSif(tx, { nodeId: on.nodeId, nif, idSistemaInformatico });
+    });
+  }
+
+  it.each(kinds)("%s another node filed and AEAT accepted is admitted", async (_n, kind, as) => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId, number } = await file({ ...kind, on: other, estado: "aceptado" });
+    expect(await admission(saleId)).toStrictEqual(as(eligible("accepted", number)));
+  });
+
+  const unanswered = kinds.flatMap(([name, kind, as]) =>
+    (["pendiente", "enviando"] as const).map((estado) => [name, estado, kind, as] as const),
+  );
+
+  it.each(unanswered)(
+    "%s another node filed waits while AEAT has not answered it (%s)",
+    async (_n, estado, kind, as) => {
+      const other = await seedNode(suite.db, "B");
+      const { saleId } = await file({ ...kind, on: other, estado });
+      expect(await admission(saleId)).toStrictEqual(as(refused("filing_pending")));
+    },
+  );
+
+  it.each(unanswered)(
+    "%s waits while AEAT has not answered it when the issuing box has no open installation (%s)",
+    async (_n, estado, kind, as) => {
+      const { saleId } = await file({ ...kind, estado });
+      expect(await admission(saleId, brandNodeId(newId()))).toStrictEqual(
+        as(refused("filing_pending")),
+      );
+    },
+  );
+
+  it.each(kinds)("%s another node filed with no submission is missing", async (_n, kind, as) => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({ ...kind, on: other, estado: null });
+    expect(await admission(saleId)).toStrictEqual(as(refused("missing")));
+  });
+
+  it.each(kinds)(
+    "%s with no submission is missing when the issuing box has no open installation",
+    async (_n, kind, as) => {
+      const { saleId } = await file({ ...kind, estado: null });
+      expect(await admission(saleId, brandNodeId(newId()))).toStrictEqual(as(refused("missing")));
+    },
+  );
+
+  it("a receipt an earlier installation of this box filed waits while AEAT has not answered it", async () => {
+    const { saleId } = await file({ estado: "pendiente" });
+    await openNewInstallation(node);
+    expect(await admission(saleId)).toStrictEqual(refused("filing_pending"));
+  });
+
+  it("a receipt this box's open installation filed is admitted while queued", async () => {
+    const { saleId, number } = await file({ estado: "pendiente" });
+    expect(await admission(saleId)).toStrictEqual(eligible("queued", number));
+  });
+
+  it("a receipt another node filed and AEAT refused waits for its fix", async () => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({ on: other, estado: "rechazado", refusal: { codigo: "1161" } });
+    expect(await admission(saleId)).toStrictEqual(refused("filing_refused"));
+  });
+
+  it("a full invoice another node filed and AEAT refused with no fix offered is refused for good", async () => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({
+      tipo: "F1",
+      on: other,
+      estado: "rechazado",
+      refusal: { codigo: "1112" },
+    });
+    expect(await admission(saleId)).toStrictEqual(full(refused("refused_no_fix")));
+  });
+
+  it("a full invoice another node filed and AEAT refused with a fix offered waits for it", async () => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({
+      tipo: "F1",
+      on: other,
+      estado: "rechazado",
+      refusal: {
+        codigo: "1100",
+        mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion",
+      },
+    });
+    expect(await admission(saleId)).toStrictEqual(full(refused("filing_refused")));
+  });
+
+  it("a receipt another node filed and this box cancelled stays voided", async () => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({ on: other, estado: "aceptado" });
+    await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "test", node.nodeId));
+    expect(await admission(saleId)).toStrictEqual(refused("voided"));
   });
 });
 
@@ -324,12 +438,6 @@ describe("refusals", () => {
 
   it.each(["F3", "R4", "R5"] as const)("an %s", async (tipo) => {
     expect(await admission((await file({ tipo })).saleId)).toStrictEqual(refused("not_simplified"));
-  });
-
-  it("another node's", async () => {
-    const other = await seedNode(suite.db, "B");
-    const { saleId } = await file({ on: other });
-    expect(await admission(saleId)).toEqual(refused("wrong_node"));
   });
 
   it("no record, or a record with no submission", async () => {

@@ -2266,6 +2266,8 @@ export const en = {
   "split.refused_not_issued": "This bill has no receipt yet.",
   "split.refused_receipt_refused":
     "AEAT refused this receipt, so the bill cannot be reopened. Take payment.",
+  "split.refused_receipt_unanswered":
+    "This receipt is waiting for the tax agency's answer, or sending it to the agency is on hold, so the bill cannot be reopened yet. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
@@ -4718,6 +4720,8 @@ export const es: Record<StringKey, string> = {
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",
   "split.refused_receipt_refused":
     "La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala.",
+  "split.refused_receipt_unanswered":
+    "Este ticket está esperando la respuesta de la Agencia Tributaria, o su envío a la Agencia está detenido, así que la cuenta aún no se puede reabrir. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":

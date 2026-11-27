@@ -29,7 +29,7 @@ describe("the till's English wording", () => {
   it("reads the codes' tables, nested tables included", () => {
     const paths = sentences().map(([path]) => path);
     expect(paths).toContain("codes.CODE_MESSAGES.server.internal");
-    expect(paths).toContain("codes.CORRECTION_NOT_ADMITTED.wrong_node");
+    expect(paths).toContain("codes.CORRECTION_NOT_ADMITTED.filing_pending");
     expect(paths).toContain("codes.MONEY_SHORT_ADVANCES.one");
   });
 

@@ -7,6 +7,7 @@ import { recordSale } from "@waitron/core";
 import {
   captureError,
   invoiceSeries,
+  newId,
   sales,
   withTransaction,
   writeNodeMembership,
@@ -573,8 +574,10 @@ describe("recordVoid", () => {
 });
 
 describe("refuseCreditOf", () => {
-  const refuseCredit = (saleId: string) =>
-    withTransaction(suite.db, (tx) => backend.refuseCreditOf(tx, brandSaleId(saleId)));
+  const refuseCredit = (saleId: string, issuingNodeId = nodeId) =>
+    withTransaction(suite.db, (tx) =>
+      backend.refuseCreditOf(tx, brandSaleId(saleId), issuingNodeId),
+    );
 
   async function answer(saleId: string, estado: string, codigo: string | null = null) {
     await suite.db
@@ -616,6 +619,61 @@ describe("refuseCreditOf", () => {
     await fixedVersionOf(suite.db, nodeId, saleId, "aceptado", null);
 
     await expect(refuseCredit(saleId)).resolves.toBeUndefined();
+  });
+
+  it.each(["pendiente", "enviando", "retenido", "detenido"])(
+    "refuses another box's receipt AEAT has not answered (%s)",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+      const m2 = await seedTaxpayerWithSif(suite.db);
+
+      await expect(refuseCredit(saleId, m2.nodeId)).rejects.toMatchObject({
+        code: "fiscal.original_unanswered",
+        params: { saleId },
+      });
+    },
+  );
+
+  it("refuses this box's receipt from an earlier installation AEAT has not answered", async () => {
+    const { saleId } = await sell();
+    await withTransaction(suite.db, async (tx) => {
+      const { nif, idSistemaInformatico } = await currentSif(tx, nodeId);
+      await seedFixtureSif(tx, { nodeId, nif, idSistemaInformatico });
+    });
+
+    await expect(refuseCredit(saleId)).rejects.toMatchObject({
+      code: "fiscal.original_unanswered",
+      params: { saleId },
+    });
+  });
+
+  it.each(["aceptado", "aceptado_con_errores"])(
+    "admits another box's receipt AEAT answered %s",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+      const m2 = await seedTaxpayerWithSif(suite.db);
+
+      await expect(refuseCredit(saleId, m2.nodeId)).resolves.toBeUndefined();
+    },
+  );
+
+  it("refuses another box's receipt AEAT refused as refused", async () => {
+    const { saleId } = await sell();
+    await answer(saleId, "rechazado", "1112");
+    const m2 = await seedTaxpayerWithSif(suite.db);
+
+    await expect(refuseCredit(saleId, m2.nodeId)).rejects.toMatchObject({
+      code: "fiscal.original_refused",
+    });
+  });
+
+  it("does not ask AEAT's answer when the issuing box has no open installation", async () => {
+    const { saleId } = await sell();
+    const bare = brandNodeId(newId());
+
+    await expect(refuseCredit(saleId, bare)).resolves.toBeUndefined();
   });
 
   it("admits a sale with no record, which the corrective's own refusal answers", async () => {
