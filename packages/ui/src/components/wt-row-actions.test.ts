@@ -39,8 +39,8 @@ test.each([
   { ordinary: true, tail: false, order: ["Edit"] },
   { ordinary: true, tail: true, order: ["Edit", "separator", "Delete"] },
   { ordinary: false, tail: true, order: ["Delete"] },
-])("separates the menu's regular actions from its final actions ($order)", async (scenario) => {
-  const menu = await mount('<wt-row-actions label="Actions"></wt-row-actions>');
+])("adds a divider only between two groups of menu actions ($order)", (scenario) => {
+  const menu = document.createElement("div");
   render(
     html`${scenario.ordinary ? html`<button>Edit</button>` : nothing}${rowActionTail(
       scenario.ordinary,
@@ -48,7 +48,6 @@ test.each([
     )}`,
     menu,
   );
-  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
   expect(
     [...menu.children].map((child) => (child.localName === "hr" ? "separator" : child.textContent)),
   ).toEqual(scenario.order);
