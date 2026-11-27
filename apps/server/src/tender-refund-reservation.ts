@@ -161,8 +161,9 @@ function namedNoCancels(refund: typeof refunds.$inferSelect): boolean {
 /**
  * Refuses a refund outside Correct invoice of `upTo` cents of payment money on the sale beyond what
  * it may give back now: what the cancels it pays for still owe (`owed`) plus what Correct invoice
- * could not give back. On a full invoice the cancels' money is the corrective's too (D5), so `owed`
- * counts for nothing there. While Correct invoice waits, the refusal is why it waits.
+ * could not give back. On a full invoice the cancels' money is the corrective's too, so `owed`
+ * counts for nothing there; the regime's admission alone says whether it is one. While Correct
+ * invoice waits, the refusal is why it waits.
  */
 async function refuseBeyondPlainRoom(
   tx: Transaction,
@@ -175,15 +176,15 @@ async function refuseBeyondPlainRoom(
 ): Promise<void> {
   const sale = brandSaleId(saleId);
   if (upTo <= owed && !(await targetNamesACustomer(tx, sale))) return;
-  const admission =
-    upTo <= owed ? await readCorrectionAdmission(tx, fiscal.backend, sale, nodeId) : undefined;
-  if (
-    admission !== undefined &&
-    !(await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, { ...AS_ADMITTED, admission }))
-  )
-    return;
-  const room = (amounts: { refundable: number; correctable: number }, fullInvoice: boolean) =>
-    (fullInvoice ? 0 : owed) + amounts.refundable - amounts.correctable;
+  const admission = await readCorrectionAdmission(tx, fiscal.backend, sale, nodeId);
+  const fullInvoice = await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, {
+    ...AS_ADMITTED,
+    admission,
+  });
+  const plainRoom = fullInvoice ? 0 : owed;
+  if (upTo <= plainRoom) return;
+  const room = (amounts: { refundable: number; correctable: number }) =>
+    plainRoom + amounts.refundable - amounts.correctable;
   // The read runs its clock check only once `upTo` is past the room, so a refusal it throws is this
   // refund's.
   const read = await readCorrectableNow(
@@ -192,13 +193,11 @@ async function refuseBeyondPlainRoom(
     { nodeId },
     fiscal.reading,
     sale,
-    (amounts, fullInvoice) => upTo > room(amounts, fullInvoice),
+    (amounts) => upTo > room(amounts),
     admission,
   );
-  if (upTo <= (read.fullInvoice ? 0 : owed)) return;
   if (read.waiting !== null) throw read.waiting;
-  if (upTo > room(read.amounts, read.fullInvoice))
-    throw new AppError("tender.refund_needs_correction", { tenderId });
+  if (upTo > room(read.amounts)) throw new AppError("tender.refund_needs_correction", { tenderId });
 }
 
 /** Whether the invoice a correction of the sale is filed against names a customer, which a full
