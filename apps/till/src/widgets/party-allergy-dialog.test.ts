@@ -399,6 +399,11 @@ describe("A669 allergy dialog", () => {
     await click(el, "[data-primary]");
     el.busy = true;
     await el.updateComplete;
+    const bar = el.shadowRoot!.querySelector("wt-top-bar")!;
+    await bar.updateComplete;
+    const back = bar.shadowRoot!.querySelector("wt-button")!;
+    await back.updateComplete;
+    expect(back.shadowRoot!.querySelector("button")!.disabled).toBe(true);
     el.busy = false;
     el.refusal = "Connection lost";
     await el.updateComplete;

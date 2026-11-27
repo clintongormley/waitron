@@ -44,6 +44,13 @@ async function fill(form: TillPartyNameDialog, value: string) {
   await form.updateComplete;
   return input;
 }
+async function closeWithBack(form: TillPartyNameDialog) {
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("party-name-cancel", () => resolve(), { once: true }),
+  );
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await closed;
+}
 async function question(app: PartyNameLeaveApp) {
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -104,11 +111,7 @@ it("normalized reverted party names close without a warning", async () => {
   expect(unload()).toBe(true);
   await fill(form, "  Ana ");
   expect(unload()).toBe(false);
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-name-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
   expect(app.submitted).toEqual([]);
@@ -241,11 +244,7 @@ it("a stored name changed elsewhere moves an untouched window with it, which the
   await form.updateComplete;
   expect(form.value).toBe("Luis");
   expect(unload()).toBe(false);
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-name-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
@@ -267,11 +266,7 @@ it("a name stored elsewhere while an untouched window is taken out moves the win
   expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Luis");
   expect(unload()).toBe(false);
   expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-name-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });

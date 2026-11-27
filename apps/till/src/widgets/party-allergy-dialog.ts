@@ -851,6 +851,7 @@ export class TillPartyAllergyDialog extends LitElement {
                   slot="header"
                   .heading=${title}
                   .backLabel=${t("action.back")}
+                  .backDisabled=${disabled}
                   @wt-back=${() => void this.renderRoot.querySelector("wt-dialog")!.requestClose("navigation")}
                 ></wt-top-bar>
                 ${content}

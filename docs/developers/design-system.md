@@ -877,7 +877,8 @@ and its backdrop dims the display. Leave the inset at zero on a narrow screen.
 
 `wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
 `heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
-and handle `wt-back` to navigate. The `action` slot holds a named icon button. Put the formatted
+and handle `wt-back` to navigate. Set `back-disabled` while the editor is saving. The `action`
+slot holds a named icon button. Put the formatted
 amount in the default slot of `wt-amount-block`. Give it a `label` and, when needed, a `breakdown`
 with the amount and any tip or adjustment.
 

@@ -5063,7 +5063,7 @@ export class TillApp extends LitElement {
     return html`<till-party-allergy-dialog
       .view=${open.view}
       .mode=${open.mode ?? "send"}
-      .panelInset=${order?.orderPaneInset ?? 0}
+      .panelInset=${open.mode === "edit" ? (order?.orderPaneInset ?? 0) : 0}
       .scopeKey=${open.key}
       .busy=${open.busy}
       .refusal=${open.refusal ?? ""}
@@ -24961,7 +24961,7 @@ export class TillApp extends LitElement {
           this.#onFloorRefresh(event.detail ?? {})}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
-        @order-pane-inset-changed=${() => {
+        @order-pane-resized=${() => {
           if (this.allergyDialog?.mode === "edit") this.requestUpdate();
         }}
         @edit-party-allergy=${(event: Event) => {

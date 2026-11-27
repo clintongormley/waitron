@@ -74,6 +74,7 @@ export class WtTopBar extends LitElement {
   @property() heading = "";
   @property() subtitle = "";
   @property({ attribute: "back-label" }) backLabel = "";
+  @property({ type: Boolean, attribute: "back-disabled" }) backDisabled = false;
 
   private back(event: Event): void {
     event.stopPropagation();
@@ -86,7 +87,7 @@ export class WtTopBar extends LitElement {
         ${
           this.backLabel === ""
             ? nothing
-            : html`<wt-button variant="ghost" @click=${this.back}
+            : html`<wt-button variant="ghost" .disabled=${this.backDisabled} @click=${this.back}
                 ><wt-icon name="chevron-left"></wt-icon
                 ><span class="back-label">${this.backLabel}</span></wt-button
               >`

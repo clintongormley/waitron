@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -167,6 +167,24 @@ describe("Table and bill actions", () => {
       expect(finished).toEqual([{}]);
     } finally {
       await page.viewport(1280, 900);
+    }
+  });
+
+  it("measures the order edge only for a panel that needs it", async () => {
+    await page.viewport(1280, 900);
+    const el = await mountScreen();
+    const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!;
+    await expect.poll(() => pane.getBoundingClientRect().left).toBeGreaterThan(0);
+    const measure = vi.spyOn(pane, "getBoundingClientRect");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(measure).not.toHaveBeenCalled();
+
+      await userEvent.click(partyMenu(el).shadowRoot!.querySelector("button")!);
+      expect(measure).toHaveBeenCalled();
+    } finally {
+      measure.mockRestore();
     }
   });
 

@@ -44,6 +44,13 @@ async function fill(form: TillPartyGuestsDialog, value: string) {
   await form.updateComplete;
   return input;
 }
+async function closeWithBack(form: TillPartyGuestsDialog) {
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+  );
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await closed;
+}
 async function question(app: PartyGuestsLeaveApp) {
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -108,11 +115,7 @@ it("a count typed back to the stored one, however spelled, closes without a warn
   expect(unload()).toBe(true);
   await fill(form, " 02 ");
   expect(unload()).toBe(false);
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
   expect(app.submitted).toEqual([]);
@@ -241,11 +244,7 @@ it("a stored count changed elsewhere moves an untouched window with it, which th
   await form.updateComplete;
   expect(form.value).toBe("6");
   expect(unload()).toBe(false);
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
@@ -267,11 +266,7 @@ it("a count stored elsewhere while an untouched window is taken out moves the wi
   expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("6");
   expect(unload()).toBe(false);
   expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
-  const closed = new Promise<void>((resolve) =>
-    form.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
-  );
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await closed;
+  await closeWithBack(form);
   expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
