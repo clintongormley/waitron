@@ -323,6 +323,13 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#scope?.commit(this.#submitted);
     this.#submitted = undefined;
   }
+  async closeSaved(scopeKey: string): Promise<void> {
+    if (!this.active || scopeKey !== this.#opening?.key) return;
+    this.commitConfirmed(scopeKey);
+    const dialog = this.renderRoot.querySelector("wt-dialog");
+    dialog?.closeAfter("saved");
+    await dialog?.updateComplete;
+  }
   reviewLatest(scopeKey: string, view: PartyAllergyRead | AllergyMoveRead): void {
     if (!this.active || scopeKey !== this.#opening?.key || view.partyId !== this.view.partyId)
       return;

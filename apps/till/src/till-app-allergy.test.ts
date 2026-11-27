@@ -1095,6 +1095,12 @@ describe("A669 live table editor", () => {
         await expect.poll(() => Math.round(bounds().left)).toBe(Math.round(paneLeft()));
         expect(bounds().right).toBe(innerWidth);
         expect(bounds().top).toBe(0);
+        const store = screen.draftStore;
+        await page.viewport(820, 1180);
+        await expect.poll(() => Math.round(bounds().right)).toBe(820);
+        await expect.poll(() => Math.round(bounds().left - paneLeft())).toBe(0);
+        expect(tableOrder(el)).toBe(screen);
+        expect(screen.draftStore).toBe(store);
 
         const closed = new Promise<void>((resolve) =>
           editor.addEventListener("wt-close", () => resolve(), { once: true }),
@@ -1143,6 +1149,9 @@ describe("A669 live table editor", () => {
     ]);
     await vi.waitFor(() => expect(dialog(el)).toBeNull());
     expect(screen.party?.revision).toBe(4);
+    expect(screen.shadowRoot!.activeElement).toBe(
+      screen.shadowRoot!.querySelector("[data-allergy-change]"),
+    );
   });
 });
 
