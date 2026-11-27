@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   draftScopeFor,
@@ -96,11 +97,15 @@ export class RecoveryPackDialog extends LitElement {
   @state() private key = "";
   /** The box's wrong-key refusal, shown on the field until the key changes; null names no key. */
   @state() private keyRefusal: { keyName: string | null } | null = null;
+  /** Counts each message that settles a step, so a repeated one is drawn anew and announced again. */
+  @state() private settled = 0;
 
   #generation = 0;
   #sent = false;
   /** The new master key's pack while the box has not confirmed taking it. */
   #unconfirmed: NewKeyPack | null = null;
+  /** Drops the confirm still out: the box refuses a confirm whose request is gone. */
+  #confirming: AbortController | null = null;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
 
@@ -174,10 +179,8 @@ export class RecoveryPackDialog extends LitElement {
   }
 
   #draft(): Draft {
-    return {
-      key: this.key,
-      unkept: (this.step === "shown" || this.step === "not-known") && !this.used,
-    };
+    const keyOut = this.#confirming !== null || this.step === "shown" || this.step === "not-known";
+    return { key: this.key, unkept: keyOut && !this.used };
   }
 
   #close(announce = true): void {
@@ -194,6 +197,8 @@ export class RecoveryPackDialog extends LitElement {
     this.key = "";
     this.keyRefusal = null;
     this.#unconfirmed = null;
+    this.#confirming?.abort();
+    this.#confirming = null;
     this.#forgetShown();
     if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
@@ -252,6 +257,7 @@ export class RecoveryPackDialog extends LitElement {
       this.lostMasterKey = newMasterKey;
       this.step = "lost";
       this.busy = false;
+      void this.#focusMessage();
       return;
     }
     if (generation !== this.#generation) return;
@@ -290,21 +296,36 @@ export class RecoveryPackDialog extends LitElement {
    */
   async #confirm(api: this["api"], generation: number, made: NewKeyPack): Promise<void> {
     this.busy = true;
-    let confirmed = await this.#markReceived(api, made.number, made.masterKey.key);
+    const confirming = new AbortController();
+    this.#confirming = confirming;
+    this.#scope?.changed();
+    let confirmed = await this.#markReceived(
+      api,
+      made.number,
+      made.masterKey.key,
+      confirming.signal,
+    );
     let after: RecoveryPackStatus | null = null;
     if (!confirmed) {
       if (generation !== this.#generation) return;
       after = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
-      confirmed = after?.masterKey?.name === made.masterKey.name;
+      confirmed =
+        after?.masterKey?.name === made.masterKey.name && after.masterKey.pack === made.number;
     }
     if (confirmed) {
       this.#unconfirmed = null;
       this.#handOver(api, made, true);
     }
     if (generation !== this.#generation) return;
+    this.#confirming = null;
     this.busy = false;
-    if (!confirmed && after && !after.newKeyWaiting) {
+    if (
+      !confirmed &&
+      after &&
+      !after.newKeyWaiting &&
+      after.masterKey?.name !== made.masterKey.name
+    ) {
       this.#unconfirmed = null;
       this.#forgetShown();
       this.lostMasterKey = true;
@@ -319,17 +340,34 @@ export class RecoveryPackDialog extends LitElement {
       this.step = confirmed ? "shown" : "not-known";
     }
     this.#scope?.changed();
+    if (this.step !== "shown") void this.#focusMessage();
   }
 
-  async #markReceived(api: this["api"], number: number, masterKey?: string): Promise<boolean> {
-    for (let attempt = 0; attempt < 2; attempt++) {
+  /** The press that led here was on a control now gone, so focus goes to the message. */
+  async #focusMessage(): Promise<void> {
+    const generation = this.#generation;
+    this.settled++;
+    await this.updateComplete;
+    if (generation !== this.#generation) return;
+    this.renderRoot.querySelector<HTMLElement>("[role=alert]")?.focus();
+  }
+
+  /** Two attempts. A plain pack's second failure is left for the card, which names the pack as
+   * never received. */
+  async #markReceived(
+    api: this["api"],
+    number: number,
+    masterKey?: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < 2 && !signal?.aborted; attempt++) {
       try {
         await (masterKey === undefined
           ? api.markRecoveryPackReceived(number)
-          : api.markRecoveryPackReceived(number, masterKey));
+          : api.markRecoveryPackReceived(number, masterKey, signal));
         return true;
       } catch {
-        // A second failure is left for the card, which names the pack as never received.
+        // Tried again once; then the caller decides.
       }
     }
     return false;
@@ -412,10 +450,10 @@ export class RecoveryPackDialog extends LitElement {
                 ${this.#keyField()}`
         }
       </div>
-      ${this.step === "lost" ? this.#lost() : nothing}
+      ${this.step === "lost" ? keyed(this.settled, this.#lost()) : nothing}
       ${
         this.step === "not-kept"
-          ? html`<div data-test="not-kept" role="alert">
+          ? html`<div data-test="not-kept" role="alert" tabindex="-1">
               <p>${t("recovery_pack_dialog.not_kept")}</p>
               <p>${t("recovery_pack_dialog.lost_new_key_choices")}</p>
             </div>`
@@ -423,10 +461,13 @@ export class RecoveryPackDialog extends LitElement {
       }
       ${
         this.step === "not-known" && this.shown
-          ? html`<p class="warning" data-test="not-known" role="alert">
+          ? html`${keyed(
+              this.settled,
+              html`<p class="warning" data-test="not-known" role="alert" tabindex="-1">
                 ${t("recovery_pack_dialog.not_known")}
-              </p>
-              ${this.#keyBox(this.shown)}`
+              </p>`,
+            )}
+            ${this.#keyBox(this.shown)}`
           : nothing
       }
       ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
@@ -489,12 +530,12 @@ export class RecoveryPackDialog extends LitElement {
 
   #lost(): TemplateResult {
     if (!this.lostMasterKey)
-      return html`<div data-test="lost" role="alert">
+      return html`<div data-test="lost" role="alert" tabindex="-1">
         <p>${t("recovery_pack_dialog.lost")}</p>
         <p>${t("recovery_pack_dialog.lost_choices")}</p>
       </div>`;
     const unreceived = this.reread?.unreceived;
-    return html`<div data-test="lost" role="alert">
+    return html`<div data-test="lost" role="alert" tabindex="-1">
       <p>
         ${t("recovery_pack_dialog.lost_new_key")}
         ${

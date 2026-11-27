@@ -212,7 +212,7 @@ export interface RecoveryPackStatus {
   keepOldPackUntil: string;
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
-  /** A new master key was made and shown, and the box has not yet taken or dropped it. */
+  /** A new master key was made and the box has not yet taken it. */
   newKeyWaiting?: boolean;
   /** The box's backup key; null while it holds none it can use. */
   backupKey: {
@@ -424,11 +424,16 @@ export class BackupApi extends CloudApi {
     });
   }
   /** A new master key's pack sends back the key it showed: the box takes the key only then. */
-  markRecoveryPackReceived(packNumber: number, masterKey?: string): Promise<void> {
+  markRecoveryPackReceived(
+    packNumber: number,
+    masterKey?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     return this.#request<void>(
       `/api/backup/recovery-pack/${packNumber}/received`,
       "POST",
       masterKey === undefined ? {} : { masterKey },
+      signal === undefined ? undefined : { signal },
     );
   }
   applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {

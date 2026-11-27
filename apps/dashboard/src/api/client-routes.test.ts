@@ -2622,6 +2622,27 @@ describe("the recovery pack calls", () => {
       ],
     ]);
   });
+
+  it("drops a confirm's request when its signal aborts", async () => {
+    let sent: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      sent = init?.signal;
+      return new Promise<Response>(() => undefined);
+    });
+    const api = new DashboardApi("", fetchImpl as typeof fetch);
+    const stop = new AbortController();
+
+    const answer = api.markRecoveryPackReceived(
+      8,
+      "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      stop.signal,
+    );
+    await expect.poll(() => fetchImpl.mock.calls.length).toBe(1);
+    stop.abort();
+
+    await expect(answer).rejects.toEqual({ code: "connection.cancelled" });
+    expect(sent?.aborted).toBe(true);
+  });
 });
 
 it("confirms fresh sign-in through the shared session endpoint", async () => {

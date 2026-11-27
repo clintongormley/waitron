@@ -215,3 +215,19 @@ it("a key the box may be using, not yet downloaded or printed, asks before Stop"
   await expect.poll(async () => (await question(f.app)).open).toBe(true);
   expect(f.dialog.open).toBe(true);
 });
+
+it("a confirm still out counts as unsaved, so leaving or closing the tab asks first", async () => {
+  const f = await fixture();
+  const api = f.host.api as unknown as { markRecoveryPackReceived: ReturnType<typeof vi.fn> };
+  api.markRecoveryPackReceived.mockReturnValue(new Promise(() => undefined));
+  const leaving = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(f.app.leave.coordinator.isDirty()).toBe(false);
+  f.press("make-pack").click();
+  await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+  await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(true);
+  expect(leaving()).toBe(true);
+});

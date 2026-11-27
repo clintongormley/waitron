@@ -54,7 +54,7 @@ function stubApi() {
       madeAt: "2026-10-30T09:00:00.000Z",
     }),
     markRecoveryPackReceived: vi
-      .fn<(n: number, masterKey?: string) => Promise<void>>()
+      .fn<(n: number, masterKey?: string, signal?: AbortSignal) => Promise<void>>()
       .mockResolvedValue(undefined),
     getRecoveryPackStatus: vi.fn<() => Promise<RecoveryPackStatus>>().mockResolvedValue(status()),
   };
@@ -106,6 +106,13 @@ async function type(el: RecoveryPackDialog, text: string = TYPED) {
   );
   await field(el)!.updateComplete;
   await el.updateComplete;
+}
+
+/** The focused element, looked for through every shadow root on the way down. */
+function focused(): Element | null {
+  let at = document.activeElement;
+  while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+  return at;
 }
 
 function words(node: Element | null | undefined): string {
@@ -525,7 +532,7 @@ describe("confirming the new master key", () => {
     const seen = made(el);
     button(el, "make-pack")!.click();
     await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
-    expect(api.markRecoveryPackReceived).toHaveBeenCalledWith(4, KEY);
+    expect(api.markRecoveryPackReceived).toHaveBeenCalledWith(4, KEY, expect.any(AbortSignal));
     await el.updateComplete;
     expect(seen).toEqual([]);
     confirm.resolve();
@@ -540,8 +547,8 @@ describe("confirming the new master key", () => {
       "shown-lead",
     );
     expect(api.markRecoveryPackReceived.mock.calls).toEqual([
-      [4, KEY],
-      [4, KEY],
+      [4, KEY, expect.any(AbortSignal)],
+      [4, KEY, expect.any(AbortSignal)],
     ]);
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     expect(inBox(el, "master-key")!.textContent).toBe(KEY);
@@ -617,6 +624,60 @@ describe("confirming the new master key", () => {
     },
   );
 
+  it("a status naming a current key with the new key's name but another pack is not known, and the card receives no PDF", async () => {
+    const { el, seen } = await unconfirmed(
+      status({ masterKey: { name: NAME, pack: 3 } }),
+      "not-known",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=not-kept]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=shown-lead]")).toBeNull();
+    expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+    expect(seen).toEqual([]);
+  });
+
+  it("drops the confirm's request when the dialog is removed while it is out", async () => {
+    const api = stubApi();
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      madeAt: "2026-11-23T09:00:00.000Z",
+      masterKey: { key: KEY, name: NAME },
+    });
+    api.markRecoveryPackReceived.mockReturnValue(new Promise(() => undefined));
+    const { el } = await open({ api, kind: "master-key" });
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+    const signal = api.markRecoveryPackReceived.mock.calls[0]![2]!;
+    expect(signal.aborted).toBe(false);
+    el.remove();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it.each(["not-kept", "not-known"] as const)(
+    "moves focus to the %s message when it appears",
+    async (settled) => {
+      const { el } = await unconfirmed(
+        settled === "not-kept" ? HELD : status({ ...HELD, newKeyWaiting: true }),
+        settled,
+      );
+      await expect
+        .poll(() => focused())
+        .toBe(el.shadowRoot!.querySelector(`[data-test=${settled}]`));
+    },
+  );
+
+  it("a Try again that fails again draws the not known message anew and focuses it", async () => {
+    const { el, api } = await unconfirmed(status({ ...HELD, newKeyWaiting: true }), "not-known");
+    const first = el.shadowRoot!.querySelector("[data-test=not-known]");
+    api.markRecoveryPackReceived.mockRejectedValueOnce(lost).mockRejectedValueOnce(lost);
+    button(el, "retry-pack")!.click();
+    await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(2);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=not-known]")).not.toBe(first);
+    const again = el.shadowRoot!.querySelector("[data-test=not-known]");
+    expect(again).not.toBeNull();
+    await expect.poll(() => focused()).toBe(again);
+  });
+
   it("an unreadable status is not known either, and the card receives no PDF", async () => {
     const { el, seen } = await unconfirmed(new Error("offline"), "not-known");
     expect(inBox(el, "master-key")!.textContent).toBe(KEY);
@@ -638,7 +699,7 @@ describe("confirming the new master key", () => {
     button(el, "retry-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     expect(api.markRecoveryPackReceived).toHaveBeenCalledTimes(5);
-    expect(api.markRecoveryPackReceived).toHaveBeenLastCalledWith(4, KEY);
+    expect(api.markRecoveryPackReceived).toHaveBeenLastCalledWith(4, KEY, expect.any(AbortSignal));
     expect(seen[0]).toMatchObject({ number: 4, received: true });
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=shown-lead]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=not-known]")).toBeNull();
@@ -999,6 +1060,11 @@ describe("a lost answer", () => {
     expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
     expect(button(el, "make-pack")!.variant).toBe("danger");
+  });
+
+  it("moves focus to its message", async () => {
+    const { el } = await lose({ masterKey: true });
+    await expect.poll(() => focused()).toBe(el.shadowRoot!.querySelector("[data-test=lost]"));
   });
 
   it("Stop closes the dialog", async () => {
