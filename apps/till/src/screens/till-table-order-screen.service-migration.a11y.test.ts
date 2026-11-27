@@ -77,8 +77,6 @@ describe.each(["en", "es"] as const)("Sent service migration in %s", (locale) =>
           path: `__screenshots__/a773-service-migration-${locale}-${theme}-${width}-reminder.png`,
         });
         await closePartyMenu(el);
-        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-        await panel.updateComplete;
         await userEvent.click(
           panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-info=l-flan]")!,
         );

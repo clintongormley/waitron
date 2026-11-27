@@ -48,13 +48,6 @@ describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
         await showView(el, "order", { ifShown: true });
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
-        for (const selector of ["[data-sent-toggle]", "[data-served-toggle]"]) {
-          const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-          if (toggle.getAttribute("aria-expanded") === "false") {
-            await userEvent.click(toggle);
-            await panel.updateComplete;
-          }
-        }
         expect(panel.shadowRoot!.querySelector('[data-served-line="dish"]')!.textContent).toContain(
           "Recorded pizza",
         );

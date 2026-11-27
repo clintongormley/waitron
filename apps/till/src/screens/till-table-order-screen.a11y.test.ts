@@ -649,13 +649,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       });
       await el.updateComplete;
       const panel = await sentPanelFor(el);
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
       );

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -84,10 +84,6 @@ describe.each(["en", "es"] as const)("bill panel total in %s", (locale) => {
         if (width < 1280) await showView(el, "order");
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
-        for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-          await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(selector)!);
-          await panel.updateComplete;
-        }
         const total = el.shadowRoot!.querySelector<HTMLElement>("[data-order-total]")!;
         expect(total.textContent!.trim()).toBe(locale === "en" ? "€16.50" : "16,50 €");
         expect(total.checkVisibility()).toBe(true);
@@ -100,10 +96,10 @@ describe.each(["en", "es"] as const)("bill panel total in %s", (locale) => {
           newOrder.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
         const companion = panel.shadowRoot!.querySelector("[data-companion=other]")!;
-        expect(companion.querySelector(".what")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-          "Wine ×1",
-        );
-        expect(companion.querySelector(".amount, wt-button, button")).toBeNull();
+        expect(
+          `${companion.querySelector(".row-qty")!.textContent} ${companion.querySelector(".row-name")!.textContent}`,
+        ).toBe("1 Wine");
+        expect(companion.querySelector(".row-price, wt-button, button")).toBeNull();
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         await expectNoA11yViolations(host);
         await page.screenshot({

@@ -61,13 +61,6 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
       await showView(el, "order", { ifShown: true });
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-      if (toggle.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
-      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-      await panel.updateComplete;
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!,
       );
@@ -130,7 +123,7 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
       });
     });
     it.each([360, 390, 1280])(
-      "keeps folds, information and native service usable at %i",
+      "keeps headings, information and native service usable at %i",
       async (width) => {
         await page.viewport(width, 1000);
         setLocale(locale);
@@ -155,10 +148,16 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
         const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
         expect(innerWidth).toBe(width);
         expect(panel.checkVisibility()).toBe(true);
-        expect(toggle.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        for (const selector of ["[data-serve-all]", "[data-group-fire]", "[data-sent-info]"]) {
+          const controls = [...panel.shadowRoot!.querySelectorAll<HTMLElement>(selector)];
+          expect(controls.length).toBeGreaterThan(0);
+          for (const control of controls) {
+            expect(control.checkVisibility()).toBe(true);
+            expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+          }
+        }
         expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         await expectNoA11yViolations(host);

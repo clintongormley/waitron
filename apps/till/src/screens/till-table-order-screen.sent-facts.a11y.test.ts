@@ -54,19 +54,11 @@ describe.each(["en", "es"] as const)("Sent dish facts in %s", (locale) => {
         await resized(el);
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
-        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-        await panel.updateComplete;
         for (const kind of ["fired", "held"] as const) {
           const clock = new Intl.DateTimeFormat(currentLocale(), {
             hour: "2-digit",
             minute: "2-digit",
           }).format(new Date(kind === "fired" ? sentAt : heldAt));
-          if (kind === "held") {
-            await userEvent.click(
-              panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!,
-            );
-            await panel.updateComplete;
-          }
           const id = kind === "fired" ? "l-croq" : "l-flan";
           await userEvent.click(
             panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${id}"]`)!,

@@ -67,12 +67,6 @@ describe.each(["en", "es"] as const)("stored nutrition on the table in %s", (loc
       await showView(el, "order", { ifShown: true });
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      for (const kind of ["served", "held"]) {
-        await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-toggle]`)!,
-        );
-        await panel.updateComplete;
-      }
       const checks = [
         ['[data-fired-line="l-croq"]', "allergen-milk", "diet-no_fish"],
         ['[data-served-line="l-salad"]', "allergen-eggs", "diet-halal"],

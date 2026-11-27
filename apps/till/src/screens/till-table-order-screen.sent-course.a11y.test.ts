@@ -79,10 +79,6 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
       await closePartyMenu(el);
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(selector)!);
-        await panel.updateComplete;
-      }
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${storedDish.id}"]`)!,
       );
