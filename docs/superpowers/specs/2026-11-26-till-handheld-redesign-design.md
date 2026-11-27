@@ -7,7 +7,9 @@ by the owner the same evening.** Where pass 2 changed a pass-1 decision, the sec
 **Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26, and this write-up
 approved by the owner the same evening. Pass 3's second part (after payment, §7.12) decided the same
 evening, and its write-up approved by the owner the same evening.** On 2026-11-27 the owner approved
-frame `bi` (a bin for Remove, "Move" for "Move to…", Undo after removing; §4 and §14.4).
+frame `bi` (a bin for Remove, "Move" for "Move to…", Undo after removing; §4 and §14.4). **Pass 3's
+third part (clocking in and out, hours and their approval, the cash drawer and a waiter's float,
+§7.14) decided with the owner on 2026-11-27, and its write-up approved by the owner the same day.**
 §14 says how each piece looks, read off the approved pictures, so the build does not have to guess.
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
@@ -695,6 +697,181 @@ the foot holds "Save · paid on BBVA terminal" (filled). Changed: the success ci
 terminal" 26px bold, a muted 14px line of what it was, by whom and when; the foot "Back to the receipt"
 (filled) and "Print the receipt again" (a text link).
 
+### 7.14 (pass 3) Clocking in and out, hours, the cash drawer and a waiter's float
+
+Decided with the owner on 2026-11-27 from pictures `ca`–`ce` (§12). Clocking in and out, breaks and
+hours appear only where the venue records working time and the profile allows clocking in, as today.
+
+**Clocking in and out** (`ca`).
+1. **Check your times** stays as today: only at the day's first sign-in, only when something needs
+   an answer, one card per question ("That's right" / "No, I left at…"; "Accept" / "Disagree").
+   "Answer later" goes on to Clock in; the question waits for the next sign-in.
+2. **Clock in** stays a full page, as today. New: the person's shift from the rota when there is one
+   ("Your shift today · 17:00 – 23:30 · Dining room"). Today's "Cancel" becomes **Not now**: the
+   person works without clocking in, and that is recorded, as today.
+3. **☰'s You section** (§9.9): "Working since 17:02 · 4 h 40 min", then **Start break** and **Clock
+   out** side by side.
+4. **On a break**: a line just above the bottom bar, "On a break · 12 min", with **End break** at its
+   right end, and a dot on ☰. ☰'s You section then has End break as its one button.
+5. **Signing in during a break** asks, as Clock in does at the start of a shift: "Welcome back,
+   Javier", "On a break since 21:30 · 25 min", **End break** or **Not now** (the break goes on).
+   Owner: "i would add that you have the option to end your break when you log in again (just like
+   clocking in at the beginning)".
+6. **Clock out** opens a sheet that sums up the day (today's times, breaks, worked), with "Clock out
+   · 23:31" and "Stay clocked in". Clocking out still logs out; plain Log out keeps the person
+   clocked in, as today.
+
+**My hours** (`cb`), from ☰ → Your time.
+- Week or Month, as today, and the total worked. **New:** beside it, the rota's shifts for the same
+  period ("Shifts on the rota: 26 h 30 min").
+- One row per day: the weekday and date, the times, breaks, hours, and whether a manager has approved
+  the day. A pill marks what is unusual: "Working now", "Clocked out automatically", "Not approved
+  yet", "You asked to change it · waiting". A period gone to the payroll cannot change, as today.
+- A day: each time as recorded, with who added it when it was not the person ("Added by Waitron:
+  your last use of a till"), the rota's shift, and **Fix my hours** at the foot.
+- **Fix my hours**: which time, the right time and why (both required), and what the day would come
+  to. The button is **Ask a manager**. The day then shows the request waiting ("Sent to the managers
+  at 17:05") with nothing to press.
+- **No manager approves on the worker's device.** Today's "Approve with a PIN" on the worker's day
+  goes. Owner: "we wouldn't hand the same device to a manager to ask for their pin, it would be sent
+  to an approval queue in the dashboard (which may also be visible in a manager's device)".
+
+**Approving hours** (`cc`). **This changes the [A10 design](2026-10-12-a10-clocking-in-and-out-design.md)**:
+there a manager approved only a worker's own correction, in the dashboard or with a manager's PIN on
+the till (decision 7), and an automatic clock-out counted as soon as it was written (decision 9,
+owner, 2026-10-14); a day nobody changed needed no manager. Owner, 2026-11-27: "a manager
+should approve all clock in/out records after they have been submitted or changed. a worker can edit
+their records (which get sent to a manager for approval). the worker can also dispute changes made by
+the manager."
+- **Every finished day waits for a manager**: one the person clocked, one Waitron ended
+  automatically, and any change by either side.
+- **Until a manager approves it, a day counts in totals and in the export as recorded, marked not
+  approved** (owner: "agreed, assume approval").
+- **To approve** is one list, on the dashboard and on a manager's own device (☰ → "To approve · 2",
+  for a person who may approve hours), in three parts:
+  - **Asked to change**: who, which day, what changes and why; **Approve**, **Edit**, **Decline**.
+  - **Disputed**: the manager's change beside the worker's own time and reason; take the worker's
+    time, or **Edit** again.
+  - **Finished days**: each person's finished day, clocked or automatic, with **Approve all**.
+  Today the dashboard shows waiting requests only on each person's hours page
+  (`apps/dashboard/src/widgets/hours-record.ts`); one list across all the staff is new.
+- **A manager may edit any time of the day**, not only approve or decline (owner: "the manager
+  should be able to edit the times, not just approve or decline"). Beside the time being changed, the
+  edit shows what Waitron recorded and what the worker asked for. A reason is required. "Save and
+  send to Javier".
+- The worker answers a manager's change at the next sign-in, in Check your times: **Accept**, or
+  **Disagree** with a reason. A disagreement keeps both versions, each with who wrote it, when and
+  why, marks the day disputed in the record and the export, and puts it back in the managers' list.
+- **Waitron never decides a disagreement.** No rule in force says how one is settled (the labour
+  research's Q48.9, [2026-11-06-adviser-labour.md](../../compliance/research/2026-11-06-adviser-labour.md));
+  the owner chose to build it this way and ask the labour adviser for confirmation ("let's build it
+  that way and ask for confirmation"): question L8 in
+  [asesor-laboral-questions.md](../../compliance/asesor-laboral-questions.md).
+
+**The cash drawer** (`cd`), from ☰ → Bills and cash, only on a device whose profile may open a
+drawer (§9.9).
+- **Cash in or out**: Cash in or Cash out, the amount on a keypad, and why (required). **New: one
+  button records it and opens the drawer** ("Take out €40.00 · opens the drawer"); today opening the
+  drawer is a separate button. Nothing prints, as today.
+- **Close the drawer, step 1 of 2**: the drawer opens by itself ("The drawer is open. If it stays
+  shut, use the key."), then a blind count, as today: what Waitron expected shows only after the
+  count is saved.
+- **Step 2 of 2**: what was counted, what Waitron expected, and the difference in words ("Short by
+  €2.70", "Over by …"), with one **Count again**, as today. Then "Leave in the drawer for the next
+  service", starting at the last close's amount (a call made in the write-up), and "For the bank".
+  "Finish and print the slip".
+- **Drawer closed**: counted, the difference, left in the drawer, for the bank, and where the slip
+  printed; then **Clock out** first where the venue records working time, and "Back to the floor".
+- No float is set at the start of a service: a drawer starts with what the last close left in it,
+  as today.
+
+**A waiter's float** (`ce`). **New: this designs backlog A240**, keeping its decisions of 2026-10-03:
+a float belongs to the waiter, not the device; cash the waiter takes from guests on any device adds
+to it; the waiter settles it at a till before leaving; the difference is recorded against the waiter;
+the cash goes into that till's drawer as cash in; the daily summary email lists any float still open.
+- **A float always comes out of a till's drawer**; a waiter never brings their own cash (owner,
+  2026-11-27: "no, don't support this"). This settles A240's open question.
+- **Take a float**: at a till with a drawer, from ☰'s You section. Which drawer, the amount (€50,
+  €100, €150, or typed), and one button that records it and opens the drawer ("Take €100.00 · opens
+  the drawer"). The drawer counts it as cash out, to that waiter.
+- **During the day** the waiter's ☰, on any device, shows the float, the cash taken from guests and
+  "You should hold", with **Add to float** (the same screen, at a till) and **Settle**.
+- **Settle**, at a till: step 1 a blind count of the cash held, with the drawer open; step 2 the float
+  taken (each amount and time), the cash from guests (how many payments), what the waiter should
+  hold, what they counted, the difference in words and one Count again; "€200.00 goes into the Bar
+  drawer. The difference is recorded against you." "Finish · float settled".
+
+### 7.15 (pass 3) How clocking in, hours, the drawer and floats look
+
+As §7.10 and §14.2 (tokens, the app bar, the foot bar, the sheet, the keypad of §7.5); pictures
+`ca`–`ce`.
+
+**Check your times** (`ca` 1, `cc` 3). A 24 bold title over a muted 14
+line, then one outlined card per question: 12 corners, 16 inside, the date in small capitals, the
+sentence 16 with its times bold, and the two answers stacked full width, 52 tall (the first teal,
+the second outlined). The foot holds "Answer later" as a bold 15 text link in the primary text
+colour.
+
+**Clock in and Welcome back** (`ca` 2 and 5). Centred in the page: the person's initials in a 72
+teal circle (bold 26), the greeting 26 bold, a muted 15 line, then a light blue panel, 10 corners,
+holding "Your shift today" (or "On a break since") 15 over the times bold 18. The foot: a teal
+"Clock in · 17:02" (or "End break · 21:55") over the text link "Not now".
+
+**☰'s You section** (`ca` 3, `ce` 2). Initials in a 44 teal circle, the name bold 17, under it a
+muted 13 line led by an 8 dot: `--wt-color-success` while working, the warning tint's colour on a
+break. Under them, two outlined buttons side by side, 46 tall ("Start break", "Clock out"), or one
+teal "End break". A waiter with a float has a light blue panel under the buttons, 10 corners: muted
+14 rows with the figures bold in the text colour and tabular, "You should hold" 16 under a line, and
+two outlined 42 buttons ("Add to float", "Settle"). "To approve · 2", for a manager, is an ordinary
+row of the section.
+
+**On a break** (`ca` 4). Just above the bottom bar, 12 in from each side, a 10-cornered line in the
+warning tint, bold 15: "On a break · 12 min", and "End break" underlined at its right end. ☰ carries
+a 10 dot in the warning tint's colour at its top right, ringed 2 in the surface colour.
+
+**Clock out** (`ca` 6). The sheet; a bold 20 title, a muted 15 line, then an outlined table, 10
+corners: label left, the figure bold and tabular at the right end. A teal "Clock out · 23:31" over
+the text link "Stay clocked in".
+
+**My hours** (`cb` 1). Under the app bar ("‹ Floor", "My hours"): Week and Month as two halves of an
+outlined control, 40 tall, 10 corners, the chosen half teal; the period between two 44 chevron
+buttons, bold 16; a light blue panel, 12 corners: "Worked this week" muted 13, the total 30 bold and
+tabular, the rota's total muted 13. The days are plain rows with a line above, at least 58 tall:
+the weekday bold 15 over the date muted 12 (a 58 column); the times 15 tabular over the breaks and
+"approved" muted 12, and the pill under them; the hours bold and tabular; the chevron muted. Pills are
+bold 12, 10 corners: "Clocked out automatically" in the warning tint, "Working now" in
+`--wt-color-success` with its text colour, "Not approved yet" and "You asked to change it · waiting"
+on `--wt-color-surface-sunken`. The closed period's note is muted 13 after a 16 lock icon (**new**:
+a padlock).
+
+**A day, Fix my hours and waiting** (`cb` 2–4, `cc` 2). The day's total in the same light blue
+panel, then the times as plain rows with a line above: a muted 96 label column ("Clocked in",
+"Break", "Clocked out"), the time bold and tabular, and who added it muted 13 under the time. Fields
+are 48 tall, 8 corners, outlined, under a muted 13 label; a required field's label ends in a star in
+`--wt-color-danger`; "Why" is 76 tall. "Worked would be …" is a muted 14 line under the time. The
+waiting request is a box, 12 corners, a 2 border in the warning tint's colour on the surface: small
+capitals "Waiting for a manager", the request 15 with its time bold, "Sent to the managers at 17:05"
+muted 13.
+
+**To approve** (`cc` 1). A muted 14 line under the app bar. Each part has a small-capitals heading
+with its count; "Approve all 6" sits at its right end as a bold 14 text link in the primary text
+colour. A request is an outlined card, 12 corners, 14 inside: the name bold 16 with the date muted 13
+at the right end, the change 15 with its times bold, the reason muted 14 in quotes, and a row of 44
+buttons (Approve teal; Edit and Decline outlined). A disputed card has a 2 border in
+`--wt-color-danger` and holds a two-column list, 14 ("You changed", "Ana says") over the muted line.
+Finished days are plain rows like My hours's, with the person's name bold in a 96 column.
+
+**The drawer and the float's screens** (`cd`, `ce` 1, 3 and 4). Cash in and Cash out are two choice
+tiles, 52 tall, 10 corners, outlined, bold 17; chosen, a 2 teal border on light blue. The float's
+quick amounts are three such tiles, 48 tall. The amount: a muted 13 label over the figure 44 bold and
+tabular, centred; the keypad of §7.5 under it. The drawer-open note is a light blue panel, 10 corners,
+14. The result is an outlined card, 12 corners: rows 16 with the figure bold 18 and tabular at the
+right end, a muted 13 line under a label where there is one ("€100.00 at 11:58 · €20.00 at 14:35");
+"Short by" and its figure in `--wt-color-danger` ("Over by" in the text colour). "Count again" is a
+centred bold text link. Drawer closed: a 64 circle in `--wt-color-success` with the check icon, "Drawer
+closed" 28 bold, the result card, the slip's note in a light blue panel; the foot a teal "Clock out"
+over the text link "Back to the floor".
+
 ## 8. The till: the same pieces side by side
 
 On a screen about 800 pixels wide or more (owner approved the drawing, 2026-11-26):
@@ -907,7 +1084,10 @@ opens for that table**, never in the floor read. (A call made in the write-up.)
 ### 9.9 ☰ and the kitchen screens
 
 **☰** (rising from the bottom), in this order:
-1. **You**: the person signed in, "Clocked in at 17:02", and **Clock out** right there.
+1. **You**: the person signed in, "Working since 17:02 · 4 h 40 min", and **Start break** and
+   **Clock out** right there (on a break, **End break**); a waiter's float, with Add to float and
+   Settle; "Take a float" on a till with a drawer; "To approve" for a person who may approve hours
+   (pass 3, §7.14).
 2. **The zone, until the next service** ("Dining room · until the next service"): Add a spare
    table, Taken off, Back to the <period> plan (§9.6). No screen says "tonight" or "today": a
    service may be breakfast, lunch or dinner.
@@ -974,7 +1154,6 @@ The build applies the same rule to every other error.
 
 ## 10. Not designed yet
 
-- Clock-in, My hours and the drawer.
 - Loading states, and the Spanish wording.
 
 ## 11. Open questions
@@ -1009,7 +1188,9 @@ paying redrawn, `ai` the floor on a till, `aj` ☰ and the kitchen screens, `ak`
 do; (pass 3) `ba` Split equally, `bb` Items, `bc` An amount, `bd` Other card machine, `be` Find a bill, `bf` the
 receipt screen, `bg` Refund, `bh` Change how it was paid, `tipcmp` the two tip screens compared; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
 bill dropdown and frame 4's ☰ still lists "Choose zones"; (2026-11-27) `bi` removing and moving new
-dishes: the bin and "Move" in the selection foot, the bin while dragging, and Undo after removing. Turned down or superseded: `w` (an edit
+dishes: the bin and "Move" in the selection foot, the bin while dragging, and Undo after removing;
+(2026-11-27, §7.14) `ca` clocking in and out, `cb` My hours (the worker), `cc` approving hours (the
+manager), `cd` the cash drawer, `ce` a waiter's float. Turned down or superseded: `w` (an edit
 mode, dropped), `y` (the Ready strip), `z` frame 2 (a Stations tab), `ab` frame 1 (a zone ⋮ menu,
 now in ☰), `ac` frames 1 and 3 and `ad` frame 2 (a counter zone with seats), `ae` and `al` (a
 counter order delivered to a table; dropped for now, §9.8).
@@ -1068,6 +1249,24 @@ counter order delivered to a table; dropped for now, §9.8).
 - (pass 3) **Change how it was paid** is new: a recorded, any-staff change of a payment's way (cash ↔
   other card machine) until its drawer is closed, reflected in the drawer's expected cash and on a
   reprint; never on a reader payment, never on the tax record.
+- (pass 3) **Every finished day waits for a manager's approval** (§7.14), changing the A10 design's
+  decisions 7 and 9: a day's approval, Approve all, a manager's edit of any time with a reason and the
+  worker's answer, and disputes that come back to the managers. A day not yet approved counts as
+  recorded, and the export marks it. The till's "Approve with a PIN" goes. A10's rule that only an
+  admin approves their own request stays (a call made in the write-up). The labour adviser is asked
+  L8 in parallel.
+- (pass 3) **"To approve" is one list across the staff** (new), on the dashboard and on the till's ☰,
+  for whoever may approve hours today; the dashboard's per-person hours page keeps its own view.
+- (pass 3) **The Clock in page shows the person's shift** from the rota when there is one; signing in
+  during a break asks End break or Not now (new).
+- (pass 3) **Cash in or out records the entry and then opens the drawer** with one button, through the
+  separate audited drawer job (printing never opens a drawer). What "Leave in the drawer" starts at
+  today was not checked; the design says the last close's amount.
+- (pass 3) **A waiter's float (A240) is new**: taking one and adding to it are cash out of a drawer to
+  that waiter; the waiter's cash from guests is their cash payments on any device; settling is cash in
+  to the till's drawer with the difference recorded against the waiter; each drawer's expected cash
+  counts all of these; the daily summary email lists floats still open. Cash a waiter takes with no
+  float stays as A238 has it.
 - (pass 2) **Lane D's point 8**: in the demo, a device-verification warning stayed after a reload while
   seating, joining and ordering still worked (2026-11-11). Reproduce and fix it in the build.
 

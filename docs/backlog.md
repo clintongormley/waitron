@@ -584,6 +584,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   table-move and bill action panels, Send and move allergy prompts, and payment slices remain.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
+  Pass 3's third part (27 November; §7.14, not started): clocking in and out with breaks, My hours,
+  and **every finished day approved by a manager** (changing the A10 design: one "To approve" list on
+  the dashboard and a manager's device, managers may edit times, workers may disagree, an unapproved
+  day counts as recorded; the labour adviser is asked L8), the cash drawer's screens, and waiter
+  floats (A240).
 
 - **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
   of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show
@@ -752,7 +757,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Qualify printer identity at enrolment.** The device enrolment design's separate printer track remains. [Detail](backlog/till.md#bundle-printer-identity-at-enrolment)
 
-- **Waiter cash floats (A240)** (size L, needs a spec). [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
+- **Waiter cash floats (A240)** (size L, designed in the till redesign §7.14, 27 November 2026; not
+  started). [Detail](backlog/till.md#waiter-cash-floats-a240--designed-owner-2026-10-03-and-2026-11-27)
 
 - **Loose ends left by W97 (#1311).**
   - A disabled device's profile approvals come back when a join enables it again (unchecked

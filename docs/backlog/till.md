@@ -354,7 +354,7 @@ Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were look
 test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
 address has not been looked at.
 
-## Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03)
+## Waiter cash floats (A240) — designed (owner, 2026-10-03 and 2026-11-27)
 
 Piece 3 of
 A238. Its screen belongs with clocking in and out, under Team (owner, 2026-10-03, A261 §10). Owner decisions so far: a float belongs to the WAITER, not the handheld; a waiter with an
@@ -362,7 +362,9 @@ open float may take cash on any handheld, and it adds to their float; the waiter
 at a till before leaving, entering what they hold, the difference is recorded against them and the
 cash goes into that till's drawer as a cash-in entry; the daily summary email lists any float still open.
 Cash taken on a handheld whose profile allows cash, with no float, is counted against the
-handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in).
+handheld until then (A238). The open point is settled: a float always comes out of a till's drawer, never
+brought in (owner, 2026-11-27: "no, don't support this"). Designed in the till redesign, with its
+screens: [§7.14](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#714-pass-3-clocking-in-and-out-hours-the-cash-drawer-and-a-waiters-float).
 
 ## Other till surfaces have not been checked against the forms rule
 
