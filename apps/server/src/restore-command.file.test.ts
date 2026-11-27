@@ -41,6 +41,7 @@ import {
   snapshotNodeDatabase,
 } from "./archive-entries.js";
 import { packArchive } from "./backup-archive.js";
+import { writeBackupKey } from "./backup-env-writer.js";
 import { buildManifest } from "./backup-manifest.js";
 import { startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -52,7 +53,7 @@ import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
-import { HELD_MASTER_KEY_DAY } from "./testing/backup-key.js";
+import { HELD_MASTER_KEY_DAY, heldBackupKey } from "./testing/backup-key.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -63,7 +64,6 @@ import {
 import { bootEnv, boxDirs, copyMigrations } from "./testing/stream-box.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 
-const RECOVERY_KEY = "s3cr3t-recovery-key-value";
 const SECRET_ACCESS_KEY = "synthetic-secret-access-key-value";
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
@@ -94,6 +94,7 @@ describe("waitron-restore restore <file>, end to end", () => {
   let personId: string;
   let masterKey: string;
   let masterKeyName: string;
+  let backupKey: ReturnType<typeof heldBackupKey>;
   /** Every line any case printed, read once at the end for secrets. */
   const printed: string[] = [];
 
@@ -134,6 +135,7 @@ describe("waitron-restore restore <file>, end to end", () => {
     ({ secret: masterKey, name: masterKeyName } = await mintMasterKey(suite.db, {
       madeAt: new Date(`${HELD_MASTER_KEY_DAY}T12:00:00Z`),
     }));
+    backupKey = heldBackupKey(decodeMasterKeyCode(masterKey));
     await seedFiscalRecord(suite.db);
     for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
       await suite.db.transaction((tx) =>
@@ -180,7 +182,7 @@ describe("waitron-restore restore <file>, end to end", () => {
     for (const line of printed) {
       expect(line).not.toContain(masterKey);
       expect(line).not.toContain(SECRET_ACCESS_KEY);
-      expect(line).not.toContain(RECOVERY_KEY);
+      expect(line).not.toContain(backupKey.key);
     }
     await rm(scratch, { recursive: true, force: true });
   });
@@ -375,10 +377,7 @@ describe("waitron-restore restore <file>, end to end", () => {
       now: () => new Date(),
     });
     await writeFile(join(original.state, "trading.env"), `WAITRON_NODE_ID=${ids.node}\n`);
-    await writeFile(
-      join(original.state, "backup.env"),
-      `WAITRON_BACKUP_RECOVERY_KEY=${RECOVERY_KEY}\n`,
-    );
+    await writeBackupKey(original.state, backupKey);
     const env = await loadBoxEnv({}, original.state);
     const ring = loadKeyRing(env);
     let signingKey: string;

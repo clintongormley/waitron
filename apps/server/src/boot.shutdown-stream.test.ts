@@ -18,6 +18,8 @@ import { createJobRunner } from "./job-runner.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { heldBackupKey } from "./testing/backup-key.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -43,6 +45,7 @@ it("stops Litestream within its reserved window even while preliminary jobs hold
   await seedModuleSettings(suite.db, { "fiscal-none": false });
   const scratch = await mkdtemp(join(tmpdir(), "waitron-shutdown-stream-"));
   await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
+  await writeBackupKey(scratch, heldBackupKey(Buffer.alloc(16, 17)));
   await writeFile(join(scratch, "trading.env"), "");
   const sources = migrationOptionsFor(manifestSets(), null);
   for (const [i, set] of manifestSets().entries())
@@ -84,7 +87,6 @@ it("stops Litestream within its reserved window even while preliminary jobs hold
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
     WAITRON_ENV: "preproduction",
-    WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789",
   };
   let release!: () => void;
   const held = new Promise<void>((done) => {
