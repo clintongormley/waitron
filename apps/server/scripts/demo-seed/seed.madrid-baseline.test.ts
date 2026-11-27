@@ -296,7 +296,9 @@ function lunchSetMenuChanges(locale: "en" | "es", photos: Record<string, string>
       [STARTER_COURSE_NAMES.Starters.es],
       [
         STARTER_COURSE_NAMES.Mains.es,
-        ...(mainsAcceptsStarters ? [STARTER_COURSE_NAMES.Starters.es] : []),
+        ...(mainsAcceptsStarters
+          ? [STARTER_COURSE_NAMES.Starters.es, STARTER_COURSE_NAMES["Sharing plates"].es]
+          : []),
       ],
       [STARTER_COURSE_NAMES.Desserts.es, NEW_COURSES[0]],
       [NEW_COURSES[2]],
@@ -337,9 +339,6 @@ function lunchSetMenuChanges(locale: "en" | "es", photos: Record<string, string>
         [0, 1, 2, 3, 4].map((index) => [lineId(id, index)]),
       ),
       set_menu_line_courses: courses,
-      set_menu_dish_courses: [
-        [menuItem(special, product("patatas-bravas")), courseKey(STARTER_COURSE_NAMES.Starters.es)],
-      ],
       set_menu_variant_exclusions: [
         [menuItem(daily, coffee), coffee, `@products:${stable([coffee, 1])}`],
       ],
@@ -451,7 +450,6 @@ const SET_MENU_TABLES = [
   "set_menu_lines",
   "set_menu_line_courses",
   "set_menu_variant_exclusions",
-  "set_menu_dish_courses",
 ] as const;
 
 const ADDED_TABLES = [

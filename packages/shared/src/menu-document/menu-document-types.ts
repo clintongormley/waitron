@@ -89,7 +89,6 @@ export type SetMenuFrozenOffer = Omit<FrozenOffer, "variants"> & {
   /** The course the dish counts as, or null when only its variants have courses. */
   countsAsCourseId: string | null;
   /** The course this set menu gives the dish and its variants, if any. */
-  courseOverrideId: string | null;
   variants: SetMenuOfferVariant[];
 };
 

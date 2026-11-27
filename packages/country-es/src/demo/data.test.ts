@@ -446,7 +446,7 @@ it.each(demoSets)("defines two set menus with eligible dishes in $id", (set) => 
     const servedCourses = menu.dishes.map((dish) => {
       const product = products.get(dish.productImage);
       expect(product?.pricingUnit, dish.productImage).toBe("each");
-      return dish.course ?? product?.course;
+      return product?.course;
     });
     for (const course of servedCourses)
       expect(

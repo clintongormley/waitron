@@ -181,7 +181,6 @@ describe("the products a published set menu can hold", () => {
   ): SetMenuFrozenOffer {
     return {
       ...offer(productId, countsAsCourseId),
-      courseOverrideId: null,
       variants: [],
       offeredModifiers: [],
       ...rest,

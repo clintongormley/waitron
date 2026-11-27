@@ -1,14 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  kitchenCourses,
-  products,
-  setMenuDishCourses,
-  setMenuLineCourses,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   patchLiveMenu,
@@ -217,52 +209,6 @@ it("keeps the published course for counting when a dish and its variant move cou
       variants: [{ id: f.largeBravas, courseId: f.sharing }],
     });
   }));
-
-it.each(["inactive", "deleted"] as const)(
-  "falls back to live sending courses when the copied override is %s",
-  (disposition) =>
-    scenario(async (tx, f) => {
-      const [{ id: override }] = await tx
-        .insert(kitchenCourses)
-        .values({ name: "Special course", displayOrder: 4 })
-        .returning({ id: kitchenCourses.id });
-      await tx.insert(setMenuDishCourses).values({ menuItemId: f.bravasItem, courseId: override });
-      await tx
-        .update(setMenuLineCourses)
-        .set({ courseId: override })
-        .where(eq(setMenuLineCourses.courseId, f.drinks));
-      await f.publish();
-      await tx.update(products).set({ courseId: f.starters }).where(eq(products.id, f.bravas));
-      const before = await served(tx, f);
-      const bravas = (snapshot: typeof before) =>
-        snapshot.setMenus?.[0]?.offers.find(({ id }) => id === f.bravasItem);
-      expect(bravas(before)).toMatchObject({
-        courseId: override,
-        countsAsCourseId: override,
-        variantCountsAs: { [f.largeBravas]: override },
-        variants: [{ id: f.largeBravas, courseId: override }],
-      });
-      await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.menuItemId, f.bravasItem));
-      await tx.delete(setMenuLineCourses).where(eq(setMenuLineCourses.courseId, override));
-      if (disposition === "inactive") {
-        await tx
-          .update(kitchenCourses)
-          .set({ active: false })
-          .where(eq(kitchenCourses.id, override));
-      } else {
-        await tx.delete(kitchenCourses).where(eq(kitchenCourses.id, override));
-      }
-      const after = await served(tx, f);
-      expect(bravas(after)).toMatchObject({
-        courseId: f.starters,
-        countsAsCourseId: override,
-        variantCountsAs: { [f.largeBravas]: override },
-        variants: [{ id: f.largeBravas, courseId: f.drinks }],
-      });
-      expect(after.liveFields).not.toBe(before.liveFields);
-      expect((await menuState(tx, f.zoneId, f.midday)).liveFields).toBe(after.liveFields);
-    }),
-);
 
 it("omits copies from a read for named menu items", () =>
   scenario(async (tx, f) => {

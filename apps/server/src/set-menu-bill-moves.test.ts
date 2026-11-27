@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { billSetMenuCopies, kitchenCourses, ticketItems, workingOrderLines } from "@waitron/db";
+import { billSetMenuCopies, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { saveSetMenuDishCourse, updateMenuDetails } from "@waitron/menu";
+import { updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createDepartment,
@@ -49,24 +49,16 @@ useVenueDb({
   setup: async (db) => {
     fixture = await setupSetMenuReaders(db);
     const { venue, copy } = fixture;
-    special = await inTx(venue, async (tx) => {
-      const [{ id }] = await tx
-        .insert(kitchenCourses)
-        .values({ name: "Sharing", displayOrder: 5 })
-        .returning({ id: kitchenCourses.id });
-      await saveSetMenuDishCourse(tx, copy.menuId, copy.menuItemId, id);
-      const special = await setMenuOnFullMenu(
+    special = await inTx(venue, (tx) =>
+      setMenuOnFullMenu(
         tx,
         copy.fullMenuId,
         copy.productId,
         "Special menu",
         "21.00",
-      );
-      // Daily counts Flan as the course Flan now has (D12), so a Daily can hold a Flan ordered a
-      // la carte.
-      await saveSetMenuDishCourse(tx, copy.menuId, copy.menuItemId, special.courseId);
-      return special;
-    });
+        copy.courseId,
+      ),
+    );
     // Flan at 20.00 a la carte, so a bill works a Flan out into a Daily (14.00).
     copy.versionId = special.versionId = await inTx(venue, (tx) =>
       priceSetMenuDish(tx, copy, { aLaCarte: 2000 }),

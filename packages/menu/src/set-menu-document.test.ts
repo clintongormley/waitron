@@ -29,12 +29,7 @@ import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { createMenu, updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn, moveMember, removeMember } from "./sections.js";
-import {
-  addSetMenuDishes,
-  saveSetMenuDishCourse,
-  saveSetMenuLines,
-  saveSetMenuVariantChoices,
-} from "./set-menus.js";
+import { addSetMenuDishes, saveSetMenuLines, saveSetMenuVariantChoices } from "./set-menus.js";
 import { createUnit, updateUnit } from "./units.js";
 import { setProductVariants } from "./variants.js";
 
@@ -211,6 +206,21 @@ it("freezes the terms and each kept variant's own course", async () => {
     Object.values(copy!.offers).find(({ productId }) => productId === f.soup)?.countsAsCourseId,
   ).toBe(f.starters);
   expect(copy?.offers[f.wineItem]?.variants[0]?.countsAsCourseId).toBe(f.drinks);
+  expect(copy?.offers[f.wineItem]).not.toHaveProperty("courseOverrideId");
+});
+
+it("publishes a variant without a course under its parent's course", async () => {
+  await app((tx) =>
+    saveSetMenuVariantChoices(tx, f.daily, f.wineItem, [
+      { variantId: f.glass, included: true, surcharge: "1.50" },
+      { variantId: f.bottle, included: true, surcharge: null },
+    ]),
+  );
+  await place();
+  const copy = await copied();
+  expect(copy?.offers[f.wineItem]?.variants).toContainEqual(
+    expect.objectContaining({ id: f.bottle, countsAsCourseId: f.mains }),
+  );
 });
 
 it("publishes customer titles and both names on a shared course line", async () => {
@@ -267,7 +277,7 @@ it("publishes customer titles and both names on a shared course line", async () 
   expect(next.setMenus?.[f.daily]?.terms.lines).toEqual(lines);
 });
 
-it("can freeze two different courses for the same product", async () => {
+it("publishes a shared dish under its product course in both set menus", async () => {
   await place();
   const shared = [{ productId: f.bravas, excludedVariantIds: [] }];
   const { special, dailyItem, specialItem } = await app(async (tx) => {
@@ -276,18 +286,15 @@ it("can freeze two different courses for the same product", async () => {
     await addSetMenuDishes(tx, f.daily, shared);
     await addSetMenuDishes(tx, special.id, shared);
     const specialItem = await itemId(tx, special.id, f.bravas);
-    await saveSetMenuDishCourse(tx, special.id, specialItem, f.starters);
     await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: special.id });
     return { special: special.id, specialItem, dailyItem: await itemId(tx, f.daily, f.bravas) };
   });
   const { document } = await build();
   expect(document.setMenus?.[f.daily]?.offers[dailyItem]).toMatchObject({
     countsAsCourseId: f.sharing,
-    courseOverrideId: null,
   });
   expect(document.setMenus?.[special]?.offers[specialItem]).toMatchObject({
-    countsAsCourseId: f.starters,
-    courseOverrideId: f.starters,
+    countsAsCourseId: f.sharing,
   });
   const bravas = documentOffers(document).find(({ productId }) => productId === f.bravas);
   expect(bravas).toMatchObject({ unitPrice: "6.00" });

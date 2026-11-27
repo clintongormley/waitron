@@ -232,33 +232,14 @@ it("saves inclusion lines and names an invalid count", async () => {
   );
 });
 
-it("returns adjusted lines and the updated draft after changing a dish's course", async () => {
+it("has no route for changing a set-menu dish's course", async () => {
   const f = await fixture();
   await addSoup(f);
   const dish = await json<{ dishes: { menuItemId: string }[] }>(await f.send("GET", f.draft), 200);
   const path = `${f.draft}/items/${dish.dishes[0]!.menuItemId}/course`;
-  expect(await json(await f.send("PUT", path, { courseId: f.main.id }), 200)).toMatchObject({
-    details: { dishes: [{ productId: f.soup.id, courseOverrideId: f.main.id }] },
-    addedLines: [{ id: expect.any(String), count: 1, courseIds: [f.main.id] }],
-    removedLines: [{ id: expect.any(String), count: 1, courseIds: [f.starter.id] }],
-  });
-  await refused(
-    await f.send("PUT", path, { courseId: crypto.randomUUID() }),
-    400,
-    "set_menu.invalid",
-    { field: "courseId" },
-  );
-});
-
-it("reports a missing dish at the course route even though the set menu still exists", async () => {
-  const { send, draft, set } = await fixture();
-  const menuItemId = crypto.randomUUID();
-  await refused(
-    await send("PUT", `${draft}/items/${menuItemId}/course`, { courseId: null }),
-    404,
-    "menu_item.not_found",
-    { menuId: set.id, menuItemId },
-  );
+  const response = await f.send("PUT", path, { courseId: f.main.id });
+  await response.text();
+  expect(response.status).toBe(404);
 });
 
 it("sets a dish's supplement through the menu item price request", async () => {
@@ -361,7 +342,6 @@ it("keeps every set-menu editor route behind menu management permission", async 
   const calls = [
     ["GET", draft, undefined],
     ["PUT", `${draft}/lines`, { lines: [] }],
-    ["PUT", `${item}/course`, { courseId: null }],
     ["PUT", `${item}/variants`, { variants: [] }],
     ["POST", `${draft}/dishes`, { dishes: [] }],
     ["POST", `${draft}/copy-dishes`, { fromMenuId: set.id }],

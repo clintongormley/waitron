@@ -151,7 +151,7 @@ it("projects set-menu choices from their published courses, supplements and decl
     menuItemId,
     productId: menuItemId,
   });
-  const choice = { ...offer, courseOverrideId: null, countsAsCourseId: "main", variants: [] };
+  const choice = { ...offer, countsAsCourseId: "main", variants: [] };
   doc.root.members = [{ kind: "set_menu", menuId: "fixed", name: "Staff placement" }];
   doc.setMenus = {
     fixed: {

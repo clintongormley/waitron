@@ -1,14 +1,8 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { kitchenCourses, workingOrderLines } from "@waitron/db";
+import { workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  createExtraList,
-  createOptionList,
-  menuItems,
-  saveSetMenuDishCourse,
-  writeProductModifiers,
-} from "@waitron/menu";
+import { createExtraList, createOptionList, menuItems, writeProductModifiers } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { GroupRelease } from "./order-group-records.js";
 import { submitDraft, type Draft } from "./order-drafts.js";
@@ -67,13 +61,14 @@ useVenueDb({
       option = { listId: options.id, labelId: options.labels[0]!.id };
       extra = { listId: extras.id, picks: [{ productId: topping, quantity: 1 }] };
       daily = await setMenuOnFullMenu(tx, venue.tables.menuId, flan);
-      const [{ id: courseId }] = await tx
-        .insert(kitchenCourses)
-        .values({ name: "Sharing", displayOrder: 5 })
-        .returning({ id: kitchenCourses.id });
-      await saveSetMenuDishCourse(tx, daily.menuId, daily.menuItemId, courseId);
-      daily.courseId = courseId;
-      special = await setMenuOnFullMenu(tx, venue.tables.menuId, flan, "Special menu", "21.00");
+      special = await setMenuOnFullMenu(
+        tx,
+        venue.tables.menuId,
+        flan,
+        "Special menu",
+        "21.00",
+        daily.courseId,
+      );
       await tx
         .update(menuItems)
         .set({ grossPrice: 500 })
@@ -166,7 +161,7 @@ it("sends a set-menu-folder dish at the grouping's price, removing a set menu it
   });
 });
 
-it("stores a dish tapped in another set menu's folder at its a la carte price with the tapped course", async () => {
+it("stores a dish tapped in another set menu's folder at its a la carte price with the product course", async () => {
   const bill = await tableBill();
   const target = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
   const tap = { ...dessert(), setMenuId: special.menuId, menuItemId: special.menuItemId };

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3192f5b0-f1c9-4dca-8c76-5407e6bf032f",
+  "id": "1377df69-a3cc-4bfc-b499-5affe24853ea",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15165,65 +15165,6 @@
           "value": "\"content_suggestions\".\"text\" is null or \"content_suggestions\".\"language\" is not null"
         }
       }
-    },
-    "set_menu_dish_courses": {
-      "name": "set_menu_dish_courses",
-      "columns": {
-        "menu_item_id": {
-          "name": "menu_item_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "course_id": {
-          "name": "course_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "set_menu_dish_courses_course_idx": {
-          "name": "set_menu_dish_courses_course_idx",
-          "columns": [
-            "course_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "set_menu_dish_courses_menu_item_id_menu_items_id_fk": {
-          "name": "set_menu_dish_courses_menu_item_id_menu_items_id_fk",
-          "tableFrom": "set_menu_dish_courses",
-          "tableTo": "menu_items",
-          "columnsFrom": [
-            "menu_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "set_menu_dish_courses_course_id_kitchen_courses_id_fk": {
-          "name": "set_menu_dish_courses_course_id_kitchen_courses_id_fk",
-          "tableFrom": "set_menu_dish_courses",
-          "tableTo": "kitchen_courses",
-          "columnsFrom": [
-            "course_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "set_menu_line_courses": {
       "name": "set_menu_line_courses",

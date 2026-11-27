@@ -28,16 +28,21 @@ export async function setMenuOnFullMenu(
   productId: string,
   name = "Daily menu",
   price = "14.00",
+  existingCourseId?: string,
 ) {
   const { id: menuId } = await createMenu(tx, {
     kind: "set_menu",
     name,
     setPrice: price,
   });
-  const [{ id: courseId }] = await tx
-    .insert(kitchenCourses)
-    .values({ name: `${name} course`, displayOrder: 4 })
-    .returning({ id: kitchenCourses.id });
+  const courseId =
+    existingCourseId ??
+    (
+      await tx
+        .insert(kitchenCourses)
+        .values({ name: `${name} course`, displayOrder: 4 })
+        .returning({ id: kitchenCourses.id })
+    )[0]!.id;
   await tx.update(products).set({ courseId }).where(eq(products.id, productId));
   await addSetMenuDishes(tx, menuId, [{ productId, excludedVariantIds: [] }]);
   await addMember(tx, await requireMenuRoot(tx, fullMenuId), { kind: "set_menu", menuId });

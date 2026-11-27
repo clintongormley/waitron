@@ -480,7 +480,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 63,
+  version: 64,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1984,7 +1984,7 @@ it("round-trips current menus and their Home positions while leaving deleted men
   });
 });
 
-it("transfers set-menu terms, course choices, dish overrides and variant exclusions", async () => {
+it("transfers set-menu terms, course choices and variant exclusions", async () => {
   const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -2018,9 +2018,6 @@ it("transfers set-menu terms, course choices, dish overrides and variant exclusi
       insert into set_menu_line_courses (line_id, course_id) values ('line', 'starter')
     `);
     await tx.execute(sql`
-      insert into set_menu_dish_courses (menu_item_id, course_id) values (${offer!.id}, 'starter')
-    `);
-    await tx.execute(sql`
       insert into set_menu_variant_exclusions (menu_item_id, product_id, variant_id)
       values (${offer!.id}, ${dish.id}, 'cup')
     `);
@@ -2050,7 +2047,6 @@ it("transfers set-menu terms, course choices, dish overrides and variant exclusi
     join set_menu_line_courses choice on choice.line_id = line.id
     join kitchen_courses course on course.id = choice.course_id
     join menu_items on menu_items.menu_id = menus.id
-    join set_menu_dish_courses override on override.menu_item_id = menu_items.id and override.course_id = course.id
     join set_menu_variant_exclusions excluded on excluded.menu_item_id = menu_items.id
     join products dish on dish.id = excluded.product_id
     join products variant on variant.id = excluded.variant_id
@@ -6400,7 +6396,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(63);
+  expect(exported.version).toBe(64);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6987,6 +6983,7 @@ describe("special days in a configuration transfer", () => {
     "hours_week_periods",
     "special_date_hours",
     "special_date_hours_periods",
+    "set_menu_dish_courses",
   ] as const)("refuses retired %s rows without retaining the target taxpayer", async (table) => {
     const { versions, transferred } = await preparedWithSpecialDays("B44006611");
     const edited = structuredClone(transferred);

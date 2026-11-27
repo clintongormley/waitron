@@ -177,7 +177,6 @@ export {
   listDashboardMenus,
   readSetMenu,
   refuseSetMenu,
-  saveSetMenuDishCourse,
   saveSetMenuLines,
   saveSetMenuVariantChoices,
   type DashboardMenuSummary,

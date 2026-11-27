@@ -351,8 +351,9 @@ To sell several courses for one price, open **Set menus** under **Products and m
 choose **Add set menu**. Give it a name and price, add customer names in the languages you use,
 then save.
 
-In **Dishes**, add the dishes you want to offer. Keep dishes sold by weight on the full menu,
-where staff can sell them separately. Use **Variants** to choose which versions are included.
+In **Dishes**, add the dishes you want to offer. [Set each dish’s course on its product](products.md#course).
+Keep dishes sold by weight on the full menu, where staff can sell them separately. Use
+**Variants** to choose which versions are included.
 Enter a surcharge beside each dish that costs extra, then choose **Save** under **Dishes**.
 Leave the amount blank for a dish that is included in the set-menu price. Set variant surcharges
 in **Variants**.
@@ -361,9 +362,7 @@ Under **What one set menu includes**, set how many dishes you offer from each co
 use one line for one starter and another for one main. Put two courses on the same line to let
 guests choose from either.
 
-If your set menu includes drinks, bread or coffee, [add the courses you need and assign them to
-products](products.md#course). In each department, set Drinks and Bread to **Fire now** so you
-can send them with the first order.
+If you serve drinks or bread with the first order, set those courses to **Fire now** in each department.
 
 Check **Offered on** to see which menus sell a set menu. Choose a menu name to open it.
 

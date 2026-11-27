@@ -358,8 +358,6 @@ const draftWithLines: SetMenuDetails = {
       productId: "wine",
       surcharge: null,
       courseId: "desserts",
-      productCourseId: "desserts",
-      courseOverrideId: null,
       soldByMeasure: false,
       variants: [
         { id: "bottle", name: "Bottle", included: true, surcharge: null, courseId: "desserts" },

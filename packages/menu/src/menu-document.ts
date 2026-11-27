@@ -8,7 +8,6 @@ import {
   optionLabels,
   optionLists,
   extraLists,
-  kitchenCourses,
   products,
   sections,
   type Transaction,
@@ -635,7 +634,6 @@ interface LiveRows {
   /** Each option label the offers name that still exists, with its availability. */
   labels: Map<string, boolean>;
   missingLists: Set<string>;
-  overrideCourses: Map<string, boolean>;
   setMenuProductIds: Set<string>;
 }
 
@@ -653,12 +651,10 @@ async function readLiveRows(
 ): Promise<LiveRows> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
-  const overrideCourses = new Map<string, boolean>();
   const setMenuProductIds = new Set<string>();
   for (const offer of setMenuOffers) {
     setMenuProductIds.add(offer.productId);
     for (const variant of offer.variants) setMenuProductIds.add(variant.id);
-    if (offer.courseOverrideId !== null) overrideCourses.set(offer.courseOverrideId, false);
   }
   const allOffers = setMenuOffers.length === 0 ? offers : [...offers, ...setMenuOffers];
   for (const offer of allOffers) {
@@ -712,21 +708,14 @@ async function readLiveRows(
         ids.delete(row.id);
     for (const id of ids) missingLists.add(`${kind}:${id}`);
   }
-  for (const batch of batches([...overrideCourses.keys()]))
-    for (const row of await tx
-      .select({ id: kitchenCourses.id, active: kitchenCourses.active })
-      .from(kitchenCourses)
-      .where(inArray(kitchenCourses.id, batch)))
-      overrideCourses.set(row.id, row.active);
-  return { products: productRows, labels, missingLists, overrideCourses, setMenuProductIds };
+  return { products: productRows, labels, missingLists, setMenuProductIds };
 }
 
 function liveFieldsDigest({
   products,
   missingLists,
-  overrideCourses,
   setMenuProductIds,
-}: Pick<LiveRows, "products" | "missingLists" | "overrideCourses" | "setMenuProductIds">): string {
+}: Pick<LiveRows, "products" | "missingLists" | "setMenuProductIds">): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([id, row]) => [id, row.courseId, row.category]);
@@ -737,7 +726,6 @@ function liveFieldsDigest({
       ? ordinary
       : [
           ordinary,
-          [...overrideCourses.keys()].sort().map((id) => [id, overrideCourses.get(id)]),
           [...setMenuProductIds].sort().map((id) => {
             const row = products.get(id);
             return [id, row !== undefined && sellable(row)];
@@ -844,7 +832,7 @@ function serveSetMenuOffer(
   offer: SetMenuFrozenOffer,
   rows: LiveRows,
 ): ServedSetMenuOffer | undefined {
-  const { countsAsCourseId, courseOverrideId, variants, ...frozen } = offer;
+  const { countsAsCourseId, variants, ...frozen } = offer;
   const live = serveOffer(
     { ...frozen, variants: variants.map((variant) => without(variant, ["countsAsCourseId"])) },
     rows,
@@ -853,10 +841,6 @@ function serveSetMenuOffer(
   const variantCountsAs = Object.fromEntries(
     variants.map((variant) => [variant.id, variant.countsAsCourseId]),
   );
-  if (courseOverrideId !== null && rows.overrideCourses.get(courseOverrideId) === true) {
-    live.courseId = courseOverrideId;
-    for (const variant of live.variants) variant.courseId = courseOverrideId;
-  }
   return { ...live, countsAsCourseId, variantCountsAs };
 }
 

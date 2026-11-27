@@ -50,7 +50,6 @@ const SLOT = {
   set_menu_lines: (row: Row) => [row.id],
   set_menu_line_courses: (row: Row) => [row.line_id, row.course_id],
   set_menu_variant_exclusions: (row: Row) => [row.menu_item_id, row.product_id, row.variant_id],
-  set_menu_dish_courses: (row: Row) => [row.menu_item_id, row.course_id],
   kitchen_courses: (row: Row) => [row.id, row.display_order],
   department_courses: (row: Row) => [
     row.department_id,

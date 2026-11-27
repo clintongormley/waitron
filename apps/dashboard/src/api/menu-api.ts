@@ -145,15 +145,6 @@ export class MenuApi {
   ): Promise<{ lines: SetMenuLine[] }> {
     return this.#request(`/management-api/menus/${menuId}/set-menu/lines`, "PUT", { lines });
   }
-  saveSetMenuDishCourse(
-    menuId: string,
-    itemId: string,
-    courseId: string | null,
-  ): Promise<SetMenuDishesResult & { removedLines: SetMenuLine[] }> {
-    return this.#request(`/management-api/menus/${menuId}/set-menu/items/${itemId}/course`, "PUT", {
-      courseId,
-    });
-  }
   saveSetMenuVariantChoices(
     menuId: string,
     itemId: string,

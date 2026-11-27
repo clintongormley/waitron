@@ -20,8 +20,6 @@ export function courseDeleteCopy(): DeleteDialogCopy {
           return countOf("kitchen.delete_course_service_steps", item.count);
         case "course_set_menu_lines":
           return countOf("kitchen.delete_course_set_menu_lines", item.count);
-        case "course_set_menu_dishes":
-          return countOf("kitchen.delete_course_set_menu_dishes", item.count);
         default:
           return countOf("kitchen.delete_course_products", item.count);
       }

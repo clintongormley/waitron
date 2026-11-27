@@ -698,7 +698,6 @@ describe("set menus in a configuration bundle", () => {
 
   it.each([
     ["set_menu_lines", "menu_id", "ordinary"],
-    ["set_menu_dish_courses", "menu_item_id", "ordinary-item"],
     ["set_menu_variant_exclusions", "menu_item_id", "ordinary-item"],
   ])("refuses %s attached to an ordinary menu", (table, column, id) => {
     expect(() =>

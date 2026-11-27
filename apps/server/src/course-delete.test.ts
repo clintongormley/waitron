@@ -27,7 +27,7 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 describe("permanent course deletion", () => {
-  it("deleting a course clears and counts its set-menu line choices and dish overrides", async () => {
+  it("deleting a course clears and counts its set-menu line choices", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id: starter } = await inTx(v, (tx) => createCourse(tx, { name: "Starters" }));
     const { id: main } = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
@@ -49,9 +49,6 @@ describe("permanent course deletion", () => {
         values ('first', ${starter}), ('second', ${starter}), ('second', ${main})
       `);
       await tx.execute(sql`
-        insert into set_menu_dish_courses (menu_item_id, course_id) values ('offer', ${starter})
-      `);
-      await tx.execute(sql`
         insert into menus (id, name, kind, set_price, set_vat_class, active, created_at, updated_at)
         values ('winter', 'Winter', 'set_menu', 1400, 'reduced', 0,
                 '2026-11-18T12:00:00Z', '2026-11-18T12:00:00Z')
@@ -64,14 +61,8 @@ describe("permanent course deletion", () => {
       await tx.execute(sql`
         insert into set_menu_line_courses (line_id, course_id) values ('winter-line', ${starter})
       `);
-      await tx.execute(sql`
-        insert into set_menu_dish_courses (menu_item_id, course_id) values ('winter-offer', ${starter})
-      `);
     });
-    const removes = [
-      { key: "course_set_menu_lines", count: 2, targets: [] },
-      { key: "course_set_menu_dishes", count: 1, targets: [] },
-    ];
+    const removes = [{ key: "course_set_menu_lines", count: 2, targets: [] }];
     expect((await inTx(v, (tx) => readCourseDeleteImpact(tx, starter))).removes).toEqual(removes);
     expect((await inTx(v, (tx) => deleteCourse(tx, starter))).removes).toEqual(removes);
     expect(
@@ -85,9 +76,8 @@ describe("permanent course deletion", () => {
       (await v.db.execute(sql`select line_id, course_id from set_menu_line_courses`)).rows,
     ).toEqual([{ line_id: "second", course_id: main }]);
     const { rows } = await v.db.execute(sql`
-      select coalesce(set_menu_dish_courses.course_id, products.course_id) as course_id
+      select products.course_id
       from menu_items join products on products.id = menu_items.product_id
-      left join set_menu_dish_courses on set_menu_dish_courses.menu_item_id = menu_items.id
       where menu_items.id = 'offer'
     `);
     expect(rows).toEqual([{ course_id: main }]);

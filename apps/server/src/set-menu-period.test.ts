@@ -10,7 +10,6 @@ import {
   deactivateMenu,
   removeMember,
   requireMenuRoot,
-  saveSetMenuDishCourse,
   saveSetMenuLines,
   updateMenuDetails,
 } from "@waitron/menu";
@@ -372,7 +371,7 @@ it("takes the newest copy on sale and records a full menu that sells it now", as
   const { root, memberId } = await inTx(venue, async (tx) => {
     await updateMenuDetails(tx, daily.menuId, { setPrice: "14.00" });
     await publishWorkingMenu(tx, daily.fullMenuId);
-    await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, evening.courseId);
+    await saveSetMenuLines(tx, evening.menuId, [{ count: 1, courseIds: [daily.courseId] }]);
     const root = await requireMenuRoot(tx, evening.fullMenuId);
     const member = await addMember(tx, root, { kind: "set_menu", menuId: daily.menuId });
     await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [evening.fullMenuId] });
@@ -571,7 +570,6 @@ it.each([
       await updateMenuDetails(tx, daily.menuId, { setPrice: (lunch / 100).toFixed(2) });
       await publishWorkingMenu(tx, daily.fullMenuId);
       await saveSetMenuLines(tx, evening.menuId, [{ count: 1, courseIds: [daily.courseId] }]);
-      await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, daily.courseId);
       await updateMenuDetails(tx, evening.menuId, { setPrice: (dinner / 100).toFixed(2) });
       await publishWorkingMenu(tx, evening.fullMenuId);
       if (withdrawn) {

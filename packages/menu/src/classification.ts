@@ -8,7 +8,6 @@ export const MENU_TABLES = [
   "set_menu_lines",
   "set_menu_line_courses",
   "set_menu_variant_exclusions",
-  "set_menu_dish_courses",
   "option_lists",
   "option_labels",
   "extra_lists",

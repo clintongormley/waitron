@@ -1,14 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  kitchenCourses,
-  products,
-  setMenuDishCourses,
-  setMenuLineCourses,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createExtraList,
@@ -124,19 +116,13 @@ it("serves a recorded copy at its own price with the allergens and diets publish
     expect(await recorded()).toEqual(served({ fish: {} }, "vegan"));
   }));
 
-it("applies the same live availability and course rule to a recorded copy", () =>
+it("keeps a recorded dish’s published course while availability and sending course change", () =>
   scenario(async (tx, f) => {
-    const [{ id: override }] = await tx
-      .insert(kitchenCourses)
-      .values({ name: "Special course", displayOrder: 4 })
-      .returning({ id: kitchenCourses.id });
-    await tx.insert(setMenuDishCourses).values({ menuItemId: f.bravasItem, courseId: override });
-    await tx
-      .update(setMenuLineCourses)
-      .set({ courseId: override })
-      .where(eq(setMenuLineCourses.courseId, f.drinks));
     const { versionId } = await f.publish();
-    await tx.update(products).set({ available: false }).where(eq(products.id, f.bravas));
+    await tx
+      .update(products)
+      .set({ available: false, courseId: f.starters })
+      .where(eq(products.id, f.bravas));
     const requested = [{ versionId, menuId: f.daily }];
     const recordedDish = async () =>
       (await serveRecordedSetMenus(tx, requested, "recorded"))[0]?.offers.find(
@@ -144,14 +130,8 @@ it("applies the same live availability and course rule to a recorded copy", () =
       );
     expect(await recordedDish()).toMatchObject({
       available: false,
-      courseId: override,
-      countsAsCourseId: override,
-    });
-    await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, override));
-    expect(await recordedDish()).toMatchObject({
-      available: false,
-      courseId: f.sharing,
-      countsAsCourseId: override,
+      courseId: f.starters,
+      countsAsCourseId: f.sharing,
     });
   }));
 

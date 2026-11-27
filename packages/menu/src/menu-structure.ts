@@ -7,7 +7,6 @@ import {
   menuItems,
   menuItemVariantOverrides,
   sections,
-  setMenuDishCourses,
   setMenuVariantExclusions,
 } from "@waitron/db";
 import { touchSetMenu } from "./set-menus.js";
@@ -286,9 +285,6 @@ export async function syncMenuOffers(
           tx
             .delete(setMenuVariantExclusions)
             .where(inArray(setMenuVariantExclusions.menuItemId, batch)),
-        );
-        await write(
-          tx.delete(setMenuDishCourses).where(inArray(setMenuDishCourses.menuItemId, batch)),
         );
       }
       await write(

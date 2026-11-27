@@ -8,7 +8,6 @@ import {
   products,
   sectionMembers,
   sections,
-  setMenuDishCourses,
   setMenuLineCourses,
   setMenuLines,
   setMenuVariantExclusions,
@@ -86,8 +85,6 @@ export interface SetMenuDishSetting {
   name: string;
   surcharge: string | null;
   courseId: string | null;
-  productCourseId: string | null;
-  courseOverrideId: string | null;
   soldByMeasure: boolean;
   variants: {
     id: string;
@@ -245,8 +242,7 @@ async function dishSettingsByRoot(
         productId: products.id,
         name: products.name,
         surcharge: menuItems.grossPrice,
-        productCourseId: products.courseId,
-        courseOverrideId: setMenuDishCourses.courseId,
+        courseId: products.courseId,
         measure: units.measure,
       })
       .from(sectionMembers)
@@ -260,15 +256,13 @@ async function dishSettingsByRoot(
       )
       .innerJoin(products, eq(products.id, menuItems.productId))
       .leftJoin(units, eq(units.id, products.unitId))
-      .leftJoin(setMenuDishCourses, eq(setMenuDishCourses.menuItemId, menuItems.id))
       .where(inArray(sectionMembers.sectionId, batch))
       .orderBy(...memberOrder);
     for (const { sectionId, measure, ...row } of rows) {
       const dish: SetMenuDishSetting = {
         ...row,
         surcharge: priceOrNull(row.surcharge),
-        productCourseId: activeCourse(row.productCourseId),
-        courseId: activeCourse(row.courseOverrideId ?? row.productCourseId),
+        courseId: activeCourse(row.courseId),
         soldByMeasure: measure === true,
         variants: [],
       };
@@ -313,7 +307,7 @@ async function dishSettingsByRoot(
         ...variant,
         included: excluded === null,
         surcharge: excluded === null ? priceOrNull(variant.surcharge) : null,
-        courseId: activeCourse(dish.courseOverrideId ?? variant.courseId),
+        courseId: activeCourse(variant.courseId),
       });
     }
   }
@@ -505,63 +499,6 @@ function appendMissingCourseLines(
   );
 }
 
-export async function saveSetMenuDishCourse(
-  tx: Transaction,
-  menuId: string,
-  menuItemId: string,
-  courseId: string | null,
-): Promise<{ addedLines: SetMenuLine[]; removedLines: SetMenuLine[] }> {
-  await requireSetMenu(tx, menuId);
-  const root = await requireMenuRoot(tx, menuId);
-  const courses = await activeCourses(tx);
-  const before = await dishSettings(tx, root, courses);
-  const dish = before.find((candidate) => candidate.menuItemId === menuItemId);
-  if (dish === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
-  if (courseId !== null && !courses.some(({ id }) => id === courseId))
-    throw new AppError("set_menu.invalid", { field: "courseId" });
-
-  const override = courseId === dish.productCourseId ? null : courseId;
-  if (override === dish.courseOverrideId) return { addedLines: [], removedLines: [] };
-
-  if (override === null)
-    await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.menuItemId, menuItemId));
-  else
-    await tx
-      .insert(setMenuDishCourses)
-      .values({ menuItemId, courseId: override })
-      .onConflictDoUpdate({
-        target: setMenuDishCourses.menuItemId,
-        set: { courseId: override },
-      });
-
-  const lines = await storedLines(tx, menuId);
-  const after = await dishSettings(tx, root, courses);
-  const changedDish = after.find((candidate) => candidate.menuItemId === menuItemId)!;
-  const previousByChoice = new Map(
-    includedDishChoices(dish).map(({ id, courseId }) => [id, courseId]),
-  );
-  const changed = includedDishChoices(changedDish).filter(
-    ({ id, courseId }) => previousByChoice.get(id) !== courseId,
-  );
-  const wanted = new Set(changed.map(({ courseId }) => courseId));
-  const addedLines = await appendMissingCourseLines(tx, menuId, courses, lines, wanted);
-  const previous = new Set(previousByChoice.values());
-  const remaining = new Set(after.flatMap(includedDishChoices).map((choice) => choice.courseId));
-  const removedLines = lines
-    .filter(
-      ({ count, courseIds }) =>
-        count === 1 &&
-        courseIds.length === 1 &&
-        previous.has(courseIds[0]!) &&
-        !remaining.has(courseIds[0]!),
-    )
-    .map(({ id, count, courseIds }) => ({ id, count, courseIds }));
-  for (const batch of batches(removedLines.map(({ id }) => id)))
-    await tx.delete(setMenuLines).where(inArray(setMenuLines.id, batch));
-  await touchSetMenu(tx, menuId);
-  return { addedLines, removedLines };
-}
-
 export async function refuseIneligibleSetMenuProducts(
   tx: Transaction,
   menuId: string,
@@ -738,17 +675,6 @@ export async function copyMenuItemChoices(
     for (const rows of batches(exclusions))
       await tx.insert(setMenuVariantExclusions).values(
         rows.map((row) => ({
-          ...row,
-          menuItemId: itemIds.get(row.menuItemId)!,
-        })),
-      );
-    const courses = await tx
-      .select()
-      .from(setMenuDishCourses)
-      .where(inArray(setMenuDishCourses.menuItemId, batch));
-    if (courses.length > 0)
-      await tx.insert(setMenuDishCourses).values(
-        courses.map((row) => ({
           ...row,
           menuItemId: itemIds.get(row.menuItemId)!,
         })),
