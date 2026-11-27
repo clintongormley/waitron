@@ -1083,7 +1083,7 @@ export class SetupApp extends LitElement {
     } catch (error) {
       const { code } = (error ?? {}) as Partial<ApiError>;
       if (
-        code !== "setup.attempt_conflict" &&
+        !statusReadUnusable(error) &&
         code !== "setup.attempt_uncertain" &&
         code !== "setup.start_again_incomplete"
       )

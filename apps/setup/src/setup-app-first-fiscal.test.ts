@@ -1502,7 +1502,9 @@ it("ignores the certificate reply after the passphrase changes", async () => {
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(cert.isConnected).toBe(true);
   expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.hasAttribute("open")).toBe(false);
+  const draft = (app as unknown as { draft: { venue: { taxId: string; legalName: string } } })
+    .draft;
+  expect(draft.venue).toMatchObject({ taxId: "", legalName: "" });
   clickStep(cert, "next");
   const details = await screen(app, "venue");
   expect(nativeInput(details, "legalName").value).toBe("Current");
@@ -1558,39 +1560,44 @@ it("reselects Live and imports a different venue without carrying its earlier ce
   expect(inspections(requests)).toHaveLength(1);
 });
 
-it.each(["setup.attempt_conflict", "setup.attempt_uncertain", "setup.start_again_incomplete"])(
-  "offers the held setup recovery when certificate inspection returns %s",
-  async (code) => {
-    let held = false;
-    const { app, requests } = await mount({
-      intercept(path) {
-        if (path.endsWith("/certificate/inspect")) {
-          held = true;
-          return Response.json({ error: { code, params: {} } }, { status: 409 });
-        }
-        if (held && path.endsWith("/first-setup/status")) return Response.json({ claimed: true });
-      },
-    });
-    const cert = await certificateFirst(app);
-    await selectCertificate(cert, "held");
-    clickStep(cert, "next");
-    const owner = await screen(app, "first-owner");
-    await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
-    const checked = requests.findIndex(({ path }) => path.endsWith("/certificate/inspect"));
-    expect(
-      requests.findIndex(
-        ({ path }, index) => index > checked && path.endsWith("/first-setup/status"),
-      ),
-    ).toBeGreaterThan(checked);
-    expect(claims(requests)).toEqual([]);
+it.each([
+  "setup.attempt_conflict",
+  "setup.attempt_uncertain",
+  "setup.attempt_invalid",
+  "setup.start_again_incomplete",
+])("offers the held setup recovery when certificate inspection returns %s", async (code) => {
+  let held = false;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect")) {
+        held = true;
+        return Response.json({ error: { code, params: {} } }, { status: 409 });
+      }
+      if (held && path.endsWith("/first-setup/status"))
+        return code === "setup.attempt_invalid"
+          ? Response.json({ error: { code, params: {} } }, { status: 409 })
+          : Response.json({ claimed: true });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "held");
+  clickStep(cert, "next");
+  const owner = await screen(app, "first-owner");
+  await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+  const checked = requests.findIndex(({ path }) => path.endsWith("/certificate/inspect"));
+  expect(
+    requests.findIndex(
+      ({ path }, index) => index > checked && path.endsWith("/first-setup/status"),
+    ),
+  ).toBeGreaterThan(checked);
+  expect(claims(requests)).toEqual([]);
 
-    held = false;
-    owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
-    const returned = await screen(app, "cert");
-    clickStep(returned, "back");
-    await screen(app, "admin");
-  },
-);
+  held = false;
+  owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+  const returned = await screen(app, "cert");
+  clickStep(returned, "back");
+  await screen(app, "admin");
+});
 
 it("keeps the name the owner typed when switching to Preparation", async () => {
   const { app } = await mount({
