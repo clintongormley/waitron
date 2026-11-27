@@ -230,7 +230,8 @@ export async function enterRecoveryDetails(
     input.dispatchEvent(new Event("change"));
   };
   change("record", JSON.stringify(record));
-  // A file's master key also authorises, so no field asks for it there.
+  // A file's master key normally also authorises, so no field asks for it there; a refusal for
+  // the authorisation brings the field back.
   if (entry.shadowRoot!.querySelector("wt-master-key-input")) await typeMasterKey(entry, nodeKey);
   tick("isolated");
   tick("retained");

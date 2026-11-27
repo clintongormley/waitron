@@ -523,16 +523,17 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
   environment: "environment",
 };
 
-/** The master key that does not open the file is refused naming the file's key number; one that
- * opens it but does not authorise the restore is refused without it, and belongs to the field
- * that typed the authorisation: a separate node key's, or else the one master-key field. */
+/** A master key that does not open the file is refused naming the file's key number. One that
+ * opens it but is not the copy's current master key is refused naming the current one, without a
+ * key number: that key goes in a second field, while the file's stays in the first. */
 function restoreRefusedField(
   code: unknown,
   params: Record<string, unknown> | undefined,
   request: RestoreRequestDetail,
 ): RestoreField | undefined {
   return code === "promotion.break_glass_invalid" &&
-    (params?.keyNumber !== undefined || request.nodeRecoverySecret === request.masterKey)
+    (params?.keyNumber !== undefined ||
+      (params?.keyName === undefined && request.nodeRecoverySecret === request.masterKey))
     ? "masterKey"
     : refusedField(code, params, RESTORE_FIELD_CODES, RESTORE_FIELD_PATHS);
 }

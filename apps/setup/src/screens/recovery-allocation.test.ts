@@ -30,8 +30,8 @@ afterEach(() => {
 });
 
 /**
- * Reviews a copy on the file restore screen, whose master key also authorises, or on the bucket
- * screen, where the allocation asks for the copy's master key itself.
+ * Reviews a copy on the file restore screen, whose master key normally also authorises, or on the
+ * bucket screen, where the allocation asks for the copy's master key itself.
  */
 async function selected(extra: Record<string, unknown> = {}, kind: "file" | "bucket" = "file") {
   const api = new SetupApi("", async () => new Response(JSON.stringify({ ...preview, ...extra })));

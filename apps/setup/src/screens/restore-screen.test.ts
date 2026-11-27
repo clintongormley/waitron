@@ -6,7 +6,7 @@ import {
   drawnFileName,
   fileControl,
 } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui";
+import { canFilm, type WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { SetupApi } from "../api/client.js";
 import { encodeMasterKeyCode } from "@waitron/shared";
@@ -957,11 +957,12 @@ describe("Restore from backup's master key", () => {
     const { field: text } = await keyText(el);
     expect(text.label).toBe("Master key");
     expect(text.getAttribute("hint")).toBeNull();
+    expect(canFilm()).toBe(true);
     expect(
       [...field.shadowRoot!.querySelectorAll("wt-button")].map((button) =>
         button.textContent!.trim(),
       ),
-    ).toContain("Choose the recovery pack PDF");
+    ).toEqual(expect.arrayContaining(["Scan the recovery pack", "Choose the recovery pack PDF"]));
   });
 
   it("a pack PDF fills the master key", async () => {
@@ -1050,6 +1051,12 @@ describe("Restore from backup's master key", () => {
       const line = MASTER_KEY_FIELD_WORDS[words].wrongKey(KEY_NAME);
       await vi.waitFor(() => expect(keyField(el).error).toBe(line));
       expect(line).toContain(KEY_NAME);
+      // The field says which key to use, so Review backup adds no vaguer line of its own.
+      const actions = copy.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("wt-form-actions")!;
+      await actions.updateComplete;
+      expect(actions.error).toBe("");
     },
   );
 

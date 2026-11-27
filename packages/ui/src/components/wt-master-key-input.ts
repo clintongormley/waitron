@@ -211,7 +211,6 @@ export class WtMasterKeyInput extends LitElement {
   fill(masterKey: string): void {
     this.#empty();
     this.value = printed(normalise(masterKey)) ?? "";
-    this.#scope?.commit({ value: this.value });
   }
 
   #empty(): void {

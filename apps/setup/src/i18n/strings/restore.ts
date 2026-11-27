@@ -32,7 +32,6 @@ export const restoreEn = {
   "restore.preview_older_key": "An older backup brings back its older master key.",
   "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
-  "restore.preview_key_error": "Check the master key.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
@@ -228,7 +227,6 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_keep_keys":
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
-  "restore.preview_key_error": "Revisa la clave maestra.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",
   "restore.preview_failed": "No se ha podido revisar esta copia.",

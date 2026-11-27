@@ -12,7 +12,8 @@ import {
 } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
-import { t } from "../i18n/t.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 /**
  * The environment a refused Review names for its copy, when the form asked for the other one. The
@@ -82,8 +83,11 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ type: Boolean }) oldBoxGone = false;
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
+  /** The copy's current master key, named by a preparation refused with the file's key. */
+  @state() private ownKeyName?: string;
   @state() private error?:
     | "key"
+    | "namedKey"
     | "environment"
     | "file"
     | "kit"
@@ -108,9 +112,19 @@ export class SetupRecoveryCopy extends LitElement {
         this.#endIfSetupConflict(cause);
         const error = cause as ApiError | undefined;
         if (error?.code === "restore.upload_interrupted") this.error = "interrupted";
-        // A backup file's master key is typed on the screen around this one; a key the recovery
-        // form asked for itself stays the form's to show.
+        const keyName = error?.params?.keyName;
+        // A backup file's master key is typed on the screen around this one, unless it opened the
+        // file but the copy's current master key is another (named, with no key number): the
+        // recovery form then asks for that one. A key the form asked for itself stays the form's.
         if (
+          this.#fileSource &&
+          request.nodeRecoverySecret === this.masterKey &&
+          error?.code === "promotion.break_glass_invalid" &&
+          typeof keyName === "string" &&
+          error.params?.keyNumber === undefined
+        )
+          this.ownKeyName = keyName;
+        else if (
           this.#fileSource &&
           request.nodeRecoverySecret === this.masterKey &&
           (error?.code === "promotion.break_glass_invalid" ||
@@ -221,6 +235,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.#attempt += 1;
     this.preview = undefined;
     this.#previewCurrent = undefined;
+    this.ownKeyName = undefined;
     this.#notifyPreview();
     this.error = undefined;
     this.busy = false;
@@ -236,7 +251,7 @@ export class SetupRecoveryCopy extends LitElement {
   }
   #notifyRefusal(cause?: ApiError): void {
     const field =
-      this.error === "key"
+      this.error === "key" || this.error === "namedKey"
         ? "masterKey"
         : this.error === "environment"
           ? "environment"
@@ -316,6 +331,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.busy = true;
     this.error = undefined;
     this.preview = undefined;
+    this.ownKeyName = undefined;
     this.#notifyPreview();
     this.#notifyRefusal();
     try {
@@ -347,21 +363,25 @@ export class SetupRecoveryCopy extends LitElement {
               ? "interrupted"
               : error?.code === "restore.archive_resource_limit"
                 ? "capacity"
-                : error?.code === "promotion.break_glass_invalid" || field === "masterKey"
-                  ? "key"
-                  : error?.code === "restore.environment_mismatch" || field === "environment"
-                    ? "environment"
-                    : error?.code === "backup.artifact_invalid" ||
-                        error?.code === "backup.archive_invalid" ||
-                        error?.code === "recovery.passphrase_invalid" ||
-                        field === "artifact"
-                      ? "file"
-                      : error?.code === "backup.stream_kit_invalid" || field === "kit"
-                        ? "kit"
-                        : error?.code === "provisioning.database_ahead" ||
-                            error?.code === "restore.schema_too_new"
-                          ? "version"
-                          : "failed";
+                : this.#fileSource &&
+                    error?.code === "promotion.break_glass_invalid" &&
+                    typeof error.params?.keyName === "string"
+                  ? "namedKey"
+                  : error?.code === "promotion.break_glass_invalid" || field === "masterKey"
+                    ? "key"
+                    : error?.code === "restore.environment_mismatch" || field === "environment"
+                      ? "environment"
+                      : error?.code === "backup.artifact_invalid" ||
+                          error?.code === "backup.archive_invalid" ||
+                          error?.code === "recovery.passphrase_invalid" ||
+                          field === "artifact"
+                        ? "file"
+                        : error?.code === "backup.stream_kit_invalid" || field === "kit"
+                          ? "kit"
+                          : error?.code === "provisioning.database_ahead" ||
+                              error?.code === "restore.schema_too_new"
+                            ? "version"
+                            : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -408,7 +428,7 @@ export class SetupRecoveryCopy extends LitElement {
     const errors = {
       manifest: "shell.restore.manifest_invalid",
       unsupported: "shell.restore.manifest_unsupported",
-      key: "restore.preview_key_error",
+      key: "restore.check.master_key",
       environment: "restore.preview_environment_error",
       file: "restore.preview_file_error",
       kit: "restore.preview_kit_error",
@@ -461,12 +481,20 @@ export class SetupRecoveryCopy extends LitElement {
                 .masterKey=${this.#fileSource ? this.masterKey : undefined}
                 .prepare=${this.#prepare}
                 .boxAddress=${this.boxAddress}
-                .errorMessage=${this.errorMessage}
-                .refusedField=${this.refusedField}
+                .errorMessage=${
+                  this.ownKeyName === undefined
+                    ? this.errorMessage
+                    : MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"].wrongKey(
+                        this.ownKeyName,
+                      )
+                }
+                .refusedField=${this.ownKeyName === undefined ? this.refusedField : "nodeRecoverySecret"}
               ></setup-recovery-allocation>
             </section>`
       }
-      <wt-form-actions .error=${this.error === undefined ? "" : t(errors[this.error])}>
+      <wt-form-actions
+        .error=${this.error === undefined || this.error === "namedKey" ? "" : t(errors[this.error])}
+      >
         <wt-button
           data-test="preview"
           variant=${this.#canReview ? "primary" : "secondary"}

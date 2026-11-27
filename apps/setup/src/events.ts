@@ -58,8 +58,8 @@ export interface RestoreRequestDetail extends RecoveryRestoreCredentials {
 
 /**
  * What the shell keeps, in page memory only, of a refused request to draw it again: never its
- * recovery operation or a separate node key. A file restore keeps its master key, so the form can
- * be sent again.
+ * recovery operation or a second master key typed for the authorisation. It keeps the master key
+ * that opens the file, so the form can be sent again.
  */
 export type KeptRestoreRequest = Omit<RestoreRequestDetail, keyof RecoveryRestoreCredentials>;
 
@@ -82,9 +82,8 @@ export interface BucketRestoreRequestDetail extends RecoveryRestoreCredentials {
 }
 
 /**
- * What the shell keeps, in page memory only, of a refused request to draw it again: never its
- * recovery operation or a separate node key. A file restore keeps its master key, so the form can
- * be sent again.
+ * What the shell keeps, in page memory only, of a refused bucket request to draw it again: never
+ * its recovery operation or the master key typed for it.
  */
 export type KeptBucketRestoreRequest = Omit<
   BucketRestoreRequestDetail,

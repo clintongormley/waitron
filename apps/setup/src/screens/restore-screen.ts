@@ -208,7 +208,7 @@ export class SetupRestoreScreen extends LitElement {
         );
       const messages = {
         artifact: "restore.preview_file_error",
-        masterKey: "restore.preview_key_error",
+        masterKey: "restore.check.master_key",
         environment: "restore.preview_environment_error",
       } as const;
       return t(messages[field]);

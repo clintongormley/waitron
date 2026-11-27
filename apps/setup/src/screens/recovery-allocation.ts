@@ -95,7 +95,11 @@ export class SetupRecoveryAllocation extends LitElement {
   @property({ attribute: false }) boxAddress?: string;
   @property() errorMessage?: string;
   @property() refusedField?: string;
-  /** The master key a backup file was opened with; it also authorises, so no second field asks. */
+  /**
+   * The master key a backup file was opened with. It normally also authorises, so no second field
+   * asks; a refusal for the authorisation (`refusedField` of `nodeRecoverySecret`) brings that
+   * field back.
+   */
   @property({ attribute: false }) masterKey?: string;
   @state() private refusalDismissed = false;
   @state() private draft = empty();
@@ -295,8 +299,11 @@ export class SetupRecoveryAllocation extends LitElement {
       Object.values(this.draft).some((value) => value !== "" && value !== false)
     );
   }
+  get #pageKey(): string | undefined {
+    return this.refusedField === "nodeRecoverySecret" ? undefined : this.masterKey;
+  }
   get #nodeKey(): string {
-    return this.masterKey ?? this.draft.nodeKey;
+    return this.#pageKey ?? this.draft.nodeKey;
   }
   get #keyInvalid(): boolean {
     return this.#nodeKey === "";
@@ -346,7 +353,7 @@ export class SetupRecoveryAllocation extends LitElement {
           this.#edit("record", event.detail.value);
         }}
       ></wt-textarea>
-      ${this.masterKey === undefined ? this.#keyField(keyInvalid) : nothing}
+      ${this.#pageKey === undefined ? this.#keyField(keyInvalid) : nothing}
       ${
         this.#review
           ? html`<section
