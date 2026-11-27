@@ -71,3 +71,18 @@ export async function recordUnexpectedStop(
     });
   });
 }
+
+export async function recordShutdownPause(
+  db: Database,
+  errorCode: string,
+  now: Date,
+): Promise<void> {
+  await withTransaction(db, (tx) =>
+    recordIncidentOnce(tx, {
+      origin,
+      error: new AppError("start.shutdown_paused", { errorCode }),
+      severity: "warning",
+      detectedAt: now,
+    }),
+  );
+}

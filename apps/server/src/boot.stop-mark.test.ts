@@ -55,9 +55,10 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
 it.each([
-  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", false],
-  ["refuses checked shutdown while streaming is configured", true],
-] as const)("%s", async (_description, streaming) => {
+  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", "restart"],
+  ["refuses checked shutdown while streaming is configured", "streaming"],
+  ["records and emails a failed final backup while sales stay paused", "failed"],
+] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
@@ -90,11 +91,16 @@ it.each([
     .spyOn(BackupSupervisor.prototype, "runForShutdown")
     .mockImplementation(async (signal) => {
       signal.throwIfAborted();
+      if (scenario === "failed") {
+        reachedCheck();
+        throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+      }
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
       });
     });
+  const smtp = scenario === "failed" ? await startFakeSmtp() : null;
   const socket = new TLSSocket(new Socket());
   let app!: Hono;
   let started!: Awaited<ReturnType<typeof startServer>>;
@@ -125,7 +131,12 @@ it.each([
               },
               null,
             );
-            if (streaming)
+            if (smtp)
+              await saveSmtpForTest(tx, ring, {
+                url: `smtp://127.0.0.1:${smtp.port}`,
+                from: "notices@example.test",
+              });
+            if (scenario === "streaming")
               await writeStreamSettings(
                 tx,
                 ring,
@@ -150,7 +161,7 @@ it.each([
         },
         httpPort,
       },
-      async () => {
+      async (base) => {
         await scheduled;
         const begin = (session: string) =>
           app.request(
@@ -167,7 +178,7 @@ it.each([
           error: { code: "management_session.proof_required" },
         });
         const response = await begin(token);
-        if (streaming) {
+        if (scenario === "streaming") {
           releaseScheduled();
           expect(response.status).toBe(409);
           expect(await response.json()).toMatchObject({
@@ -185,6 +196,28 @@ it.each([
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
         await checking;
+        if (smtp) {
+          const rows = () =>
+            suite.db
+              .select({ params: incidents.params })
+              .from(incidents)
+              .where(eq(incidents.code, "start.shutdown_paused"));
+          await vi.waitFor(async () => {
+            expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+          });
+          await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
+          const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
+          expect(message).toContain("To: owner@example.test");
+          expect(message).toContain("La comprobaci");
+          expect(message).toContain("Estado del servidor");
+          const trading = await fetch(`${base}/api/node`);
+          expect(await trading.json()).toMatchObject({ acceptingSales: false });
+          await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
+            "code",
+            "ENOENT",
+          );
+          return;
+        }
         await started.markRestart!();
         await started.close();
         expect(await readFile(join(stateDir, "stop-mark.json"), "utf8")).toBe(
@@ -200,6 +233,7 @@ it.each([
     scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();
+    await smtp?.close();
   }
 });
 

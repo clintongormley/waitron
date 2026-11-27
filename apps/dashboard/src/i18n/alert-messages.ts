@@ -90,6 +90,10 @@ export const ALERT_MESSAGES: Readonly<
       },
     },
   },
+  "start.shutdown_paused": {
+    en: "The final backup check paused during shutdown. Open Box status to see your choices.",
+    es: "La comprobación de la última copia se detuvo durante el apagado. Consulta las opciones en Estado del servidor.",
+  },
   "start.unplanned_stop": {
     en: "The box stopped without warning.",
     es: "El servidor se detuvo sin aviso.",

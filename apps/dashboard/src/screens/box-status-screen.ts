@@ -9,7 +9,14 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi } from "../api/client.js";
-import type { AlertView, BoxHealth, BoxNetwork, FiscalRetryView } from "../api/servers-api.js";
+import type {
+  AlertView,
+  BoxHealth,
+  BoxNetwork,
+  FiscalRetryView,
+  ShutdownDecision,
+  ShutdownStaffMember,
+} from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -240,7 +247,8 @@ export class BoxStatusScreen extends LitElement {
       .box-network dt {
         font-weight: var(--wt-font-weight-bold);
       }
-      .box-network a {
+      .box-network a,
+      .box-restart a {
         color: var(--wt-color-primary-text);
       }
       .box-network h2,
@@ -258,6 +266,7 @@ export class BoxStatusScreen extends LitElement {
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
   @property({ attribute: false }) canCheckClock = false;
   @property({ attribute: false }) canRestart = false;
+  @property({ attribute: false }) canMakeRecoveryPack = false;
   @property({ attribute: false }) canManageUpgrades = false;
 
   @state() private networkAccepted = false;
@@ -296,8 +305,9 @@ export class BoxStatusScreen extends LitElement {
   @state() private confirmingClock = false;
   /** The Clock row's confirmation refusal; the next press clears it. */
   @state() private clockConfirmError = "";
-  @state() private shutdownOpen = false;
+  @state() private shutdownConfirmation: "start" | "shut-down-anyway" | null = null;
   @state() private shutdownBusy = false;
+  @state() private shutdownStaff: ShutdownStaffMember[] = [];
   @state() private shutdownError = "";
   @state() private restartOpen = false;
   @state() private restarting = false;
@@ -1048,16 +1058,34 @@ export class BoxStatusScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  async #shutdown(cancel: boolean): Promise<void> {
+  async #openShutdown(): Promise<void> {
+    if (this.shutdownBusy) return;
+    this.shutdownBusy = true;
+    this.shutdownError = "";
+    try {
+      this.shutdownStaff = await this.api.getBoxShutdownStaff();
+      this.shutdownConfirmation = "start";
+    } catch (error) {
+      this.shutdownError = codeMessage(codeOf(error));
+    } finally {
+      this.shutdownBusy = false;
+    }
+  }
+
+  async #shutdown(action: "start" | "cancel" | ShutdownDecision): Promise<void> {
     const available = this.health?.shutdown?.available ?? false;
     if (this.shutdownBusy) return;
     this.shutdownBusy = true;
     this.shutdownError = "";
     try {
-      const status = await (cancel ? this.api.cancelBoxShutdown() : this.api.startBoxShutdown());
+      const status = await (action === "cancel"
+        ? this.api.cancelBoxShutdown()
+        : action === "start"
+          ? this.api.startBoxShutdown()
+          : this.api.resolveBoxShutdown(action));
       if (this.health !== null)
         this.health = { ...this.health, shutdown: { ...status, available } };
-      this.shutdownOpen = false;
+      this.shutdownConfirmation = null;
       this.api.liveData.refresh();
     } catch (error) {
       this.shutdownError = codeMessage(codeOf(error));
@@ -1075,22 +1103,52 @@ export class BoxStatusScreen extends LitElement {
     )
       return nothing;
     const phase = status.phase;
+    const anyway = this.shutdownConfirmation === "shut-down-anyway";
     return html`<section class="box-restart">
       <h2>${t("box_status.shutdown.title")}</h2>
       <p role="status" data-test="box-shutdown-status">
-        ${phase === "idle" ? "" : t(`box_status.shutdown.${phase}`)}
+        ${
+          phase === "ready" && status.checked === false
+            ? t("box_status.shutdown.unchecked")
+            : phase === "idle"
+              ? ""
+              : t(`box_status.shutdown.${phase}`)
+        }
+        ${phase === "paused" ? codeMessage(status.errorCode) : nothing}
       </p>
       ${
         phase === "idle"
           ? html`<wt-button
               variant="secondary"
               data-test="box-shutdown"
-              @click=${() => {
-                this.shutdownError = "";
-                this.shutdownOpen = true;
-              }}
+              ?disabled=${this.shutdownBusy}
+              ?loading=${this.shutdownBusy}
+              @click=${() => void this.#openShutdown()}
               >${t("box_status.shutdown.title")}</wt-button
             >`
+          : nothing
+      }
+      ${
+        phase === "paused"
+          ? html`
+              <wt-button
+                variant="primary"
+                data-test="box-shutdown-retry"
+                ?disabled=${this.shutdownBusy}
+                @click=${() => void this.#shutdown("retry")}
+                >${t("box_status.shutdown.retry")}</wt-button
+              >
+              <wt-button
+                variant="danger"
+                data-test="box-shutdown-anyway"
+                ?disabled=${this.shutdownBusy}
+                @click=${() => {
+                  this.shutdownError = "";
+                  this.shutdownConfirmation = "shut-down-anyway";
+                }}
+                >${t("box_status.shutdown.anyway")}</wt-button
+              >
+            `
           : nothing
       }
       ${
@@ -1100,39 +1158,61 @@ export class BoxStatusScreen extends LitElement {
                 variant="secondary"
                 data-test="box-shutdown-cancel"
                 ?disabled=${this.shutdownBusy}
-                @click=${() => void this.#shutdown(true)}
+                @click=${() => void this.#shutdown("cancel")}
                 >${t("box_status.shutdown.cancel")}</wt-button
               >
-              ${this.shutdownError ? html`<p class="refusal" role="alert">${this.shutdownError}</p>` : nothing}
             `
           : nothing
       }
+      ${
+        this.shutdownConfirmation === null && this.shutdownError
+          ? html`<p class="refusal" role="alert">${this.shutdownError}</p>`
+          : nothing
+      }
       <wt-dialog
-        .open=${this.shutdownOpen}
+        .open=${this.shutdownConfirmation !== null}
         .dismissible=${!this.shutdownBusy}
-        heading=${t("box_status.shutdown.question")}
+        heading=${t(anyway ? "box_status.shutdown.anyway_question" : "box_status.shutdown.question")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          this.shutdownOpen = false;
+          this.shutdownConfirmation = null;
         }}
       >
-        <p>${t("box_status.shutdown.what")}</p>
-        <p>${t("box_status.shutdown.password_reason")}</p>
+        ${
+          anyway
+            ? html`<p>${t("box_status.shutdown.anyway_warning")}</p>`
+            : html`<p>${t("box_status.shutdown.what")}</p>
+                ${this.canMakeRecoveryPack ? html`<p><a href="/backup?recovery-pack=make">${t("recovery_pack.make")}</a></p>` : nothing}
+                ${
+                  this.shutdownStaff.length === 0
+                    ? nothing
+                    : html`
+                        <p>${t("box_status.shutdown.clock_out_first")}</p>
+                        <ul>
+                          ${this.shutdownStaff.map(({ displayName, state }) => html`<li>${displayName} (${t(state === "working" ? "box_status.shutdown.working" : "clock.on_break")})</li>`)}
+                        </ul>
+                      `
+                }
+                <p>${t("box_status.shutdown.password_reason")}</p>`
+        }
         <wt-form-actions slot="footer" .error=${this.shutdownError}>
           <wt-button
             slot="cancel"
             variant="secondary"
             ?disabled=${this.shutdownBusy}
-            @click=${() => (this.shutdownOpen = false)}
+            @click=${() => (this.shutdownConfirmation = null)}
             >${t("box_status.restart.stop")}</wt-button
           >
           <wt-button
-            variant="primary"
+            variant=${anyway ? "danger" : "primary"}
             data-test="box-shutdown-confirm"
             ?disabled=${this.shutdownBusy}
             ?loading=${this.shutdownBusy}
-            @click=${() => void this.#shutdown(false)}
-            >${t("box_status.shutdown.title")}</wt-button
+            @click=${() => {
+              const action = this.shutdownConfirmation;
+              if (action !== null) void this.#shutdown(action);
+            }}
+            >${t(anyway ? "box_status.shutdown.anyway" : "box_status.shutdown.title")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

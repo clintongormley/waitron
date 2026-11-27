@@ -94,3 +94,63 @@ it("waits for admitted work and keeps new work out until Cancel has settled", as
     await sale;
   }
 });
+
+it("captures a new backup on Retry while sales stay paused", async () => {
+  let passes = 0;
+  let pauses = 0;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      passes++;
+      if (passes === 1) throw new Error("The backup destination is unavailable");
+    },
+    save: async () => {},
+    clear: async () => {},
+    pauseDuties: () => {
+      pauses++;
+      return { settled: Promise.resolve(), drainRefunds: async () => {}, resume() {} };
+    },
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    shutdown.resolvePaused("retry");
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("ready"));
+    expect(passes).toBe(2);
+    expect(pauses).toBe(1);
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("writes the next-start hold only when the administrator chooses Shut down anyway", async () => {
+  let releaseSave!: () => void;
+  const saving = new Promise<void>((resolve) => (releaseSave = resolve));
+  let marked = false;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      throw new Error("The saved archive could not be opened");
+    },
+    save: async () => {
+      await saving;
+      marked = true;
+    },
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    expect(marked).toBe(false);
+    shutdown.resolvePaused("shut-down-anyway");
+    expect(shutdown.status().phase).toBe("checking");
+    releaseSave();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready", checked: false }));
+    expect(marked).toBe(true);
+  } finally {
+    releaseSave();
+    await shutdown.close();
+  }
+});

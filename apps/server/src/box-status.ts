@@ -10,6 +10,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { SHUTDOWN_PATH, type AdminShutdown } from "./admin-shutdown.js";
+import type { readShutdownStaff } from "./admin-shutdown-duties.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { SpareFollowView } from "./spare-follow.js";
 import type { StreamView } from "@waitron/stream";
@@ -18,8 +19,12 @@ import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
 import type { TimeHealth } from "./time-health.js";
 import { healthSnapshot, type HealthState } from "./health.js";
-import { requireManagementSession } from "@waitron/server-kit";
-import { createErrorBoundary } from "@waitron/server-kit";
+import {
+  createErrorBoundary,
+  readJsonBody,
+  requireEnum,
+  requireManagementSession,
+} from "@waitron/server-kit";
 import type { JobView } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 
@@ -107,7 +112,10 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
-  shutdown?: Pick<AdminShutdown, "status" | "start" | "cancel"> & { available(): Promise<boolean> };
+  shutdown?: Pick<AdminShutdown, "status" | "start" | "resolvePaused" | "cancel"> & {
+    available(): Promise<boolean>;
+    readStaff: () => ReturnType<typeof readShutdownStaff>;
+  };
   readStream: () => StreamView;
   readSpare?: () => Promise<SpareFollowView | null>;
   readMode: () => DeploymentMode;
@@ -119,6 +127,7 @@ export type BoxStatusDeps = {
 };
 
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "management.request_invalid": 400,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -142,12 +151,31 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
       });
       if (fresh) await requireFreshManagementSignIn(deps.db, token, { passwordOnly: true });
     };
+    app.get(SHUTDOWN_PATH, (c) =>
+      run(c, log, async () => {
+        requireNodeOperationHttps(c);
+        await authorize(c);
+        if (!(await shutdown.available())) throw new AppError("box.shutdown_unavailable", {});
+        return c.json(await shutdown.readStaff());
+      }),
+    );
     app.post(SHUTDOWN_PATH, (c) =>
       run(c, log, async () => {
         requireNodeOperationHttps(c);
         await authorize(c, true);
         if (!(await shutdown.available())) throw new AppError("box.shutdown_unavailable", {});
         shutdown.start();
+        return c.json(shutdown.status(), 202);
+      }),
+    );
+    app.patch(SHUTDOWN_PATH, (c) =>
+      run(c, log, async () => {
+        requireNodeOperationHttps(c);
+        await authorize(c);
+        const body = await readJsonBody<{ decision?: unknown } | null>(c);
+        shutdown.resolvePaused(
+          requireEnum(body?.decision, "decision", ["retry", "shut-down-anyway"]),
+        );
         return c.json(shutdown.status(), 202);
       }),
     );

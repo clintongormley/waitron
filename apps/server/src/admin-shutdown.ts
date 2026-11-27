@@ -7,7 +7,11 @@ import "./errors.js";
 export const SHUTDOWN_PATH = "/api/box/shutdown";
 
 export type ShutdownStatus =
-  { phase: "idle" | "checking" | "ready" } | { phase: "paused"; errorCode: string };
+  | { phase: "idle" | "checking" }
+  | { phase: "ready"; checked?: false }
+  | { phase: "paused"; errorCode: string };
+
+export type ShutdownDecision = "retry" | "shut-down-anyway";
 
 export async function waitForShutdownDrain(
   drain: Promise<unknown> | undefined,
@@ -39,7 +43,9 @@ export function createAdminShutdown(deps: {
     controller: AbortController;
     settled: Promise<void>;
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
+    drained: boolean;
     saving: boolean;
+    markMayExist: boolean;
     cancelling?: Promise<void>;
   };
   let attempt: Attempt | undefined;
@@ -64,6 +70,36 @@ export function createAdminShutdown(deps: {
     }
   };
 
+  function run(current: Attempt, checkBackup: boolean): void {
+    current.state = { phase: "checking" };
+    const { signal } = current.controller;
+    current.settled = (async () => {
+      try {
+        if (!current.drained) {
+          await waitForShutdownDrain(Promise.all(writers), signal);
+          current.duties ??= deps.pauseDuties?.();
+          if (current.duties !== undefined) {
+            await waitForShutdownDrain(current.duties.settled, signal);
+            signal.throwIfAborted();
+            await current.duties.drainRefunds();
+          }
+          current.drained = true;
+        }
+        signal.throwIfAborted();
+        if (checkBackup) await deps.check(signal);
+        signal.throwIfAborted();
+        current.saving = true;
+        current.markMayExist = true;
+        await deps.save();
+        current.state = checkBackup ? { phase: "ready" } : { phase: "ready", checked: false };
+      } catch (error) {
+        current.state = { phase: "paused", errorCode: codeOf(error) };
+      } finally {
+        current.saving = false;
+      }
+    })();
+  }
+
   return {
     middleware,
     status: (): ShutdownStatus => attempt?.state ?? { phase: "idle" },
@@ -73,42 +109,30 @@ export function createAdminShutdown(deps: {
         state: { phase: "checking" },
         controller: new AbortController(),
         settled: Promise.resolve(),
+        drained: false,
         saving: false,
+        markMayExist: false,
       };
       attempt = current;
-      const { signal } = current.controller;
-      current.settled = (async () => {
-        try {
-          await waitForShutdownDrain(Promise.all(writers), signal);
-          signal.throwIfAborted();
-          current.duties = deps.pauseDuties?.();
-          if (current.duties !== undefined) {
-            await waitForShutdownDrain(current.duties.settled, signal);
-            signal.throwIfAborted();
-            await current.duties.drainRefunds();
-          }
-          signal.throwIfAborted();
-          await deps.check(signal);
-          signal.throwIfAborted();
-          current.saving = true;
-          await deps.save();
-          current.state = { phase: "ready" };
-        } catch (error) {
-          current.state = { phase: "paused", errorCode: codeOf(error) };
-        }
-      })();
+      run(current, true);
+    },
+    resolvePaused(decision: ShutdownDecision): void {
+      const current = attempt;
+      if (closing || current?.state.phase !== "paused" || current.cancelling !== undefined)
+        throw new AppError("box.shutdown_in_progress", {});
+      run(current, decision === "retry");
     },
     async cancel(): Promise<void> {
       const current = attempt;
       if (current === undefined) return;
       if (current.cancelling !== undefined) return current.cancelling;
-      if (current.saving && current.state.phase !== "paused")
+      if (current.saving || current.state.phase === "ready")
         throw new AppError("box.shutdown_in_progress", {});
       current.controller.abort();
       current.cancelling = (async () => {
         await current.settled;
         if (closing) return;
-        if (current.saving) await deps.clear();
+        if (current.markMayExist) await deps.clear();
         if (closing) return;
         current.duties?.resume();
         attempt = undefined;

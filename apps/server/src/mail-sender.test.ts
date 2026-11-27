@@ -104,6 +104,25 @@ describe("one mail sender", () => {
       lock.mockRestore();
     }
   });
+  it("sends box alerts during shutdown and leaves ordinary mail for later", async () => {
+    let paused = true;
+    await queue("alert");
+    await queue("certificate", { kind: "certificate_reminder" });
+    const job = mailSendJob({
+      ...deps,
+      owners: [owner, { ...owner, kind: "certificate_reminder" }],
+      maxSleepMs: 60_000,
+      boxAlertsOnly: () => paused,
+    });
+    const pass = () => job.pass({ now: time, signal: controller.signal });
+    await pass();
+    await pass();
+    expect((await row("alert"))?.status).toBe("sent");
+    expect((await row("certificate"))?.status).toBe("pending");
+    paused = false;
+    await pass();
+    expect((await row("certificate"))?.status).toBe("sent");
+  });
   describe("an owner's sweep", () => {
     const deadline = new Date("2026-11-09T12:00:10.000Z");
 

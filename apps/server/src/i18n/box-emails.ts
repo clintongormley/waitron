@@ -31,6 +31,17 @@ export const BOX_EMAIL_WORDS = {
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
 
+export const SHUTDOWN_PAUSED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: shutdown paused during the final backup check",
+    text: "The box at {venue} could not finish checking the final backup. Open Box status to see the reason and decide what to do.",
+  },
+  es: {
+    subject: "{venue}: el apagado se detuvo durante la comprobación de la última copia",
+    text: "La comprobación de la última copia de seguridad de {venue} no terminó. Abre Estado del servidor para ver el motivo y decidir qué hacer.",
+  },
+} as const;
+
 export const UNPLANNED_STOP_EMAIL_WORDS = {
   en: {
     subject: "{venue}: the box stopped without warning",

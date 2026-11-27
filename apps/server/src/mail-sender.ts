@@ -555,7 +555,7 @@ export async function nextMailDueAt(
 }
 
 export function mailSendJob(
-  deps: Omit<MailSenderDeps, "signal"> & { maxSleepMs: number },
+  deps: Omit<MailSenderDeps, "signal"> & { maxSleepMs: number; boxAlertsOnly?(): boolean },
 ): JobDefinition {
   const kinds = new Set<OutgoingMailKind>();
   for (const owner of deps.owners) {
@@ -564,6 +564,7 @@ export function mailSendJob(
     if (owner.retryDelaysMs.some((ms) => ms > owner.longestWaitMs))
       throw new Error("Mail longest wait is below a retry delay");
   }
+  const boxAlertOwners = deps.owners.filter((owner) => owner.kind === "box_alert");
   let waitingForSetup = false;
   const unavailable = new Set<MailDeliveryRule | "cloud_relay">();
   const resolveDelivery: MailSenderDeps["resolveDelivery"] = async (tx, rule) => {
@@ -605,16 +606,17 @@ export function mailSendJob(
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 60_000 },
     pass: async ({ signal }) => {
-      const result = await runMailPass({ ...deps, signal, resolveDelivery, resolveAccountRelay });
+      const scope = deps.boxAlertsOnly?.() ? { ...deps, owners: boxAlertOwners } : deps;
+      const result = await runMailPass({ ...scope, signal, resolveDelivery, resolveAccountRelay });
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;
-        return { nextDueAt: (await readSweeps(deps, deps.now())).nextAt };
+        return { nextDueAt: (await readSweeps(scope, deps.now())).nextAt };
       }
       if (result.processed && result.mailId !== null) waitingForSetup = false;
       if (result.processed) return { nextDueAt: deps.now() };
-      const mailAt = await nextMailDueAt(deps);
-      const { nextAt: sweepAt } = await readSweeps(deps, deps.now());
+      const mailAt = await nextMailDueAt(scope);
+      const { nextAt: sweepAt } = await readSweeps(scope, deps.now());
       return { nextDueAt: mailAt && (!sweepAt || mailAt < sweepAt) ? mailAt : sweepAt };
     },
   };

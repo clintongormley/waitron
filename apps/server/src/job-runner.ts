@@ -66,7 +66,7 @@ export interface JobRunner {
   wake(name: JobName): void;
   roleChanged(): void;
   signalStepdown(): void;
-  pauseJobs(): { settled: Promise<void>; resume(): void };
+  pauseJobs(except?: readonly JobName[]): { settled: Promise<void>; resume(): void };
   stopJobs(): Promise<void>;
   views(): Readonly<Record<string, JobView>>;
 }
@@ -81,7 +81,7 @@ export function createJobRunner(deps: {
   subscribe?: (fn: (change: ResourceChange) => void) => () => void;
 }): JobRunner {
   const delay = deps.delay ?? realSleep;
-  let paused = false;
+  let paused: readonly JobName[] | null = null;
   const jobs = new Map<
     JobName,
     {
@@ -212,7 +212,7 @@ export function createJobRunner(deps: {
     try {
       if (def.firstPassAfterMs) await sleep(def.firstPassAfterMs, true);
       while (!controller.signal.aborted) {
-        if (paused) {
+        if (paused !== null && !paused.includes(def.name)) {
           await sleep(def.maxSleepMs, true);
           continue;
         }
@@ -352,12 +352,12 @@ export function createJobRunner(deps: {
       for (const [name, job] of jobs)
         if ("stop" in JOB_CATALOGUE[name].stepdown) job.controller.abort();
     },
-    pauseJobs() {
-      paused = true;
+    pauseJobs(except = []) {
+      paused = except;
       return {
         settled: Promise.allSettled([...jobs.values()].map((job) => job.pass)).then(() => {}),
         resume() {
-          paused = false;
+          paused = null;
           for (const job of jobs.values()) job.role.abort();
         },
       };

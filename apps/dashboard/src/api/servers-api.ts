@@ -198,7 +198,13 @@ export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
   version: 1;
 }
 export type ShutdownStatus =
-  { phase: "idle" | "checking" | "ready" } | { phase: "paused"; errorCode: string };
+  | { phase: "idle" | "checking" }
+  | { phase: "ready"; checked?: false }
+  | { phase: "paused"; errorCode: string };
+
+export type ShutdownStaffMember = { displayName: string; state: "working" | "on_break" };
+
+export type ShutdownDecision = "retry" | "shut-down-anyway";
 
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {
@@ -467,8 +473,14 @@ export class ServersApi extends PrintingApi {
   clockConfirm(input: { challengeId: string; asShown: true }): Promise<ClockSetView> {
     return this.#request<ClockSetView>("/api/box/clock-confirm", "POST", input);
   }
+  getBoxShutdownStaff(): Promise<ShutdownStaffMember[]> {
+    return this.#request("/api/box/shutdown", "GET");
+  }
   startBoxShutdown(): Promise<ShutdownStatus> {
     return this.#request("/api/box/shutdown", "POST", {});
+  }
+  resolveBoxShutdown(decision: ShutdownDecision): Promise<ShutdownStatus> {
+    return this.#request("/api/box/shutdown", "PATCH", { decision });
   }
   cancelBoxShutdown(): Promise<ShutdownStatus> {
     return this.#request("/api/box/shutdown", "DELETE", {});

@@ -3203,6 +3203,7 @@ async function bootServer(
         ...cloudMail,
         log,
         bus: liveEvents,
+        boxAlertsOnly: () => health.adminPaused?.() ?? false,
         maxSleepMs: 60_000,
       }),
     );
@@ -4109,6 +4110,9 @@ async function bootServer(
     config,
     runner: jobRunner,
     backup: backupSupervisor,
+    workforceEnabled,
+    now,
+    log,
     isMain: () => !handoverGate.isClosed() && cloudPrimary(),
   });
   shutdownGate = shutdown.middleware;

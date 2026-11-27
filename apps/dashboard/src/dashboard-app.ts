@@ -3856,6 +3856,7 @@ export class DashboardApp extends LitElement {
           .canOpen=${this.#canOpenScreen}
           .canCheckClock=${this.#sessionPermissions.includes("node.manage")}
           .canRestart=${this.#sessionPermissions.includes("system.manage")}
+          .canMakeRecoveryPack=${this.#sessionPermissions.includes("system.manage")}
           .canManageUpgrades=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}
           @wt-alert-go-to=${this.#onAlertGoTo}
