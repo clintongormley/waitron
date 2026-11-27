@@ -9,14 +9,9 @@ import type { TillBasket } from "./basket.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
-import { registerIcons } from "@waitron/ui";
 import { OpenDraftRow, draftSlotStyles } from "./draft-row-open.js";
 import { draftSplitArrow } from "./draft-portions.js";
-
-registerIcons({
-  minus: "M2.5 7.25H13.5V8.75H2.5Z",
-  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
-});
+import type { WtStepper } from "@waitron/ui";
 
 /** The order screen's part in an opened row: it holds which row is open and slots its controls. */
 class OpenedRowHost extends LitElement {
@@ -37,7 +32,10 @@ class OpenedRowHost extends LitElement {
       .openedLine=${this.opener.line(this.store)}
       >${this.store.lines.map(
         (line, index) =>
-          html`${this.opener.controls(this.store, line, index)}${draftSplitArrow(
+          html`${this.opener.controls(this.store, line, index, {
+            allowed: true,
+            run: () => {},
+          })}${draftSplitArrow(
             line,
             index,
             () => true,
@@ -225,6 +223,9 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     );
     expect(added.hasAttribute("data-open")).toBe(true);
     expect(getComputedStyle(added).backgroundColor).toBe(plain.backgroundColor);
+    const stepper = el.shadowRoot!.querySelector<WtStepper>('[data-draft-open="1"] wt-stepper')!;
+    await stepper.updateComplete;
+    expect(stepper.shadowRoot!.querySelector("[data-remove]")).not.toBeNull();
     await expectNoA11yViolations(host);
     await userEvent.click(
       basket.shadowRoot!.querySelector<HTMLButtonElement>('[data-draft-row="1"]')!,
