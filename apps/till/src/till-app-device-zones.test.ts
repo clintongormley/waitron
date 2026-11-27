@@ -16,6 +16,7 @@ import {
   servedMenus,
 } from "./widgets/test-helpers.js";
 import { liveReadFixture } from "../test/live-connection.js";
+import { deferred } from "../test/clock-app.js";
 import { billOptions, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -927,8 +928,8 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
       expect(listCounterWaiting.mock.calls.length).toBeGreaterThan(readsBeforeChange),
     );
     await expect.element(page.getByRole("heading", { name: "Ready to hand over" })).toBeVisible();
-    const writeRead = Promise.withResolvers<(typeof sent)[]>();
-    const liveRead = Promise.withResolvers<(typeof sent)[]>();
+    const writeRead = deferred<(typeof sent)[]>();
+    const liveRead = deferred<(typeof sent)[]>();
     listCounterWaiting
       .mockImplementationOnce(() => writeRead.promise)
       .mockImplementationOnce(() => liveRead.promise);
