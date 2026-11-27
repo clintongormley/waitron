@@ -375,8 +375,6 @@ declare module "@waitron/shared" {
     "handover.copy_damaged": Record<string, never>;
     /** The archive does not admit this mirror's key under its held main box. */
     "handover.copy_predates_destination": Record<string, never>;
-    /** The emergency switch's backup step is not configured on this box. */
-    "handover.backup_key_missing": Record<string, never>;
     /** The selected backup file is not under the backup key this box holds; only the master key
      * `keyName` names opens it. */
     "handover.backup_needs_master_key": { keyName: string };

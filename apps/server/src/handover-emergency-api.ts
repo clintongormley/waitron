@@ -1,5 +1,6 @@
 import { type KeyRing } from "@waitron/credentials";
 import { peerBodyLimit } from "./peer-route-limits.js";
+import { isUnset } from "./env-value.js";
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -132,7 +133,7 @@ interface Deps {
     restart(): void;
     migrationsRoot: string | null;
   };
-  backup?: {
+  backup: {
     readBackupKey(): Promise<HeldBackupKey | undefined>;
     environment: DeploymentEnvironment;
     migrationsRoot: string | null;
@@ -166,7 +167,6 @@ const STATUS = {
   "node.read_only": 409,
   "setup.request_invalid": 400,
   "handover.copy_predates_destination": 409,
-  "handover.backup_key_missing": 409,
   "handover.backup_needs_master_key": 409,
   "promotion.break_glass_invalid": 422,
   "recovery.passphrase_invalid": 422,
@@ -400,11 +400,12 @@ export function mountHandoverEmergencyApi(
       requireNodeOperationHttps(c);
       const { payload, artifact } = await readUpload(
         c,
-        deps.backup?.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
+        deps.backup.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
       );
       if (!isRecord(payload) || artifact === undefined) refuseRequest("artifact");
       if (payload.masterKey !== undefined && typeof payload.masterKey !== "string")
         refuseRequest("masterKey");
+      const masterKey = payload.masterKey as string | undefined;
       return inTurn(deps.node, "handover-emergency", async () => {
         await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
@@ -412,7 +413,6 @@ export function mountHandoverEmergencyApi(
         if (open !== null)
           throw new AppError("handover.controlled_unresolved", { operationId: open.operationId });
         await sourceSilent(sourceNodeId, false);
-        if (deps.backup === undefined) throw new AppError("handover.backup_key_missing", {});
         const parent = join(deps.stateDir, SCRATCH_DIR);
         await mkdir(parent, { recursive: true, mode: 0o700 });
         const folder = await mkdtemp(join(parent, "handover-upload-"));
@@ -424,7 +424,7 @@ export function mountHandoverEmergencyApi(
             ...deps.backup,
             signal: c.req.raw.signal,
             artifactPath,
-            ...(payload.masterKey === undefined ? {} : { masterKey: payload.masterKey as string }),
+            ...(isUnset(masterKey?.trim()) ? {} : { masterKey }),
           });
         } finally {
           await rm(folder, { recursive: true, force: true });

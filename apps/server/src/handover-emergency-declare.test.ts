@@ -157,6 +157,7 @@ function service(
           ),
         );
       },
+      ...backupDeps(),
       ...overrides,
     },
     log,
@@ -342,6 +343,22 @@ it("a file under an older key asks for the master key and names it, then opens w
   await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
 });
 
+it.each([
+  ["an empty", ""],
+  ["a whitespace-only", " \t "],
+])("reads %s master key as none sent, so the held key opens a current file", async (_, typed) => {
+  const restart = vi.fn();
+  const s = service("https://spare.example", backupDeps(restart));
+  const current = masterKeyArchiveBytes(await selectableBackup(), masterKey);
+  const answer = await s.post(
+    upload({ signIn: request.signIn, masterKey: typed }, current),
+    true,
+    "backup",
+  );
+  expect(answer.body).toEqual({ restarting: true });
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
+});
+
 it("a wrong master key is refused with 422 naming the backup's key", async () => {
   const restart = vi.fn();
   const s = service("https://spare.example", backupDeps(restart));
@@ -373,21 +390,20 @@ it("refuses a version 1 file as an invalid backup, and a master key that is not 
   expect(typed.body.error?.code).toBe("handover.request_invalid");
 });
 
-it("never sends or logs the held backup key", async () => {
+it("never sends or logs the held backup key or a typed master key", async () => {
   const s = service("https://spare.example", backupDeps());
   const older = masterKeyArchiveBytes(await selectableBackup(), masterKey, 2);
+  const typed = encodeMasterKeyCode(makeMasterKey());
   const answers = [
     await s.post(upload({ signIn: request.signIn }, older), true, "backup"),
-    await s.post(
-      upload({ signIn: request.signIn, masterKey: encodeMasterKeyCode(makeMasterKey()) }, older),
-      true,
-      "backup",
-    ),
+    await s.post(upload({ signIn: request.signIn, masterKey: typed }, older), true, "backup"),
   ];
   expect(answers.map((answer) => answer.status)).toEqual([409, 422]);
   const seen = JSON.stringify([answers, s.log.mock.calls]);
   expect(seen).not.toContain(held.key);
   expect(seen).not.toContain(Buffer.from(held.key, "base64url").toString("hex"));
+  expect(seen).not.toContain(typed);
+  expect(seen).not.toContain(typed.replaceAll(" ", ""));
 });
 
 it("answers a compressed-backup capacity refusal with 507", async () => {
@@ -930,9 +946,9 @@ describe("the switch's passkey and proof", () => {
     async (step) => {
       const s = service();
       const accepted = await s.post(bodies[step](), true, step, await proofCookie());
-      // A backup step with no backup configured gets past the sign-in to this refusal.
+      // A backup step's one-byte file gets past the sign-in to the file's own refusal.
       expect(accepted.body.error?.code ?? accepted.status).toBe(
-        step === "backup" ? "handover.backup_key_missing" : 200,
+        step === "backup" ? "backup.artifact_invalid" : 200,
       );
       expect(accepted.setCookie?.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
       const refused = await s.post(bodies[step](), true, step, await proofCookie("not-a-proof"));

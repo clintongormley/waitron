@@ -439,6 +439,12 @@ async function emergencyTakeover(
     fetch: async () => {
       throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
     },
+    backup: {
+      readBackupKey: async () => undefined,
+      environment: "preproduction" as const,
+      migrationsRoot: null,
+      restart: () => {},
+    },
   });
   const preview = await boxRequest(declaration, "/api/node/handover/emergency/preview", {
     signIn,
@@ -948,6 +954,12 @@ describe("a controlled handover to the joined spare, then the old box back by em
         credentialKeyRing: TOTP_KEY_RING,
         fetch: async () => {
           throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
+        },
+        backup: {
+          readBackupKey: async () => undefined,
+          environment: "preproduction" as const,
+          migrationsRoot: null,
+          restart: () => {},
         },
       });
       const preview = await boxRequest(declaration, "/api/node/handover/emergency/preview", {
