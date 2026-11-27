@@ -84,6 +84,13 @@ export const quietPayStyles = css`
     margin-inline: calc(-1 * var(--wt-space-1));
   }
 
+  @media (height > 480px), (orientation: portrait) {
+    wt-amount-block:has([data-quiet-pay-breakdown])
+      + .quiet-pay-controls:has(> [data-pay-way]:first-child) {
+      padding-block-start: var(--wt-space-1);
+    }
+  }
+
   [data-quiet-pay-breakdown] wt-button::part(button) {
     min-inline-size: var(--wt-stepper-button-width);
     min-block-size: var(--wt-stepper-button-width);

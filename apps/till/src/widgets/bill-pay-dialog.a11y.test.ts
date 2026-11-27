@@ -191,7 +191,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             expect(box.top).toBeGreaterThanOrEqual(boxes[index]!.bottom);
           }
           await pressed(el, "[data-quiet-pay-tip]");
+          const tipField = el.shadowRoot!.querySelector('wt-input[name="cardTip"]')!;
+          const tipFieldTop = tipField.getBoundingClientRect().top;
           await typed(el, "cardTip", locale === "en" ? "87.32" : "87,32");
+          expect(tipField.getBoundingClientRect().top).toBe(tipFieldTop);
           await pressed(el, "[data-quiet-pay-tip]");
           const root = el.shadowRoot!;
           const breakdown = root.querySelector("[data-quiet-pay-breakdown]")!;
@@ -210,6 +213,27 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
               root.querySelector("[data-quiet-pay-card] wt-icon")!,
           ];
           expect(icons.map((icon) => icon.getBoundingClientRect().width)).toEqual([20, 20, 22]);
+          if (width === 390) {
+            const tipText = document.createRange();
+            tipText.selectNodeContents(breakdown.querySelector("span")!);
+            const tileTop = choices[0]!.getBoundingClientRect().top;
+            expect.soft(tileTop - tipText.getBoundingClientRect().bottom).toBeLessThanOrEqual(15);
+            for (const link of [removeTip, editTip]) {
+              const target = link.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              expect.soft(target.height).toBeGreaterThanOrEqual(24);
+              expect.soft(target.bottom).toBeLessThan(tileTop);
+            }
+
+            const check = icons[1]!.shadowRoot!.querySelector("path")!;
+            expect.soft(check.isPointInFill(new DOMPoint(10, 6.6))).toBe(true);
+            expect.soft(check.isPointInFill(new DOMPoint(10, 8.7))).toBe(true);
+
+            const chevron = root.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-icon")!;
+            const arrow = chevron.shadowRoot!.querySelector("path")!.getBBox();
+            const scale = chevron.getBoundingClientRect().width / 16;
+            expect.soft(arrow.width * scale).toBeGreaterThanOrEqual(8);
+            expect.soft(arrow.height * scale).toBeGreaterThanOrEqual(13.5);
+          }
           await expectNoA11yViolations(host);
           await page.screenshot({
             path: `__screenshots__/quiet-pay-q1-${locale}-${theme}-${width}x${height}.png`,
