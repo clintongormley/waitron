@@ -165,6 +165,20 @@ it("refuses an entire batch if a displayed day has since changed", async () => {
   expect(await suite.db.select().from(timeEntries)).toEqual(approved);
 });
 
+it("refuses a duplicate day with a different UUID spelling", async () => {
+  const { approval } = await (await request(route("day"))).json();
+  const day = { personId: venue.personId, date: "2026-01-05", digest: approval.digest as string };
+  const response = await request("approve-days", {
+    days: [day, { ...day, personId: day.personId.toUpperCase() }],
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "attendance.invalid", params: { reason: "duplicate_approval_day" } },
+  });
+  expect(
+    await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "day_approval")),
+  ).toEqual([]);
+});
 it("removes a day from bulk approval when the manager sends the worker a proposal", async () => {
   const before = await (await request("queue")).json();
   expect(before.finishedDays).toMatchObject([

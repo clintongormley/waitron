@@ -4914,7 +4914,7 @@ export const es: Record<StringKey, string> = {
   "permission.schedule.manage.help":
     "Planifica y publica el cuadrante, gestiona puestos y sus titulares, y tramita cambios de turno y ausencias. También cambia los datos de planificación del personal en Usuarios.",
   "permission.workforce.correct.help":
-    "Revisa las incidencias de presencia, propón cambios o responde a ellos y aprueba los días terminados. Para aprobar tus propias horas también necesitas Aprobar tus propias horas.",
+    "Revisa las incidencias de presencia, propón cambios o responde a ellos y aprueba los días terminados. Para aprobar tus propias horas también necesitas el permiso Aprobar tus propias horas.",
   "permission.workforce.self_approve.help":
     "Aprueba tus propios días terminados y los cambios en tus horas. También necesitas Corregir horas trabajadas.",
   "permission.menu.manage.help":

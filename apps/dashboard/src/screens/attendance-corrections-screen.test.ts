@@ -363,6 +363,7 @@ it.each(["current", "changed"] as const)(
       .poll(() => root.querySelector("[data-finished-days]")?.textContent)
       .not.toContain("Ana Worker");
     expect(section.textContent).toContain("Morgan Manager");
+    expect(root.querySelector("[data-action-error]")).toBeNull();
   },
 );
 

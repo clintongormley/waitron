@@ -172,7 +172,21 @@ it("holds the overnight shift and leaves the following shift available while a b
   );
   expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-06" }]);
 });
-it("refuses the same day twice before appending any approvals", async () => {
+it("holds a finished day while a worker requests a missing second shift", async () => {
+  await shift();
+  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-05" }]);
+  await send({
+    action: "request",
+    questionId: null,
+    reason: "I forgot to clock in for the second shift",
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 },
+    ],
+  });
+  expect((await queue()).finishedDays).toEqual([]);
+});
+it("refuses the same day twice and leaves the record unchanged", async () => {
   await shift();
   const { date, digest } = (await queue()).finishedDays[0]!;
   const target = { personId, date, digest };
