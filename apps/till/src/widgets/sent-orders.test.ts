@@ -378,6 +378,17 @@ it("opens line information without serving and refuses detached, busy or superse
   expect(serves).toEqual([]);
 });
 
+it("a part-served dish's information names its served part as well as what is left", async () => {
+  const el = await mount(
+    current([row("Bravas", { quantity: "3.000", servedQuantity: "1.000", readyAt: at(59) })]),
+  );
+  const details = collect(el, "sent-line-info");
+  await click(el, "[data-sent-info=Bravas]");
+  expect(details).toEqual([
+    { lineId: "Bravas", workingOrderId: "b1", kind: "fired", servedLineIds: ["Bravas"] },
+  ]);
+});
+
 it("labels companions by bill without a price or line action, and fires the whole held group", async () => {
   const data = current(
     [],
@@ -1101,6 +1112,44 @@ it("A803 portion grouping: a long press on a grouped row names every member", as
     { lineId: "burger-1", workingOrderId: "b1", kind: "fired", lineIds: ["burger-1", "burger-2"] },
   ]);
   expect(serves).toEqual([]);
+});
+
+it("A803 portion grouping: a long press on a part-served row names what is left and what was served", async () => {
+  const el = await mount(
+    current([
+      burger("burger-3", 3),
+      burger("burger-1", 1, { servedQuantity: "1.000", servedAt: at(50) }),
+      burger("burger-2", 2),
+    ]),
+    { lines: burgers },
+  );
+  const details = collect(el, "sent-line-info");
+  const dish = find(el, "[data-serve-line=burger-2]");
+  dish.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  window.dispatchEvent(
+    new PointerEvent("pointerup", { pointerId: 1, pointerType: "mouse", clientX: 10, clientY: 10 }),
+  );
+  await el.updateComplete;
+  expect(details).toEqual([
+    {
+      lineId: "burger-2",
+      workingOrderId: "b1",
+      kind: "fired",
+      lineIds: ["burger-2", "burger-3"],
+      servedLineIds: ["burger-1"],
+    },
+  ]);
 });
 
 describe("A773 at the pass", () => {

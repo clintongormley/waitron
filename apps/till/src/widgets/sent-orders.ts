@@ -48,6 +48,8 @@ export interface SentLineInfo {
   kind: SentSlice["kind"];
   /** Present when the row shows several identical portions: every member, by line number. */
   lineIds?: string[];
+  /** Present when the row joins served portions to what is left: the served ones, by line number. */
+  servedLineIds?: string[];
 }
 interface HeldOrder {
   scope: string;
@@ -66,6 +68,9 @@ interface SentModel {
 
 /** The slices a row's information and hold name: what is left of it, or else all of it. */
 const infoMembers = (row: SentRow) => (row.left.length > 0 ? row.left : row.slices);
+/** The served slices a row joins to what is left of it, which its information names apart. */
+const servedBeside = (row: SentRow) =>
+  row.left.length > 0 ? row.slices.filter((slice) => slice.kind === "served") : [];
 const firedLeft = (rows: readonly SentRow[]) =>
   rows.flatMap((row) => row.left).filter((slice) => slice.kind === "fired");
 
@@ -131,7 +136,7 @@ export class TillSentOrders extends LitElement {
   #pressedNow?: number;
   #gestures?: Gestures;
   #pressed?: {
-    members: readonly SentSlice[];
+    row: SentRow;
     scope: string;
     billId: string;
     target: EventTarget;
@@ -167,7 +172,7 @@ export class TillSentOrders extends LitElement {
           press.scope === this.scope &&
           press.billId === this.billId
         )
-          this.#info(press.members);
+          this.#info(press.row);
         this.#releaseHeading();
       },
       pan: ({ dy }) => {
@@ -324,12 +329,14 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
-  #info(members: readonly SentSlice[]): void {
+  #info(row: SentRow): void {
     if (!this.isConnected || this.busy) return;
+    const members = infoMembers(row);
+    const served = servedBeside(row);
     const slices = this.#model()?.sections.flatMap((section) =>
       section.rows.flatMap((row) => row.slices),
     );
-    const found = members.map((member) =>
+    const found = [...members, ...served].map((member) =>
       slices?.find((slice) => slice.row.lineId === member.row.lineId && slice.kind === member.kind),
     );
     const slice = found[0];
@@ -339,6 +346,7 @@ export class TillSentOrders extends LitElement {
         workingOrderId: slice.row.workingOrderId,
         kind: slice.kind,
         ...(members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {}),
+        ...(served.length > 0 ? { servedLineIds: served.map((member) => member.row.lineId) } : {}),
       } satisfies SentLineInfo);
     this.#releasePointer();
   }
@@ -360,7 +368,7 @@ export class TillSentOrders extends LitElement {
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
-    this.#pressed = { members, scope: this.scope, billId: this.billId, target };
+    this.#pressed = { row, scope: this.scope, billId: this.billId, target };
     if (slice.kind === "fired") {
       this.#pressedModel = this.#model();
       this.#pressedNow = this.now ?? Date.now();
@@ -510,7 +518,7 @@ export class TillSentOrders extends LitElement {
               busy: this.busy,
               press: (event) => this.#pressLine(row, event),
               serve: (event) => this.#clickServe(row, event),
-              info: () => this.#info(infoMembers(row)),
+              info: () => this.#info(row),
             }),
         )}
         ${section.companions.map((row) =>

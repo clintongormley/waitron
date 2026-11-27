@@ -216,6 +216,7 @@ import { payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
   apartInSetMenus,
+  sentRowPortionKey,
   sentSlicePortionKey,
   tabLinePortionKey,
 } from "../state/portion-groups.js";
@@ -3479,6 +3480,30 @@ export class TillTableOrderScreen extends LitElement {
   /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
    * of a grouped row while they all still show as that one row. */
   #sentLineMembers(): SentSlice[] | undefined {
+    const info = this.#sentLineInfo();
+    return info && this.#sentPortions(info);
+  }
+
+  /** What Not served takes back: the sheet's own portions when they are served, else the served
+   * portions its row joins to them, while they are still the same dish. */
+  #sentTakeBack(
+    members: readonly SentSlice[] | undefined = this.#sentLineMembers(),
+  ): readonly SentSlice[] | undefined {
+    const info = this.#sentLineInfo();
+    if (members === undefined || info === undefined) return;
+    if (members[0]!.kind === "served") return members;
+    const served = this.#sentPortions(info, true);
+    if (served === undefined) return;
+    if (members.length === 1 && served.length === 1 && members[0]!.row === served[0]!.row)
+      return served;
+    const shown = this.#sentShown();
+    const dishes = [...members, ...served].map(
+      (slice) => sentRowPortionKey(slice, this.lines, shown(slice))?.dish,
+    );
+    return dishes.every((dish) => dish !== undefined && dish === dishes[0]) ? served : undefined;
+  }
+
+  #sentLineInfo(): SentLineInfo | undefined {
     const pending = this.sentLinePending;
     if (
       pending === null ||
@@ -3490,23 +3515,34 @@ export class TillTableOrderScreen extends LitElement {
       pending.visit !== this.serviceVisit
     )
       return;
-    const slices = this.#sentSlices(this.currentOrders);
+    return pending.info;
+  }
+
+  /** What besides the dish keeps sent portions apart: each one's guest allergy and set menu. */
+  #sentShown(): (slice: SentSlice) => unknown[] {
+    const allergy = this.#allergy()?.snapshot ?? null;
+    const menus = sentMenuDishes(this.#dishSources().setMenus);
+    return ({ row: { lineId: id } }) => [
+      allergyGuestId(allergy, { kind: "working", id }),
+      menus.get(id)?.setMenuId,
+    ];
+  }
+
+  /** The slices `info` names, or its served ones, by line number, while all are identical portions. */
+  #sentPortions(info: SentLineInfo, served = false): SentSlice[] | undefined {
+    const lineIds = served ? info.servedLineIds : (info.lineIds ?? [info.lineId]);
+    if (lineIds === undefined) return;
+    const slices = this.#sentSlices(this.currentOrders!);
     const members: SentSlice[] = [];
-    for (const lineId of pending.info.lineIds ?? [pending.info.lineId]) {
-      const member = findSlice(slices, pending.info.kind, pending.info.workingOrderId, lineId);
+    for (const lineId of lineIds) {
+      const member = findSlice(slices, served ? "served" : info.kind, info.workingOrderId, lineId);
       if (member === undefined) return;
       members.push(member);
     }
     members.sort((a, b) => a.row.lineNo - b.row.lineNo);
     if (members.length > 1) {
-      const allergy = this.#allergy()?.snapshot ?? null;
-      const menus = sentMenuDishes(this.#dishSources().setMenus);
-      const keys = members.map((member) =>
-        sentSlicePortionKey(member, this.lines, [
-          allergyGuestId(allergy, { kind: "working", id: member.row.lineId }),
-          menus.get(member.row.lineId)?.setMenuId,
-        ]),
-      );
+      const shown = this.#sentShown();
+      const keys = members.map((member) => sentSlicePortionKey(member, this.lines, shown(member)));
       if (keys.some((key) => key === null || key !== keys[0])) return;
     }
     return members;
@@ -3525,7 +3561,7 @@ export class TillTableOrderScreen extends LitElement {
       this.#askSentChangeLeave(() => this.#serveFromSentLine(pending, undo, true));
       return;
     }
-    const members = this.#sentLineMembers();
+    const members = undo ? this.#sentTakeBack() : this.#sentLineMembers();
     if (
       members === undefined ||
       members.some(
@@ -3804,8 +3840,9 @@ export class TillTableOrderScreen extends LitElement {
     if (members === undefined || slice === undefined) return nothing;
     const fire = members.every((member) => this.#canFireSent(member));
     const station = members.every((member) => this.#canMoveSent(member));
+    const takeBack = this.#sentTakeBack(members);
     const unserve =
-      slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
+      takeBack !== undefined && takeBack.every((member) => this.#sentBillOpen(member.row));
     if (!fire && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
