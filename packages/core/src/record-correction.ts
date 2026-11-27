@@ -58,7 +58,7 @@ export interface RecordCorrectionInput {
    * (4-Dec-2025) allows this for the remedy and annulment records — «se [podría] generar y
    * conservar o remitir a la AEAT desde un SIF distinto al que expidió la factura original» — but
    * extending it to a corrective invoice is our reading, not the FAQ's words. The owner
-   * took it on 26 Nov 2026 (A1614); docs/compliance/asesor-questions.md R4 puts it to the asesor.
+   * asked for it on 26 Nov 2026 (A1614); docs/compliance/asesor-questions.md R4 puts it to the asesor.
    */
   nodeId: NodeId;
   /** Must name a `corrective` series, or with `fullInvoice` a `full_corrective` one

@@ -946,8 +946,8 @@ is ever issued in anger.
 
 > **2026-11-27, A1614:** a box now corrects an invoice an earlier box (or an earlier installation of
 > this box) issued, judged by its filing status like its own: accepted is correctable, and while AEAT
-> has not answered it the correction waits (`filing_pending`). The owner took this reading on
-> 26 November; [asesor-questions.md](asesor-questions.md) R4 still puts it to the asesor.
+> has not answered it the correction waits (`filing_pending`). The owner asked for this on
+> 26 November and the watcher cleared the design on 27 November; [asesor-questions.md](asesor-questions.md) R4 still puts it to the asesor.
 
 ---
 

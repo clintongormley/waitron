@@ -1,6 +1,6 @@
 # A1614 — correct an invoice a previous main box issued
 
-Status: PLAN FOR APPROVAL (lane B, 2026-11-27). Fiscal: the owner lands it. Read against main 4d89be4919;
+Status: built (lane B, 2026-11-27); the watcher cleared D1–D4 and changed D5 (below). Fiscal: the owner lands it. Read against main 4d89be4919;
 read once by a fresh reader (no Critical; two Important and four Minor findings, all taken in below).
 
 ## What staff can do when it lands
@@ -75,7 +75,7 @@ we will file it, so we can issue a correction regardless".
    refusal (searched `apps/server/src/guide/`).
 5. **Comments and docs.** `packages/core/src/record-correction.ts:53-61` says to confirm with the
    asesor "before a real cross-node caller is wired": replace that clause with a one-line pointer to
-   the owner's decision of 26 Nov (A1614) and asesor question R4
+   the owner's request of 26 Nov (A1614) and asesor question R4
    (`docs/compliance/asesor-questions.md:605`, already listed). Dated pointer lines in
    `docs/compliance/verifactu-findings.md` (~:945) and `docs/compliance/2026-11-19-adviser-meeting.md:300`
    (historical: a pointer, not a rewrite).
@@ -106,6 +106,8 @@ we will file it, so we can issue a correction regardless".
 - **D1** (above): another chain's unanswered original waits (`filing_pending`); own chain unchanged.
   Alternative: admit it as `queued` like the box's own (no wait, but the corrective can reach AEAT
   before its original, or cite one that ends refused).
+  (2026-11-27, as built: with no open installation every chain counts as another; an original with
+  no filing row answers `missing` on every chain, since nothing files it.)
 - **D2:** the same wait covers an earlier installation on this box (after a restore), which today is
   admitted as `queued`. Recommended, because it is the same risk and the same one-line test.
 - **D3:** no check that the original's node is in this box's handover history. Every record in the
@@ -119,6 +121,9 @@ we will file it, so we can issue a correction regardless".
   box's receipt; they refuse only a refused original (`refuseCreditOf`, `backend.ts:465-478`), not one
   another chain has not had answered. This item does not change them; making them wait too would be
   a separate item.
+  (2026-11-27: built after all. The watcher changed D5 to "do it if under about 40 product lines"
+  (lane B `questions.md`, "WATCHER 2026-11-27 02:14"): both credits refuse
+  `fiscal.original_unanswered` while a version on another chain is unanswered or held.)
 - **Out of scope:** the deferred close after a switch (`deferred-close.ts:105,131`, `other_node`),
   pending the owner's answer.
 
