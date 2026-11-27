@@ -295,6 +295,16 @@ export const customerMenuPageStyles = [
       article {
         --menu-padding: var(--wt-space-6);
       }
+      :host([standalone]) .detail-lead:has(img) {
+        margin-block-start: 0;
+        margin-inline: 0;
+      }
+      :host([standalone]) .detail-lead img {
+        inline-size: auto;
+        max-inline-size: 100%;
+        aspect-ratio: auto;
+        border-radius: var(--wt-radius-md);
+      }
       header {
         grid-template-columns: minmax(0, 1fr) minmax(360px, 44%);
         align-items: center;

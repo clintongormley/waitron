@@ -58,6 +58,25 @@ describe("Customer menu page", () => {
     expect.soft(getComputedStyle(image).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   });
 
+  it("keeps the wide standalone dish photo at its original size inside the menu column", async () => {
+    await page.viewport(1440, 900);
+    const { customer } = await openMenu(published().menu, "light", true);
+    customer.photoSource = () =>
+      "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='240'%20height='120'/%3E";
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    const heading = page.getByRole("heading", { level: 1, name: "Roast pepper", exact: true });
+    await expect.element(heading).toBeVisible();
+    const photo = customer.shadowRoot!.querySelector<HTMLImageElement>(".detail-lead img")!;
+    await photo.decode();
+    const bounds = photo.getBoundingClientRect();
+    const column = heading.element().getBoundingClientRect();
+    expect.soft(bounds.width).toBe(photo.naturalWidth);
+    expect.soft(bounds.height).toBe(photo.naturalHeight);
+    expect.soft(bounds.left).toBeGreaterThanOrEqual(column.left);
+    expect.soft(bounds.right).toBeLessThanOrEqual(column.right);
+    expect.soft(parseFloat(getComputedStyle(photo).borderTopLeftRadius)).toBeGreaterThan(0);
+  });
+
   it.each(["light", "dark"] as const)(
     "filters the published menu and marks choices in %s",
     async (theme) => {
