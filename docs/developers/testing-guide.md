@@ -2860,6 +2860,18 @@ Noto Sans file. Measured that day for the three entries beside "Ready 10 min" at
 warning cases (196 px against 164 to 183). With it pinned, the file passed on macOS and in a
 `node:26-trixie` container with Playwright's Chromium, where `fc-match system-ui` names DejaVu Sans.
 
+The font alone is not enough where a check has less than a pixel to spare: Linux's Chromium puts
+each glyph at a whole pixel, macOS's at fractions. On 2026-11-28 CI run 46130471883 failed "every
+tile is 76 px tall at 719 px" and "84 px tall at 720 px" (`apps/till/src/widgets/menu-tiles.test.ts`,
+86.171875 px) and "fits 3 automatic columns at 360 px and 130% text"
+(`menu-browser.home-columns.test.ts`, "verduras" on two lines), all in Noto Sans. In the container
+above, "Nothing matches" in the tiles' 12 px semibold measured 103 px against the 102 the tile
+holds, so the filter notice took three lines; macOS measured 101.17. With `text-rendering:
+geometricPrecision` on the text, the container measured 101.17 too and the three cases passed. A
+native button resets `text-rendering` for what it holds, so setting it on the test's host does
+nothing inside a tile: `placeGlyphsFractionally()` (`apps/till/src/widgets/test-helpers.ts`) sets it
+on every element of the widget's shadow root.
+
 ## A check of what an observer's first report does polls for it, never counts frames
 
 On 2026-10-29 "shows the first tab at the strip's start when the strip comes back after the Floor

@@ -11,6 +11,7 @@ import {
   mountWidget,
   pageAt,
   PHONE_FONT,
+  placeGlyphsFractionally,
   resetPage,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
@@ -156,6 +157,7 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
       );
       if (width === 792) host.style.width = "792px";
       host.style.setProperty("--wt-font-family", PHONE_FONT);
+      placeGlyphsFractionally(el.shadowRoot!);
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(getComputedStyle(el).fontFamily).toBe(PHONE_FONT);
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;

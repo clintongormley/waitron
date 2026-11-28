@@ -10,6 +10,7 @@ import {
   mountWidget,
   pageAt,
   PHONE_FONT,
+  placeGlyphsFractionally,
   resetPage,
   type Mounted,
 } from "./test-helpers.js";
@@ -95,15 +96,19 @@ const menu: TillZoneMenu = {
   home: { shortcuts: [], order: DEFAULT_HOME_ORDER },
 };
 
-/** Draws `mounted` in a phone's font, so a check of what fits measures the tiles rather than the
- * machine's own `system-ui`. */
+/** Draws `mounted` in a phone's font, its glyphs placed at fractions of a pixel, so a check of what
+ * fits measures the tiles rather than the machine's own `system-ui` and glyph placement. */
 async function inPhoneFont(
   mounted: Promise<Mounted<TillMenuBrowser>>,
 ): Promise<Mounted<TillMenuBrowser>> {
   const shown = await mounted;
   shown.host.style.setProperty("--wt-font-family", PHONE_FONT);
+  placeGlyphsFractionally(shown.el.shadowRoot!);
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(getComputedStyle(shown.el).fontFamily).toBe(PHONE_FONT);
+  expect(getComputedStyle(shown.el.shadowRoot!.querySelector(".label")!).textRendering).toBe(
+    "geometricprecision",
+  );
   return shown;
 }
 
