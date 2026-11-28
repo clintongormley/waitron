@@ -40,9 +40,9 @@ describe.each(["light", "dark"] as const)("wt-course-heading a11y (%s theme)", (
       '<wt-course-heading mark="sent" mark-label="Sent" style="width: 240px">Sharing plates · fired 12 min ago<button type="button" slot="end">Serve all</button></wt-course-heading>',
       theme,
     );
-    for (let frame = 0; frame < 2; frame++)
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-    expect(el.hasAttribute("stacked")).toBe(true);
+    const title = el.shadowRoot!.querySelector('[role="heading"]')!.getBoundingClientRect();
+    const end = el.shadowRoot!.querySelector(".end")!.getBoundingClientRect();
+    expect(end.top).toBeGreaterThanOrEqual(title.bottom);
     await expectNoA11yViolations(host);
   });
 });

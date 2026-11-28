@@ -572,6 +572,11 @@ it("draws Serve all as a teal word on the heading's line, with a full tap area i
   expect(pill.right).toBeLessThanOrEqual(button.left);
 });
 
+/** Whether the heading's mark and actions are drawn on a line of their own, under its title. */
+const wrapped = (heading: Element) =>
+  heading.shadowRoot!.querySelector(".end")!.getBoundingClientRect().top >=
+  heading.shadowRoot!.querySelector('[role="heading"]')!.getBoundingClientRect().bottom;
+
 /** The vertical middle of the text inside `node`, wherever it is drawn. */
 function textMiddle(node: Node): number {
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -587,19 +592,25 @@ function textMiddle(node: Node): number {
 
 it.each([
   [600, false, 44],
-  [200, true, 75],
+  [200, true, 71],
 ] as const)(
-  "centres Serve all's word on the Sent mark's line at %ipx (stacked: %s), %ipx tall",
+  "centres Serve all's word on the Sent mark's line at %ipx (wrapped: %s), %ipx tall",
   async (width, stacked, height) => {
     const el = await twoHeadings(width);
     const heading = find(el, "[data-sent-section=fired] wt-course-heading");
-    expect(heading.hasAttribute("stacked")).toBe(stacked);
+    expect(wrapped(heading)).toBe(stacked);
     const serve = find(el, "[data-sent-section=fired] [data-serve-all]");
     const mark = heading.shadowRoot!.querySelector('[part="mark"]')!;
     expect(Math.abs(textMiddle(serve) - textMiddle(mark))).toBeLessThanOrEqual(1);
     expect(heading.getBoundingClientRect().height).toBeCloseTo(height, 0);
     expect(serve.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(serve.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    const title = find(
+      el,
+      "[data-sent-section=fired] [data-section-title]",
+    ).getBoundingClientRect();
+    if (stacked)
+      expect(serve.getBoundingClientRect().top).toBeGreaterThanOrEqual(title.bottom - 0.5);
   },
 );
 
@@ -607,7 +618,7 @@ it.each([
   [600, false],
   [200, true],
 ] as const)(
-  "centres Serve all's word on Fire's line on a held heading with a released dish at %ipx (stacked: %s)",
+  "centres Serve all's word on Fire's line on a held heading with a released dish at %ipx (wrapped: %s)",
   async (width, stacked) => {
     const el = await mount(
       current([], [group("g", [row("own", { released: false }), row("drink", { lineNo: 2 })])]),
@@ -616,7 +627,7 @@ it.each([
     for (let frame = 0; frame < 2; frame++)
       await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
     const heading = find(el, "[data-sent-section=g] wt-course-heading");
-    expect(heading.hasAttribute("stacked")).toBe(stacked);
+    expect(wrapped(heading)).toBe(stacked);
     const fire = find(el, "[data-group-fire=g]");
     const serve = find(el, "[data-sent-section=g] [data-serve-all]");
     expect(Math.abs(textMiddle(serve) - textMiddle(fire))).toBeLessThanOrEqual(1);

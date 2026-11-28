@@ -120,8 +120,9 @@ export class TillSentOrders extends LitElement {
       [data-serve-all]:not([disabled]) {
         --wt-action-text: var(--wt-color-primary-text);
       }
-      /* A word, not a block: its tap area spills into the heading's own padding, so the heading
-         stays as tall as its words. Padding equal to each spill keeps the word on the mark's line. */
+      /* A word, not a block: its tap area spills into the heading's own padding (or, on a line of
+         its own, the equal gap above it), so the heading stays as tall as its words. Padding equal
+         to each spill keeps the word on the mark's line. */
       [data-serve-all] {
         --wt-action-font-size: var(--wt-font-size-md);
         --wt-action-weight: var(--wt-font-weight-bold);
@@ -130,10 +131,6 @@ export class TillSentOrders extends LitElement {
           var(--wt-course-heading-padding-bottom);
         margin-block: calc(-1 * var(--wt-space-3))
           calc(-1 * var(--wt-course-heading-padding-bottom));
-      }
-      wt-course-heading[stacked] [data-serve-all] {
-        --wt-action-padding: 0 var(--wt-space-2) var(--wt-course-heading-padding-bottom);
-        margin-block-start: 0;
       }
       .reminder {
         display: flex;
