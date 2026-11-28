@@ -57,7 +57,7 @@ export class WtCountBadge extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    if (this.hasUpdated) this.#syncPublishing();
+    this.#syncPublishing();
   }
 
   override disconnectedCallback() {
@@ -70,9 +70,9 @@ export class WtCountBadge extends LitElement {
   }
 
   #syncPublishing() {
-    if (!this.publishWidth) return this.#stopPublishing();
+    this.#stopPublishing();
     const parent = this.parentElement;
-    if (this.#widthObserver || !parent) return;
+    if (!this.publishWidth || !parent) return;
     this.#publishedOn = parent;
     this.#widthObserver = new ResizeObserver(([entry]) => {
       parent.style.setProperty("--count-badge-width", `${entry!.borderBoxSize[0]!.inlineSize}px`);

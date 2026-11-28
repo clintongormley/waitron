@@ -669,7 +669,7 @@ En una mesa, un número en la esquina de un plato indica cuántos hay de él en 
 Añade los platos que piden los clientes, desde cualquier carpeta. Cuando envías los platos de una mesa,
 la cuenta los agrupa en los menús más baratos que encuentra. Cobra a la carta los platos que quedan
 fuera. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
-desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
+desde la cuadrícula o escribe su nombre en **Buscar en la carta** y pulsa el resultado.
 
 En una mesa, un plato sin agrupar muestra su propio precio con los extras de pago hasta que lo
 envías. El total del pedido puede bajar si el plato pasa a formar parte de un menú.

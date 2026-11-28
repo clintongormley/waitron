@@ -626,7 +626,7 @@ On a table, a number on a dish's corner says how many of it are in your **New or
 Add the dishes the guests order, from any folder. When you send dishes at a table, the bill
 groups them into the cheapest set menus it finds. It charges any dish outside those menus à la carte.
 Open a set-menu folder to see the dishes and supplements. Find it in the grid or by name in
-**Search**.
+**Search the menu**.
 
 At a table, an ungrouped dish shows its own price with paid extras until you send it. The order
 total can drop when the dish joins a set menu.

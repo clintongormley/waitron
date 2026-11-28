@@ -269,8 +269,8 @@ The remaining storage, input-validation and shared-form limits.
 ## Menu home preview rendering
 
 - **The dashboard's Home page preview still copies the till's presentation.** Tile and breadcrumb
-  markup, paint helpers and the table layout values remain separate, and the preview's path and
-  search no longer look like the till's; tile CSS,
+  markup and the table layout values remain separate, and the preview's path and search no longer
+  look like the till's; tile CSS, the tile paint helper,
   grid sizing, arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
   ordering and dashboard shortcut editing.
   [Detail](menu.md#each-menu-has-one-device-home-page-w93-1287-left-open)

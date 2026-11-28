@@ -674,7 +674,7 @@ section action adds anything to your basket. The dashboard Home preview keeps it
 it and its label's line height), `--wt-google-button-font-size` and
 `--wt-google-button-font-weight` (Google's sign-in button's label size and weight, 14px and 500,
 which no theme writes), `--wt-shadow-1|2`, `--wt-focus-ring`, `--wt-focus-offset`,
-`--wt-count-badge-ring-width` (2px, the ring the till's menu tiles draw round a count),
+`--wt-menu-count-ring-width` (2px, the ring the till's menu tiles draw round a count),
 `--wt-dialog-max-width`, `--wt-modal-compact-width`,
 `--wt-modal-standard-width`, `--wt-modal-max-width`, `--wt-modal-medium-height`, `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-keyboard-inset` and
 `--wt-keyboard-top` (0px; only the till sets them), `--wt-form-max-width`,
@@ -1325,7 +1325,7 @@ and disabled together. The Menu button keeps its width, so the words beside it a
 from product id to items, every variant and choice of a product counted together, and draw the
 number with the words for screen readers. The screen passes the map at every width, side by side
 too. The number is a `wt-count-badge tone="notice" publish-width` set 6 px outside the tile's top
-and end corner, ringed `--wt-count-badge-ring-width` in `--wt-color-bg`; no space is kept above the
+and end corner, ringed `--wt-menu-count-ring-width` in `--wt-color-bg`; no space is kept above the
 name for it, and the grid keeps room at its top and end for the number and its ring. A tile's name
 shows at most two lines, cut with "…". On a counted tile the name is narrowed on both sides by the
 number's reach into the tile, taken from the width the badge publishes, so a wider number ("99+")

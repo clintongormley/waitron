@@ -91,7 +91,7 @@ test("without publish-width, leaves its parent's style alone", async () => {
   expect(host.style.getPropertyValue("--count-badge-width")).toBe("");
 });
 
-test("with publish-width at the top of a shadow root, where it has no parent element, draws and publishes nothing", async () => {
+test("with publish-width at the top of a shadow root, where it has no parent element, draws but publishes nothing", async () => {
   await mount("<div></div>");
   const root = host.firstElementChild!.attachShadow({ mode: "open" });
   root.innerHTML = '<wt-count-badge count="9" publish-width></wt-count-badge>';
