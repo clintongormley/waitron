@@ -30,6 +30,8 @@ describe("till-diet-filter", () => {
     const icon = el.shadowRoot!.querySelector("[data-filter-open] wt-icon");
     expect(icon?.getAttribute("name")).toBe("menu-filter");
     expect(icon?.shadowRoot?.querySelector("path")?.getAttribute("d")).toBeTruthy();
+    // Frame m draws it in a 20 px box; 18 px is the nearest icon size.
+    expect(icon!.getBoundingClientRect().width).toBe(18);
     el.selected = { diets: ["vegan"], exclude: { milk: "all" } };
     await el.updateComplete;
     await expect.element(page.getByRole("button", { name: "Filter 2", exact: true })).toBeVisible();
