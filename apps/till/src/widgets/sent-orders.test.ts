@@ -602,7 +602,8 @@ it.each([
     const serve = find(el, "[data-sent-section=fired] [data-serve-all]");
     const mark = heading.shadowRoot!.querySelector('[part="mark"]')!;
     expect(Math.abs(textMiddle(serve) - textMiddle(mark))).toBeLessThanOrEqual(1);
-    expect(heading.getBoundingClientRect().height).toBeCloseTo(height, 0);
+    // Within a pixel or so: CI's fonts draw these lines a pixel shorter than a Mac's.
+    expect(Math.abs(heading.getBoundingClientRect().height - height)).toBeLessThanOrEqual(1.5);
     expect(serve.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     expect(serve.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
     const title = find(
