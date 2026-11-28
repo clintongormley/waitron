@@ -717,7 +717,7 @@ export function workOutBillDiscounts(
       id: discount.id,
       holds,
       takes,
-      ...(bound ? spreadTakes(takes) : {}),
+      ...spreadTakes(takes),
       lines: lines
         .filter(({ id }) => moved.has(id))
         .map(({ id }) => ({

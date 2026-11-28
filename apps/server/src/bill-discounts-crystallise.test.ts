@@ -257,6 +257,35 @@ async function measuredExtras(olives: number): Promise<string> {
   return billId;
 }
 
+/** `measuredExtras(1003)` with the second pizza at `second` cents and the first at 1.00, listed at
+ * `second` so that the two file together once they are at one price. */
+async function pizzasAt(second: number): Promise<{ billId: string; second: string }> {
+  const billId = await measuredExtras(1003);
+  const [one, two] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          sql`${workingOrderLines.parentLineId} is null`,
+        ),
+      )
+      .orderBy(asc(workingOrderLines.lineNo)),
+  );
+  await inTx(venue, async (tx) => {
+    await tx
+      .update(workingOrderLines)
+      .set({ unitPriceGross: 100, listUnitPriceGross: second, lineTotal: 100 })
+      .where(eq(workingOrderLines.id, one!.id));
+    await tx
+      .update(workingOrderLines)
+      .set({ unitPriceGross: second, lineTotal: second })
+      .where(eq(workingOrderLines.id, two!.id));
+  });
+  return { billId, second: two!.id };
+}
+
 /** The first extra on `billId`. */
 async function firstExtraOf(billId: string): Promise<string> {
   const [extra] = await inTx(venue, (tx) =>
@@ -742,32 +771,10 @@ describe("refuseDiscountsNotHolding", () => {
     // Two bound pizzas at 1.00 (listed at 1.01) and 1.01, each with 0.125 of olives at 10.03,
     // file apart: 1.00 + 1.25 + 1.01 + 1.25. A share of 0.01 off the second brings both to 1.00,
     // so they file as one row, and their olives as one row of 2.51: the invoice loses nothing.
-    const billId = await measuredExtras(1003);
-    const [first, second] = await inTx(venue, (tx) =>
-      tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(
-          and(
-            eq(workingOrderLines.workingOrderId, billId),
-            sql`${workingOrderLines.parentLineId} is null`,
-          ),
-        )
-        .orderBy(asc(workingOrderLines.lineNo)),
-    );
-    await inTx(venue, async (tx) => {
-      await tx
-        .update(workingOrderLines)
-        .set({ unitPriceGross: 100, listUnitPriceGross: 101, lineTotal: 100 })
-        .where(eq(workingOrderLines.id, first!.id));
-      await tx
-        .update(workingOrderLines)
-        .set({ unitPriceGross: 101, lineTotal: 101 })
-        .where(eq(workingOrderLines.id, second!.id));
-    });
+    const { billId, second } = await pizzasAt(101);
     const id = await inTx(venue, (tx) =>
       holdDiscount(tx, venue, {
-        lineId: second!.id,
+        lineId: second,
         ...amountOf(1),
         origin: "bill_share",
         sharedFromBillName: "Table 4",
@@ -785,9 +792,59 @@ describe("refuseDiscountsNotHolding", () => {
       expect(decimalToCents((await priceStoredOrder(tx, billId)).total)).toBe(before);
       expect(await pendingOn(tx, billId)).toEqual([]);
       expect(await adjustmentsOn(tx, billId)).toMatchObject([
-        { lineId: second!.id, action: "discount_amount", reduction: 0 },
+        { lineId: second, action: "discount_amount", reduction: 0 },
       ]);
     });
+  });
+
+  it("passes, and writes, an amount the invoice's filed rows take some of and its line's price all of", async () => {
+    // Filed apart, 1.00 + 1.25 + 1.02 + 1.25 = 4.52. A share of 0.02 off the second brings both
+    // to 1.00, so they file as one row, and their olives as one row of 2.51: 4.51.
+    const { billId, second } = await pizzasAt(102);
+    const id = await inTx(venue, (tx) =>
+      holdDiscount(tx, venue, {
+        lineId: second,
+        ...amountOf(2),
+        origin: "bill_share",
+        sharedFromBillName: "Table 4",
+      }),
+    );
+    await inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId));
+    const row = { id: second, lineNo: 3, quantity: 1000, unit: 100, total: 100 };
+    expect((await inTx(venue, (tx) => readBillDiscounts(tx, [billId]))).get(billId)).toEqual({
+      discounts: [
+        {
+          id,
+          holds: "yes",
+          takes: 1,
+          spreadTakes: 2,
+          lines: [{ lineId: second, rows: [row] }],
+        },
+      ],
+      takes: 1,
+    });
+    // The receipt prints the pizzas' fall from their list price of 1.02: 0.04, two cents of it the
+    // first pizza's, which this bill holds no record of.
+    expect(await crystallisesAsShown(billId, true, 4)).toBe(1);
+    expect(await inTx(venue, (tx) => adjustmentsOn(tx, billId))).toMatchObject([
+      { lineId: second, action: "discount_amount", reduction: 1 },
+    ]);
+  });
+
+  it("passes, and writes, a whole-bill amount the invoice's filed rows take less of than its rows' prices", async () => {
+    // Filed apart, 1.00 + 1.25 + 1.01 + 1.25 = 4.51. 0.03 off the bill takes 0.01 off the second
+    // pizza and each olives' price; at one price the pizzas file as one row, and their olives as
+    // 0.250 at 9.95, 2.49: 4.49.
+    const { billId } = await pizzasAt(101);
+    const id = await inTx(venue, (tx) =>
+      holdDiscount(tx, venue, { workingOrderId: billId, ...amountOf(3) }),
+    );
+    await inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId));
+    const worked = (await inTx(venue, (tx) => readBillDiscounts(tx, [billId]))).get(billId)!;
+    expect(worked.discounts).toMatchObject([{ id, holds: "yes", takes: 2, spreadTakes: 3 }]);
+    // The receipt prints each filed row's fall from its list price: the pizzas' 0.02 from 2.02, one
+    // cent of it the first pizza's, which this bill holds no record of, and the olives' from 2.51.
+    expect(await crystallisesAsShown(billId, true, 4)).toBe(2);
   });
 });
 
