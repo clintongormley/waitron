@@ -737,6 +737,58 @@ describe("refuseDiscountsNotHolding", () => {
     });
     expect(await inTx(venue, (tx) => pendingOn(tx, billId))).toHaveLength(1);
   });
+
+  it("passes, and writes, an amount the invoice's filed rows take nothing of, on a bill nobody split", async () => {
+    // Two bound pizzas at 1.00 (listed at 1.01) and 1.01, each with 0.125 of olives at 10.03,
+    // file apart: 1.00 + 1.25 + 1.01 + 1.25. A share of 0.01 off the second brings both to 1.00,
+    // so they file as one row, and their olives as one row of 2.51: the invoice loses nothing.
+    const billId = await measuredExtras(1003);
+    const [first, second] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, billId),
+            sql`${workingOrderLines.parentLineId} is null`,
+          ),
+        )
+        .orderBy(asc(workingOrderLines.lineNo)),
+    );
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 100, listUnitPriceGross: 101, lineTotal: 100 })
+        .where(eq(workingOrderLines.id, first!.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 101, lineTotal: 101 })
+        .where(eq(workingOrderLines.id, second!.id));
+    });
+    const id = await inTx(venue, (tx) =>
+      holdDiscount(tx, venue, {
+        lineId: second!.id,
+        ...amountOf(1),
+        origin: "bill_share",
+        sharedFromBillName: "Table 4",
+      }),
+    );
+    await inTx(venue, async (tx) => {
+      const before = decimalToCents((await priceStoredOrder(tx, billId)).total);
+      expect(before).toBe(451);
+      expect((await readBillDiscounts(tx, [billId])).get(billId)).toEqual({
+        discounts: [{ id, holds: "yes", takes: 0, spreadTakes: 1, lines: [] }],
+        takes: 0,
+      });
+      await refuseDiscountsNotHolding(tx, billId);
+      await crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true });
+      expect(decimalToCents((await priceStoredOrder(tx, billId)).total)).toBe(before);
+      expect(await pendingOn(tx, billId)).toEqual([]);
+      expect(await adjustmentsOn(tx, billId)).toMatchObject([
+        { lineId: second!.id, action: "discount_amount", reduction: 0 },
+      ]);
+    });
+  });
 });
 
 describe("a split line's pending discounts", () => {

@@ -299,12 +299,17 @@ export interface BillDiscountRow {
  * from what the lines' own totals lose. `takes` is never negative: on such a bill a discount whose
  * rows would raise the invoice's total, or lower lines' totals and leave the invoice's as it is,
  * moves no line. `cut_down`: an amount larger than what its target costs, which takes the target
- * to zero; `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * to zero (the server's `workOutHeldBill` also marks a fixed amount whose rows together take less
+ * than they were given); `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * `spreadTakes`, on a fixed amount whose `takes` the filed rows made differ from it: what its
+ * shares took off the prices they were spread over (the filed rows' for a whole-bill amount, its
+ * lines' otherwise).
  */
 export interface WorkedBillDiscount {
   id: string;
   holds: "yes" | "set_menu_gone" | "cut_down";
   takes: number;
+  spreadTakes?: number;
   lines: { lineId: string; rows: BillDiscountRow[] }[];
 }
 
@@ -456,10 +461,11 @@ function written(parts: readonly Part[], shares: readonly PricedShare<Subject>[]
   return [...members, ...splits];
 }
 
-/** A piece of a discount's target, what it costs and how a share of the discount spreads over it. */
+/** A piece of a discount's target, what it costs, and how a share of the discount spreads over
+ * it, with what that takes off the piece's own prices. */
 interface Piece {
   cost: number;
-  spread: (cents: number) => PricedShare<Subject>[];
+  spread: (cents: number) => { shares: PricedShare<Subject>[]; took: number };
 }
 
 const ordinal = ({ row }: Subject) => (row.parentLineId === null ? row.portion!.ordinal : 0);
@@ -471,7 +477,11 @@ function linePiece(subjects: readonly Subject[]): Piece {
       (sum, { row, quantity }) => sum + decimalToCents(lineGross(row, quantity)),
       0,
     ),
-    spread: (cents) => spreadSubjects(subjects, centsToDecimal(cents)),
+    spread: (cents) => {
+      const shares = spreadSubjects(subjects, centsToDecimal(cents));
+      const took = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+      return { shares, took };
+    },
   };
 }
 
@@ -485,8 +495,9 @@ function linePiece(subjects: readonly Subject[]): Piece {
 function filedPiece(subjects: readonly Subject[]): Piece {
   const groups = filedRows(subjects);
   const parts = subjects.map(({ row }) => row);
+  const cost = groups.reduce((sum, members) => sum + filedCost(members), 0);
   return {
-    cost: groups.reduce((sum, members) => sum + filedCost(members), 0),
+    cost,
     spread: (cents) => {
       const held = new Set<readonly Subject[]>();
       for (;;) {
@@ -504,7 +515,9 @@ function filedPiece(subjects: readonly Subject[]): Piece {
             !held.has(members) &&
             members.some(({ row }) => row.portion !== null),
         );
-        if (filedTotal(written(parts, shares)) === planned || split.length === 0) return shares;
+        if (filedTotal(written(parts, shares)) === planned || split.length === 0) {
+          return { shares, took: cost - planned };
+        }
         split.forEach((members) => held.add(members));
       }
     },
@@ -651,9 +664,12 @@ export function workOutBillDiscounts(
     return [subjectsOf(parts, exactOnWholeBill(parts))];
   };
 
-  /** Each copy's shares of `discount`, and whether an amount was cut down to what they cost. */
+  /** Each copy's shares of `discount`, whether an amount was cut down to what they cost, and what
+   * the shares took off the prices they were spread over. */
   const sharesOf = (discount: PendingBillDiscount, copies: readonly Subject[][]) => {
-    if (discount.action === "comp") return { cut: false, shares: copies.flatMap(zeroedRows) };
+    if (discount.action === "comp") {
+      return { cut: false, shares: copies.flatMap(zeroedRows), took: 0 };
+    }
     const pieces =
       discount.target.kind === "bill" && bound ? [filedPiece(copies[0]!)] : copies.map(linePiece);
     const costs = pieces.map(({ cost }) => cost);
@@ -666,14 +682,16 @@ export function workOutBillDiscounts(
             costs,
           )
         : null;
+    const spread = pieces.map((piece, index) =>
+      piece.spread(
+        amounts?.[index] ??
+          decimalToCents(percentReduction(centsToDecimal(piece.cost), discount.percentBp!)),
+      ),
+    );
     return {
       cut: discount.action === "discount_amount" && discount.amount! > whole,
-      shares: pieces.flatMap((piece, index) =>
-        piece.spread(
-          amounts?.[index] ??
-            decimalToCents(percentReduction(centsToDecimal(piece.cost), discount.percentBp!)),
-        ),
-      ),
+      shares: spread.flatMap(({ shares }) => shares),
+      took: spread.reduce((sum, { took }) => sum + took, 0),
     };
   };
 
@@ -681,13 +699,15 @@ export function workOutBillDiscounts(
   const worked: WorkedBillDiscount[] = ordered.map(({ discount }) => {
     const copies = copiesOf(discount);
     if (copies === null) return { id: discount.id, holds: "set_menu_gone", takes: 0, lines: [] };
-    const { cut, shares } = sharesOf(discount, copies);
+    const { cut, shares, took } = sharesOf(discount, copies);
     const holds = cut ? "cut_down" : "yes";
     let takes = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+    const spreadTakes = (filed: number) =>
+      discount.action === "discount_amount" && took !== filed ? { spreadTakes: took } : {};
     if (bound) {
       const drop = filedBefore - filedTotal(written(parts, shares));
       if (drop < 0 || (drop === 0 && takes > 0)) {
-        return { id: discount.id, holds, takes: 0, lines: [] };
+        return { id: discount.id, holds, takes: 0, ...spreadTakes(0), lines: [] };
       }
       takes = drop;
       filedBefore -= drop;
@@ -697,6 +717,7 @@ export function workOutBillDiscounts(
       id: discount.id,
       holds,
       takes,
+      ...(bound ? spreadTakes(takes) : {}),
       lines: lines
         .filter(({ id }) => moved.has(id))
         .map(({ id }) => ({

@@ -806,6 +806,27 @@ describe("workOutBillDiscounts: bound portions", () => {
     }
   });
 
+  it("reports what an amount took off its line's price where the filed rows take less", () => {
+    // At 1.00 the second dish files with the first, and their sauces as one row of 2.51 where
+    // apart they were 1.25 each: the invoice loses nothing, though the dish's price lost 0.01.
+    const lines = [
+      boundDish("d1", 1, 100, 0),
+      boundDish("d2", 2, 101, 1),
+      measured("s1", 3, 1003, 125, "d1"),
+      measured("s2", 4, 1003, 125, "d2"),
+    ];
+    const result = workOutBillDiscounts(lines, [amount("share", on("d2"), 1, 1, "bill_share")]);
+    expect(worked(result, "share")).toEqual({
+      id: "share",
+      holds: "yes",
+      takes: 0,
+      spreadTakes: 1,
+      lines: [],
+    });
+    const percentage = workOutBillDiscounts(lines, [percent("one", on("d2"), 100, 1)]);
+    expect(worked(percentage, "one")).not.toHaveProperty("spreadTakes");
+  });
+
   it("files bound portions together again once a discount brings them to one price", () => {
     const lines = [
       line("p1", 1, 1000, { portion: { group: "croquettes", ordinal: 0 } }),

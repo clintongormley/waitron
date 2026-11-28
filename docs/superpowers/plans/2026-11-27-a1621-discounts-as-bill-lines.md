@@ -258,8 +258,10 @@ Recommendations, each with why. None changes what the owner decided, except wher
   (`set_menu_gone` or `cut_down`), what it was given on (dish, extra or set-menu name, or the bill),
   its action, percentage or amount. A condition of its own (spec 6.6 kind 2) is left out: none exists
   (owner Q3). `cut_down` also marks a fixed amount whose rows (one, or those sharing
-  `given_together`) together take less than they were given, as on a weighed line a split left in
-  parts; such a discount is listed once, under its first row's id, with its rows' amounts added up
+  `given_together`) together take less than they were given, both off their lines' own prices and
+  off the invoice, as on a weighed line a split left in parts. Bound portions the invoice files
+  together again, so that it takes less than the prices lost, are no reason to ask. Such a
+  discount is listed once, under its first row's id, with its rows' amounts added up
   (the builder, answering the run-it review, 2026-11-28).
 - **D8. A share of a whole-bill discount arriving on an existing bill** (owner Q4: "calculate the
   amount and apply it to the individual items that move") is a pending amount on each moved line

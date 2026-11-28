@@ -137,20 +137,22 @@ export async function gatherBillDiscountInputs(
  * `given_together` (one till row, and the parts a split left it on), together take what they
  * were given; otherwise every row of it is `cut_down`. Each share takes only what its own part's
  * whole-cent prices allow (plan D10), and a split copies no share of nothing, so a split can
- * leave a weighed line taking less than it took whole, with the part that holds its share alone
- * unable to take it. An amount on a weighed line that takes less unsplit is `cut_down` too. What
- * each takes is `workOutBillDiscounts`' figure, unchanged.
+ * leave a weighed line taking less than it took whole. An amount is not `cut_down` when its
+ * lines' own prices lose all of it and only the invoice's filed rows take less (bound portions
+ * filed together again), nor when the filed rows take all of it. What each takes is `workOutBillDiscounts`'
+ * figure, unchanged.
  */
 export function workOutHeldBill(bill: HeldBill): WorkedBill {
   const { input, held } = bill;
   const worked = workOutBillDiscounts(input.lines, input.discounts);
   for (const group of givenTogether(bill, worked.discounts)) {
     const rows = group.map(({ id }) => held.get(id)!);
+    const given = rows.reduce((sum, { amount }) => sum + (amount ?? 0), 0);
     const short =
       rows.every(({ action }) => action === "discount_amount") &&
       group.every(({ holds }) => holds === "yes") &&
-      group.reduce((sum, { takes }) => sum + takes, 0) <
-        rows.reduce((sum, { amount }) => sum + amount!, 0);
+      group.reduce((sum, { takes }) => sum + takes, 0) < given &&
+      group.reduce((sum, { takes, spreadTakes }) => sum + (spreadTakes ?? takes), 0) < given;
     if (short) for (const one of group) one.holds = "cut_down";
   }
   return worked;

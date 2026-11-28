@@ -4,11 +4,17 @@ import {
   workOutBillDiscounts,
   type BillDiscountLine,
   type PendingBillDiscount,
+  type PendingDiscount,
+  type WorkedBillDiscount,
 } from "@waitron/adjustments";
 import { menus, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { gatherBillDiscountInputs, readBillDiscounts } from "./bill-discounts-read.js";
+import {
+  gatherBillDiscountInputs,
+  readBillDiscounts,
+  workOutHeldBill,
+} from "./bill-discounts-read.js";
 import { readLockedLines } from "./stored-order-lines.js";
 import { holdDiscount } from "./testing/bill-discounts.js";
 import {
@@ -284,5 +290,38 @@ describe("gatherBillDiscountInputs and readBillDiscounts", () => {
       expect(answers.get(bill)).toEqual(workOutBillDiscounts(lines, discounts));
     }
     expect(answers.get(first)!.takes).toBeGreaterThan(0);
+  });
+});
+
+describe("workOutHeldBill", () => {
+  // 0.02 off given as one till row, left on two lines; what the working-out answers is set here.
+  const ids = ["first", "second"];
+  const held = new Map(
+    ids.map((id) => [
+      id,
+      { id, action: "discount_amount", amount: 1, givenTogether: "row" } as PendingDiscount,
+    ]),
+  );
+  const holdsWhen = (...figures: Pick<WorkedBillDiscount, "takes" | "spreadTakes">[]) => {
+    const discounts = figures.map((one, at) => ({
+      id: ids[at]!,
+      holds: "yes" as const,
+      lines: [],
+      ...one,
+    }));
+    worked.mockReturnValueOnce({ discounts, takes: 0 });
+    const bill = { input: { lines: [], discounts: [] }, held, names: new Map() };
+    return workOutHeldBill(bill).discounts.map(({ holds }) => holds);
+  };
+
+  it("cuts down an amount whose rows together take less, on their prices and on the invoice", () => {
+    expect(holdsWhen({ takes: 1 }, { takes: 0 })).toEqual(["cut_down", "cut_down"]);
+    expect(holdsWhen({ takes: 1 }, { takes: 0, spreadTakes: 0 })).toEqual(["cut_down", "cut_down"]);
+  });
+
+  it("leaves holding an amount whose rows' prices, or the invoice, take all of it", () => {
+    expect(holdsWhen({ takes: 2 }, { takes: 0 })).toEqual(["yes", "yes"]);
+    expect(holdsWhen({ takes: 1 }, { takes: 0, spreadTakes: 1 })).toEqual(["yes", "yes"]);
+    expect(holdsWhen({ takes: 1 }, { takes: 1, spreadTakes: 0 })).toEqual(["yes", "yes"]);
   });
 });
