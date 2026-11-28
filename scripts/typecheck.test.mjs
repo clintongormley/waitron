@@ -11,7 +11,8 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { expect, test, vi } from "vitest";
 import { runTypecheck } from "./typecheck.mjs";
@@ -25,8 +26,10 @@ const typecheckScript = (member) =>
   JSON.parse(readFileSync(join(root, member, "package.json"), "utf8")).scripts?.typecheck;
 
 const pausedCompiler = `#!/bin/sh
+printf 'start %s\\n' "$FAKE_COMPILER_EXIT" >> "$FAKE_COMPILER_EVENTS"
 printf 'compiler: ["%s","%s","%s"]\\n' "$1" "$2" "$3"
 IFS= read -r done
+printf 'end %s\\n' "$FAKE_COMPILER_EXIT" >> "$FAKE_COMPILER_EVENTS"
 exit "$FAKE_COMPILER_EXIT"
 `;
 
@@ -73,7 +76,15 @@ function startCompiler(cwd, lockFile, exitCode, watch = false) {
       "false",
       ...(watch ? ["--watch"] : []),
     ],
-    { cwd, detached: watch, env: { ...process.env, FAKE_COMPILER_EXIT: String(exitCode) } },
+    {
+      cwd,
+      detached: watch,
+      env: {
+        ...process.env,
+        FAKE_COMPILER_EXIT: String(exitCode),
+        FAKE_COMPILER_EVENTS: join(dirname(lockFile), "compiler-events"),
+      },
+    },
   );
   let stdout = "";
   let stderr = "";
@@ -119,11 +130,20 @@ test.runIf(process.platform === "darwin").each([false, true])(
       expect(second.stdout()).toBe("");
       expect(second.stderr()).toContain(`Waiting for the Waitron typecheck slot at ${lockFile}`);
       if (cancelled) stopWatch(first.child);
-      else first.child.stdin.end();
+      else {
+        // Give an unlocked waiter time to start before recording the holder's exit.
+        await delay(1000);
+        first.child.stdin.end();
+      }
       expect(await first.closed).toEqual(cancelled ? [null, "SIGKILL"] : [2, null]);
       await vi.waitFor(() => expect(second.stdout()).toContain(ready), wait);
       second.child.stdin.end();
       expect(await second.closed).toEqual([0, null]);
+      if (!cancelled) {
+        expect(readFileSync(join(dir, "compiler-events"), "utf8")).toBe(
+          "start 2\nend 2\nstart 0\nend 0\n",
+        );
+      }
     } finally {
       if (cancelled) stopWatch(first.child);
       else first.child.stdin.end();
@@ -135,17 +155,22 @@ test.runIf(process.platform === "darwin").each([false, true])(
 );
 
 test.each([
-  ["linux", null, null],
-  ["darwin", "EAGAIN", "Waiting for the Waitron typecheck slot"],
-  ["darwin", "EPERM", "Running without the lock"],
+  ["linux", null, null, "6GiB", "6GiB"],
+  ["darwin", "EAGAIN", "Waiting for the Waitron typecheck slot", undefined, "8GiB"],
+  ["darwin", "EPERM", "Running without the lock", "6GiB", "6GiB"],
+  ["darwin", "EACCES", "Running without the lock", undefined, "8GiB"],
 ])(
   "returns the compiler status on %s when opening the slot gives %s",
-  async (platform, refusal, message) => {
+  async (platform, refusal, message, override, memoryTarget) => {
     const cwd = mkdtempSync(join(tmpdir(), "wt-typecheck-cli-"));
     const lockFile = join(cwd, "slot");
     const warning = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      compilerFixture(cwd, "#!/bin/sh\nexit 23\n");
+      vi.stubEnv("GOMEMLIMIT", override);
+      compilerFixture(
+        cwd,
+        `#!/bin/sh\n[ "$GOMEMLIMIT" = "${memoryTarget}" ] || exit 24\nexit 23\n`,
+      );
       if (refusal)
         vi.mocked(open).mockRejectedValueOnce(Object.assign(new Error(refusal), { code: refusal }));
       expect(await runTypecheck(["--noEmit"], { cwd, platform, lockFile })).toBe(23);
@@ -154,6 +179,7 @@ test.each([
       else expect(warning).not.toHaveBeenCalled();
     } finally {
       vi.mocked(open).mockReset();
+      vi.unstubAllEnvs();
       warning.mockRestore();
       rmSync(cwd, { recursive: true });
     }
