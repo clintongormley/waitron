@@ -20,14 +20,14 @@ export interface SentSlice {
 export interface SentPanel {
   served: SentSlice[];
   fired: SentSlice[];
-  held: { group: CurrentOrderGroup; rows: SentSlice[]; companions: CurrentOrderRow[] }[];
+  held: { group: CurrentOrderGroup; rows: SentSlice[] }[];
 }
 /** Fire groups in firing order. */
 export const byFiringOrder = (
   a: { position: number; id: string },
   b: { position: number; id: string },
 ): number => a.position - b.position || a.id.localeCompare(b.id);
-const time = (value: string | null) =>
+export const time = (value: string | null) =>
   value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
 const zero = decimal("0");
 const positive = (value: Decimal) => compareDecimal(value, zero) > 0;
@@ -64,6 +64,11 @@ function splitRow(row: CurrentOrderRow, held: boolean): SentSlice[] {
   });
 }
 
+/** Whether a held group's dish still waits for Fire: not released, and some of it neither served
+ * nor cancelled. */
+export const waitsForFire = (row: CurrentOrderRow): boolean =>
+  !row.released && splitRow(row, true).some((slice) => slice.kind === "held");
+
 export function sentPanel(current: CurrentOrders, billId: string): SentPanel {
   const served: SentSlice[] = [];
   const fired: SentSlice[] = [];
@@ -79,16 +84,7 @@ export function sentPanel(current: CurrentOrders, billId: string): SentPanel {
   for (const group of [...current.groups].sort(byFiringOrder)) {
     const rows: SentSlice[] = [];
     for (const row of group.rows) take(row, group.state === "held" && !row.released, rows);
-    if (rows.length > 0)
-      held.push({
-        group,
-        rows,
-        companions: group.rows.filter(
-          (row) =>
-            row.workingOrderId !== billId &&
-            splitRow(row, true).some((slice) => slice.kind === "held"),
-        ),
-      });
+    if (rows.length > 0) held.push({ group, rows });
   }
   for (const row of current.ungrouped) take(row, false, []);
   const when = new Map(

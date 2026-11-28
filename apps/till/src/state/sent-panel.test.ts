@@ -146,7 +146,7 @@ describe("Sent panel (A773)", () => {
     ]);
   });
 
-  it("shows only this bill's held prices and quantities, with active other-bill companions at the same group", () => {
+  it("shows only this bill's held prices and quantities", () => {
     const held = group("shared", "held", [
       row("ours", {
         quantity: "3.000",
@@ -172,7 +172,6 @@ describe("Sent panel (A773)", () => {
     expect(slices(panel.held[0]!.rows)).toEqual([
       { id: "ours", kind: "held", quantity: "2", amount: "8.00" },
     ]);
-    expect(panel.held[0]!.companions.map((row) => row.lineId)).toEqual(["theirs"]);
   });
 
   it("keeps measured food's exact portions and large money values in each slice", () => {

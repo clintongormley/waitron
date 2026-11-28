@@ -2,7 +2,7 @@ import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { type SentRowPortionKey, sentRowId } from "./portion-groups.js";
-import { type SentSlice, byFiringOrder, sentPanel } from "./sent-panel.js";
+import { type SentSlice, byFiringOrder, sentPanel, time, waitsForFire } from "./sent-panel.js";
 
 export type SentRowState =
   "held" | "ready" | "at_the_pass" | "fired" | "served" | "cancelled_charged";
@@ -40,8 +40,6 @@ export interface SentSection {
 }
 
 const sum = (values: readonly string[]) => sumDecimals(values.map((value) => decimal(value)));
-const time = (value: string | null) =>
-  value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
 const unitId = (slice: SentSlice) => `${slice.kind === "cancelled_charged"}:${slice.row.lineId}`;
 
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
@@ -170,13 +168,15 @@ export function sentSections(
   for (const group of [...ordered, null]) {
     const slices = sliced.get(group);
     if (slices === undefined) continue;
-    const heldEntry = panel.held.find((entry) => entry.group === group);
     const rows = joinRows(slices, portionKey).map(toRow);
     const when = new Map(
       rows.map((row) => [row, time(row.left[0]?.row.readyAt ?? row.left[0]?.row.firedAt ?? null)]),
     );
     rows.sort((a, b) => compareRows(a, b, readOrder, when));
-    const companions = heldEntry?.companions ?? [];
+    const holding = group?.state === "held" && group.rows.some(waitsForFire);
+    const companions = holding
+      ? group.rows.filter((row) => row.workingOrderId !== billId && waitsForFire(row))
+      : [];
     const courseIds = [
       ...new Set([...slices.map((slice) => slice.row), ...companions].map((row) => row.courseId)),
     ]
@@ -196,12 +196,11 @@ export function sentSections(
       companions,
       title: {
         courseIds,
-        state:
-          heldEntry !== undefined
-            ? "held"
-            : waiting.length > 0 && waiting.every((row) => row.state === "at_the_pass")
-              ? "at_the_pass"
-              : "fired",
+        state: holding
+          ? "held"
+          : waiting.length > 0 && waiting.every((row) => row.state === "at_the_pass")
+            ? "at_the_pass"
+            : "fired",
         firedAt,
       },
     });

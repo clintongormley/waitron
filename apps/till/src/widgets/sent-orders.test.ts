@@ -491,6 +491,25 @@ it("labels companions by bill without a price or line action, and fires the whol
   expect(calls).toEqual([{ groupId: "g" }]);
 });
 
+it("keeps Fire and the other bill's held dish under a held group whose dish on this bill was released", async () => {
+  const el = await mount(
+    current(
+      [],
+      [
+        group("g", [
+          row("own", { name: "Bravas" }),
+          row("guest", { workingOrderId: "b2", released: false }),
+        ]),
+      ],
+    ),
+  );
+  expect(headings(el)).toEqual([["Held", "", ["fire", "serve all"]]]);
+  expect(every(el, "[data-companion=guest]")).toHaveLength(1);
+  const calls = collect(el, "fire-group");
+  await click(el, "[data-group-fire=g]");
+  expect(calls).toEqual([{ groupId: "g" }]);
+});
+
 it("draws another bill's dish as an ordinary muted sent row whose second line is the bill's name", async () => {
   const el = await mount(
     current(

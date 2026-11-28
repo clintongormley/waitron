@@ -268,6 +268,33 @@ describe("sentSections (till redesign PR 8a)", () => {
     expect(sections[0]!.rows.map((each) => each.state)).toEqual(["held"]);
   });
 
+  it("keeps a held group held, with its companion, when this bill's only dish in it was released", () => {
+    const other = row("theirs", { workingOrderId: "bill-2", released: false });
+    const [section] = sentSections(
+      current([group("held", "held", [row("mine", { courseId: "mains" }), other])]),
+      "bill-1",
+    );
+    expect(section).toMatchObject({ companions: [other], title: { state: "held" } });
+    expect(section!.rows.map((each) => [each.id, each.state])).toEqual([["false:mine", "fired"]]);
+  });
+
+  it("names another bill's dish a companion only while some of it waits for Fire", () => {
+    const other = { workingOrderId: "bill-2", released: false };
+    const [section] = sentSections(
+      current([
+        group("held", "held", [
+          row("mine", { released: false }),
+          row("released", { workingOrderId: "bill-2" }),
+          row("served", { ...other, servedQuantity: "1.000", servedAt: at(1) }),
+          row("gone", { ...other, cancelledQuantity: "1.000" }),
+          row("waits", { ...other, quantity: "2.000", cancelledQuantity: "1.000" }),
+        ]),
+      ]),
+      "bill-1",
+    );
+    expect(section!.companions.map((each) => each.lineId)).toEqual(["waits"]);
+  });
+
   it("gives no held section when nothing is held", () => {
     const sections = sentSections(
       current([group("g1", "fired", [row("a")]), group("g2", "held", [row("b")], 2)]),
