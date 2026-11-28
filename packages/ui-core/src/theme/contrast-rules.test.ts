@@ -28,6 +28,7 @@ const SIZES: Record<ContrastGroupId, readonly [light: number, dark: number]> = {
   "disabled-fill": [0, 4],
   "disabled-text": [0, 2],
   "google-button": [5, 5],
+  camera: [1, 1],
   "calendar-text": [18, 18],
   "calendar-days": [1, 1],
   "table-text": [5, 5],
@@ -71,8 +72,8 @@ describe("the rule groups", () => {
   }
 
   test("all the rules, in table order", () => {
-    expect(allRules("light")).toHaveLength(406);
-    expect(allRules("dark")).toHaveLength(412);
+    expect(allRules("light")).toHaveLength(407);
+    expect(allRules("dark")).toHaveLength(413);
     expect(allRules("dark")).toEqual(CONTRAST_GROUPS.flatMap((group) => rulesIn(group.id, "dark")));
   });
 

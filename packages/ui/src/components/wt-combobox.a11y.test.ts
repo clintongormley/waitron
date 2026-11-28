@@ -548,4 +548,25 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     await expectNoA11yViolations(host);
   });
+
+  test.each(["", "highlight", 'error="Choose a reader"', "disabled", "highlight open"])(
+    "boxed %s, with a value chosen, then empty",
+    async (attributes) => {
+      const html = `<wt-combobox variant="boxed" label="Card reader" search="never" ${attributes.replace("open", "")}></wt-combobox>`;
+      const el = attributes.endsWith("open")
+        ? await openThemed(html, theme)
+        : ((await mountThemed(html, theme)) as WtCombobox);
+      el.options = TAGS;
+      el.value = "vegan";
+      await el.updateComplete;
+      const field = getComputedStyle(el.shadowRoot!.querySelector(".field")!).backgroundColor;
+      const value = getComputedStyle(el.shadowRoot!.querySelector(".value")!).color;
+      if (attributes !== "disabled")
+        expect(contrastRatio(value, field)).toBeGreaterThanOrEqual(4.5);
+      await expectNoA11yViolations(host);
+      el.value = "";
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 });

@@ -3,6 +3,7 @@ import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import {
+  boxedFieldStyles,
   fieldLabel,
   fieldLabelState,
   fieldStyles,
@@ -56,6 +57,7 @@ export class WtInput extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
+    boxedFieldStyles,
     css`
       :host {
         display: block;
@@ -97,50 +99,31 @@ export class WtInput extends LitElement {
         ${visuallyHiddenStyles}
       }
 
-      /* A real border rather than a box-shadow, so the outline survives forced colours. The inline
-         padding gives back what a thicker border takes, so focus moves neither icon nor text. */
+      /* The border is boxedFieldStyles'. The inline padding gives back what a thicker border takes,
+         so focus moves neither icon nor text. */
       :host([variant="outlined"]) .field {
-        --wt-input-outline-width: var(--wt-field-line-width);
-        align-items: center;
+        --wt-field-box-fill: var(--wt-color-bg);
+        --wt-field-box-line-invalid: var(--wt-field-line-width);
         gap: var(--wt-space-2);
         height: var(--wt-tap-min);
         min-height: 0;
         padding-inline: calc(
-          var(--wt-space-3) + var(--wt-field-line-width) - var(--wt-input-outline-width)
+          var(--wt-space-3) + var(--wt-field-line-width) - var(--wt-field-box-line)
         );
-        border: var(--wt-input-outline-width) solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-bg);
-        box-shadow: none;
         color: var(--wt-color-text-muted);
       }
 
-      :host([variant="outlined"]) .field::after {
-        content: none;
-      }
-
       :host([variant="outlined"]) .field:focus-within {
-        --wt-input-outline-width: var(--wt-field-line-width-active);
-        border-color: var(--wt-color-primary);
         color: var(--wt-color-text);
-      }
-
-      :host([variant="outlined"]) .field[data-invalid] {
-        border-color: var(--wt-color-danger);
-      }
-
-      :host([variant="outlined"]) .field[data-disabled] {
-        border-style: dashed;
-        background: var(--wt-color-field-fill-disabled);
       }
 
       /* The transparent input runs under the border to the field's outer edge on both block sides,
          so it stays a full tap target at every border width. Its inline padding stays: the end
          action and the price field's currency sign reserve their room there. */
       :host([variant="outlined"]) .field-control {
-        height: calc(100% + 2 * var(--wt-input-outline-width));
+        height: calc(100% + 2 * var(--wt-field-box-line));
         min-height: 0;
-        margin-block: calc(-1 * var(--wt-input-outline-width));
+        margin-block: calc(-1 * var(--wt-field-box-line));
         padding-block: 0;
       }
 
@@ -158,8 +141,8 @@ export class WtInput extends LitElement {
       }
 
       :host([variant="outlined"]) .end {
-        inset-block: calc(-1 * var(--wt-input-outline-width));
-        inset-inline-end: calc(var(--wt-space-1) - var(--wt-input-outline-width));
+        inset-block: calc(-1 * var(--wt-field-box-line));
+        inset-inline-end: calc(var(--wt-space-1) - var(--wt-field-box-line));
       }
 
       /* In the flow, so the inherited arrow follows the start icon instead of sitting on it. */
@@ -178,11 +161,11 @@ export class WtInput extends LitElement {
 
       @media (forced-colors: active) {
         :host([variant="outlined"]) .field[data-invalid] {
-          --wt-input-outline-width: var(--wt-field-line-width-active);
+          --wt-field-box-line: var(--wt-field-line-width-active);
         }
 
         :host([variant="outlined"]) .field[data-invalid]:focus-within {
-          --wt-input-outline-width: calc(2 * var(--wt-field-line-width-active));
+          --wt-field-box-line: calc(2 * var(--wt-field-line-width-active));
         }
       }
     `,
@@ -396,6 +379,7 @@ export class WtInput extends LitElement {
           ?data-invalid=${this.invalid || hasError}
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
+          ?data-boxed=${this.variant === "outlined"}
         >
           ${outlined ? html`<slot name="start"></slot>` : nothing}${this.renderFieldContents(label, input, end)}
         </div>

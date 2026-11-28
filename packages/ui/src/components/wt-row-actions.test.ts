@@ -1363,14 +1363,28 @@ test("Escape that closes the menu goes no further, so a dialog around it stays o
 });
 
 describe("standard icon trigger", () => {
-  it("has no disabled host property or disabled trigger control", async () => {
+  it("a reflected disabled setting disables the trigger, stops show() and closes an open popup with a toggle event", async () => {
     const { el, trigger, popup } = await mountActions();
-    expect("disabled" in el).toBe(false);
     el.setAttribute("disabled", "");
     await el.updateComplete;
-    expect(trigger.disabled).toBe(false);
+    expect(trigger.disabled).toBe(true);
+    el.show();
+    expect(popup.matches(":popover-open")).toBe(false);
+    (el as WtRowActions).disabled = false;
+    await el.updateComplete;
+    expect(el.hasAttribute("disabled")).toBe(false);
     el.show();
     expect(popup.matches(":popover-open")).toBe(true);
+    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+    const toggles: boolean[] = [];
+    el.addEventListener("wt-row-actions-toggle", (event) =>
+      toggles.push((event as CustomEvent<{ open: boolean }>).detail.open),
+    );
+    (el as WtRowActions).disabled = true;
+    await el.updateComplete;
+    expect(popup.matches(":popover-open")).toBe(false);
+    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+    expect(toggles).toEqual([false]);
   });
 
   it("renders the configured icon as the empty trigger slot's fallback", async () => {
@@ -1966,4 +1980,10 @@ it("start-aligns each line of a wrapping link label", async () => {
   label.selectNodeContents(link);
   expect(label.getClientRects().length).toBeGreaterThan(1);
   expect(getComputedStyle(link).textAlign).toBe("start");
+});
+
+it("paints a disabled trigger at the disabled opacity", async () => {
+  const el = await mount('<wt-row-actions label="Devices" disabled></wt-row-actions>');
+  host.style.setProperty("--wt-opacity-disabled", "0.3");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).opacity).toBe("0.3");
 });

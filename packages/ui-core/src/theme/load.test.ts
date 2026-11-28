@@ -7,7 +7,7 @@ test("the contrast rules build when their module loads", async () => {
   const { THEME_RULES, CONTRAST_GROUPS } = await import("./contrast-rules.js");
   expect(THEME_RULES.light).toHaveLength(115);
   expect(THEME_RULES.dark).toHaveLength(120);
-  expect(CONTRAST_GROUPS).toHaveLength(27);
+  expect(CONTRAST_GROUPS).toHaveLength(28);
 });
 
 test("Waitron's values are read from the token text when their module loads", async () => {

@@ -350,6 +350,20 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
   });
 });
 
+const CAMERA = { "--wt-color-camera": "#15171b", "--wt-color-on-camera": "#e9ecf1" } as const;
+
+test.each(["light", "dark"] as const)(
+  "the OS preference in %s gives the camera colours, and its words read on its box",
+  async (theme) => {
+    await commands.emulateColorScheme(theme);
+    const el = mount();
+    expect(Object.fromEntries(Object.keys(CAMERA).map((name) => [name, token(el, name)]))).toEqual(
+      CAMERA,
+    );
+    expect(failures("camera", theme, el)).toEqual([]);
+  },
+);
+
 const PALETTE = [
   "red",
   "orange",

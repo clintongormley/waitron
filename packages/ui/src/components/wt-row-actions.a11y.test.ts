@@ -141,4 +141,13 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     (el as unknown as { show(): void }).show();
     await expectNoA11yViolations(host);
   });
+
+  test("a disabled menu sheet trigger", async () => {
+    await mountThemed(
+      `<wt-row-actions label="Devices" bottom-sheet sheet-variant="menu" disabled>
+        <button>Done</button></wt-row-actions>`,
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

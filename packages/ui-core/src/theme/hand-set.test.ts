@@ -163,7 +163,7 @@ describe("colours set by hand", () => {
     },
   );
 
-  test.each(["scrim", "logo-plate", "paper", "ink", "danger"])(
+  test.each(["scrim", "logo-plate", "paper", "ink", "camera", "on-camera", "danger"])(
     "a hand-set %s is refused, naming the key",
     (key) => {
       const choices = withHand(DARK_GREEN, "dark", { [key]: "#000000" } as Partial<

@@ -240,6 +240,15 @@ test("a slider's thumb size is 16px", () => {
   expect(token(el, "--wt-slider-thumb-size")).toBe("16px");
 });
 
+test("the framed camera is 230px high, its 34px corner brackets drawn in 4px lines, 40px from its top and bottom and 70px from its sides", () => {
+  const el = mount();
+  expect(token(el, "--wt-camera-height")).toBe("230px");
+  expect(token(el, "--wt-camera-bracket-size")).toBe("34px");
+  expect(token(el, "--wt-camera-bracket-line")).toBe("4px");
+  expect(token(el, "--wt-camera-bracket-inset-block")).toBe("40px");
+  expect(token(el, "--wt-camera-bracket-inset-inline")).toBe("70px");
+});
+
 test("a help badge is a 24px target around a 20px circle", () => {
   const el = mount();
   expect(token(el, "--wt-help-badge-target")).toBe("24px");

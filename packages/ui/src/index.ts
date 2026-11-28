@@ -205,7 +205,12 @@ export { WtMenuRow } from "./components/wt-menu-row.js";
 export { WtDishPickRow } from "./components/wt-dish-pick-row.js";
 export { WtHelpSwitch } from "./components/wt-help-switch.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
-export { DROPDOWN_ICONS, WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
+export {
+  DROPDOWN_ICONS,
+  WtCombobox,
+  type ComboboxOption,
+  type WtComboboxVariant,
+} from "./components/wt-combobox.js";
 export { WtColourChooser, type ColourChoice } from "./components/wt-colour-chooser.js";
 export {
   WtAddressLookup,
@@ -238,6 +243,7 @@ export {
 } from "./components/wt-master-key-input.js";
 export {
   WtQrScanner,
+  QR_FRAME_MS,
   canFilm,
   type QrScannerUnavailableReason,
 } from "./components/wt-qr-scanner.js";

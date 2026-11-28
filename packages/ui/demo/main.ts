@@ -164,6 +164,22 @@ const panel = (theme: "light" | "dark") => `
           allow-add
         ></wt-combobox>
       </div>
+      <div class="row" style="margin-top: var(--wt-space-4)">
+        <wt-combobox variant="boxed" label="Card reader" search="never" class="demo-boxed"></wt-combobox>
+        <wt-combobox
+          variant="boxed"
+          label="Receipt printer"
+          search="never"
+          class="demo-boxed"
+          highlight
+        ></wt-combobox>
+      </div>
+      <div
+        class="demo-framed-camera"
+        style="margin-top: var(--wt-space-4); padding-inline: var(--wt-space-4)"
+      >
+        <wt-button variant="secondary" class="start-framed-camera">Show the framed camera</wt-button>
+      </div>
       <wt-address-lookup
         label="Street address"
         name="streetAddress"
@@ -567,6 +583,22 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   ];
   const single = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-combobox")!;
   single.options = DEMO_TAGS;
+  for (const boxed of el.querySelectorAll<HTMLElementTagNameMap["wt-combobox"]>(".demo-boxed")) {
+    boxed.options = [
+      { value: "bar", label: "Bar" },
+      { value: "terrace", label: "Terrace" },
+    ];
+    boxed.value = "bar";
+  }
+  // Added on a tap, because a scanner asks for the camera as soon as it is on the page.
+  el.querySelector(".start-framed-camera")!.addEventListener("click", (event) => {
+    const scanner = document.createElement("wt-qr-scanner");
+    scanner.framed = true;
+    scanner.label = "Camera";
+    scanner.caption = "Point at a device's QR sticker · scan as many as you need";
+    scanner.unavailable = "The camera is not available. Choose from the list.";
+    (event.currentTarget as HTMLElement).replaceWith(scanner);
+  });
   const address =
     el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!;
   address.provider = {

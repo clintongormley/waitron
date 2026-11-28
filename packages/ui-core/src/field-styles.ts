@@ -237,3 +237,42 @@ export const fieldStyles = css`
     }
   }
 `;
+
+/** The boxed field box, `.field[data-boxed]`: a border on every side instead of the filled look's
+ * fill and bottom line, thicker in primary while focused, in danger when invalid, dashed when
+ * disabled. `wt-input`'s outlined look and `wt-combobox`'s boxed look both draw it. A primitive adds
+ * it after `fieldStyles` and declares, on its boxed `.field`, `--wt-field-box-fill` (the background)
+ * and `--wt-field-box-line-invalid` (an invalid field's border width); the current border width is
+ * `--wt-field-box-line`, for the room a primitive gives back so a thicker border moves nothing. A
+ * real border rather than a box-shadow, so it survives forced colours. See design-system.md → Forms. */
+export const boxedFieldStyles = css`
+  .field[data-boxed] {
+    --wt-field-box-line: var(--wt-field-line-width);
+    align-items: center;
+    border: var(--wt-field-box-line) solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-field-box-fill);
+  }
+  .field[data-boxed],
+  .field[data-boxed]:is(:focus-within, [data-invalid]) {
+    box-shadow: none;
+  }
+  .field[data-boxed]::after {
+    content: none;
+  }
+  /* Before the focus rule, so a focused invalid field takes the focused width. */
+  .field[data-boxed][data-invalid] {
+    --wt-field-box-line: var(--wt-field-box-line-invalid);
+  }
+  .field[data-boxed]:focus-within {
+    --wt-field-box-line: var(--wt-field-line-width-active);
+    border-color: var(--wt-color-primary);
+  }
+  .field[data-boxed][data-invalid] {
+    border-color: var(--wt-color-danger);
+  }
+  .field[data-boxed][data-disabled] {
+    border-style: dashed;
+    background: var(--wt-color-field-fill-disabled);
+  }
+`;

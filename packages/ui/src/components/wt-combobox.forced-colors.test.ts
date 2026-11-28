@@ -55,3 +55,18 @@ test("the searchable list draws an outline around its focused search", async () 
     at(box.left - 7, box.top + box.height / 2),
   );
 });
+
+test("a boxed field keeps a real border, drawn thicker when highlighted", async () => {
+  const el = await combobox("never");
+  el.variant = "boxed";
+  await el.updateComplete;
+  const field = el.shadowRoot!.querySelector<HTMLElement>(".field")!;
+  const box = field.getBoundingClientRect();
+  const plain = await elementPixels(el);
+  el.highlight = true;
+  await el.updateComplete;
+  const highlighted = await elementPixels(el);
+  expect(getComputedStyle(field).borderTopStyle).toBe("solid");
+  const edge = [box.left + box.width / 2, box.top + 1.5] as const;
+  expect(highlighted(...edge)).not.toEqual(plain(...edge));
+});

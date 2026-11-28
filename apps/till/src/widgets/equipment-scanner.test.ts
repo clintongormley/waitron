@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import "./equipment-scanner.js";
-import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
+import { cameraFilming, cameraShowing } from "@waitron/ui/test/qr-camera.js";
 import type { TillEquipmentScanner } from "./equipment-scanner.js";
 
 const PRINTER = "6f1c3a52-0000-4000-8000-000000000001";
@@ -27,9 +27,12 @@ function film(text: string): MediaStream {
   return camera.stream;
 }
 
-async function mountScanner(kind: "printer" | "reader" | "any") {
+async function mountScanner(kind: "printer" | "reader" | "any", more: object = {}) {
   const scanned: string[] = [];
-  const { el } = await mountWidget<TillEquipmentScanner>("till-equipment-scanner", { kind });
+  const { el } = await mountWidget<TillEquipmentScanner>("till-equipment-scanner", {
+    kind,
+    ...more,
+  });
   el.addEventListener("equipment-scanned", (event) =>
     scanned.push((event as CustomEvent<{ id: string }>).detail.id),
   );
@@ -217,5 +220,69 @@ describe("till-equipment-scanner", () => {
 
     expect(name()).toBe(es["equipment.camera_label"]);
     expect(name()).not.toBe("Camera");
+  });
+});
+
+describe("till-equipment-scanner keep-going", () => {
+  type Frames = { onFrame(text: string | null): void };
+  const poll = { timeout: 10_000 };
+  let now = 0;
+  beforeEach(() => {
+    now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+  });
+
+  it("sends a sticker again only once frames without it have been read for 2 s", async () => {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const { el, scanned } = await mountScanner("any", { keepGoing: true });
+    const at = (ms: number, text: string | null) => {
+      now = ms;
+      (el as unknown as Frames).onFrame(text);
+    };
+    const printer = formatEquipmentCode("printer", PRINTER);
+    at(0, printer);
+    at(250, printer);
+    at(2_500, printer); // a pause with the sticker in view
+    at(2_750, null);
+    at(3_000, formatEquipmentCode("reader", READER));
+    for (let ms = 3_250; ms <= 4_500; ms += 250) at(ms, "https://example.com");
+    at(4_749, null);
+    at(4_750, printer); // 1,999 ms without it
+    at(5_000, null);
+    at(7_350, null); // a pause between two frames without it
+    at(7_600, printer);
+    expect(scanned).toEqual([PRINTER, READER]);
+    for (let ms = 7_850; ms <= 9_850; ms += 250) at(ms, null);
+    at(10_100, printer); // 2,000 ms without it
+    expect(scanned).toEqual([PRINTER, READER, PRINTER]);
+  });
+
+  it("clears an earlier not-ours message once a sticker is accepted, draws its caption, and counts blank frames as the sticker gone", async () => {
+    const camera = cameraShowing("https://example.com");
+    filming = camera;
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const { el, scanned } = await mountScanner("any", {
+      keepGoing: true,
+      framed: true,
+      caption: "Scan as many as you need",
+    });
+    const { calls } = vi.spyOn(el as unknown as Frames, "onFrame").mock;
+    const frame = async (text: string | null) => {
+      const from = calls.length;
+      await expect.poll(() => calls.slice(from).some(([read]) => read === text), poll).toBe(true);
+    };
+    await expect.poll(() => message(el), poll).toBe(t("equipment.scan_not_ours"));
+    camera.show(formatEquipmentCode("printer", PRINTER));
+    await expect.poll(() => scanned, poll).toEqual([PRINTER]);
+    await el.updateComplete;
+    expect(message(el)).toBe("");
+    const caption = el.shadowRoot!.querySelector("[data-scanner-caption]")!;
+    expect(caption.textContent!.trim()).toBe("Scan as many as you need");
+
+    camera.show(null);
+    for (now = 0; now <= 2_000; now += 500) await frame(null);
+    camera.show(formatEquipmentCode("printer", PRINTER));
+    await expect.poll(() => scanned, poll).toEqual([PRINTER, PRINTER]);
+    expect(camera.stream.getTracks().every((track) => track.readyState === "live")).toBe(true);
   });
 });

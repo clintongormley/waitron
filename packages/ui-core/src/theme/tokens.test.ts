@@ -22,6 +22,8 @@ const FIXED: Record<string, string> = {
   "logo-plate": "#ffffff",
   paper: "#ffffff",
   ink: "#000000",
+  camera: "#15171b",
+  "on-camera": "#e9ecf1",
 };
 
 describe("the token list a theme writes", () => {

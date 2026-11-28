@@ -17,6 +17,7 @@ export type ContrastGroupId =
   | "disabled-fill"
   | "disabled-text"
   | "google-button"
+  | "camera"
   | "calendar-text"
   | "calendar-days"
   | "table-text"
@@ -203,6 +204,7 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
       each(["google-button-line"], ["google-button-fill", "surface-raised", "surface", "bg"]),
     ],
   ),
+  group("camera", MODES, ["at-least", 4.5, [["on-camera", "camera"]]]),
   group("calendar-text", MODES, [
     "at-least",
     4.5,
