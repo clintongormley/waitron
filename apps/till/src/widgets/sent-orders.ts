@@ -562,15 +562,20 @@ export class TillSentOrders extends LitElement {
     this.#releasePointer();
     if (this.#open.is(this.#opening, row.id)) void this.revealOpen();
   }
-  /** The opened row's last Serve button, else its box, once drawn, above the bar at the foot of the area the list scrolls in;
-   * the screen sets the clearance on its `opened-row` part, and calls this again once it has
-   * measured a new bar. */
+  /** The opened row's last Serve button, else its box, once drawn, above the bar at the foot of the area the list scrolls in,
+   * though never its line above the area's top; the screen sets the clearance on its `opened-row`
+   * part, and calls this again once it has measured a new bar. */
   async revealOpen(): Promise<void> {
     await this.updateComplete;
     const box = this.renderRoot.querySelector("li[data-open]");
     if (box === null) return;
     const serves = box.querySelectorAll("[data-sent-serve]");
-    revealOpenBox(box, scrollAreaOf(this), serves[serves.length - 1]);
+    revealOpenBox(
+      box,
+      scrollAreaOf(this),
+      serves[serves.length - 1],
+      box.querySelector("[data-sent-row] .row-text") ?? undefined,
+    );
   }
   #displayNow(): number {
     return this.#heldNow() ?? Date.now();

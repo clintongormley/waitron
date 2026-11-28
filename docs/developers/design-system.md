@@ -6721,10 +6721,12 @@ served or cancelled but charged, has no count line either. Under them, Dish deta
 them, opens the dish's details window, which a held press on any of the bill's sent rows also
 opens; the box ends `--wt-space-2` and half a `--wt-space-1` under it, as frame `e` 3 draws it.
 Opening a row whose last Serve button would end under the draft bar scrolls the list until that
-button's lower edge sits `--wt-space-2` above the bar, so the dish's line and its Serve buttons
-show together on a handheld turned sideways, with Dish details possibly under the bar; a row with
-no Serve buttons brings its box's lower edge there instead, as an opened new row's does. A change
-of the screen's width while it is open brings it back the same way.
+button's lower edge sits `--wt-space-2` above the bar, with Dish details possibly under the bar,
+but never so far that the top of the dish's text (its name and second line) goes above the top
+of the area the list scrolls in: where the two do not both fit, that text stops at the area's top
+and the Serve buttons may sit under the bar. A row with no Serve buttons brings its box's lower
+edge there instead, as an opened new row's does. A change of the screen's width while it is open
+brings it back the same way.
 
 ### The dish picker
 

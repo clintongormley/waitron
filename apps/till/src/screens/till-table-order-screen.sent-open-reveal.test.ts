@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
@@ -31,8 +31,9 @@ const sentRow = (el: TillTableOrderScreen, n: number) =>
 const barTop = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect().top;
 
-/** A handheld at `width` × `height` on Order, its scroll area the window. */
-async function onOrder(width: number, height: number, ungrouped = dishes) {
+/** A handheld at `width` × `height` on Order, its scroll area the window below `head` pixels, where
+ * the app draws its top bar. */
+async function onOrder(width: number, height: number, ungrouped = dishes, head = 0) {
   await page.viewport(width, height);
   const draft = new DraftStore();
   draft.loadFrom("draft", [{ product: beer, quantity: "1", place: { kind: "fire" } }]);
@@ -44,8 +45,13 @@ async function onOrder(width: number, height: number, ungrouped = dishes) {
     handheld: true,
   });
   host.style.width = "100vw";
-  host.style.height = "100vh";
+  host.style.height = `calc(100vh - ${head}px)`;
   host.style.overflowY = "auto";
+  if (head > 0) {
+    host.style.position = "fixed";
+    host.style.top = `${head}px`;
+    host.style.left = "0";
+  }
   await resized(el);
   await showView(el, "order", { ifShown: true, scripted: true });
   await resized(el);
@@ -134,4 +140,49 @@ it("a sent row with nothing to serve, opened low, brings its box's foot above th
   const gap = (top: number) => top - box.getBoundingClientRect().bottom;
   expect(gap(barTop(el))).toBeGreaterThanOrEqual(gapOf(el) - 0.5);
   expect(gap(barTop(el))).toBeLessThanOrEqual(gapOf(el) + 1.5);
+});
+
+describe("on a handheld turned sideways, with the strip the app leaves above the bar", () => {
+  // In the app at 844 × 390 the order shows about 118 px between the top bar and the draft bar;
+  // this screen alone draws no total under its bar, so its scroll area starts lower to match.
+  const head = 141;
+  const noted = dishes.map((dish, n) =>
+    n === 4 ? { ...dish, note: "no onions, sauce on the side, well done please" } : dish,
+  );
+  const visibleTop = (host: HTMLElement) => host.getBoundingClientRect().top + host.clientTop;
+
+  it("a sent dish whose line runs to two lines, opened low, keeps its line in view, its Serve buttons giving way", async () => {
+    const { el, host } = await onOrder(844, 390, noted, head);
+    const n = 4;
+    await lastShowing(el, host, n);
+    const strip = barTop(el) - visibleTop(host);
+    expect(strip).toBeGreaterThan(110);
+    expect(strip).toBeLessThan(130);
+    const before = host.scrollTop;
+    await open(el, host, n);
+    const box = sentRow(el, n);
+    expect(box.hasAttribute("data-open")).toBe(true);
+    const line = box.querySelector("[data-sent-row] .row-text")!.getBoundingClientRect();
+    const name = box.querySelector(".row-name")!.getBoundingClientRect();
+    const more = box.querySelector(".row-more")!.getBoundingClientRect();
+    expect(more.top).toBeGreaterThanOrEqual(name.bottom - 0.5);
+    const serve = [...box.querySelectorAll("[data-sent-serve]")].at(-1)!.getBoundingClientRect();
+    // Line and buttons cannot both show between the scroll area's top and the bar.
+    expect(serve.bottom - line.top + gapOf(el)).toBeGreaterThan(barTop(el) - visibleTop(host));
+    expect(host.scrollTop).toBeGreaterThan(before);
+    expect(line.top).toBeGreaterThanOrEqual(visibleTop(host) - 0.5);
+    expect(line.top).toBeLessThanOrEqual(visibleTop(host) + 1.5);
+    expect(name.top).toBeGreaterThanOrEqual(visibleTop(host));
+  });
+
+  it("a one-line sent dish, opened low, still brings its Serve buttons above the bar", async () => {
+    const { el, host } = await onOrder(844, 390, dishes, head);
+    const n = 4;
+    await lastShowing(el, host, n);
+    const before = host.scrollTop;
+    await open(el, host, n);
+    expect(sentRow(el, n).hasAttribute("data-open")).toBe(true);
+    expect(host.scrollTop).toBeGreaterThan(before);
+    expectAboveBar(el, host, sentRow(el, n));
+  });
 });
