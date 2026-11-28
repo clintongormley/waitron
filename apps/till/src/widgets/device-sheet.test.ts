@@ -1,0 +1,239 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { WtCombobox, WtRowActions } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { cameraShowing } from "@waitron/ui/test/qr-camera.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { setLocale, t } from "../i18n/t.js";
+import "./device-sheet.js";
+import type { DeviceSheetPick, TillDeviceSheet } from "./device-sheet.js";
+import type { DeviceEquipment, EquipmentItem } from "../api/device-session-api.js";
+import type { CapabilityFlag } from "../layout.js";
+import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
+
+const R2 = equipmentItem("r2", "Reader 2", { portable: true, provider: "sumup" });
+const R3 = equipmentItem("r3", "Reader 3", { portable: true, provider: "sumup" });
+const BUSY = equipmentItem("r4", "Reader 4", { portable: true, provider: "sumup", busy: true });
+const HELD = equipmentItem("r5", "Reader 5", {
+  portable: true,
+  provider: "sumup",
+  heldBy: { deviceId: "d2", deviceName: "Phone 2", personName: null },
+});
+const BAR = equipmentItem("p1", "Bar");
+const TERRACE = equipmentItem("p2", "Terrace");
+const DRAWER = equipmentItem("p3", "Counter drawer");
+const ALL: CapabilityFlag[] = ["print-receipt", "open-cash-drawer", "integrated-card-payment"];
+
+function equipment(
+  reader: EquipmentItem | null = R2,
+  printer: EquipmentItem = BAR,
+  slip: EquipmentItem = BAR,
+): DeviceEquipment {
+  return {
+    roles: [
+      roleOf("receipt", printer, [BAR, TERRACE]),
+      roleOf("payment_slip", slip, [BAR, TERRACE]),
+      roleOf("cash_drawer", DRAWER, [DRAWER]),
+      roleOf("invoice", null, []),
+      roleOf("card_terminal", reader, [R2, R3, BUSY, HELD]),
+    ],
+  };
+}
+
+let camera: ReturnType<typeof cameraShowing> | undefined;
+
+beforeEach(() => setLocale("en"));
+afterEach(() => {
+  cleanupWidgets();
+  camera?.stop();
+  camera = undefined;
+  vi.restoreAllMocks();
+});
+
+function film(): MediaStream {
+  camera?.stop();
+  camera = cameraShowing(null);
+  vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+  return camera.stream;
+}
+
+async function mountSheet(props: Partial<TillDeviceSheet> = {}) {
+  const { el } = await mountWidget<TillDeviceSheet>("till-device-sheet", {
+    equipment: equipment(),
+    capabilities: ALL,
+    ...props,
+  });
+  const picks: DeviceSheetPick[] = [];
+  el.addEventListener("device-sheet-pick", (event) =>
+    picks.push((event as CustomEvent<DeviceSheetPick>).detail),
+  );
+  return { el, picks };
+}
+
+const sheet = (el: TillDeviceSheet) =>
+  el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions")!;
+const popup = (el: TillDeviceSheet) =>
+  sheet(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+const isOpen = (el: TillDeviceSheet) => popup(el).matches(":popover-open");
+const scanner = (el: TillDeviceSheet) => el.shadowRoot!.querySelector("till-equipment-scanner");
+const rows = (el: TillDeviceSheet) =>
+  [...el.shadowRoot!.querySelectorAll<WtCombobox>("wt-combobox")].map((box) => box.name);
+const box = (el: TillDeviceSheet, name: string) =>
+  el.shadowRoot!.querySelector<WtCombobox>(`wt-combobox[name="${name}"]`)!;
+
+async function open(el: TillDeviceSheet): Promise<void> {
+  el.show();
+  await el.updateComplete;
+  await scanner(el)?.updateComplete;
+}
+
+describe("till-device-sheet", () => {
+  it("films only while open, and stops the camera on Done, a tap outside, Escape and removal", async () => {
+    const closers: ((el: TillDeviceSheet) => void | Promise<void>)[] = [
+      (el) => el.shadowRoot!.querySelector<HTMLElement>("[data-device-sheet-done]")!.click(),
+      (el) => popup(el).click(),
+      () => userEvent.keyboard("{Escape}"),
+      (el) => el.remove(),
+    ];
+    for (const close of closers) {
+      const stream = film();
+      const { el } = await mountSheet();
+      expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+      expect(scanner(el)).toBeNull();
+
+      await open(el);
+      await expect.poll(() => stream.getTracks()[0]!.readyState).toBe("live");
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+      await close(el);
+
+      await expect
+        .poll(() => stream.getTracks().every((track) => track.readyState === "ended"))
+        .toBe(true);
+      expect(isOpen(el)).toBe(false);
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("draws no camera box without camera access, only the unavailable line", async () => {
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+    try {
+      const { el } = await mountSheet();
+      await open(el);
+
+      const root = scanner(el)!.shadowRoot!;
+      expect(root.querySelector("[data-scanner-camera]")).toBeNull();
+      expect(root.textContent).toContain(t("equipment.camera_unavailable"));
+    } finally {
+      delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+
+  it("lists card reader, receipt, slip and drawer in that order, each by its flag", async () => {
+    const all = await mountSheet();
+    expect(rows(all.el)).toEqual([
+      "cardReaderId",
+      "receiptPrinterId",
+      "paymentSlipPrinterId",
+      "cashDrawerPrinterId",
+    ]);
+    const noDrawer = await mountSheet({ capabilities: ["print-receipt"] });
+    expect(rows(noDrawer.el)).toEqual(["cardReaderId", "receiptPrinterId", "paymentSlipPrinterId"]);
+    const noReceipt = await mountSheet({ capabilities: ["open-cash-drawer"] });
+    expect(rows(noReceipt.el)).toEqual(["cardReaderId", "cashDrawerPrinterId"]);
+  });
+
+  it("highlights every role a scan changed: a printer sticker picks up receipt and slip together", async () => {
+    film();
+    const { el, picks } = await mountSheet();
+    await open(el);
+
+    scanner(el)!.dispatchEvent(
+      new CustomEvent("equipment-scanned", {
+        detail: { kind: "printer", id: "p2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(picks).toEqual([
+      { role: "receipt", kind: "printer", id: "p2", takeOver: false, via: "scan" },
+    ]);
+    el.equipment = equipment(R2, TERRACE, TERRACE);
+    await el.updateComplete;
+
+    const lit = (name: string) => box(el, name).highlight;
+    expect([lit("cardReaderId"), lit("receiptPrinterId"), lit("paymentSlipPrinterId")]).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(isOpen(el)).toBe(true);
+    expect(scanner(el)).not.toBeNull();
+  });
+
+  it("sends a free pick at once, asks Take it? for a held one, and offers a busy reader unpickable", async () => {
+    const { el, picks } = await mountSheet();
+    await open(el);
+    const reader = box(el, "cardReaderId");
+    expect(reader.options.find((option) => option.value === "r4")?.disabled).toBe(true);
+
+    await chooseOption(reader, "r3");
+    await chooseOption(reader, "r5");
+    await el.updateComplete;
+    expect(picks).toEqual([{ role: "card_terminal", id: "r3", takeOver: false, via: "list" }]);
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-confirm]")!;
+    expect(confirm.closest("[data-keep-open]")).not.toBeNull();
+    confirm.querySelector<HTMLElement>("[data-equipment-take]")!.click();
+    await el.updateComplete;
+
+    expect(picks.at(-1)).toEqual({ role: "card_terminal", id: "r5", takeOver: true, via: "list" });
+    expect(el.shadowRoot!.querySelector("[data-equipment-confirm]")).toBeNull();
+    expect(isOpen(el)).toBe(true);
+  });
+
+  it("is inert while disabled, and turning disabled on closes an open sheet", async () => {
+    film();
+    const { el } = await mountSheet();
+    await open(el);
+
+    el.disabled = true;
+    await el.updateComplete;
+    await expect.poll(() => isOpen(el)).toBe(false);
+    expect(scanner(el)).toBeNull();
+    expect(sheet(el).disabled).toBe(true);
+    el.show();
+    await el.updateComplete;
+    expect(isOpen(el)).toBe(false);
+    expect(box(el, "cardReaderId").disabled).toBe(true);
+  });
+
+  it("shows a reader refusal under Card reader, and a printer problem on the button", async () => {
+    const { el } = await mountSheet({ errors: { card_terminal: "Take it first" }, badge: true });
+
+    expect(box(el, "cardReaderId").error).toBe("Take it first");
+    expect(box(el, "receiptPrinterId").error).toBe("");
+    expect(sheet(el).querySelector('[slot="badge"]')).not.toBeNull();
+    expect(sheet(el).label).toBe(t("device_sheet.label_problem"));
+  });
+
+  it("adds the NFC sentence where the browser supports NFC, and drops it once NFC proved unavailable", async () => {
+    const hint = (el: TillDeviceSheet) =>
+      el.shadowRoot!.querySelector("[data-device-sheet-hint]")!.textContent!.trim();
+    const { el } = await mountSheet();
+    expect(hint(el)).toBe(t("device_sheet.hint"));
+
+    el.nfcPermission = "granted";
+    await el.updateComplete;
+    expect(hint(el)).toBe(`${t("device_sheet.hint")} ${t("device_sheet.hint_nfc")}`);
+
+    el.nfcUnavailable = true;
+    await el.updateComplete;
+    expect(hint(el)).toBe(t("device_sheet.hint"));
+
+    el.notice = { message: "Picked up Reader 3", tone: "info" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-device-sheet-hint]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-device-sheet-notice]")!.textContent).toContain(
+      "Picked up Reader 3",
+    );
+  });
+});

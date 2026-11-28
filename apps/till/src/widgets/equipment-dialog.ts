@@ -20,6 +20,7 @@ import type {
   EquipmentRole,
   RoleEquipment,
 } from "../api/device-session-api.js";
+import type { CapabilityFlag } from "../layout.js";
 
 interface NfcRecord {
   recordType: string;
@@ -51,6 +52,22 @@ const ROWS: { role: EquipmentRole; field: Field; scan: "printer" | "reader" | nu
   { role: "cash_drawer", field: "cashDrawerPrinterId", scan: null },
   { role: "invoice", field: "invoicePrinterId", scan: null },
 ];
+
+/** A role worth a row: something to choose, chosen or a default, and for the cash drawer a profile
+ * that may open one. `null` capabilities applies no flag. */
+export function listedRole(
+  equipment: DeviceEquipment | null,
+  role: EquipmentRole,
+  capabilities: readonly CapabilityFlag[] | null,
+): RoleEquipment | undefined {
+  if (role === "cash_drawer" && capabilities !== null && !capabilities.includes("open-cash-drawer"))
+    return undefined;
+  const found = equipment?.roles.find((each) => each.role === role);
+  return found !== undefined &&
+    (found.choices.length > 0 || found.chosen !== null || found.default !== null)
+    ? found
+    : undefined;
+}
 
 export function equipmentTakeover(
   item: EquipmentItem,
@@ -148,6 +165,8 @@ export class TillEquipmentDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   /** As the server last said; `null` before it has been read. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
+  /** The profile's flags; `null` until known, which hides no row. */
+  @property({ attribute: false }) capabilities: readonly CapabilityFlag[] | null = null;
   /** A refused choice; `field` names the role it refused. */
   @property({ attribute: false }) error: { code: string; field?: string } | null = null;
   /** A held item picked from a list, waiting for the person to say whether to take it. */
@@ -379,11 +398,7 @@ export class TillEquipmentDialog extends LitElement {
   }
 
   #role(role: EquipmentRole): RoleEquipment | undefined {
-    const found = this.equipment?.roles.find((each) => each.role === role);
-    return found !== undefined &&
-      (found.choices.length > 0 || found.chosen !== null || found.default !== null)
-      ? found
-      : undefined;
+    return listedRole(this.equipment, role, this.capabilities);
   }
 
   /** The field a refusal is shown under, when this dialog shows that row. A busy reader's refusal

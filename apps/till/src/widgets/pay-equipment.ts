@@ -22,7 +22,7 @@ import {
 
 /** What the open row says under the printer field when the receipt cannot print now; the
  * payment still goes ahead (design default 19). */
-function printerWarning(printer: PayPrinter): string | null {
+export function printerWarning(printer: PayPrinter): string | null {
   if (printer.kind === "switched_off")
     return t("pay_equipment.printer_switched_off").replace("{item}", () => printer.name);
   return printer.kind === "unset" ? t("pay_equipment.printer_none") : null;
