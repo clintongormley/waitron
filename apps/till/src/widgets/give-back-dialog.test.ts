@@ -1520,30 +1520,37 @@ describe("sending", () => {
   );
 
   it.each([
-    ["printed on the receipt printer instead of A4", true],
+    ["went to the receipt printer instead of A4", true],
     ["sent the way its invoice went", false],
-  ])("says where a full invoice's corrective invoice printed when it %s", async (_case, flag) => {
-    const api = fakeGiveBackApi();
-    answering(api, {
-      parts: [{ kind: "correction", amount: "5.00", way: "card-1", lineIds: [] }],
-    });
-    api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => {
-      const outcome = completedFor(body);
-      return {
-        ...outcome,
-        parts: outcome.parts.map((part) => ({
-          ...part,
-          corrective: { delivery: { medium: "receipt" }, printedOnReceiptNotA4: flag },
-        })),
-      };
-    });
-    const el = await press(api, "card-1");
-    el.fullInvoice = true;
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is refunded to card ···4242."));
-    expect(
-      outcomeText(el).includes("Its corrective invoice printed on the receipt printer, not on A4."),
-    ).toBe(flag);
-  });
+  ])(
+    "says where a full invoice's corrective invoice is printing when it %s",
+    async (_case, flag) => {
+      const api = fakeGiveBackApi();
+      answering(api, {
+        parts: [{ kind: "correction", amount: "5.00", way: "card-1", lineIds: [] }],
+      });
+      api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => {
+        const outcome = completedFor(body);
+        return {
+          ...outcome,
+          parts: outcome.parts.map((part) => ({
+            ...part,
+            corrective: { delivery: { medium: "receipt" }, printedOnReceiptNotA4: flag },
+          })),
+        };
+      });
+      const el = await press(api, "card-1");
+      el.fullInvoice = true;
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€5.00 is refunded to card ···4242."),
+      );
+      expect(
+        outcomeText(el).includes(
+          "Its corrective invoice is printing on the receipt printer, not on A4.",
+        ),
+      ).toBe(flag);
+    },
+  );
 
   it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();

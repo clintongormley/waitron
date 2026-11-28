@@ -465,6 +465,24 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     expect(await wayOf(r1)).toEqual(EMAIL);
   });
 
+  it("prints the R1 on this till's receipt printer and says so, when the replaced invoice went on A4 and its replacement was never sent", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "a4", pagePrinterId: officeId });
+    await venue.db.update(printers).set({ active: false }).where(eq(printers.id, officeId));
+    onTestFinished(async () => {
+      await venue.db.update(printers).set({ active: true }).where(eq(printers.id, officeId));
+    });
+    const r4 = await replacedByR4(saleId);
+    const { answer, r1 } = await givenBackInCash(saleId);
+    const [filed] = await venue.db
+      .select({ corrects: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, r1));
+    expect(filed!.corrects).toBe(r4);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+    expect(correctivePart(answer)?.printedOnReceiptNotA4).toBe(true);
+  });
+
   it("prints the R1 on paper when the replacement of the invoice given back on was printed on paper, though that invoice was emailed", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await deliveredOriginal(saleId, { medium: "email", recipient: "old@harbour.example" });
@@ -585,6 +603,37 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     expect(answer.json).toMatchObject({
       parts: [{ kind: "correction", corrective: { saleId: r1, delivery: null } }],
     });
+  });
+
+  it("still says the R1 did not fall back from A4 when the same press is sent again after the R1 was printed by hand", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "a4", pagePrinterId: officeId });
+    const printerId = receiptPrinterId();
+    await venue.db
+      .update(devices)
+      .set({ receiptPrinterId: null })
+      .where(eq(devices.id, venue.deviceId));
+    onTestFinished(async () => {
+      await venue.db
+        .update(devices)
+        .set({ receiptPrinterId: printerId })
+        .where(eq(devices.id, venue.deviceId));
+    });
+    const body = await giveBody(saleId, "10.00");
+    const first = await give(saleId, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(correctivePart(first)).toMatchObject({ delivery: null, printedOnReceiptNotA4: false });
+    const r1 = (await correctionOf(first)).correctiveSaleId!;
+    await venue.db
+      .update(devices)
+      .set({ receiptPrinterId: printerId })
+      .where(eq(devices.id, venue.deviceId));
+    const printed = await send(mailApp, adminCookie, "POST", `/api/transactions/${r1}/reprint`, {});
+    expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+    expect(await deliveriesOf(r1)).toEqual([expect.objectContaining({ medium: "receipt" })]);
+    const again = await give(saleId, body);
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(correctivePart(again)?.printedOnReceiptNotA4).toBe(false);
   });
 
   it("sends nothing again when the same press is sent again", async () => {

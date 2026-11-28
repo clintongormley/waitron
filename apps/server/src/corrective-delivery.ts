@@ -1,7 +1,7 @@
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
-import { invoiceSeries, sales, type Transaction } from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, sales, type Transaction } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import {
@@ -20,6 +20,8 @@ import {
 } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+
+const correctiveRequestKey = (correctionId: string) => `corrective:${correctionId}`;
 
 /** How the invoice `correctiveSaleId` corrects went; for a replacement that never went out, how
  * the invoice it replaced went. */
@@ -60,7 +62,7 @@ export async function sendFiledCorrective(
   correctiveSaleId: string,
 ): Promise<void> {
   await optionalDocument(tx, "sendFiledCorrective", correctiveSaleId, async () => {
-    const requestKey = `corrective:${correction.id}`;
+    const requestKey = correctiveRequestKey(correction.id);
     const personId = correction.requestedBy;
     const way = await readCorrectedWay(tx, correctiveSaleId);
     if (
@@ -112,15 +114,18 @@ export interface SentCorrective {
   amount: string;
   /** How it is being sent, in the till's delivery-status shape; null when nothing was sent. */
   delivery: InvoiceDeliveryAttempt | null;
-  /** The invoice it corrects went on A4, and it is being printed on the receipt printer instead. */
+  /** The invoice it corrects went on A4, and the box's own send when it was filed put it on the
+   * receipt printer instead. */
   printedOnReceiptNotA4: boolean;
 }
 
-/** The corrective `correctiveSaleId` when it is a full invoice's, else null. The recipient's
- * email is shown only to a device that may print receipts, as the till's delivery read does. */
+/** The corrective `correctiveSaleId` that correction `correctionId` filed, when it is a full
+ * invoice's, else null. The recipient's email is shown only to a device that may print receipts,
+ * as the till's delivery read does. */
 export async function readSentCorrective(
   tx: Transaction,
   cfg: DeviceRequestConfig,
+  correctionId: string,
   correctiveSaleId: string,
 ): Promise<SentCorrective | null> {
   const [sale] = await tx
@@ -140,6 +145,15 @@ export async function readSentCorrective(
     includeInvoiceRecipientEmail: await deviceMayPrintReceipts(tx, cfg.origin.deviceId),
   });
   const delivery = status?.current ?? null;
+  const [sentWhenFiled] = await tx
+    .select({ medium: invoiceDeliveries.medium })
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.saleId, correctiveSaleId),
+        eq(invoiceDeliveries.requestKey, correctiveRequestKey(correctionId)),
+      ),
+    );
   return {
     saleId: correctiveSaleId,
     invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
@@ -147,7 +161,7 @@ export async function readSentCorrective(
     amount: centsToDecimal(-sale.total),
     delivery,
     printedOnReceiptNotA4:
-      delivery?.medium === "receipt" &&
+      sentWhenFiled?.medium === "receipt" &&
       (await readCorrectedWay(tx, correctiveSaleId))?.medium === "a4",
   };
 }
