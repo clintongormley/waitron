@@ -55,6 +55,27 @@ const times = [
   { kind: "in", at: "2026-10-13T08:00:00.000Z", offsetMinutes: 120, automatic: false },
   { kind: "out", at: "2026-10-13T15:00:00.000Z", offsetMinutes: 120, automatic: true },
 ] as const;
+const clockEntries = times.map((time, index) => {
+  const entry = attendanceEntry({
+    entryId: index === 0 ? "original-in" : "original-out",
+    entryKind: time.kind,
+    eventAt: time.at,
+    offsetMinutes: time.offsetMinutes,
+    sequenceNo: index + 1,
+    extension: index === 0 ? null : attendanceEntry().extension,
+  });
+  return {
+    entry,
+    author: { kind: "worker" as const, personId: other.personId },
+    effective: true,
+    confirmed: false,
+    confirmedByWorker: false,
+    selfApproved: false,
+    corrected: false,
+    disputed: false,
+    closedPeriodIds: [],
+  };
+});
 const view: AttendanceDayView = {
   personId: other.personId,
   date: other.date,
@@ -62,8 +83,19 @@ const view: AttendanceDayView = {
   timeZone: "Europe/Madrid",
   items: [requested],
   record: {
-    sessions: [],
-    entries: [],
+    sessions: [
+      {
+        personId: other.personId,
+        workDate: other.date,
+        startedAt: times[0].at,
+        startOffsetMinutes: 120,
+        endedAt: times[1].at,
+        endOffsetMinutes: 120,
+        breakMinutes: 0,
+        workedMinutes: 420,
+      },
+    ],
+    entries: clockEntries,
     closures: [],
     closedPeriodImpacts: [],
   },
@@ -170,6 +202,8 @@ it("counts actionable days and approves only the displayed eligible day", async 
   const worked = root.querySelector("[data-worked]")!;
   expect(worked.querySelector<HTMLElement>('[aria-hidden="true"]')?.innerText).toBe("7 h 00");
   expect(worked.textContent).toContain("7 hours");
+  await expect.element(page.getByRole("button", { name: /Edit.*Javier.*7 hours/ })).toBeVisible();
+
   f.getAttendanceManagerQueue.mockResolvedValue({
     items: [],
     finishedDays: [{ ...own, times: [...times] }],
@@ -210,6 +244,399 @@ it.each([
     other.date,
     expect.anything(),
   );
+});
+
+it.each([
+  { label: "worker request", item: requested },
+  { label: "disputed change", item: disputed },
+  { label: "finished day", item: undefined },
+])("sends a whole-day edit for a $label from the manager’s till", async ({ item }) => {
+  const f = await manager({
+    items: item ? [item] : [],
+    finishedDays: item ? [] : [{ ...other, times: [...times], workedMinutes: 420 }],
+  });
+  await open(f.el);
+  const edit = page.getByRole("button", { name: item ? "Edit" : /Edit.*Javier/, exact: !!item });
+  await expect.element(edit).toBeVisible();
+  await edit.click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
+  const root = form.shadowRoot!;
+  const announcedTotal = root.querySelector("[aria-live=polite]");
+  const fields = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]'),
+  ];
+  expect(fields.map((field) => field.value)).toEqual(["10:00", item ? "01:15" : "17:00"]);
+  if (item === requested) {
+    await expectNoA11yViolations(form);
+    expect(fields[1]!.label).toBe("Clocked out (+1)");
+  }
+  if (item) {
+    expect(root.querySelector(".time-note")?.textContent).toContain("Waitron: 17:00");
+    expect(root.querySelector(".time-note")?.textContent?.replaceAll("\u00a0", " ")).toContain(
+      "Javier asked for 01:15 (+1)",
+    );
+  }
+  const send = root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-save]")!;
+  expect(send.textContent?.trim()).toBe("Save and send to Javier");
+  expect(send.disabled).toBe(true);
+  const reason = root.querySelector("wt-textarea")!;
+  expect(reason.hasAttribute("required")).toBe(true);
+  const date = root.querySelectorAll('wt-input[type="date"]')[1]!;
+  for (const [field, value] of [
+    [date, other.date],
+    [fields[1]!, item === requested ? "17:00" : "18:00"],
+  ] as const) {
+    field.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
+  }
+  await vi.waitFor(() => expect(send.disabled).toBe(false));
+  await userEvent.click(send);
+  await vi.waitFor(() => expect(reason.error).toBe("Enter a reason for the change."));
+  expect(send.disabled).toBe(true);
+  reason.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "  Closing took longer  " },
+      bubbles: true,
+    }),
+  );
+  await vi.waitFor(() => {
+    expect(send.disabled).toBe(false);
+    expect(announcedTotal?.textContent).toContain(
+      `Worked would be ${item === requested ? "7" : "8"} hours`,
+    );
+    expect(root.querySelector("[aria-live=polite]")).toBe(announcedTotal);
+  });
+  f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
+  await userEvent.click(send);
+  await vi.waitFor(() =>
+    expect(f.sendAttendanceManagerCommand).toHaveBeenCalledExactlyOnceWith(
+      {
+        action: "propose",
+        personId: other.personId,
+        date: other.date,
+        ...(item ? { replaces: item.id } : {}),
+        expectedRevision: "day-revision",
+        commandId: expect.any(String),
+        reason: "Closing took longer",
+        changes: [
+          {
+            target: { entryId: "original-out" },
+            at: item === requested ? "2026-10-13T15:00:00.000Z" : "2026-10-13T16:00:00.000Z",
+            offsetMinutes: 120,
+          },
+        ],
+      },
+      expect.anything(),
+    ),
+  );
+  await expect
+    .element(page.getByText("No hours are waiting for your approval.", { exact: true }))
+    .toBeVisible();
+});
+
+it("refreshes a finished day when a worker’s request arrived while the list was open", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  f.getAttendanceManagerDay.mockResolvedValue({ ...view, items: [requested] });
+  f.getAttendanceManagerQueue.mockResolvedValue({ items: [requested], finishedDays: [] });
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  const root = screen(f.el)!.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(root.querySelector("[role=alert]")?.textContent).toContain("These hours changed"),
+  );
+  expect(root.querySelector("till-attendance-correction-dialog")).toBeNull();
+  await expect.element(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+});
+
+it.each([false, true])(
+  "keeps the prior overnight shift out of the selected day (request: %s)",
+  async (fromRequest) => {
+    const f = await manager({
+      items: fromRequest ? [requested] : [],
+      finishedDays: fromRequest ? [] : [{ ...other, times: [...times] }],
+    });
+    const priorProposal = attendanceItem({ date: "2026-10-12", status: "waiting-worker" });
+    const priorOut = {
+      ...clockEntries[1]!,
+      entry: {
+        ...clockEntries[1]!.entry,
+        entryId: "prior-out",
+        eventAt: "2026-10-13T02:00:00.000Z",
+      },
+    };
+    f.getAttendanceManagerDay.mockResolvedValue({
+      ...view,
+      items: fromRequest ? [priorProposal, requested] : [priorProposal],
+      record: { ...view.record, entries: [priorOut, ...clockEntries] },
+    });
+    await open(f.el);
+    await page
+      .getByRole("button", { name: fromRequest ? "Edit" : /Edit.*Javier/, exact: fromRequest })
+      .click();
+    const root = screen(f.el)!.shadowRoot!;
+    await vi.waitFor(() =>
+      expect(root.querySelector("till-attendance-correction-dialog")).not.toBeNull(),
+    );
+    const form = root.querySelector("till-attendance-correction-dialog")!;
+    expect(
+      [
+        ...form.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+          'wt-input[type="time"]',
+        ),
+      ].map((field) => field.value),
+    ).toEqual(["10:00", fromRequest ? "01:15" : "17:00"]);
+    if (fromRequest) {
+      const date = form.shadowRoot!.querySelector('wt-input[type="date"]')!;
+      date.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "2026-10-14" }, bubbles: true }),
+      );
+      await vi.waitFor(() =>
+        expect(form.shadowRoot!.querySelector(".time-note")?.textContent?.trim()).toBe(
+          "Waitron: 10:00",
+        ),
+      );
+    }
+  },
+);
+
+it("keeps an unfinished clock-in with the requested clock-out and explains a stale proposal", async () => {
+  const item = {
+    ...requested,
+    changes: [
+      {
+        target: { missingKind: "out" as const },
+        at: "2026-10-13T16:00:00.000Z",
+        offsetMinutes: 120,
+      },
+    ],
+  };
+  const f = await manager({ items: [item], finishedDays: [] });
+  f.getAttendanceManagerDay.mockResolvedValue({
+    ...view,
+    items: [item],
+    record: { ...view.record, sessions: [], entries: [clockEntries[0]!] },
+  });
+  f.sendAttendanceManagerCommand.mockRejectedValueOnce({
+    code: "correction.invalid",
+    params: { reason: "target_scope" },
+  });
+  await open(f.el);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!.querySelector(
+    "till-attendance-correction-dialog",
+  )!.shadowRoot!;
+  const fields = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]'),
+  ];
+  expect(fields.map(({ value }) => value)).toEqual(["10:00", "18:00"]);
+  const reason = root.querySelector("wt-textarea")!;
+  await userEvent.fill(
+    page.elementLocator(reason.shadowRoot!.querySelector("textarea")!),
+    "Manual clock-out",
+  );
+  const send = page.getByRole("button", { name: "Save and send to Javier" });
+  await send.click();
+  await vi.waitFor(() =>
+    expect(root.textContent).toContain(
+      "Go back to To approve and reopen the day before trying again.",
+    ),
+  );
+  expect(reason.value).toBe("Manual clock-out");
+  await expect.element(send).toBeEnabled();
+});
+
+it("shows an invalid date in the manager’s time row", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
+  const root = form.shadowRoot!;
+  const field =
+    root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="date"]')[1]!;
+  for (const [control, input] of [
+    [field, ""],
+    [root.querySelector("wt-textarea")!, "Checking hours"],
+  ] as const) {
+    control.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: input }, bubbles: true }),
+    );
+  }
+  await page.getByRole("button", { name: "Save and send to Javier" }).click();
+  await vi.waitFor(() => expect(field.error).toBe("Choose a valid date."));
+  expect(field.label).toBe("Date · Clocked out");
+  expect(field.getBoundingClientRect().width).toBeGreaterThan(0);
+  await expect.poll(() => root.activeElement).toBe(field);
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("groups a day into shifts and sends two breaks with an added overnight shift", async () => {
+  const firstOut = { ...times[1], at: "2026-10-13T11:00:00.000Z", automatic: false };
+  const secondIn = { ...times[0], at: "2026-10-13T12:00:00.000Z" };
+  const f = await manager({
+    items: [],
+    finishedDays: [{ ...other, times: [times[0], firstOut, secondIn, times[1]] }],
+  });
+  f.getAttendanceManagerDay.mockResolvedValue({
+    ...view,
+    items: [],
+    record: {
+      ...view.record,
+      entries: [times[0], firstOut, secondIn, times[1]].map((time, i) => ({
+        ...clockEntries[0]!,
+        entry: {
+          ...clockEntries[0]!.entry,
+          entryId: `shift-time-${i}`,
+          entryKind: time.kind,
+          eventAt: time.at,
+          sequenceNo: i + 1,
+        },
+      })),
+      sessions: [
+        { ...view.record.sessions[0]!, endedAt: firstOut.at },
+        { ...view.record.sessions[0]!, startedAt: secondIn.at },
+      ],
+    },
+  });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!.querySelector(
+    "till-attendance-correction-dialog",
+  )!.shadowRoot!;
+  const shift = (number: number) =>
+    page.getByRole("group", { name: `Shift ${number}`, exact: true });
+  const change = (control: Element, value: string) =>
+    control.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
+  const fields = (number: number, type = "time") => [
+    ...shift(number)
+      .element()
+      .querySelectorAll<HTMLElementTagNameMap["wt-input"]>(`wt-input[type="${type}"]`),
+  ];
+  await expect.element(shift(2)).toBeVisible();
+  expect(fields(1).map(({ value }) => value)).toEqual(["10:00", "13:00"]);
+  expect(fields(2).map(({ value }) => value)).toEqual(["14:00", "17:00"]);
+  const addBreak = shift(1).getByRole("button", { name: "Add a break" });
+  await addBreak.click();
+  await addBreak.click();
+  await vi.waitFor(() => {
+    expect(fields(1)).toHaveLength(6);
+    expect(root.textContent).toContain("Fill in the times to see the new total.");
+  });
+  await shift(1).getByRole("button", { name: "Remove added break" }).last().click();
+  await vi.waitFor(() => expect(fields(1)).toHaveLength(4));
+  await addBreak.click();
+  const addedBreaks = fields(1).filter(({ value }) => value === "");
+  const send = page.getByRole("button", { name: "Save and send to Javier" });
+  for (const [index, value] of ["10:45", "10:30", "12:00", "12:15"].entries())
+    change(addedBreaks[index]!, value);
+  change(root.querySelector("wt-textarea")!, "Add missing breaks and closing shift");
+  await send.click();
+  await vi.waitFor(() => expect(addedBreaks[1]!.error).toBe("End the break after it starts."));
+  await expect.element(send).toBeDisabled();
+  expect(root.textContent).not.toContain("Worked would be");
+  change(addedBreaks[0]!, "09:30");
+  await vi.waitFor(() => expect(addedBreaks[0]!.error).toBe("Keep the break inside its shift."));
+  change(addedBreaks[0]!, "10:45");
+  change(addedBreaks[1]!, "11:00");
+
+  await page.getByRole("button", { name: "Add a shift" }).click();
+  await expect.element(shift(3)).toBeVisible();
+  const [start, end] = fields(3);
+  const [startDate, endDate] = fields(3, "date");
+  change(start!, "15:00");
+  change(end!, "16:00");
+  await vi.waitFor(() => expect(start!.error).toBe("This shift overlaps another shift."));
+  change(startDate!, "2026-10-14");
+  await vi.waitFor(() => expect(startDate!.error).toBe("Use the work date for a new clock-in."));
+  change(startDate!, "2026-10-13");
+  change(start!, "21:00");
+  change(end!, "00:45");
+  await vi.waitFor(() => {
+    expect(endDate?.value).toBe("2026-10-14");
+    expect(end!.label).toBe("Clocked out (+1)");
+  });
+  change(endDate!, "2026-10-13");
+  await vi.waitFor(() =>
+    expect(end!.error).toBe("The end must be after the start. Choose the actual dates."),
+  );
+  change(endDate!, "2026-10-15");
+  await vi.waitFor(() => expect(endDate!.error).toBe("Use the work date or the following date."));
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+  change(endDate!, "2026-10-14");
+  await expect.element(send).toBeEnabled();
+  await send.click();
+  await vi.waitFor(() => expect(f.sendAttendanceManagerCommand).toHaveBeenCalledOnce());
+  const [command] = f.sendAttendanceManagerCommand.mock.calls[0]!;
+  expect(command).toMatchObject({
+    action: "propose",
+    changes: [
+      {
+        target: { missingKind: "break_start" },
+        at: "2026-10-13T08:45:00.000Z",
+        offsetMinutes: 120,
+      },
+      { target: { missingKind: "break_end" }, at: "2026-10-13T09:00:00.000Z", offsetMinutes: 120 },
+      {
+        target: { missingKind: "break_start" },
+        at: "2026-10-13T10:00:00.000Z",
+        offsetMinutes: 120,
+      },
+      { target: { missingKind: "break_end" }, at: "2026-10-13T10:15:00.000Z", offsetMinutes: 120 },
+      { target: { missingKind: "in" }, at: "2026-10-13T19:00:00.000Z", offsetMinutes: 120 },
+      { target: { missingKind: "out" }, at: "2026-10-13T22:45:00.000Z", offsetMinutes: 120 },
+    ],
+  });
+});
+
+it("asks before going back from a changed day edit", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!;
+  const editor = root.querySelector("till-attendance-correction-dialog")!;
+  const field = editor.shadowRoot!.querySelector("wt-textarea")!;
+  await userEvent.fill(
+    page.elementLocator(field.shadowRoot!.querySelector("textarea")!),
+    "My draft",
+  );
+  await page.getByRole("button", { name: "To approve", exact: true }).click();
+  const question = f.el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  expect(field.value).toBe("My draft");
+  await page.getByRole("button", { name: "To approve", exact: true }).click();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await vi.waitFor(() =>
+    expect(root.querySelector("till-attendance-correction-dialog")).toBeNull(),
+  );
+});
+
+it("keeps a worker’s requested missing time available for the manager to fill", async () => {
+  const item = {
+    ...requested,
+    changes: [
+      {
+        target: { missingKind: "break_start" as const },
+        at: "2026-10-13T11:00:00.000Z",
+        offsetMinutes: 120,
+      },
+    ],
+  };
+  const f = await manager({ items: [item], finishedDays: [] });
+  await open(f.el);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
+  const root = form.shadowRoot!;
+  expect(
+    [...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]')].find(
+      ({ label }) => label === "Break started",
+    )?.value,
+  ).toBe("13:00");
+  expect(root.textContent).not.toContain("Remove added break");
 });
 
 it("retries an unanswered decision with the original command and revision", async () => {
@@ -347,18 +774,21 @@ it("keeps the finished day’s times together and keeps both notes visible at ph
   }
 });
 
-it("shows disputes that require a dashboard edit without counting them as till actions", async () => {
+it("counts a dispute the manager can edit even without a worker time to take", async () => {
   const unsolved = { ...disputed, workerVersion: undefined };
-  const f = await manager({ items: [unsolved], finishedDays: [] });
+  const f = await manager({
+    items: [unsolved, attendanceItem({ status: "waiting-worker" })],
+    finishedDays: [],
+  });
   await open(f.el);
   const root = screen(f.el)!.shadowRoot!;
   expect(root.textContent).toContain("I closed the bar.");
-  expect(root.textContent).toContain("Open this day in the dashboard to send an edit.");
+  await expect.element(page.getByRole("button", { name: "Edit", exact: true })).toBeEnabled();
   expect(root.querySelector("[data-approve-request]")).toBeNull();
   const back = root.querySelector("wt-top-bar")!;
   await userEvent.click(back.shadowRoot!.querySelector("wt-button")!);
   await openMore(f.el);
-  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
 });
 
 it("reads the count when the manager opens More and refreshes it on reopening", async () => {
@@ -383,6 +813,7 @@ it("an administrator may approve their own request but has no button to decline 
   expect(
     [...root.querySelectorAll("wt-button")].map((button) => button.textContent?.trim()),
   ).not.toContain("Decline");
+  expect(root.textContent).not.toContain("Edit");
 });
 
 it("clears the previous count when a new sign-in opens More while its count is still loading", async () => {

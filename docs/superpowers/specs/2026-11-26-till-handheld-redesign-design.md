@@ -774,7 +774,9 @@ the manager."
 - **A manager may edit any time of the day**, not only approve or decline (owner: "the manager
   should be able to edit the times, not just approve or decline"). Beside the time being changed, the
   edit shows what Waitron recorded and what the worker asked for. A reason is required. "Save and
-  send to Javier".
+  send to Javier". On the till, each shift has a clock-in, a clock-out and any number of paired
+  breaks. Add a break within its shift or add a shift below. Edit each date beside its time. A time
+  earlier than clock-in defaults to the next day and shows **(+1)**.
 - The worker answers a manager's change at the next sign-in, in Check your times: **Accept**, or
   **Disagree** with a reason. A disagreement keeps both versions, each with who wrote it, when and
   why, marks the day disputed in the record and the export, and puts it back in the managers' list.
@@ -1402,6 +1404,10 @@ How to read it:
   unless its line below says so; the `menu-*` icons are not used on these screens.
 
 ### 14.1 Where a picture is out of date
+
+- `cc` 2 draws one break. The till editor follows §7.14's shifts and paired breaks, with a date on
+  each time row and **(+1)** for the next day (owner's picture review relayed on 2026-11-28 at 11:47,
+  cleared by the watcher at 12:47).
 
 - `ag` 1 to 3 and `aj`: Map and List are drawn as two joined halves. Build **one** outlined button
   naming the other view (§9.1), as `ak` 1 and `ak` 3 draw it.

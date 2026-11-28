@@ -29,6 +29,7 @@ export {
   originalEntry,
   projectWorkSessions,
 } from "@waitron/workforce/dashboard";
+export { dayEditorRows, previewDayMinutes } from "@waitron/workforce/attendance-day-edit";
 export type {
   AttendanceCommand,
   AttendanceCommandPayload,

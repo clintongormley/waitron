@@ -237,7 +237,10 @@ Your request goes to the managers. Check **My hours** for its progress.
 
 On your till, open **More** and choose **To approve**. The number shows how many requests, disputes
 and finished days you can act on from the till. Under **Disputed**, compare the manager’s change
-with the worker’s reply. To edit a whole day, open it in the dashboard.
+with the worker’s reply. To change hours, choose **Edit** on a request or dispute, or open a row under
+**Finished days**. Use **Add a break** inside its shift or **Add a shift** below the list. A time
+marked **(+1)** is on the next day. You can change its date in the same row. Check the new total,
+enter **Why**, then choose **Save and send to** the worker.
 
 In the dashboard, open **Team** and choose **To approve**. Open **Details** under **Asked to change** to
 review a request. Choose **Edit** to see the whole day, change the times and add a reason. Check the

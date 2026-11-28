@@ -239,6 +239,75 @@ it("reads and approves another person's finished day from a manager's clock-only
   ).toMatchObject([{ personId: venue.personId, recordedByPersonId: managerId }]);
 });
 
+it("keeps recorded hours until the worker accepts a retime, two breaks and a shift from the manager’s till", async () => {
+  const itemId = await pending();
+  const { cookie } = await managerCookie();
+  const personId = venue.personId;
+  const date = "2026-01-05";
+  const dayPath = `manager/day?personId=${personId}&date=${date}`;
+  const day = await (await request(dayPath, undefined, cookie)).json();
+  const additions = (
+    [
+      ["break_start", "11:00"],
+      ["break_end", "11:15"],
+      ["break_start", "13:00"],
+      ["break_end", "13:30"],
+      ["in", "21:00"],
+      ["out", "23:45"],
+    ] as const
+  ).map(([missingKind, time]) => ({
+    target: { missingKind },
+    at: `${date}T${time}:00.000Z`,
+    offsetMinutes: 60,
+  }));
+  const changes = [
+    { target: { entryId: targetId }, at: "2026-01-05T17:30:00.000Z", offsetMinutes: 60 },
+    ...additions,
+  ];
+  const response = await request(
+    "manager/commands",
+    {
+      action: "propose",
+      personId,
+      date,
+      replaces: itemId,
+      changes,
+      commandId: randomUUID(),
+      expectedRevision: day.revision,
+      reason: "Closed at half past",
+    },
+    cookie,
+  );
+  expect(response.status).toBe(200);
+  const inbox = (await (await request("inbox")).json()) as AttendanceInbox;
+  expect(inbox.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: itemId, status: "overtaken" }),
+      expect.objectContaining({
+        status: "waiting-worker",
+        changes,
+        reason: "Closed at half past",
+        requestedByPersonId: managerId,
+      }),
+    ]),
+  );
+  const after = await (await request(dayPath, undefined, cookie)).json();
+  expect(after.record.sessions).toEqual(day.record.sessions);
+  const proposal = inbox.items.find(({ status }) => status === "waiting-worker")!;
+  const accepted = await request("commands", {
+    action: "accept",
+    commandId: randomUUID(),
+    expectedRevision: inbox.revision,
+    itemId: proposal.id,
+  });
+  expect(accepted.status).toBe(200);
+  const acceptedDay = await (await request(dayPath, undefined, cookie)).json();
+  expect(acceptedDay.record.sessions).toMatchObject([
+    { breakMinutes: 45, workedMinutes: 465 },
+    { endedAt: "2026-01-05T23:45:00.000Z", breakMinutes: 0, workedMinutes: 165 },
+  ]);
+});
+
 it("settles a worker's request as the signed-in manager and scopes receipt recovery to that manager", async () => {
   const itemId = await pending();
   const { cookie } = await managerCookie();

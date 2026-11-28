@@ -22,6 +22,7 @@ import { projectCorrectionItems, readAttendanceRevision } from "./attendance-res
 import { readRecordedEntries } from "./record-reads.js";
 import { approvalsForPerson, writeAttendanceDayApproval } from "./day-approvals.js";
 import { isRecordDate } from "./record-dates.js";
+import { attendanceEditDateInRange } from "./attendance-day-edit.js";
 import { entryDate, recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
 import {
@@ -291,15 +292,14 @@ export async function executeAttendanceCommand(
         if (reviewedEntries && !reviewedEntries.includes(target.entryId)) invalid("target_scope");
         if (
           editedDate &&
-          editedDate !== date &&
-          editedDate !== nextDate &&
+          !attendanceEditDateInRange(editedDate, date, nextDate) &&
           editedDate !== entryDate(target)
         )
           invalid("target_scope");
         if (question && question.automaticEntryId !== target.entryId) invalid("question_target");
       } else {
         const kind = change.target.missingKind;
-        if (editedDate && editedDate !== date && (editedDate !== nextDate || kind === "in"))
+        if (editedDate && !attendanceEditDateInRange(editedDate, date, nextDate, kind === "in"))
           invalid("target_scope");
         if (
           question &&

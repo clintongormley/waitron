@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./attendance-day-edit": "./src/attendance-day-edit.ts",
     "./attendance-contract": "./src/attendance-contract.ts",
     "./projection": "./src/projection.ts",
     "./test/fixtures.js": "./test/fixtures.ts",
