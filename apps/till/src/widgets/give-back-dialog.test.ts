@@ -80,7 +80,7 @@ const withView = (over: Partial<GiveBackView>) => fakeGiveBackApi({ ...VIEW, ...
 const root = (el: TillGiveBackDialog) => el.shadowRoot!;
 const underWay = (el: TillGiveBackDialog) => root(el).querySelector("till-give-back-under-way");
 const heading = (el: TillGiveBackDialog) => root(el).querySelector("wt-dialog")!.heading;
-const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+const text = (node: Node | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 const choice = (el: TillGiveBackDialog, purpose: string) =>
   root(el).querySelector<HTMLElement>(`[data-choice=${purpose}]`);
 async function choose(el: TillGiveBackDialog, purpose: string) {
