@@ -27,6 +27,7 @@ import {
   filedInvoicesOf,
   type FiledInvoice,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { readBillAdvances } from "./bill-advances.js";
 import { readBillEditState } from "./bill-editing.js";
 import type { BillPaymentRequest } from "./bill-payment-types.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
@@ -1072,6 +1073,17 @@ describe("a bill whose advance has a correction still open", () => {
       ),
     );
     expect(refused).toMatchObject({ code: "advance.correction_open" });
+    // And so does it for a caller that hands over the advances it read.
+    const handedOver = await withTransaction(venue.db, async (tx) =>
+      priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, bill.billId, {
+        asked: false,
+        advances: await readBillAdvances(tx, [bill.billId]),
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+    expect(handedOver).toMatchObject({ code: "advance.correction_open" });
     expect(heldOf()).toEqual([{ id: heldId }]);
     expect(await adjustmentsOf()).toEqual([]);
     expect(linesOf()).toEqual(lines);

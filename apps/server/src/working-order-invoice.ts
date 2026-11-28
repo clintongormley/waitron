@@ -294,8 +294,8 @@ export function filedLines(
 /** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment}:
  * refused while one of its advances has a correction open, and otherwise priced once it has written
  * the discounts the order holds into its lines ({@link crystalliseBillDiscounts}, `asked` and
- * `discounts` as there). `advances` are the order's when the caller read them, and refused on an
- * open correction, earlier in this transaction. Writes nothing else but `log`'s lines. */
+ * `discounts` as there). `advances` are the order's when the caller read them earlier in this
+ * transaction. Writes nothing else but `log`'s lines. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
@@ -305,11 +305,8 @@ export async function priceForIssuance(
   options: { asked: boolean; advances?: BillAdvances; discounts?: BillDiscounts },
   log?: Logger,
 ): Promise<PricedInvoice> {
-  let credits = options.advances?.credits;
-  if (credits === undefined) {
-    credits = (await readBillAdvances(tx, [id])).credits;
-    if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
-  }
+  const credits = options.advances?.credits ?? (await readBillAdvances(tx, [id])).credits;
+  if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
   await crystalliseBillDiscounts(tx, cfg, id, options);
   const order = await priceStoredOrderForIssuance(tx, id);
   const choice = await readOrderInvoiceChoice(tx, id);
