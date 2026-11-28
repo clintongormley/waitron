@@ -55,6 +55,10 @@ it.each(
       const frame = root(el).querySelector(".frame")!.getBoundingClientRect();
       expect(grid.getBoundingClientRect().left - frame.left).toBeCloseTo(9);
     }
+    // A word too wide for its tile ends in "…" and never widens the grid past its region.
+    expect(grid.getBoundingClientRect().width).toBeLessThanOrEqual(
+      grid.parentElement!.getBoundingClientRect().width,
+    );
     expect(tracks(grid)).toBe(columns);
     expect(tiles(el, "structure")).toHaveLength(3);
     for (const cell of tiles(el, "structure")) {

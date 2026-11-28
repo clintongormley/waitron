@@ -25,9 +25,12 @@ export function menuTilePaint(color: string | null | undefined): string | undefi
  * control) holding a `.label`; `[data-painted]` fills it from `--tile-fill` and `--tile-ink`.
  */
 export const menuTileStyles: CSSResult = css`
-  /* Room at the top and end for a count drawn outside a tile's corner, so a scroller never clips it. */
+  /* Room at the top and end for a count drawn outside a tile's corner, so a scroller never clips it.
+     No automatic minimum: a word too wide for a tile, which ends in "…", would otherwise widen the
+     grid past the region holding it. */
   .grid {
     display: grid;
+    min-width: 0;
     gap: var(--wt-space-2);
     grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
     --count-outside: calc(var(--wt-space-3) / 2);
