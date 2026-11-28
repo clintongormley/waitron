@@ -605,11 +605,21 @@ menu and the order sit side by side.
 On a phone or tablet, to move a dish in **New order**, press its row until the outline appears.
 Keep your finger down, drag to the heading of the group you want, then lift your finger.
 
-Use the **Menu** field beside **Search** to switch between the menus available now. Scroll past
+Use the **Menu** field above **Search** to switch between the menus available now. Scroll past
 the first block to find **Shortcuts** or **Full menu**, whichever follows. The same menu starts in
 the same order on the counter till and handheld.
 Tap a tile with a folder to open that section. A price range shows what the different variants
 cost. Tap the product to choose one and see its price.
+
+## Find dishes on the menu {#till-menu}
+
+Type a dish's name in **Search the menu** to find it in the menu on screen and in the other menus
+on now. Clear the search to go back to where you were.
+
+Tap a section to open it. Above its dishes, the path shows where you are: tap the house to go back
+to the start of the menu, or a section's name to go back to that section.
+
+On a table, a number on a dish's corner says how many of it are in your **New order**.
 
 ## Set menus {#set-menus}
 

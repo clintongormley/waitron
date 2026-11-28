@@ -623,6 +623,22 @@ the till's catalogue, its help text and the tables in `codes.ts` (the refund mes
 refuses the dropped words there; it does not read the guide pages, nor Spanish written inline in `codes.ts`'s message
 functions or in components.
 
+**The till's menu head.** Above the tiles the browser draws one block (`[data-menu-head]`): the
+menu picker (`till-menu-switcher`) on its own line when the screen gives it one, then the search
+with the diet and allergen filter's 44 px outlined icon button beside it, then, inside a section
+only, the path (`apps/till/src/widgets/menu-path.ts`). The search is `wt-input variant="outlined"`
+with the `search` icon in its `start` slot and "Search the menu" / "Buscar en la carta" as its
+placeholder. The path starts with a ghost button showing only the `home` icon and named "Home" /
+"Inicio", then a button for each section on the way, then the section shown, which is not a button
+and carries `aria-current="location"`; `›` separators in `--wt-color-text-muted` are hidden from
+screen readers. Its buttons are in `--wt-color-primary-text` and the section shown in
+`--wt-color-text`, all bold, 15 px below a 720 px viewport and 16 px from it (no font-size token
+holds either, so both are drawn from `--wt-font-size-md` and `--wt-font-size-lg`), and each step is
+at least `--wt-tap-min` tall. Opening a section scrolls the path into view. The head scrolls with the
+tiles unless the browser carries `pinned-head`, which makes it `position: sticky; top: 0` on
+`--wt-color-bg`. Guards: `menu-path.test.ts`, `menu-browser.toolbar.test.ts` and the "head" cases in
+`menu-browser.test.ts`.
+
 **The till's menu search.** The till and dashboard Home preview label the field "Search" / "Buscar".
 The search field sits above both blocks, on home and inside a
 section; typing replaces the view with results, and clearing returns to where it was. Its results
@@ -1306,9 +1322,10 @@ counted dishes as **2 × Croquettes** and measured lines as their dish and amoun
 the draft bar's Send all sends and shows Order as the send starts. Both Send all buttons are quiet
 and disabled together. The Menu button keeps its width, so the words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
-number at the tile's corner with the words for screen readers; side by side the map is not passed.
-A tile reserves space above the name whenever the map is passed. Adding a dish keeps the tile's
-size and the name's centred wrapping.
+number with the words for screen readers. The screen passes the map at every width, side by side
+too. The number is a `wt-count-badge tone="notice"` set 6 px outside the tile's top and end corner,
+ringed 2 px in `--wt-color-bg`; no space is kept above the name for it. Adding a dish keeps the
+tile's size and the name's centred wrapping.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, grouped by name for counted dishes, with one entry per
 measured line, in first-appearance order) and `newOrderByProduct` (the tiles). A counted line

@@ -2,7 +2,12 @@ import { bill as setMenuBill, daily, special } from "../../test/set-menu-widgets
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import {
+  CATEGORY_PALETTE,
+  currentContentLanguages,
+  setContentLanguages,
+  type WtInput,
+} from "@waitron/ui";
 import { formatMoney, DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
@@ -609,10 +614,10 @@ describe("till-menu-browser", () => {
       ])("searches from an outlined field with a magnifier, saying %s's %s", async (lang, text) => {
         setLocale(lang);
         const { el } = await mount();
-        const field = root(el).querySelector<HTMLElement & { variant: string }>(
+        const field = root(el).querySelector<WtInput>(
           '[data-menu-head] [data-region="search"] wt-input',
         )!;
-        await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        await field.updateComplete;
         expect(field.variant).toBe("outlined");
         const icon = field.querySelector('wt-icon[slot="start"]')!;
         expect(icon.getAttribute("name")).toBe("search");

@@ -648,11 +648,21 @@ En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pul
 hasta que aparezca el contorno. Sin levantar el dedo, arrástralo al título del grupo que quieras y
 suéltalo.
 
-Usa el campo **Carta** junto a **Buscar** para cambiar entre las cartas disponibles. Desplázate
+Usa el campo **Carta** encima de **Buscar** para cambiar entre las cartas disponibles. Desplázate
 más allá del primer bloque para encontrar **Accesos directos** o **Carta completa**, según cuál
 venga después. La misma carta empieza en el mismo orden en la caja y el dispositivo de mano.
 Toca un botón con una carpeta para abrir esa sección. Un intervalo de precios indica cuánto
 cuestan las variantes. Toca el producto para elegir una y ver su precio.
+
+## Buscar platos en la carta {#till-menu}
+
+Escribe el nombre de un plato en **Buscar en la carta** para encontrarlo en la carta en pantalla y
+en las demás cartas disponibles ahora. Borra la búsqueda para volver a donde estabas.
+
+Toca una sección para abrirla. Encima de sus platos, la ruta muestra dónde estás: toca la casa para
+volver al principio de la carta, o el nombre de una sección para volver a ella.
+
+En una mesa, un número en la esquina de un plato indica cuántos hay de él en tu **Nuevo pedido**.
 
 ## Menús {#set-menus}
 
