@@ -71,15 +71,15 @@ function changeLine(item: CorrectionItem, change: AttendanceChange, date: string
       : t("attendance.time");
   const before =
     recorded && timeText({ at: recorded.eventAt, offsetMinutes: recorded.offsetMinutes }, date);
-  return html`${label}
-    <strong>${before ? `${before} → ` : ""}${timeText(change, date)}</strong>
-    ${
-      before && recorded?.extension?.authorKind === "automatic"
-        ? html`<span class="muted"
-            >${fill(t("hours.time_added_by_waitron"), { time: before })}</span
-          >`
-        : nothing
-    }`;
+  const disputed = item.status === "disputed";
+  const times = `${before ? `${before} → ` : ""}${timeText(change, date)}`;
+  return html`${disputed ? label.toLocaleLowerCase(currentLocale()) : label}
+  ${disputed ? html`<span>${times}</span>` : html`<strong>${times}</strong>`}
+  ${
+    before && recorded?.extension?.authorKind === "automatic"
+      ? html`<span>${fill(t("hours.time_added_by_waitron"), { time: before })}</span>`
+      : nothing
+  }`;
 }
 
 function quotedReason(reason: string): string {

@@ -37,6 +37,7 @@ const disputed = attendanceItem({
   workerVersion: { changes: requested.changes },
   responseEntryIds: ["disagreed"],
   history: [
+    requested.history[0]!,
     attendanceEntry({
       entryId: "disagreed",
       entryKind: "correction",
@@ -263,7 +264,10 @@ it("identifies the automatic time as the old time on a request", async () => {
   });
   await open(f.el);
   const card = screen(f.el)!.shadowRoot!.querySelector("article")!;
-  expect(card.textContent).toContain("(23:48 added by Waitron)");
+  const change = card.querySelector("p")!;
+  const note = change.querySelector("span")!;
+  expect(note.textContent).toContain("(23:48 added by Waitron)");
+  expect(getComputedStyle(note).color).toBe(getComputedStyle(change).color);
   expect(card.textContent).toContain(`“${requested.reason}”`);
 });
 
@@ -282,6 +286,10 @@ it("labels each side of a dispute with the person who gave that time", async () 
     "Javier says",
   ]);
   expect(colleagueCard!.querySelector("dt")?.textContent?.trim()).toBe("Ana changed");
+  const change = ownCard!.querySelector<HTMLParagraphElement>("dd p")!;
+  expect(change.innerText).toBe("clock-out 17:00 → 18:00");
+  const times = change.querySelector("span")!;
+  expect(getComputedStyle(times).fontWeight).toBe(getComputedStyle(change).fontWeight);
   expect(ownCard!.textContent).toContain("“I closed the bar.”");
   expect(ownCard!.textContent).toContain("Both versions stay on the record.");
 });
