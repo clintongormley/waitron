@@ -11806,6 +11806,23 @@ describe("till-app: table relocation editing observations", () => {
     ).toEqual([]);
   }
 
+  it("Move this bill shows a destination read failure in the picker", async () => {
+    const read = observations();
+    const { el } = await mountApp({
+      listDrafts: vi.fn(async (partyId: string) => {
+        if (partyId === "v7") throw new Error("offline");
+        return read(partyId);
+      }),
+    });
+    const order = await openPartyTable(el);
+    await relocationPrompt(el, "move-bill");
+    await flush(el, 6);
+    expect(order.shadowRoot!.querySelector("[data-action-panel]")?.textContent).toContain(
+      t("table.reread_failed"),
+    );
+    expect(api.moveBill).not.toHaveBeenCalled();
+  });
+
   const verbs = [
     { verb: "move", method: "moveGuests" },
     { verb: "join", method: "joinTables" },

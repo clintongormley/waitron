@@ -583,7 +583,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The zone and More sheets dock against that bar, and More uses shared action rows.
   More shows your clock-in time under your name, beside **Clock out**.
   The table name opens the shared action sheet with Finish table at the end.
-  The ⋮ beside the bill picker opens the current bill's actions.
+  The ⋮ beside the bill picker opens the current bill's actions. Merge bills and Move this bill
+  open with Back above the list of choices.
   Table Pay uses the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   On the narrow floor the zone chooser opens Counter by zone name on tills that already run

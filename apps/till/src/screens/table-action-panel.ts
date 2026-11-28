@@ -24,6 +24,7 @@ export function tableActionPanel(
   beforeClose: (reason: LeaveReason) => Promise<boolean>,
   closed: (event: Event) => void,
   step: TemplateResult | typeof nothing,
+  label: string,
 ): TemplateResult {
   return html`<wt-dialog
     ${trackDialog()}
@@ -31,7 +32,7 @@ export function tableActionPanel(
     data-table-action-dialog
     full-screen
     .open=${open}
-    .ariaLabel=${t("table.actions_title")}
+    .ariaLabel=${label}
     .beforeClose=${beforeClose}
     @wt-back=${(event: Event) => void (event.currentTarget as WtDialog).requestClose("navigation")}
     @wt-close=${closed}

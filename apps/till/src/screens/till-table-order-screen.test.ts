@@ -3971,9 +3971,13 @@ describe("till-table-order-screen", () => {
 
         expect(targetHeading(el)).toBe(t("table.move_bill_heading").replace("{bill}", scope));
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
-        expect(target(el, "counter")!.textContent).toContain(t("table.to_counter"));
-        expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
-        expect(target(el, "t7")!.textContent).toContain(
+        expect(
+          target(el, "counter")!.shadowRoot!.querySelector("[part=label]")!.textContent,
+        ).toContain(t("table.to_counter"));
+        expect(target(el, "t9")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toContain(
+          t("floor.free"),
+        );
+        expect(target(el, "t7")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toContain(
           t("table.held_by").replace("{party}", "Luis"),
         );
         expect(target(el, "t6")!.disabled).toBe(true);
@@ -4084,8 +4088,7 @@ describe("till-table-order-screen", () => {
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
-        click(el, "[data-action-back]");
-        await el.updateComplete;
+        await closePicker(el);
         ready!();
         await el.updateComplete;
 
@@ -4412,12 +4415,16 @@ describe("till-table-order-screen", () => {
           await el.updateComplete;
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
           const counterChoice = el.shadowRoot!.querySelector('[data-target="counter"]')!;
-          expect(counterChoice.textContent).toContain(t("floor.closed"));
+          expect(counterChoice.shadowRoot?.textContent ?? counterChoice.textContent).toContain(
+            t("floor.closed"),
+          );
 
           el.zones = [...setUp.zones, counter(false)];
           await el.updateComplete;
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
-          expect(counterChoice.textContent).not.toContain(t("floor.closed"));
+          expect(counterChoice.shadowRoot?.textContent ?? counterChoice.textContent).not.toContain(
+            t("floor.closed"),
+          );
         });
 
         it("keeps the counter when its area is the bill's own closed area", async () => {
@@ -5177,9 +5184,9 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetIds(el)).toEqual(["wo-check"]);
-      expect(el.shadowRoot!.querySelector('[data-target="wo-check"]')!.textContent).toContain(
-        t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
-      );
+      expect(
+        target(el, "wo-check")!.shadowRoot!.querySelector("[part=label]")!.textContent,
+      ).toContain(t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"));
       let captured: CustomEvent | undefined;
       el.addEventListener("merge-bills", (e) => (captured = e as CustomEvent));
       click(el, '[data-target="wo-check"]');

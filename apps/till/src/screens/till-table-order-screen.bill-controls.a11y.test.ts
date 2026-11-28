@@ -175,7 +175,9 @@ describe.each(["light", "dark"] as const)("Bill actions at a phone's height, %s 
       await userEvent.click(menu.querySelector<HTMLElement>('[data-action="merge"]')!);
       await el.updateComplete;
       const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
-      expect(el.shadowRoot!.activeElement).toBe(panel.querySelector("h2"));
+      await expect
+        .poll(() => el.shadowRoot!.activeElement)
+        .toBe(panel.querySelector("[data-action-heading]"));
       await expectNoA11yViolations(panel);
     } finally {
       await page.viewport(1280, 900);

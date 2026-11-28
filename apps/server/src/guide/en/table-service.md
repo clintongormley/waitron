@@ -678,8 +678,8 @@ changes.
 
 Tap **⋮** beside the bill switcher to open the action sheet for the bill you are viewing. Check
 the bill name and balance at the top. Choose **Full invoice** before **Print the bill** if you need
-to enter invoice details. When an action needs a choice, it opens beside the order. Choose **Back**
-to return.
+to enter invoice details. **Merge bills** and **Move this bill** fill the screen on a phone and
+open over the order on a wide till. Choose **Back** at the top to return.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the

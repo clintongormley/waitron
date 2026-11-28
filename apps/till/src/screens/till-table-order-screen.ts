@@ -6029,7 +6029,7 @@ export class TillTableOrderScreen extends LitElement {
       if (current()) this.relocationRefusal = message;
     };
     const opening = new CustomEvent<TableRelocationOpenDetail>("table-relocation-open", {
-      detail: { verb, table, prompt, ready, ...(verb === "move-bill" ? {} : { refused }) },
+      detail: { verb, table, prompt, ready, refused },
       bubbles: true,
       composed: true,
       cancelable: true,
@@ -6879,11 +6879,8 @@ export class TillTableOrderScreen extends LitElement {
 
   #actionPanel(): TemplateResult | typeof nothing {
     if (this.actionStep === "closed") return nothing;
-    if (
-      this.actionStep === "split-table" ||
-      this.actionStep === "split-table-pick" ||
-      (this.actionStep === "pick" && (this.actionVerb === "move" || this.actionVerb === "join"))
-    ) {
+    if (this.actionStep !== "move-dishes") {
+      const bill = this.actionVerb === "merge" || this.actionVerb === "move-bill";
       return tableActionPanel(
         this.#tableActionCanOpen,
         this.#beforeTableActionClose,
@@ -6894,6 +6891,7 @@ export class TillTableOrderScreen extends LitElement {
           this.#stepFocus = "menu";
         },
         this.#actionSection(),
+        t(bill ? "table.bill_actions" : "table.actions_title"),
       );
     }
     return html`<aside
@@ -7139,58 +7137,55 @@ export class TillTableOrderScreen extends LitElement {
     const forTables =
       this.actionVerb === "move" || this.actionVerb === "join" || this.actionVerb === "move-bill";
     if (forTables) return this.#tablePicker();
-    const targets = this.#otherBills().map(({ bill, name }) => ({
-      id: bill.workingOrderId,
-      name: `${name} · ${this.#money(bill.total)}`,
-      pick: () => this.#pickBill(bill),
-    }));
-    const emptyKey = "table.no_other_bills";
-    return html`<section class="actions" data-target-picker>
-      <h2 tabindex="-1">${this.#billsHeading("table.merge_into", { bill: this.orderId })}</h2>
-      ${
-        targets.length === 0
-          ? html`<p class="empty">${t(emptyKey)}</p>`
-          : html`<div class="action-options">
-              ${targets.map(
-                (target) =>
-                  html`<wt-button
-                    class="target"
-                    data-target=${target.id}
-                    variant="secondary"
-                    @click=${(event: Event) => {
-                      if (this.#actionControlCurrent(event)) target.pick();
-                    }}
-                  >
-                    ${target.name}
-                  </wt-button>`,
-              )}
-            </div>`
-      }
-      ${this.#backButton()}
-    </section>`;
+    const targets = this.#otherBills();
+    const body =
+      targets.length === 0
+        ? html`<p class="empty">${t("table.no_other_bills")}</p>`
+        : html`<div class="action-options">
+            ${targets.map(
+              ({ bill, name }) =>
+                html`<wt-choice-tile
+                  check-position="none"
+                  data-target=${bill.workingOrderId}
+                  .label=${name}
+                  .hint=${this.#money(bill.total)}
+                  @click=${(event: Event) => {
+                    if (this.#actionControlCurrent(event)) this.#pickBill(bill);
+                  }}
+                ></wt-choice-tile>`,
+            )}
+          </div>`;
+    return tableActionStep(
+      "target",
+      {
+        title: t("table.action_merge_bills"),
+        subtitle: this.#shownBillName() ?? "",
+        label: this.#billsHeading("table.merge_into", { bill: this.orderId }),
+      },
+      body,
+      this.busy,
+    );
   }
 
   #tablePicker(): TemplateResult {
-    const toCounter = this.actionVerb === "move-bill";
+    const moveBill = this.actionVerb === "move-bill";
     const closed = (zoneId: string | null) =>
       this.zones.some((zone) => zone.id === zoneId && zone.closed);
     const targets = this.#tableTargets();
     const heading = this.#tablePickerHeading();
     const body = html`${
-      targets.length === 0 && !toCounter
+      targets.length === 0 && !moveBill
         ? html`<p class="empty">${t("table.no_other_tables")}</p>`
         : html`<div class="action-options">
             ${
-              toCounter
-                ? html`<wt-button
-                    class="target"
+              moveBill
+                ? html`<wt-choice-tile
+                    check-position="none"
                     data-target="counter"
-                    variant="secondary"
+                    .label=${t("table.to_counter")}
+                    .hint=${closed(this.counterZoneId) ? t("floor.closed") : ""}
                     @click=${() => this.#moveBillToCounter()}
-                  >
-                    <span class="target-label">${t("table.to_counter")}</span>
-                    ${closed(this.counterZoneId) ? html`<span class="target-state">${t("floor.closed")}</span>` : nothing}
-                  </wt-button>`
+                  ></wt-choice-tile>`
                 : nothing
             }
             ${targets.map((table) =>
@@ -7198,30 +7193,35 @@ export class TillTableOrderScreen extends LitElement {
                 table,
                 this.party?.id,
                 (picked) => this.#pickTable(picked),
-                this.actionVerb !== "move-bill",
+                true,
                 closed(table.zoneId),
               ),
             )}
           </div>`
     }`;
-    if (this.actionVerb !== "move-bill")
-      return tableActionStep(
-        "target",
-        {
-          title: t(this.actionVerb === "move" ? "table.action_move_guests" : "table.action_join"),
-          subtitle: this.party === null ? "" : this.#partyScope(this.party),
-          label: heading,
-        },
-        body,
-        this.busy,
-        this.relocationRefusal === ""
-          ? nothing
-          : html`<div class="table-action-message">${formMessage(this.relocationRefusal)}</div>`,
-      );
-    return html`<section class="actions" data-target-picker>
-      <h2 tabindex="-1">${heading}</h2>
-      ${body} ${this.#backButton()}
-    </section>`;
+    return tableActionStep(
+      "target",
+      {
+        title: t(
+          moveBill
+            ? "table.action_move_bill"
+            : this.actionVerb === "move"
+              ? "table.action_move_guests"
+              : "table.action_join",
+        ),
+        subtitle: moveBill
+          ? (this.#shownBillName() ?? "")
+          : this.party === null
+            ? ""
+            : this.#partyScope(this.party),
+        label: heading,
+      },
+      body,
+      this.busy,
+      this.relocationRefusal === ""
+        ? nothing
+        : html`<div class="table-action-message">${formMessage(this.relocationRefusal)}</div>`,
+    );
   }
 
   #tablePickerHeading(): string {

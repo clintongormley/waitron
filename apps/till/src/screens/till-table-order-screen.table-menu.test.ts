@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, panelBackButton } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -892,7 +892,21 @@ describe("Table and bill actions", () => {
     expect(item(el, "[data-bill-receipt]")).toBeNull();
   });
 
-  it("choosing Merge bills shows its picker beside the order, and Back closes it", async () => {
+  async function closeBillPanel(panel: HTMLElement, via: "back" | "escape") {
+    const closed = new Promise((resolve) =>
+      panel.addEventListener("wt-close", resolve, { once: true }),
+    );
+    if (via === "back") {
+      await userEvent.click(
+        panelBackButton(panel.querySelector<HTMLElement>("[data-action-back]")!),
+      );
+    } else {
+      await userEvent.keyboard("{Escape}");
+    }
+    await closed;
+  }
+
+  it("choosing Merge bills opens its picker, and Back closes it", async () => {
     const el = await mountScreen();
     await userEvent.click(menu(el));
     await userEvent.click(item(el, '[data-action="merge"]')!);
@@ -903,7 +917,7 @@ describe("Table and bill actions", () => {
     expect(panel.querySelector('[data-target="wo-1"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-drawer]")).toBeNull();
 
-    panel.querySelector<HTMLElement>("[data-action-back]")!.click();
+    await closeBillPanel(panel, "back");
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
   });
@@ -1088,7 +1102,7 @@ describe("Table and bill actions", () => {
       el.shadowRoot!.activeElement ===
       el.shadowRoot!.querySelector("[data-action-panel] :is(h2, [data-action-heading])");
 
-    it("in Spanish at 1024x768: Merge bills is scrolled into view with its heading focused; Back and Escape return to the ⋮", async () => {
+    it("in Spanish at 1024x768: Merge bills opens with its heading focused; Back and Escape return to the ⋮", async () => {
       setLocale("es");
       await page.viewport(1024, 768);
       try {
@@ -1100,15 +1114,14 @@ describe("Table and bill actions", () => {
         await el.updateComplete;
 
         const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
-        await expect
-          .poll(() => panel.getBoundingClientRect().bottom)
-          .toBeLessThanOrEqual(innerHeight + 1);
-        expect(panel.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
-        expect(focusOnStep(el)).toBe(true);
+        const dialog = panel.shadowRoot!.querySelector("dialog")!;
+        expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight + 1);
+        expect(dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+        await expect.poll(() => focusOnStep(el)).toBe(true);
         await userEvent.keyboard("{Tab}");
         expect(el.shadowRoot!.activeElement).toBe(panel.querySelector('[data-target="wo-1"]'));
 
-        await userEvent.click(panel.querySelector<HTMLElement>("[data-action-back]")!);
+        await closeBillPanel(panel, "back");
         await el.updateComplete;
         expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
         expect(focusOnMenu(el)).toBe(true);
@@ -1116,8 +1129,11 @@ describe("Table and bill actions", () => {
         await userEvent.click(menu(el));
         await userEvent.click(item(el, '[data-action="merge"]')!);
         await el.updateComplete;
-        expect(focusOnStep(el)).toBe(true);
-        await userEvent.keyboard("{Escape}");
+        await expect.poll(() => focusOnStep(el)).toBe(true);
+        await closeBillPanel(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!,
+          "escape",
+        );
         await el.updateComplete;
         expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
         expect(focusOnMenu(el)).toBe(true);
@@ -1130,11 +1146,11 @@ describe("Table and bill actions", () => {
       ["the ⋮", "[data-table-menu]"],
       ["the bill switcher", "[data-bill-switcher]"],
     ])(
-      "Escape in a step while %s is open closes only that list; the next Escape closes the step",
+      "Escape in Move dishes while %s is open closes only that list; the next Escape closes the step",
       async (_name, selector) => {
         const el = await mountScreen();
         await userEvent.click(menu(el));
-        await userEvent.click(item(el, '[data-action="merge"]')!);
+        await userEvent.click(item(el, '[data-action="move-dishes"]')!);
         await el.updateComplete;
         const list = el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(selector)!;
         const popup = list.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -1191,10 +1207,10 @@ describe("Table and bill actions", () => {
       expect(el.shadowRoot!.activeElement).toBe(switcher);
     });
 
-    it("a step closed while focus is elsewhere leaves focus there", async () => {
+    it("Move dishes closed while focus is elsewhere leaves focus there", async () => {
       const el = await mountScreen();
       await userEvent.click(menu(el));
-      await userEvent.click(item(el, '[data-action="merge"]')!);
+      await userEvent.click(item(el, '[data-action="move-dishes"]')!);
       await el.updateComplete;
       const switcher = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
       switcher.focus();
