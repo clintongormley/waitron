@@ -154,7 +154,7 @@ describe("wt-qr-scanner", () => {
     }
   });
 
-  test("the camera stops when the scanner leaves the page", async () => {
+  test("the camera stops when the scanner leaves the page, and a new one films when it comes back", async () => {
     const stream = film("hello");
     const el = (await mount(SCANNER)) as WtQrScanner;
     await expect.poll(() => live(stream)).toBe(true);
@@ -162,6 +162,13 @@ describe("wt-qr-scanner", () => {
     el.remove();
 
     expect(ended(stream)).toBe(true);
+    filming!.stop();
+    const again = film("second");
+    const reads: string[] = [];
+    el.addEventListener("wt-qr-read", (event) => reads.push((event as CustomEvent).detail.text));
+    host.append(el);
+    await expect.poll(() => reads[0], { timeout: 10_000 }).toBe("second");
+    expect(el.shadowRoot!.querySelector("video")!.srcObject).toBe(again);
   });
 
   test("a camera that answers after the scanner left the page is stopped at once", async () => {

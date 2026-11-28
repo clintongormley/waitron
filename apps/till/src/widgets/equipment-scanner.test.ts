@@ -242,16 +242,18 @@ describe("till-equipment-scanner keep-going", () => {
     const printer = formatEquipmentCode("printer", PRINTER);
     at(0, printer);
     at(250, printer);
-    at(2_500, printer);
+    at(2_500, printer); // a pause with the sticker in view
     at(2_750, null);
     at(3_000, formatEquipmentCode("reader", READER));
-    at(4_000, "https://example.com");
+    for (let ms = 3_250; ms <= 4_500; ms += 250) at(ms, "https://example.com");
     at(4_749, null);
-    at(4_750, printer);
-    expect(scanned).toEqual([PRINTER, READER]);
+    at(4_750, printer); // 1,999 ms without it
     at(5_000, null);
-    at(7_000, null);
-    at(7_250, printer);
+    at(7_350, null); // a pause between two frames without it
+    at(7_600, printer);
+    expect(scanned).toEqual([PRINTER, READER]);
+    for (let ms = 7_850; ms <= 9_850; ms += 250) at(ms, null);
+    at(10_100, printer); // 2,000 ms without it
     expect(scanned).toEqual([PRINTER, READER, PRINTER]);
   });
 
@@ -278,9 +280,7 @@ describe("till-equipment-scanner keep-going", () => {
     expect(caption.textContent!.trim()).toBe("Scan as many as you need");
 
     camera.show(null);
-    await frame(null);
-    now = 2_000;
-    await frame(null);
+    for (now = 0; now <= 2_000; now += 500) await frame(null);
     camera.show(formatEquipmentCode("printer", PRINTER));
     await expect.poll(() => scanned, poll).toEqual([PRINTER, PRINTER]);
     expect(camera.stream.getTracks().every((track) => track.readyState === "live")).toBe(true);

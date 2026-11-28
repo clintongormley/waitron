@@ -1,6 +1,6 @@
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { WtQrScanner } from "@waitron/ui";
+import { QR_FRAME_MS, WtQrScanner } from "@waitron/ui";
 import { parseEquipmentCode, type EquipmentKind } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
@@ -8,6 +8,8 @@ type Message = "scan_not_ours" | "scan_not_printer" | "scan_not_reader";
 
 /** How long frames without a sticker must be read before `keep-going` sends it again. */
 const RESEND_AFTER_MS = 2_000;
+/** A longer wait between two frames is a pause in reading, which says nothing about a sticker. */
+const PAUSE_MS = 2 * QR_FRAME_MS;
 
 /**
  * Reads equipment labels until one of `kind` (either, for `"any"`) is seen, then stops the camera
@@ -23,10 +25,10 @@ export class TillEquipmentScanner extends WtQrScanner {
   @state() private code: Message | null = null;
   /**
    * Each accepted label still taken as in view, with when frames without it began, or `null`
-   * while it is read. Only a frame read without it counts towards its absence, so a stall in the
-   * frame loop sends nothing again.
+   * while it is read. A pause in reading starts that count again from the frame after it.
    */
   #inView = new Map<string, number | null>();
+  #lastFrame?: number;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
@@ -62,9 +64,11 @@ export class TillEquipmentScanner extends WtQrScanner {
 
   #noteFrame(text: string | null): void {
     const now = performance.now();
+    const paused = this.#lastFrame !== undefined && now - this.#lastFrame > PAUSE_MS;
+    this.#lastFrame = now;
     for (const [label, missingSince] of this.#inView) {
       if (label === text) this.#inView.set(label, null);
-      else if (missingSince === null) this.#inView.set(label, now);
+      else if (missingSince === null || paused) this.#inView.set(label, now);
       else if (now - missingSince >= RESEND_AFTER_MS) this.#inView.delete(label);
     }
   }

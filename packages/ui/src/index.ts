@@ -243,6 +243,7 @@ export {
 } from "./components/wt-master-key-input.js";
 export {
   WtQrScanner,
+  QR_FRAME_MS,
   canFilm,
   type QrScannerUnavailableReason,
 } from "./components/wt-qr-scanner.js";

@@ -25,8 +25,9 @@ describe.each(["light", "dark"] as const)("QR scanner accessibility (%s)", (them
     ["message", SCANNER],
     ["unavailable", SCANNER],
     ["framed filming", FRAMED],
+    ["framed message", FRAMED],
   ] as const)("%s", async (name, markup) => {
-    const state = name === "framed filming" ? "filming" : name;
+    const state = name.replace("framed ", "") as "filming" | "message" | "unavailable";
     if (state === "unavailable") {
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
         new DOMException("Permission denied", "NotAllowedError"),

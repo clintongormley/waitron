@@ -4,7 +4,7 @@ import type jsQR from "jsqr";
 import { baseStyles } from "../base-styles.js";
 
 /** How often a frame is read from the camera. */
-const FRAME_MS = 250;
+export const QR_FRAME_MS = 250;
 const DECODE_WIDTH = 640;
 
 /** `failed`: the camera answered, then gave no picture or stopped by itself. */
@@ -194,6 +194,8 @@ export class WtQrScanner extends LitElement {
     for (const track of stream.getTracks())
       track.addEventListener("ended", () => this.#fail("failed"), { signal: this.#watch.signal });
     this.phase = "filming";
+    // A scanner put back on the page is already filming, so the phase alone redraws nothing.
+    this.requestUpdate();
     // Loaded only once a camera answers, so a page that never films never downloads it.
     const decode = await import("jsqr").then(
       (module) => module.default,
@@ -204,7 +206,7 @@ export class WtQrScanner extends LitElement {
       this.#fail("unsupported");
       return;
     }
-    this.#timer = setInterval(() => this.#read(decode), FRAME_MS);
+    this.#timer = setInterval(() => this.#read(decode), QR_FRAME_MS);
   }
 
   #fail(reason: QrScannerUnavailableReason): void {
@@ -256,7 +258,7 @@ export class WtQrScanner extends LitElement {
 
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
-    // A change of look can draw a new video; the camera goes on in whichever one is on the page.
+    // The only place a video gets the camera: a new camera, or a new video drawn by a change of look.
     const video = this.video;
     const stream = this.#stream;
     if (video === undefined || stream === undefined || video.srcObject === stream) return;
