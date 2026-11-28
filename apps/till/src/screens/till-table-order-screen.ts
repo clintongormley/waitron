@@ -3889,7 +3889,8 @@ export class TillTableOrderScreen extends LitElement {
     return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
   }
 
-  /** `count` identical portions' price: `amount` is already theirs together. */
+  /** A price shown in a sent dish's window; `amount` is already its portions', and `part` takes
+   * their part of a whole line's list price. */
   #sentPrice(
     row: CurrentOrderRow,
     amount: Decimal,
@@ -3946,9 +3947,6 @@ export class TillTableOrderScreen extends LitElement {
       share !== undefined &&
       compareDecimal(share.served, decimal("0")) > 0 &&
       compareDecimal(share.served, share.quantity) < 0;
-    const extraTotal =
-      row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
-      decimal("0");
     const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
     const changeLines =
       pending === null || members === undefined ? undefined : this.#sentChangeLines(members);
@@ -4040,7 +4038,7 @@ export class TillTableOrderScreen extends LitElement {
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${this.#sentPrice(row, share!.of(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, share!.of)}</span
+                  >${this.#sentPrice(row, share!.dish(row.extras.map((extra) => decimal(extra.netAmount))), undefined, share!.of)}</span
                 >
               </div>
               ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, share!.of(decimal(extra.netAmount)), extra, share!.of)}</span></div>`)}

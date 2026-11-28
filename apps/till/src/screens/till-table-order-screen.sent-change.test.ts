@@ -1183,6 +1183,47 @@ it.each([
   },
 );
 
+it.each([
+  ["an odd cent split in half", "2.000", "1.000", 0, "11.25", [], "€11.25"],
+  ["a weighed half", "1.000", "0.500", 3, "7.49", [], "€7.49"],
+  ["an odd-cent extra", "2.000", "1.000", 0, "13.26", ["2.01"], "€11.25"],
+] as const)(
+  "prices a dish served in part on one line to the cent of its row, with %s",
+  async (_case, quantity, servedQuantity, unitPrecision, netAmount, extras, dish) => {
+    const el = await openRow(
+      {
+        currentOrders: current({
+          ungrouped: [
+            row("l-patatas", "Bravas", quantity, {
+              servedQuantity,
+              unitPrecision,
+              netAmount,
+              extras: extras.map((amount, at) => ({
+                lineId: `extra-${at}`,
+                name: "Aioli",
+                quantity: "1.000",
+                netAmount: amount,
+                unitPriceGross: amount,
+                priceQuantity: "1.000",
+              })),
+            }),
+          ],
+        }),
+      },
+      "l-patatas",
+      null,
+    );
+    const sheet = q(el, "[data-sent-line-dialog]")!;
+    const words = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+    expect(words(sheet.querySelector("[data-sent-line-amount]")!)).toBe(dish);
+    expect(sheet.querySelector("[data-sent-extra] .amount")?.textContent ?? null).toBe(
+      extras.length === 0 ? null : "€2.01",
+    );
+    const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+    expect([...last.children].map(words)).toEqual(["Total", `€${netAmount}`]);
+  },
+);
+
 it("localises the sent dish, extras and served quantity", async () => {
   setLocale("es-ES");
   const el = await openRow(
