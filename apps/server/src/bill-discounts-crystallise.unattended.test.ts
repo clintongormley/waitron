@@ -166,4 +166,63 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
       { data: { discountId, why: "cut_down", takes: "18.00" } },
     ]);
   });
+
+  it.each([
+    {
+      way: "cash",
+      payment: { method: "cash", tendered: "30.00" },
+      refund: {},
+    },
+    {
+      way: "hand-keyed card",
+      payment: { method: "card", entry: "manual", externalRef: "OP-1621" },
+      refund: { manualConfirmed: true },
+    },
+  ])(
+    "a $way refund of a bill payment that leaves the bill paid, completed as it is asked",
+    async ({ payment, refund }) => {
+      const billId = await tabWith(venue, "Tarta", "Steak");
+      const paid = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "30.00",
+          applied: "30.00",
+          tip: "0.00",
+          ...payment,
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const paymentId = (paid.json.payment as { id: string }).id;
+      // The bill now owes 25.00 and holds 30.00.
+      const discountId = await cutDownOn(billId);
+
+      const refunded = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          appliedAmount: "5.00",
+          tipAmount: "0.00",
+          reason: "Overpaid",
+          override: { personId: venue.adminId, pin: "1234" },
+          ...refund,
+        },
+      );
+
+      expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+      expect(refunded.json).toMatchObject({ refund: { paymentId, state: "completed" } });
+      expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
+      expect(stillHeld(billId)).toEqual([]);
+      expect(await writtenAsItStood(billId)).toMatchObject([
+        { data: { discountId, why: "cut_down", takes: "18.00" } },
+      ]);
+    },
+  );
 });

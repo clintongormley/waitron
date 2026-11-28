@@ -241,6 +241,9 @@ Recommendations, each with why. None changes what the owner decided, except wher
   a card refund's completion and its recovery job (`issueAfterBillRefund`,
   `tender-refund-sends.ts:334-353` (†)), marked by a new `IssueOptions.unattended`, not by
   `moneyMoved`, which would also let it file a product taken off sale (`bill-payments.ts:1166`). A
+  cash or hand-keyed card refund that completes in its own request and leaves the bill exactly
+  covered is not asked either: it passes `unattended` too (`bill-refunds.ts`), because the money has
+  already gone back and corrections never wait (watcher, 2026-11-28 03:57, A1619). A
   hand-keyed card is charged on another machine before its
   request, so its check is the payment preview (`previewBillPayment`, `bill-payments.ts:1405` (†)),
   for a payment that would complete the bill only (a part payment is never asked); 6b pins by test

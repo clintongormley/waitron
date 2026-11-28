@@ -155,8 +155,9 @@ export async function issueAdvanceIfOwed(
 }
 type IssueOptions = {
   moneyMoved?: boolean;
-  /** Nobody is there to answer for a discount that no longer holds, so it is written as it stands
-   * (plan A1621 D6). Not `moneyMoved`, which also files a product taken off sale. */
+  /** Nobody is there to answer for a discount that no longer holds, or the money has already gone
+   * back in a refund, so it is written as it stands (plan A1621 D6). Not `moneyMoved`, which also
+   * files a product taken off sale. */
   unattended?: true;
   closeZero?: boolean;
   /** The bill's figures from earlier in this transaction, with no sale or advance issued or
