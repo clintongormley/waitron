@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import {
   deviceProfiles,
@@ -28,7 +28,22 @@ let venue: BillVenue;
 let reasonId: string;
 let adminCookie: string;
 let officeId: string;
+let backOfficeId: string;
 let mailApp: Hono;
+
+/** With `refuseOnce`, the next automatic filing throws, leaving its correction open. */
+const automaticFiling = vi.hoisted(() => ({ refuseOnce: false }));
+vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./invoice-correction-alerts.js")>();
+  return {
+    ...real,
+    fileCorrectionAutomatically: (...args: Parameters<typeof real.fileCorrectionAutomatically>) => {
+      if (!automaticFiling.refuseOnce) return real.fileCorrectionAutomatically(...args);
+      automaticFiling.refuseOnce = false;
+      return Promise.reject(new Error("automatic filing refused"));
+    },
+  };
+});
 
 useVenueDb({
   resetPerTest: false,
@@ -41,6 +56,8 @@ useVenueDb({
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
       adminCookie = await fixture.adminTillCookie(tx, venue);
       officeId = await insertA4Printer(tx, { name: "Office", host: "10.0.0.9" });
+      // Active, but not on this till's invoice list, so never offered to it.
+      backOfficeId = await insertA4Printer(tx, { name: "Back office", host: "10.0.0.10" });
       for (const department of await tx.select().from(departments))
         await seedDepartmentReceipt(tx, department.id, {
           operationDescription: "Restaurante",
@@ -229,13 +246,13 @@ describe("a give-back sends the corrective full invoice the way staff chose", ()
     const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
     await delivered(saleId, { medium: "email", recipient: "accounts@harbour.example" });
     const body = await pressBody(saleId, {
-      correctiveDelivery: { medium: "email", recipient: "ana@empresa.es" },
+      correctiveDelivery: { medium: "email", recipient: "ana@example.com" },
     });
     const answer = await give(saleId, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const r1 = await filedR1(answer);
     expect(await deliveriesOf(r1)).toEqual([
-      { medium: "email", recipient: "ana@empresa.es", printerId: null },
+      { medium: "email", recipient: "ana@example.com", printerId: null },
     ]);
     expect(await jobsOf(r1)).toEqual([]);
   });
@@ -283,7 +300,7 @@ describe("a give-back sends the corrective full invoice the way staff chose", ()
     const way = fixture.tenderOf(venue, saleId, "card");
     const body = await pressBody(saleId, {
       way,
-      correctiveDelivery: { medium: "email", recipient: "ana@empresa.es" },
+      correctiveDelivery: { medium: "email", recipient: "ana@example.com" },
     });
     const answer = await give(saleId, {
       ...body,
@@ -293,7 +310,7 @@ describe("a give-back sends the corrective full invoice the way staff chose", ()
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const r1 = await filedR1(answer);
     expect(await deliveriesOf(r1)).toEqual([
-      { medium: "email", recipient: "ana@empresa.es", printerId: null },
+      { medium: "email", recipient: "ana@example.com", printerId: null },
     ]);
   });
 
@@ -337,7 +354,7 @@ describe("a give-back refuses a corrective way that is no longer there, before a
     const body = await pressBody(saleId, {}, venue.app);
     const answer = await give(
       saleId,
-      { ...body, correctiveDelivery: { medium: "email", recipient: "ana@empresa.es" } },
+      { ...body, correctiveDelivery: { medium: "email", recipient: "ana@example.com" } },
       venue.app,
     );
     expect(answer.status).toBe(409);
@@ -378,5 +395,104 @@ describe("a give-back refuses a corrective way that is no longer there, before a
       params: { field: "correctiveDelivery" },
     });
     expect(await writtenOn(saleId)).toEqual(NOTHING);
+  });
+});
+
+describe("a resend that files the correction its first press left open checks the way it carries first", () => {
+  const correctionsOf = (saleId: string) =>
+    venue.db
+      .select({
+        state: invoiceCorrections.state,
+        correctiveSaleId: invoiceCorrections.correctiveSaleId,
+      })
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.originalSaleId, saleId));
+
+  /** A hand-keyed card press choosing Office whose automatic filing is refused once. */
+  async function leftOpen(saleId: string) {
+    const way = fixture.tenderOf(venue, saleId, "card");
+    const body = await pressBody(saleId, {
+      way,
+      correctiveDelivery: { medium: "print", printerId: officeId },
+    });
+    const full = {
+      ...body,
+      manualConfirmed: true,
+      override: { personId: venue.adminId, pin: "1234" },
+    };
+    automaticFiling.refuseOnce = true;
+    onTestFinished(() => {
+      automaticFiling.refuseOnce = false;
+    });
+    const first = await give(saleId, full);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(await correctionsOf(saleId)).toEqual([{ state: "open", correctiveSaleId: null }]);
+    return full;
+  }
+
+  it("refuses a printer this till is not offered, filing nothing", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { card: "37.00" });
+    const full = await leftOpen(saleId);
+    const before = await writtenOn(saleId);
+    const resend = await give(saleId, {
+      ...full,
+      correctiveDelivery: { medium: "print", printerId: backOfficeId },
+    });
+    expect(resend.status, JSON.stringify(resend.json)).toBe(409);
+    expect(resend.json).toEqual({
+      code: "invoice_delivery.printer_invalid",
+      params: { field: "correctiveDelivery.printerId" },
+    });
+    expect(await correctionsOf(saleId)).toEqual([{ state: "open", correctiveSaleId: null }]);
+    expect(await writtenOn(saleId)).toEqual(before);
+  });
+
+  it("refuses email on a box that cannot send it, filing nothing", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { card: "37.00" });
+    const full = await leftOpen(saleId);
+    const before = await writtenOn(saleId);
+    const resend = await give(
+      saleId,
+      { ...full, correctiveDelivery: { medium: "email", recipient: "someone@else.example" } },
+      venue.app,
+    );
+    expect(resend.status, JSON.stringify(resend.json)).toBe(409);
+    expect(resend.json).toEqual({
+      code: "invoice_delivery.email_unavailable",
+      params: { field: "correctiveDelivery.recipient" },
+    });
+    expect(await correctionsOf(saleId)).toEqual([{ state: "open", correctiveSaleId: null }]);
+    expect(await writtenOn(saleId)).toEqual(before);
+  });
+
+  it("files it the way a resend's offered choice names", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { card: "37.00" });
+    const full = await leftOpen(saleId);
+    const resend = await give(saleId, {
+      ...full,
+      correctiveDelivery: { medium: "email", recipient: "ana@example.com" },
+    });
+    expect(resend.status, JSON.stringify(resend.json)).toBe(200);
+    const [row] = await correctionsOf(saleId);
+    expect(row!.state).toBe("filed");
+    expect(await deliveriesOf(row!.correctiveSaleId!)).toEqual([
+      { medium: "email", recipient: "ana@example.com", printerId: null },
+    ]);
+  });
+
+  it("files it the default way when the resend carries no choice", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { card: "37.00" });
+    const full: Record<string, unknown> = { ...(await leftOpen(saleId)) };
+    delete full.correctiveDelivery;
+    const resend = await give(saleId, full);
+    expect(resend.status, JSON.stringify(resend.json)).toBe(200);
+    const [row] = await correctionsOf(saleId);
+    expect(row!.state).toBe("filed");
+    expect(await jobsOf(row!.correctiveSaleId!)).toEqual([
+      { printerId: receiptPrinterId(), kind: "document" },
+    ]);
+    expect(await deliveriesOf(row!.correctiveSaleId!)).toEqual([
+      { medium: "receipt", recipient: null, printerId: null },
+    ]);
   });
 });

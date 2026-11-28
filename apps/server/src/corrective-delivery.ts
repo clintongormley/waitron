@@ -111,7 +111,7 @@ async function defaultCorrectiveWay(
   const [named] = await tx
     .select({ name: printers.name })
     .from(printers)
-    .where(eq(printers.id, receipt.id));
+    .where(and(isReceiptPrinter(), eq(printers.id, receipt.id)));
   return { medium: "receipt", printerId: receipt.id, printerName: named!.name };
 }
 
@@ -129,8 +129,7 @@ export interface CorrectiveChoice {
   emailAvailable: boolean;
 }
 
-/** What `cfg`'s device may choose among for a corrective of `originalSaleId`: nothing, on a
- * device that may not print receipts, as Find a bill offers it nothing. */
+/** What `device` may choose among for a corrective of `originalSaleId`. */
 async function readCorrectiveOffers(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
@@ -251,8 +250,8 @@ function receiptPrinterLookup(tx: Transaction, cfg: DeviceRequestConfig, printer
 
 /**
  * Sends the corrective full invoice `correctiveSaleId` (request key `corrective:<correction id>`),
- * under the person who opened the correction: the way staff `chosen` on the give-back form, else
- * the way {@link defaultCorrectiveWay} gives. A failure to send leaves the filing as it is.
+ * under the person who opened the correction: the way `chosen` on the give-back form, else the
+ * way {@link defaultCorrectiveWay} gives. A failure to send leaves the filing as it is.
  */
 export async function sendFiledCorrective(
   tx: Transaction,
@@ -268,6 +267,7 @@ export async function sendFiledCorrective(
     let way: CorrectiveWay | { medium: "receipt"; printerId: string | null } | null;
     if (chosen?.medium === "email") way = chosen;
     else if (chosen?.medium === "print") {
+      // Either kind: the chosen printer's kind decides whether it goes on A4 or the receipt path.
       const [printer] = await tx
         .select({ kind: printers.kind, name: printers.name })
         .from(printers)
