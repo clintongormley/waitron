@@ -21,13 +21,12 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 /**
- * Sends the corrective full invoice `correctiveSaleId` of `correction` (request key
- * `corrective:<id>`) the way the invoice it corrects went ({@link readOriginalWay}), which is the
- * replacement when the invoice given back on was replaced, under the person who opened the
- * correction: by email to the same address when this box can email the invoice now; on `cfg`'s
- * device's own A4 printer when that invoice went on A4 and that device has one; otherwise on that
- * device's receipt printer when its profile may print receipts. A failure to send leaves the
- * filing as it is.
+ * Sends the corrective full invoice `correctiveSaleId` (request key `corrective:<correction id>`),
+ * under the person who opened the correction, the way the invoice it corrects went; for a
+ * replacement that never went out, the way the invoice it replaced went. By email to the same
+ * address when this box can email the invoice now; on `cfg`'s device's own A4 printer when that
+ * way was A4 and the device has one; otherwise on the device's receipt printer when its profile
+ * may print receipts. A failure to send leaves the filing as it is.
  */
 export async function sendFiledCorrective(
   tx: Transaction,
@@ -39,11 +38,20 @@ export async function sendFiledCorrective(
   await optionalDocument(tx, "sendFiledCorrective", correctiveSaleId, async () => {
     const requestKey = `corrective:${correction.id}`;
     const personId = correction.requestedBy;
-    const [corrective] = await tx
-      .select({ correctsSaleId: sales.correctsSaleId })
-      .from(sales)
-      .where(eq(sales.id, correctiveSaleId));
-    const way = await readOriginalWay(tx, corrective!.correctsSaleId!);
+    const correctionLinkOf = async (saleId: string) =>
+      (
+        await tx
+          .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
+          .from(sales)
+          .where(eq(sales.id, saleId))
+      )[0]!;
+    const targetId = (await correctionLinkOf(correctiveSaleId)).corrects!;
+    const target = await correctionLinkOf(targetId);
+    // A replacement is never itself replaced (packages/core/src/record-replacement.ts), so one
+    // step back reaches the invoice it replaced.
+    const way =
+      (await readOriginalWay(tx, targetId)) ??
+      (target.replaces ? await readOriginalWay(tx, target.corrects!) : null);
     if (
       way?.medium === "email" &&
       way.recipient !== null &&

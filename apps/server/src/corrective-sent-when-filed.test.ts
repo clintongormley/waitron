@@ -270,7 +270,7 @@ const receiptPrinterId = () =>
     sql`select receipt_printer_id as id from devices where id = ${venue.deviceId}`,
   )[0]!.id;
 
-describe("a corrective full invoice is sent once, when it is filed, the way the original went", () => {
+describe("a corrective full invoice is sent once, when it is filed, the way the invoice it corrects went", () => {
   it("given back in cash on a full invoice of which nothing was ever sent, prints the R1 once on this till's receipt printer and says so", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     const answer = await give(saleId, await giveBody(saleId, "10.00"));
@@ -442,6 +442,19 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
       .where(eq(sales.id, r1));
     expect(filed!.corrects).toBe(r4);
     expect(await wayOf(r1)).toEqual({ ...EMAIL, recipient: "current@harbour.example" });
+  });
+
+  it("emails the R1 to the address the replaced invoice went to, when its replacement was never sent", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const r4 = await replacedByR4(saleId);
+    const { r1 } = await givenBackInCash(saleId);
+    const [filed] = await venue.db
+      .select({ corrects: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, r1));
+    expect(filed!.corrects).toBe(r4);
+    expect(await wayOf(r1)).toEqual(EMAIL);
   });
 
   it("prints the R1 on paper when the replacement of the invoice given back on was printed on paper, though that invoice was emailed", async () => {
