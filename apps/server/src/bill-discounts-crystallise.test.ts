@@ -776,6 +776,23 @@ describe("a split line's pending discounts", () => {
     expect(await inTx(venue, (tx) => pendingOn(tx, billId))).toHaveLength(2);
   });
 
+  it("are read as not holding by the shown total's read, which Pay refuses, its total unchanged", async () => {
+    const billId = await groupedBill([{ name: "Fish", quantity: "4" }], 100);
+    const fish = await lineIdOf(venue, billId, 1);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: fish, ...amountOf(4) }));
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1.5" }]),
+    );
+    const shown = await inTx(venue, async (tx) =>
+      (await readBillDiscounts(tx, [billId])).get(billId)!,
+    );
+    expect(shown.discounts.map(({ holds }) => holds)).toEqual(["cut_down", "cut_down"]);
+    expect(shown.takes).toBe(3);
+    await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
+      code: "adjustment.no_longer_applies",
+    });
+  });
+
   it("are written as one discount, counted once, with what it takes off each line", async () => {
     const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
     const beers = await lineIdOf(venue, billId, 1);

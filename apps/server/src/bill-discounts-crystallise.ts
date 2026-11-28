@@ -1,17 +1,16 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   adjustmentLines,
   coveredBySetMenu,
   deletePendingDiscounts,
   lineGross,
   recordAdjustment,
-  workOutBillDiscounts,
   type BillDiscountRow,
   type PendingBillDiscount,
+  type PendingDiscount,
   type WorkedBillDiscount,
 } from "@waitron/adjustments";
 import {
-  billDiscounts,
   insertInChunks,
   recordActivity,
   workingOrderLines,
@@ -29,7 +28,7 @@ import {
 } from "@waitron/shared";
 import { listValue, readRows, stageOf, type Row } from "./adjustment-rows.js";
 import { reprice, type Change } from "./adjustment-reprice.js";
-import { gatherBillDiscountInputs, type BillDiscountInput } from "./bill-discounts-read.js";
+import { gatherHeldBills, workOutHeldBill, type HeldBill } from "./bill-discounts-read.js";
 import type { TradingContext } from "./trading-context.js";
 import { bumpRevision } from "./working-order-edit-state.js";
 import "./errors.js";
@@ -37,35 +36,16 @@ import "./errors.js";
 type NotHolding = ErrorParams["adjustment.no_longer_applies"]["discounts"][number];
 
 /** What each of `worked` that does not hold was given on, as the refusal names it. */
-async function notHolding(
-  tx: Transaction,
-  worked: readonly WorkedBillDiscount[],
-): Promise<NotHolding[]> {
-  const ids = worked.filter(({ holds }) => holds !== "yes").map(({ id }) => id);
-  if (ids.length === 0) return [];
-  const rows = await tx
-    .select({
-      id: billDiscounts.id,
-      action: billDiscounts.action,
-      percentBp: billDiscounts.percentBp,
-      amount: billDiscounts.amount,
-      setMenuName: billDiscounts.setMenuName,
-      lineName: workingOrderLines.name,
-      variantName: workingOrderLines.variantName,
-      parentLineId: workingOrderLines.parentLineId,
-    })
-    .from(billDiscounts)
-    .leftJoin(workingOrderLines, eq(workingOrderLines.id, billDiscounts.lineId))
-    .where(inArray(billDiscounts.id, ids));
-  const byId = new Map(rows.map((row) => [row.id, row]));
+function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): NotHolding[] {
   return worked.flatMap(({ id, holds }): NotHolding[] => {
     if (holds === "yes") return [];
-    const row = byId.get(id)!;
+    const row = bill.held.get(id)!;
+    const line = bill.input.lines.find(({ id: lineId }) => lineId === row.lineId);
     const on: NotHolding["on"] =
-      row.lineName !== null
+      line !== undefined
         ? {
-            kind: row.parentLineId === null ? "dish" : "extra",
-            targetName: staffPresentationName({ name: row.lineName, variantName: row.variantName }),
+            kind: line.parentLineId === null ? "dish" : "extra",
+            targetName: staffPresentationName(bill.names.get(line.id)!),
           }
         : row.setMenuName !== null
           ? { kind: "set_menu", targetName: row.setMenuName }
@@ -83,61 +63,17 @@ async function notHolding(
   });
 }
 
-async function refuseIfAny(
-  tx: Transaction,
-  billId: string,
-  worked: readonly WorkedBillDiscount[],
-): Promise<void> {
-  const discounts = await notHolding(tx, worked);
-  if (discounts.length > 0) {
-    throw new AppError("adjustment.no_longer_applies", { workingOrderId: billId, discounts });
-  }
-}
-
 /**
  * Refuses `adjustment.no_longer_applies` when any discount held on `billId` would be written
  * other than as given (spec 6.6), naming each; writes nothing.
  */
 export async function refuseDiscountsNotHolding(tx: Transaction, billId: string): Promise<void> {
-  const input = (await gatherBillDiscountInputs(tx, [billId])).get(billId);
-  if (input !== undefined) await refuseIfAny(tx, billId, (await workedOut(tx, input)).worked);
-}
-
-/**
- * `input`'s discounts worked out, with their held rows by id. A discount given as one row of the
- * till that a split left on several lines, in rows sharing `given_together`, holds only if its
- * rows together take what they were given: each row's share takes only what its own part's
- * prices allow (plan D10), so a split weighed line can lose a cent it took whole, and then every
- * row of it is `cut_down`.
- */
-async function workedOut(
-  tx: Transaction,
-  input: BillDiscountInput,
-): Promise<{ worked: WorkedBillDiscount[]; heldOf: Map<string, HeldDiscount> }> {
-  const ids = input.discounts.map(({ id }) => id);
-  const heldOf = new Map(
-    (await tx.select().from(billDiscounts).where(inArray(billDiscounts.id, ids))).map((row) => [
-      row.id,
-      row,
-    ]),
-  );
-  const worked = workOutBillDiscounts(input.lines, input.discounts).discounts;
-  const groups = new Map<string, WorkedBillDiscount[]>();
-  for (const one of worked) {
-    const key = heldOf.get(one.id)!.givenTogether;
-    groups.set(key, [...(groups.get(key) ?? []), one]);
+  const bill = (await gatherHeldBills(tx, [billId])).get(billId);
+  if (bill === undefined) return;
+  const discounts = notHolding(bill, workOutHeldBill(bill).discounts);
+  if (discounts.length > 0) {
+    throw new AppError("adjustment.no_longer_applies", { workingOrderId: billId, discounts });
   }
-  for (const group of groups.values()) {
-    const amounts = group.map(({ id }) => heldOf.get(id)!);
-    const short =
-      group.length > 1 &&
-      amounts.every(({ action }) => action === "discount_amount") &&
-      group.every(({ holds }) => holds === "yes") &&
-      group.reduce((sum, { takes }) => sum + takes, 0) <
-        amounts.reduce((sum, { amount }) => sum + amount!, 0);
-    if (short) for (const one of group) one.holds = "cut_down";
-  }
-  return { worked, heldOf };
 }
 
 /** The bill's rows as crystallising leaves them, each under the id the working-out gives its
@@ -287,7 +223,7 @@ async function writeWorked(
  * several lines: the held row of its first part, the line that part is on and its dish, the
  * quantity of every part's line, and what writing each part left to record. */
 interface Given {
-  held: HeldDiscount;
+  held: PendingDiscount;
   line: Row | null;
   dish: Row | null;
   quantity: number;
@@ -371,8 +307,6 @@ function fitted(
   return lines.filter(({ reduction }) => reduction !== 0);
 }
 
-type HeldDiscount = typeof billDiscounts.$inferSelect;
-
 /**
  * Writes every discount held on `billId` into its lines and records it, and deletes the bill's
  * pending rows (plan A1621 D5): the bill's discounts are worked out once, as its shown total works
@@ -387,10 +321,11 @@ export async function crystalliseBillDiscounts(
   billId: string,
   options: { asked: boolean },
 ): Promise<void> {
-  const input = (await gatherBillDiscountInputs(tx, [billId])).get(billId);
-  if (input === undefined) return;
-  const { worked, heldOf } = await workedOut(tx, input);
-  const standing = await notHolding(tx, worked);
+  const bill = (await gatherHeldBills(tx, [billId])).get(billId);
+  if (bill === undefined) return;
+  const { input } = bill;
+  const worked = workOutHeldBill(bill).discounts;
+  const standing = notHolding(bill, worked);
   if (options.asked && standing.length > 0) {
     throw new AppError("adjustment.no_longer_applies", {
       workingOrderId: billId,
@@ -410,7 +345,7 @@ export async function crystalliseBillDiscounts(
   let open: Given | null = null;
   for (const one of worked) {
     const discount = input.discounts.find(({ id }) => id === one.id)!;
-    const held = heldOf.get(one.id)!;
+    const held = bill.held.get(one.id)!;
     if (one.holds !== "set_menu_gone") {
       const line = discount.target.kind === "bill" ? null : lineOf.get(discount.target.lineId!)!;
       if (open !== null && open.held.givenTogether !== held.givenTogether) {
