@@ -17,7 +17,12 @@ import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type SentSlice, byFiringOrder } from "../state/sent-panel.js";
 import { sentPortionsApart, sentRowPortionKey } from "../state/portion-groups.js";
-import { type SentRow, type SentSection, sentSections } from "../state/sent-sections.js";
+import {
+  type SentRow,
+  type SentSection,
+  sentPortionId,
+  sentSections,
+} from "../state/sent-sections.js";
 import { sentMenuDishes } from "../state/set-menus.js";
 import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
@@ -172,8 +177,15 @@ export class TillSentOrders extends LitElement {
   #suppressClick = false;
   /** A serve sent from the keyboard on the open row's focused button: focus stays in that row, on
    * a Serve of the same kind where there is one, until the row draws other than as it was pressed,
-   * a pointer presses anywhere, or focus moves out of the row. */
-  #focusAfterServe?: { opening: string; kind: SentServe["kind"]; drawn: string };
+   * a pointer presses anywhere, or the person moves focus. If the box closes on the same bill and
+   * party with focus fallen to the page, focus goes to the first row now holding one of the row's
+   * `portions`. */
+  #focusAfterServe?: {
+    opening: string;
+    kind: SentServe["kind"];
+    drawn: string;
+    portions: string[];
+  };
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
   readonly #startPointer = () => this.#releaseHeading();
@@ -184,7 +196,8 @@ export class TillSentOrders extends LitElement {
   readonly #focusMoved = () => {
     if (!this.#focusing) this.#focusAfterServe = undefined;
   };
-  /** Only a move to another element ends the hold; focus dropped to the page is what it mends. */
+  /** A move to an element outside the open row ends the hold; focus dropped to the page, with no
+   * element to go to, is what the hold mends. */
   readonly #focusLeft = (event: Event) => {
     const to = (event as FocusEvent).relatedTarget;
     if (to instanceof Node && this.renderRoot.querySelector("li[data-open]")?.contains(to) !== true)
@@ -443,7 +456,12 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
     const fromKeys = (event as MouseEvent).detail === 0;
     if (fromKeys && (this.renderRoot as ShadowRoot).activeElement === event.currentTarget)
-      this.#focusAfterServe = { opening, kind: serve.kind, drawn };
+      this.#focusAfterServe = {
+        opening,
+        kind: serve.kind,
+        drawn,
+        portions: row.slices.map(sentPortionId),
+      };
     this.#releasePointer();
   }
   /** While the box's buttons are disabled, focus waits on the row's own button; Chromium would
@@ -456,6 +474,8 @@ export class TillSentOrders extends LitElement {
     const page = document.activeElement;
     const lost = at === null && (page === null || page === document.body);
     if (box === null || hold.opening !== this.#opening || (!lost && !box.contains(at))) {
+      if (box === null && hold.opening === this.#opening && lost)
+        this.#focusRowHolding(hold.portions);
       this.#focusAfterServe = undefined;
       return;
     }
@@ -477,6 +497,20 @@ export class TillSentOrders extends LitElement {
       .find((row) => this.#open.is(this.#opening, row.id));
     if (!this.busy && (live === undefined || sentRowDrawn(live, this.lines) !== hold.drawn))
       this.#focusAfterServe = undefined;
+  }
+  /** Each `[data-sent-row]` button is one drawn row, in the order the drawn sections list them. */
+  #focusRowHolding(portions: readonly string[]): void {
+    const live = this.#model();
+    const rows = (live === null ? null : (this.#pressedModel ?? live))?.sections.flatMap(
+      (section) => section.rows,
+    );
+    const index = (rows ?? []).findIndex((row) =>
+      row.slices.some((slice) => portions.includes(sentPortionId(slice))),
+    );
+    const button = this.renderRoot.querySelectorAll<HTMLElement>("[data-sent-row]")[index];
+    this.#focusing = true;
+    button?.focus();
+    this.#focusing = false;
   }
   #info(row: SentRow): void {
     if (!this.isConnected || this.busy) return;

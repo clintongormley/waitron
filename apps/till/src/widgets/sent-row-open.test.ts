@@ -221,7 +221,7 @@ it("keeps keyboard focus on Serve 1 while a portion is sent and after it lands",
   ]);
 });
 
-it("follows the open row with keyboard focus when a serve regroups it, and closes it once the row holding its last portion has another to serve", async () => {
+it("follows the open row with keyboard focus when a serve regroups it, then closes it and focuses the row holding its last portion when that row has another to serve", async () => {
   const ready = { readyAt: at(55) };
   const el = await mount(
     sentCurrent([
@@ -260,6 +260,7 @@ it("follows the open row with keyboard focus when a serve regroups it, and close
     [burgers[0]!, ...burgers.slice(1).map((line) => ({ ...line, servedAt: at(59) }))],
   );
   expect(opened(el)).toEqual([]);
+  expect(focused(el)).toBe(find(el, toggle("burger-1")));
   expect(serves).toEqual([
     { items: [{ lineId: "burger-2", quantity: "1" }] },
     { items: [{ lineId: "burger-3", quantity: "1" }] },

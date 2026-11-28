@@ -95,7 +95,8 @@ const opened = (opening: string, row: SentRow): Opened => ({
  * change which line a row starts with, so the open row is followed by its portions: to the row
  * holding the first of its unserved ones still unserved; once none is, to a row holding any of its
  * portions that has none left. It closes when the bill or party changes or no row qualifies, so
- * the box never moves onto portions left to serve that the person did not open.
+ * once nothing it held is left to serve, the box never moves onto a row with something left to
+ * serve.
  */
 export class OpenSentRow {
   #open?: Opened;
