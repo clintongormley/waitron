@@ -24,7 +24,11 @@ function recorded({ view }: ManagerDay, target: AttendanceChange["target"]) {
 }
 
 export function managerDayRows(day: ManagerDay) {
-  return dayEditorRows(day.view, requested(day));
+  const rows = dayEditorRows(day.view, requested(day));
+  if (day.item) return rows;
+  return rows.filter(({ at }) =>
+    day.view.record.sessions.some(({ startedAt, endedAt }) => at >= startedAt && at <= endedAt),
+  );
 }
 
 export function managerDayEdits(day: ManagerDay, changes: AttendanceChange[]) {

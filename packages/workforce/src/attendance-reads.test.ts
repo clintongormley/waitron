@@ -171,6 +171,15 @@ it("holds the overnight shift and leaves the following shift available while a b
     manager,
   );
   expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-06" }]);
+  const following = await day("2026-01-06");
+  expect(following.items).toMatchObject([{ status: "waiting-worker" }]);
+  expect(following.record.entries).toContainEqual(
+    expect.objectContaining({
+      effective: true,
+      entry: expect.objectContaining({ entryKind: "out", eventAt: "2026-01-06T04:00:00.000Z" }),
+    }),
+  );
+  expect(following.record.sessions).toMatchObject([{ workDate: "2026-01-06" }]);
 });
 it("holds a finished day while a worker requests a missing second shift", async () => {
   await shift();

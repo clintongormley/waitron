@@ -462,14 +462,10 @@ export class AttendanceCorrectionDialog extends LitElement {
       minutes === undefined
         ? nothing
         : html` <span aria-hidden="true"
-              >${fill(t("hours.worked_would_be"), {
-                time: `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`,
-              })}</span
-            ><span class="spoken-total" aria-live="polite"
-              >${fill(t("hours.worked_would_be"), {
-                time: formatDuration(minutes * 60_000, currentLocale()),
-              })}</span
-            >`;
+            >${fill(t("hours.worked_would_be"), {
+              time: `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`,
+            })}</span
+          >`;
     const fields = html` ${this.draft.rows.map((row, index) => {
         const field = dayFields?.[index];
         const label = field
@@ -533,6 +529,7 @@ export class AttendanceCorrectionDialog extends LitElement {
             </fieldset>`;
       })}
       ${lastNote === -1 && worked !== nothing ? html`<p>${worked}</p>` : nothing}
+      ${manager ? html`<span class="spoken-total" aria-live="polite">${minutes === undefined ? "" : fill(t("hours.worked_would_be"), { time: formatDuration(minutes * 60_000, currentLocale()) })}</span>` : nothing}
       <div>
         ${manager ? html`<span class="clock-label" aria-hidden="true">${t("hours.why")} <strong>*</strong></span>` : nothing}
         <wt-textarea

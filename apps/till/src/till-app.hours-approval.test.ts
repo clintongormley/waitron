@@ -78,7 +78,18 @@ const view: AttendanceDayView = {
   timeZone: "Europe/Madrid",
   items: [requested],
   record: {
-    sessions: [],
+    sessions: [
+      {
+        personId: other.personId,
+        workDate: other.date,
+        startedAt: times[0].at,
+        startOffsetMinutes: 120,
+        endedAt: times[1].at,
+        endOffsetMinutes: 120,
+        breakMinutes: 0,
+        workedMinutes: 420,
+      },
+    ],
     entries: clockEntries,
     closures: [],
     closedPeriodImpacts: [],
@@ -245,6 +256,7 @@ it.each([
   await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
   const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
   const root = form.shadowRoot!;
+  const announcedTotal = root.querySelector("[aria-live=polite]");
   const fields = [
     ...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]'),
   ];
@@ -283,7 +295,8 @@ it.each([
   );
   await vi.waitFor(() => {
     expect(send.disabled).toBe(false);
-    expect(root.textContent).toContain("Worked would be 8 hours");
+    expect(announcedTotal?.textContent).toContain("Worked would be 8 hours");
+    expect(root.querySelector("[aria-live=polite]")).toBe(announcedTotal);
   });
   f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
   await userEvent.click(send);
@@ -327,6 +340,34 @@ it("refreshes a finished day when a worker’s request arrived while the list wa
   await expect.element(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 });
 
+it("opens the listed finished day beside a proposal from the prior overnight shift", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  const priorProposal = attendanceItem({ date: "2026-10-12", status: "waiting-worker" });
+  const priorOut = {
+    ...clockEntries[1]!,
+    entry: { ...clockEntries[1]!.entry, entryId: "prior-out", eventAt: "2026-10-13T02:00:00.000Z" },
+  };
+  f.getAttendanceManagerDay.mockResolvedValue({
+    ...view,
+    items: [priorProposal],
+    record: { ...view.record, entries: [priorOut, ...clockEntries] },
+  });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  const root = screen(f.el)!.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(root.querySelector("till-attendance-correction-dialog")).not.toBeNull(),
+  );
+  const form = root.querySelector("till-attendance-correction-dialog")!;
+  expect(
+    [
+      ...form.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+        'wt-input[type="time"]',
+      ),
+    ].map((field) => field.value),
+  ).toEqual(["10:00", "17:00"]);
+});
+
 it.each([
   { type: "date", value: "", error: "Choose a valid date." },
   {
@@ -354,7 +395,10 @@ it.each([
   }
   await page.getByRole("button", { name: "Save and send to Javier" }).click();
   await vi.waitFor(() => expect(field.error).toBe(error));
-  if (type === "date") expect(root.querySelector("details")?.open).toBe(true);
+  if (type === "date") {
+    expect(root.querySelector("details")?.open).toBe(true);
+    expect(field.label).toBe("Date · Clocked out");
+  }
   await expect.poll(() => root.activeElement).toBe(field);
   expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
 });

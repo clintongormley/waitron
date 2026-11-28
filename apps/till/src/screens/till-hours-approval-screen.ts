@@ -418,11 +418,22 @@ export class TillHoursApprovalScreen extends LitElement {
       const current = view.items.find(
         ({ id, status }) => id === item?.id && status === item.status,
       );
-      const pending = view.items.some(
-        ({ status }) =>
-          status === "waiting-manager" || status === "waiting-worker" || status === "disputed",
-      );
-      if (item ? !current : pending) throw { code: "attendance.state_changed" };
+      if (item && !current) throw { code: "attendance.state_changed" };
+      if (
+        !item &&
+        view.items.some((row) => this.#canEdit(row) || row.status === "waiting-worker")
+      ) {
+        const { finishedDays } = await this.#call(lifetime, (options) =>
+          this.api.getAttendanceManagerQueue(options),
+        );
+        if (
+          !finishedDays.some(
+            ({ personId, date }) => personId === view.personId && date === view.date,
+          )
+        )
+          throw { code: "attendance.state_changed" };
+      }
+      if (lifetime.aborted || !this.active) return;
       this.editor = { view, item: current, name: this.#name(view.personId).split(" ")[0]! };
     });
   }
