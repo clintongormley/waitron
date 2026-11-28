@@ -136,6 +136,11 @@ export class WtCourseHeading extends LitElement {
     super.connectedCallback();
     this.#words = new MutationObserver(() => this.#lay());
     this.#words.observe(this, { childList: true, subtree: true, characterData: true });
+    // Lit does not update a reconnected element, so a heading put back in the page resumes here.
+    if (this.hasUpdated) {
+      this.#watchWidth();
+      this.#lay();
+    }
   }
 
   override disconnectedCallback(): void {
@@ -148,17 +153,19 @@ export class WtCourseHeading extends LitElement {
   }
 
   protected override updated(): void {
-    const width = this.renderRoot.querySelector(".width")!;
-    if (this.#widths === undefined) {
-      // Watches a zero-height box, so stacking, which changes only the height, never re-triggers it.
-      this.#widths = new ResizeObserver(([entry]) => {
-        if (entry!.contentRect.width === this.#width) return;
-        this.#width = entry!.contentRect.width;
-        this.#lay();
-      });
-      this.#widths.observe(width);
-    }
+    this.#watchWidth();
     this.#lay();
+  }
+
+  #watchWidth(): void {
+    if (this.#widths !== undefined) return;
+    // Watches a zero-height box, so stacking, which changes only the height, never re-triggers it.
+    this.#widths = new ResizeObserver(([entry]) => {
+      if (entry!.contentRect.width === this.#width) return;
+      this.#width = entry!.contentRect.width;
+      this.#lay();
+    });
+    this.#widths.observe(this.renderRoot.querySelector(".width")!);
   }
 
   /** Beside the mark and the action the title may take two lines; one that needs a third, or whose

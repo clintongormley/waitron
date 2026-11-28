@@ -245,6 +245,33 @@ describe("laying out a title, the mark and an action", () => {
     expect(sameLine(words, button)).toBe(true);
   });
 
+  it("keeps following the heading's width after it is taken out of the page and put back", async () => {
+    const el = (await laidOut(900)) as HTMLElement;
+    el.style.width = "240px";
+    await settled(el);
+    el.style.width = "900px";
+    await settled(el);
+    expect(el.hasAttribute("stacked")).toBe(false);
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await settled(el);
+    el.style.width = "240px";
+    await settled(el);
+    expect(el.hasAttribute("stacked")).toBe(true);
+  });
+
+  it("keeps following its words after it is taken out of the page and put back", async () => {
+    const el = await laidOut(390, "Drinks");
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await settled(el);
+    el.firstChild!.textContent = `${title} · ${title}`;
+    await settled(el);
+    expect(el.hasAttribute("stacked")).toBe(true);
+  });
+
   it("moves the mark and action under the title when its words grow past two lines", async () => {
     const el = await laidOut(390, "Drinks");
     expect(el.hasAttribute("stacked")).toBe(false);
