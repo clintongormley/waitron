@@ -93,29 +93,53 @@ it("shows the counter its set-menu folders on a takeaway order, with no count", 
 it.each(["fresh", "parked"])(
   "shows a %s takeaway's draft charges and takes the amount confirmed in Pay",
   async (kind) => {
+    const fromPark = kind === "parked";
+    const tendered = fromPark ? "25" : "21";
+    const amount = `${tendered}.00`;
     const extrasList = burger.offeredModifiers!.find((modifier) => modifier.kind === "extras")!;
     const item = { ...extrasList.items[0]!, price: "2.00", image: null, available: true };
-    const { productId, name, price: extraPrice } = item;
-    const extra = { listId: extrasList.id, productId, name, price: extraPrice, quantity: 1 };
-    const dish = daily.offers.find(({ id }) => id === "sirloin")!;
+    const { productId, name, price: unitPrice } = item;
+    const extra = { listId: extrasList.id, productId, name, price: unitPrice, quantity: 1 };
+    const sirloin = daily.offers[1]!;
+    const dish = fromPark ? daily.offers[0]! : sirloin;
     const offer = {
       ...dish,
+      unitPrice: fromPark ? "15.00" : dish.unitPrice,
       aLaCartePrices: { v1: { [dish.productId]: "24.00" } },
       offeredModifiers: [{ ...extrasList, items: [item] }],
     };
-    const copy = { ...daily, offers: [offer] };
-    const product = setMenuProduct({ offer, setMenuId: copy.menuId, versionId: "v1" });
-    let parked = kind === "parked";
+    const copy = { ...daily, offers: [offer, ...(fromPark ? [sirloin] : [])] };
+    const folder = { setMenuId: copy.menuId, versionId: "v1" };
+    const product = setMenuProduct({ ...folder, offer });
+    const kept = {
+      workingOrderLineId: "kept-dish",
+      menuItemId: offer.id,
+      menuVersionId: "v1",
+      setMenuId: copy.menuId,
+      quantity: "1.000",
+      extras: [extra],
+      product: { ...product, unitPrice: fromPark ? "23.00" : "5.00" },
+    };
+    const removed = {
+      ...kept,
+      workingOrderLineId: "removed-dish",
+      menuItemId: sirloin.id,
+      product: setMenuProduct({ ...folder, offer: sirloin }),
+      extras: [],
+    };
+    const grouped = { ...bill.dishes[0]!, lineId: fromPark ? "removed-dish" : "kept-dish" };
+    let beforeEdit = fromPark;
+    const storedLines = () => (beforeEdit ? [kept, removed] : [kept]);
     const { api, el, counter } = await openCounterTakeaway(copy, {
       parkOrder: vi.fn(async ({ id }: { id: string }) => ({ id, orderNumber: 10 })),
       updateWorkingOrder: vi.fn(async () => {
-        parked = false;
+        beforeEdit = false;
         return { revision: 6 };
       }),
       retrieveWorkingOrder: vi.fn(async (id: string) => ({
         id,
         orderNumber: 10,
-        revision: parked ? 5 : 6,
+        revision: beforeEdit ? 5 : 6,
         zoneId: offers.context.zoneId,
         label: null,
         expectedEdit: null,
@@ -127,35 +151,27 @@ it.each(["fresh", "parked"])(
           ...bill,
           copies: [setMenuCopyOf(copy, "v1")],
           recorded: { [copy.menuId]: "v1" },
-          setMenus: parked ? [] : [bill.setMenus[0]!],
-          dishes: parked ? [] : [{ ...bill.dishes[0]!, lineId: "sirloin-line" }],
+          setMenus: beforeEdit || !fromPark ? [bill.setMenus[0]!] : [],
+          dishes: beforeEdit || !fromPark ? [grouped] : [],
         },
         setMenuCopies: [copy],
-        lines: [
-          {
-            workingOrderLineId: "sirloin-line",
-            menuItemId: offer.id,
-            menuVersionId: "v1",
-            setMenuId: copy.menuId,
-            quantity: "1.000",
-            product: parked ? { ...product, unitPrice: "23.00" } : product,
-            extras: parked ? [] : [extra],
-          },
-        ],
+        lines: storedLines(),
       })),
       getTabLines: vi.fn(async () => ({
-        revision: parked ? 5 : 6,
-        lines: [line({ id: "sirloin-line", unitPriceGross: parked ? "23.00" : "5.00" })],
+        revision: beforeEdit ? 5 : 6,
+        lines: storedLines().map(({ workingOrderLineId: id, product }) =>
+          line({ id, unitPriceGross: product.unitPrice, sentAt: null, firedAt: null }),
+        ),
       })),
-      getBillBalance: vi.fn(async (id: string) =>
-        balanceOf({ workingOrderId: id, total: "21.00", outstanding: "21.00" }),
+      getBillBalance: vi.fn(async (workingOrderId: string) =>
+        balanceOf({ workingOrderId, total: amount, outstanding: amount }),
       ),
-      previewBillPayment: vi.fn(async () => cash("21.00", "0.00")),
+      previewBillPayment: vi.fn(async () => cash(amount, "0.00")),
       takeBillPayment: vi.fn(async () =>
         takenOf(
-          { applied: "21.00", tendered: "21.00", change: "0.00" },
-          { total: "21.00", received: "21.00", outstanding: "0.00", status: "settled" },
-          invoiceOf("21.00"),
+          { applied: amount, tendered: amount, change: "0.00" },
+          { total: amount, received: amount, outstanding: "0.00", status: "settled" },
+          invoiceOf(amount),
         ),
       ),
     });
@@ -163,35 +179,35 @@ it.each(["fresh", "parked"])(
     const price = (amount: string) =>
       expect.element(basket.getByText(money(amount), { exact: true }), { timeout: 1500 });
     const total = () => counter.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent;
-    if (parked) {
+    if (fromPark) {
       emit(counter, "retrieve-order", { id: "parked-takeaway" });
       await vi.waitFor(() => expect(counter.store.id).toBe("parked-takeaway"));
       await price("23.00").toBeVisible();
-      counter.store.removeLine(0);
+      counter.store.removeLine(1);
+    } else {
+      counter.store.addProduct(product, "1", { setMenu: { id: copy.menuId }, extras: [extra] });
+      await price("24.00").toBeVisible();
+      expect(total()).toContain(money("26.00"));
     }
-    const id = counter.store.id;
-    counter.store.addProduct(product, "1", { setMenu: { id: copy.menuId }, extras: [extra] });
-    await price("24.00").toBeVisible();
     await price("2.00").toBeVisible();
-    expect(total()).toContain(money("26.00"));
-
+    const id = counter.store.id;
     const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
     await userEvent.click(tender.shadowRoot!.querySelector("[data-counter-pay]")!);
     await expect
-      .poll(() => dialog(el)?.shadowRoot?.querySelector("[data-quiet-pay-amount]")?.textContent)
-      .toContain(money("21.00"));
-    await price("5.00").toBeInTheDocument();
-    expect(total()).toContain(money("21.00"));
-    const save = kind === "fresh" ? api.parkOrder : api.updateWorkingOrder;
+      .poll(() => inDialog(el, "[data-quiet-pay-amount]")?.textContent ?? "")
+      .toContain(money(amount));
+    await price(fromPark ? "23.00" : "5.00").toBeInTheDocument();
+    expect(total()).toContain(money(amount));
+    const save = fromPark ? api.updateWorkingOrder : api.parkOrder;
     expect(vi.mocked(save).mock.lastCall?.at(-1)).toMatchObject({
       lines: [{ setMenuId: copy.menuId, extras: [{ listId: extra.listId }] }],
     });
-    await type(el, "tendered", "21");
+    await type(el, "tendered", tendered);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     expect(api.takeBillPayment).toHaveBeenCalledWith(
       id,
-      expect.objectContaining({ kind: "share", shareOf: 1, method: "cash", tendered: "21" }),
+      expect.objectContaining({ kind: "share", shareOf: 1, method: "cash", tendered }),
       expect.anything(),
     );
   },

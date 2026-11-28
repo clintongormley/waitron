@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import { floorZones, persons, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
-import { createExtraList, updateMenuDetails, writeProductModifiers } from "@waitron/menu";
+import { updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import * as venueService from "@waitron/venue-service";
 import { insertPartyBill } from "./parties.js";
@@ -21,6 +21,7 @@ import {
 } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { addExtraList } from "./testing/working-order.test-support.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
 let app: Hono;
@@ -487,30 +488,16 @@ it("answers the dead-end check for a table draft line tapped in a set-menu folde
 
 it("takes exact cash for a Counter takeaway with a set-menu supplement and a paid extra", async () => {
   const copy = await counterSetMenu();
-  const { venue } = fixture;
-  const productId = venue.productId("Tarta");
-  const { versionId, listId } = await inTx(venue, async (tx) => {
+  const { versionId, listId, productId } = await inTx(fixture.venue, async (tx) => {
     await updateMenuDetails(tx, copy.menuId, { setPrice: "14.00" });
-    const list = await createExtraList(
-      tx,
-      {
-        name: "Takeaway extra",
-        minPicks: 0,
-        maxPicks: 1,
-        items: [{ productId, maxQuantity: 1, price: "2.00" }],
-      },
-      venue.cfg.locale,
-    );
-    await writeProductModifiers(tx, copy.productId, [{ kind: "extras", id: list.id }]);
+    const extra = await addExtraList(tx, copy.productId, "Takeaway extra", { price: "2.00" });
     const versionId = await priceSetMenuDish(tx, copy, { aLaCarte: 2400, supplementCents: 500 });
-    return { versionId, listId: list.id };
+    return { versionId, ...extra };
   });
-  const { id, dining, zoneId } = await counterTakeaway();
+  const { id, dining, zoneId, lines } = await freshBasket("takeaway");
   const line = {
-    setMenuId: copy.menuId,
-    menuItemId: copy.menuItemId,
+    ...lines[0]!,
     menuVersionId: versionId,
-    quantity: "1",
     extras: [{ listId, picks: [{ productId, quantity: 1 }] }],
   };
   const paid = await payWithBasket(id, dining, { zoneId, lines: [line] }, "21.00");
