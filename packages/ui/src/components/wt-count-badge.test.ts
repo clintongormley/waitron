@@ -85,6 +85,24 @@ test("with publish-width, keeps its drawn width on its parent as the count chang
   expect(published()).toBe("");
 });
 
+test("given publish-width while detached, publishes on the parent it is then put in", async () => {
+  const el = (await mount('<wt-count-badge count="9"></wt-count-badge>')) as WtCountBadge;
+  const before = document.createElement("div");
+  before.append(el);
+  el.publishWidth = true;
+  await el.updateComplete;
+  await nextPaint();
+  const after = document.createElement("div");
+  host.append(after);
+  after.append(el);
+  await nextPaint();
+  expect(before.style.getPropertyValue("--count-badge-width")).toBe("");
+  expect(published()).toBe("");
+  expect(after.style.getPropertyValue("--count-badge-width")).toBe(
+    `${el.getBoundingClientRect().width}px`,
+  );
+});
+
 test("without publish-width, leaves its parent's style alone", async () => {
   await mount('<wt-count-badge count="9"></wt-count-badge>');
   await nextPaint();

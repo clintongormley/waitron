@@ -59,12 +59,12 @@ for (const [name, ctor] of Object.entries(components)) {
   });
 
   test(`${name} declares no literal px/rem/em sizing`, () => {
-    // Up to 1px is allowed as a hairline; rem and em are banned at any size. A media or container
-    // condition cannot read a custom property, and the menu's column formula is the shared one
-    // its tiles' widths are defined by.
-    const css = cssOf(ctor.styles)
-      .replace(/@(?:media|container)[^{]*\{/g, "{")
-      .replaceAll(HOME_GRID_COLUMNS, "");
+    // Up to 1px is allowed as a hairline; rem and em are banned at any size. The menu tiles alone
+    // may keep their 720 px height step, since a media condition cannot read a custom property,
+    // and the shared column formula.
+    let css = cssOf(ctor.styles);
+    if (name === "menuTileStyles")
+      css = css.replace(/@media \(width >= 720px\)\s*\{/g, "{").replaceAll(HOME_GRID_COLUMNS, "");
     const pxOffenders = numbersWithUnit(css, "px").filter((n) => Math.abs(n) > 1);
     const remEmOffenders = numbersWithUnit(css, String.raw`(?:rem|em)\b`);
     expect([...pxOffenders, ...remEmOffenders]).toEqual([]);

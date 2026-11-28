@@ -1091,8 +1091,8 @@ On a till's PIN sign-in, a person the device's profile does not admit also answe
 [design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
 several of them more broadly — the token rule there binds any component or view, not only
 `packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower:
-`packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts` and the
-stylesheets exported from `packages/ui/src/*.ts` only, and
+`packages/ui/src/no-hardcoded-chrome.test.ts` scans what `packages/ui/src/components/*.ts` and
+`packages/ui/src/*.ts` (not `index.ts`) export only, and
 `scripts/no-hardcoded-chrome-views.test.ts` the dashboard's, the till's, the customer menu's and modules' dashboard
 views (below).
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
@@ -1101,13 +1101,13 @@ The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` 
 ## No hardcoded chrome
 
 Every colour, spacing, radius, and font value in a `packages/ui/src/components/*.ts` component's
-`static styles` (and any other stylesheet it keeps as a static), and in a stylesheet a
+`static styles` (and any other single stylesheet it keeps as a static), and in a stylesheet a
 `packages/ui/src/*.ts` module exports, such as `menuTileStyles`, must read a `--wt-*` custom
 property: no hex, no
 `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()`/`color()`/`color-mix()`, no named colours,
-no `px` above `1` (outside a `@media` or `@container` condition, which cannot read a custom
-property, and the shared `HOME_GRID_COLUMNS` formula), no `rem`/`em` at all (including inside
-`min()`/`max()`/`clamp()`). `transparent`,
+no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp()`).
+`menuTileStyles` alone may keep its `@media (width >= 720px)` tile-height step, since a media
+condition cannot read a custom property, and the shared `HOME_GRID_COLUMNS` formula. `transparent`,
 `currentColor`, and `inherit` are legitimate escape hatches, not chrome, and so are the system
 colours inside `@media (forced-colors: active)` (see
 [design-system.md](design-system.md#forced-colours-windows-contrast-themes)); no guard checks where

@@ -17,14 +17,14 @@ afterEach(() => {
   host = undefined;
 });
 
-async function drawTile(width: number): Promise<HTMLElement> {
+async function drawTile(width: number, counted = false): Promise<HTMLElement> {
   await page.viewport(width, 800);
   host = document.createElement("div");
   document.body.append(host);
   applyTokens(host);
   const root = host.attachShadow({ mode: "open" });
   root.adoptedStyleSheets = [baseStyles.styleSheet!, menuTileStyles.styleSheet!];
-  root.innerHTML = `<div class="grid"><div class="tile"><span class="label"><span class="name">Bravas</span></span></div></div>`;
+  root.innerHTML = `<div class="grid"><div class="tile"${counted ? " data-in-order" : ""}><span class="label"><span class="name">Bravas</span></span></div></div>`;
   return root.querySelector<HTMLElement>(".tile")!;
 }
 
@@ -43,6 +43,14 @@ describe("menu tile styles", () => {
     expect(style.paddingTop).toBe("8px");
     expect(style.paddingRight).toBe("8px");
     expect(style.rowGap).toBe("8px");
+  });
+
+  it("keeps a counted name clear of a count at its narrowest until the count says how wide it is", async () => {
+    const name = (await drawTile(390, true)).querySelector<HTMLElement>(".name")!;
+    const style = getComputedStyle(name);
+    // 24 px count less the 6 px outside the tile, plus half the 14 px name size at the start for "…".
+    expect(style.paddingInlineEnd).toBe("18px");
+    expect(style.paddingInlineStart).toBe("25px");
   });
 });
 

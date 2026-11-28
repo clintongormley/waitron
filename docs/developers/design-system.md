@@ -33,9 +33,10 @@ in any component or view. Every such value reads a token instead. `transparent`,
 and `inherit` are legitimate escape hatches, not chrome, and so are the system colours inside
 `@media (forced-colors: active)` (see "Forced colours", below); no guard checks where a system
 colour is used.
-`packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
-`import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
-styles`, and fails on violations. It covers a new primitive automatically.
+`packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives and style modules via
+`import.meta.glob(["./components/*.ts", "./*.ts", ...])` (excluding `*.test.ts` and `index.ts`),
+scans each primitive's `static styles` and each exported stylesheet, and fails on violations. It
+covers a new primitive automatically.
 `scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
 template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
 `packages/<name>/src/dashboard` (skipping the folders `sourceFilesIn` in
