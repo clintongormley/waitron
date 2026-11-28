@@ -385,6 +385,25 @@ describe("A dish", () => {
     expect(amountField(el).value).toBe("5.00");
   });
 
+  it("fits the refund note beside the remaining balance on a phone", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    onTestFinished(() => page.viewport(viewport.width, viewport.height));
+    await page.viewport(390, 844);
+    const reduced = { ...VIEW.lines[0]!, gross: "43.50", left: "29.00", credited: "14.50" };
+    const { el } = await mount(withView({ lines: [reduced] }));
+    await choose(el, "dishes");
+    const row = dish(el, "croquetas")!;
+    await row.updateComplete;
+    await document.fonts.ready;
+
+    const note = row.shadowRoot!.querySelector('[part="description"]')!;
+    const balance = row.shadowRoot!.querySelector("#dish-amount")!;
+    const words = document.createRange();
+    words.selectNodeContents(note);
+    expect(words.getClientRects()).toHaveLength(1);
+    expect(words.getBoundingClientRect().right).toBeLessThan(balance.getBoundingClientRect().left);
+  });
+
   it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {
     const salad = VIEW.lines.find((line) => line.id === "salad")!;
     const waiting = { ...salad, cancelled: { ...salad.cancelled!, waiting: "4.00" } };

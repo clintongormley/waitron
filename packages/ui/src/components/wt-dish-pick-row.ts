@@ -32,6 +32,14 @@ export class WtDishPickRow extends LitElement {
         line-height: 1.35;
       }
 
+      .row:has(#dish-quantity:empty) {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+      }
+
+      #dish-quantity:empty {
+        display: none;
+      }
+
       label.row {
         min-inline-size: var(--wt-tap-min);
         cursor: pointer;
