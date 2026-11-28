@@ -422,6 +422,10 @@ describe("the customer menu Online preview", () => {
         const choice = page.getByRole("radio", { name: size });
         await expect.element(choice).toBeVisible();
         if (choice.element().getAttribute("aria-checked") !== "true") await choice.click();
+        if (surface === "canvas") {
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+        }
         const first = page.getByRole("link", { name: "From the oven", exact: true }).first();
         await expect.element(first, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
         const last = page.getByRole("link", { name: "Desserts and coffee" });
