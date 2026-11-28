@@ -21,6 +21,7 @@ import {
   readCorrectableNow,
   readInvoiceCorrection,
   recordsNeedChecking,
+  type InvoiceCorrectionDeps,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
 import { refuseUntilRefundable } from "./tender-refund-completion.js";
@@ -91,6 +92,8 @@ export interface GiveBackDeps {
   admission: TradingAdmission;
   /** As the refund write looks a card's provider up; absent, no card reader refund can be sent. */
   refundProviderFor?: RefundProviderFor;
+  /** Whether this box can send invoice email now; absent, it cannot. */
+  invoiceEmailAvailable?: InvoiceCorrectionDeps["invoiceEmailAvailable"];
 }
 
 export interface GiveBackWaits {

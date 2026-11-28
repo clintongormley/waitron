@@ -443,9 +443,9 @@ When a card refund waits for the card company, choose **Check again** to ask it 
 and **Refund the rest** when the window offers it. If you cannot give refunds yourself, a
 supervisor or manager approves asking with their PIN. If the window says the box did not answer,
 choose **Send again**. **Check again** and **Send again** never refund the same money twice. A
-corrective invoice goes out by itself when it is filed: by email to the address the customer's
-invoice went to, when the box can send email; otherwise it prints at this till. Give the customer
-what prints. A corrective receipt or invoice that does not print by itself can be printed
+corrective invoice goes out by itself when it is filed. The window says where it goes: to send it
+to another printer or email address, choose **Change** before you give the money back. If the card company answers only later (when you
+choose **Check again**, or by itself), or you finish the refund from **Find a bill**, it goes the way the customer's invoice went instead. Give the customer what prints. A corrective receipt or invoice that does not print by itself can be printed
 from **Find a bill**.
 
 If you close the window before all the money is refunded, look for the receipt in **Find a bill**

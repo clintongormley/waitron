@@ -148,6 +148,7 @@ export class FindBillApi extends DrawerApi {
       extra: request.extra,
       way: request.way,
       fromCancel: request.fromCancel,
+      correctiveDelivery: request.correctiveDelivery,
     } satisfies Record<keyof GiveBackRequest, unknown>;
     return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/give-back`, "POST", {
       ...fields,

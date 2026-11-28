@@ -29,6 +29,7 @@ import {
   previewFor,
   refundAnswer,
   refundsOn,
+  sentCorrective,
 } from "./give-back-dialog.test-helpers.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
@@ -1503,8 +1504,10 @@ describe("sending", () => {
   });
 
   it.each([
-    ["it is being sent", { delivery: { medium: "email" } }, false],
-    ["nothing was sent", { delivery: null }, true],
+    ["it is being sent", sentCorrective({ medium: "email" }), false],
+    ["nothing was sent", sentCorrective(null), true],
+    ["its send failed", sentCorrective({ medium: "email", status: "failed" }), true],
+    ["its send ended unknown", sentCorrective({ medium: "email", status: "unknown" }), true],
     ["the answer names none", undefined, true],
   ])(
     "says a full invoice's corrective invoice can be printed from Find a bill unless the box sent it (%s)",
@@ -1547,7 +1550,7 @@ describe("sending", () => {
           ...outcome,
           parts: outcome.parts.map((part) => ({
             ...part,
-            corrective: { delivery: { medium: "receipt" }, printedOnReceiptNotA4: flag },
+            corrective: { ...sentCorrective({ medium: "receipt" }), printedOnReceiptNotA4: flag },
           })),
         };
       });

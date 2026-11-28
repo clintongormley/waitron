@@ -10,7 +10,9 @@ import type {
   GiveBackRequest,
   GiveBackView,
   GiveBackWay,
+  SentCorrective,
 } from "../api/give-back-types.js";
+import type { InvoiceDeliveryAttempt } from "../api/invoice-delivery-api.js";
 import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import { TenderRefundSession } from "../state/tender-refund.js";
 import type { RefundableTender, TenderRefundView } from "../api/tender-refund-types.js";
@@ -162,6 +164,34 @@ export const WAITING_TENDER: RefundableTender = {
   pendingRefundId: "refund-1",
   manual: false,
 };
+
+/** A filed corrective of €4.50 for Acme SL, sent as `delivery` says (an email waiting to go unless
+ * it says otherwise); null when nothing was sent. */
+export const sentCorrective = (
+  delivery: Partial<InvoiceDeliveryAttempt> | null,
+): SentCorrective => ({
+  saleId: "corrective-1",
+  invoiceNumber: "R/7",
+  customerName: "Acme SL",
+  amount: "4.50",
+  delivery:
+    delivery === null
+      ? null
+      : {
+          id: "delivery-1",
+          medium: "email",
+          designation: "original",
+          status: "queued",
+          failureCode: null,
+          requestedAt: "2026-11-28T10:00:00.000Z",
+          at: null,
+          personId: "person-1",
+          printerHold: null,
+          lateSuccess: false,
+          ...delivery,
+        },
+  printedOnReceiptNotA4: false,
+});
 
 /** Every part of `body` given back. */
 export const completedFor = (body: GiveBackWrite): GiveBackOutcome => ({

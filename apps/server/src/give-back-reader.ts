@@ -119,7 +119,11 @@ async function runReaderParts(
     if (settled === null) break;
     refusalReason = settled.refusalReason;
     if (settled.correctionId !== undefined && settled.state === "completed")
-      await fileCorrectionAutomatically(deps, settled.correctionId).catch((error: unknown) => {
+      await fileCorrectionAutomatically(
+        deps,
+        settled.correctionId,
+        ask.request.correctiveDelivery,
+      ).catch((error: unknown) => {
         deps.log?.("error", "invoice_correction.automatic_filing_failed", {
           correctionId: settled.correctionId,
           refundId: settled.id,

@@ -1,7 +1,7 @@
 # CORRECT-FULL-INVOICE: giving money back on a full invoice files a corrective full invoice
 
 Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Give money
-back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b landed as #4483 (`30fc335b78`); PR 4a is built on `feat/correct-full-invoice-goes-out`. Design:
+back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b landed as #4483 (`30fc335b78`); PR 4a is built on `feat/correct-full-invoice-goes-out`, and PR 4a-choice (staff choose the way on the give-back form, not stored; the owner's ask of 2026-11-28 05:53, cleared by the watcher 06:02) on `feat/correct-full-invoice-choose-way`. Design:
 [2026-11-25-correct-full-invoice-design.md](../specs/2026-11-25-correct-full-invoice-design.md), with the
 owner's answers at the end of its section 6. FISCAL: the owner lands every pull request.
 
@@ -287,7 +287,8 @@ invoice it corrects, which covers M7's sites at once. An R4 replacement's delive
 `corrective:<id>`) the original's way (D8); the answer's corrective part gains number, customer, amount and how it
 was sent. Failing first: cash on paper; a late answer by email; an A4 printer switched off since (alert, filing
 stands); no receipt printer on the opening device (nothing queued, filing stands); a resend sends nothing again.
-**Leaves:** a corrective reaches the customer as the original did; staff cannot yet choose another way.
+**Leaves:** a corrective reaches the customer as the original did; staff cannot yet choose another way
+(since PR 4a-choice they can, PR 5's note).
 _2026-11-28, as built: when the original went on A4, the corrective goes on the filing till's own
 active A4 printer, and otherwise on its receipt printer with no alert, as D8 says (lane L's reading;
 Task 13's list said "alert" for an A4 printer switched off since); the answer's field is
@@ -319,6 +320,8 @@ corrective. Failing first: email, retry, each refused where an F1's button is. *
 no till screen sends them until PR 5.
 
 ## PR 5 — staff can change it (till)
+
+_2026-11-28 (PR 4a-choice), built ahead of this section: the give-back form's line "Corrective invoice: …" with **Change** (`widgets/corrective-choice.ts`), and Task 18's three corrective-invoice lines on the end screen. The press field is `correctiveDelivery` (`{ medium: "print", printerId }` or `{ medium: "email", recipient }`), checked by `checkCorrectiveDelivery`, not Pay's `delivery` and `checkedInvoiceChoiceDelivery`: Pay's shape has no slot for a receipt printer chosen by id, so Task 14 stores one of the two shapes and Task 16 reconciles the sheet's Delivery field with the recipient dialog's. Its refusals are forgotten on a first send only (`refusesChosenWay` in `state/give-back.ts`), so Task 17 adds neither `invoice_delivery` code to `PROVES_NOTHING`; `fiscal.taxpayer_domicile_missing` is still Task 17's. Not stored: until PR 4b only a corrective filed during a Give back press goes the chosen way._
 
 **Task 16.** The Delivery field and email box move from `invoice-recipient-dialog.ts` to
 `widgets/invoice-delivery-choice.ts`; that dialog's tests pass unedited.

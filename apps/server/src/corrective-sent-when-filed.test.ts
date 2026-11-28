@@ -492,6 +492,27 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
   });
 
+  it("previews the way the R1 then goes when the invoice given back on was emailed and its replacement printed on paper", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "old@harbour.example" });
+    const r4 = await replacedByR4(saleId);
+    await printedOriginal(r4);
+    const shown = await send(
+      mailApp,
+      adminCookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      ask("goodwill", "10.00"),
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect((shown.json.corrective as { default: unknown }).default).toMatchObject({
+      medium: "receipt",
+      printerId: receiptPrinterId(),
+    });
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+  });
+
   it("emails the R1 when the original was emailed and a paper copy printed afterwards", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
@@ -531,6 +552,60 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
     expect(await invoiceMails()).toBe(mailsBefore);
     expect(correctivePart(answer)?.delivery).toMatchObject({ medium: "receipt" });
+  });
+
+  it("prints the R1 on paper when this box cannot read whether it can send email", async () => {
+    const app = venue.appWith({
+      invoiceEmailAvailable: () => Promise.reject(new Error("email settings unreadable")),
+    });
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await printedOriginal(saleId);
+    const answer = await give(saleId, await giveBody(saleId, "10.00"), app);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const correction = await correctionOf(answer);
+    expect(correction.state).toBe("filed");
+    expect(await wayOf(correction.correctiveSaleId!)).toEqual(PAPER(receiptPrinterId()));
+  });
+
+  it("previews paper and offers no email when this box cannot read whether it can send email", async () => {
+    const app = venue.appWith({
+      invoiceEmailAvailable: () => Promise.reject(new Error("email settings unreadable")),
+    });
+    const saleId = await fullInvoice({ cash: "37.00" });
+    const shown = await send(
+      app,
+      adminCookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      ask("goodwill", "10.00"),
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect(shown.json.corrective).toMatchObject({
+      default: { medium: "receipt", printerId: receiptPrinterId() },
+      emailAvailable: false,
+    });
+  });
+
+  it("prints the R1 on paper, as the preview says, when the original was emailed and this box cannot read whether it can send email", async () => {
+    const app = venue.appWith({
+      invoiceEmailAvailable: () => Promise.reject(new Error("email settings unreadable")),
+    });
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const shown = await send(
+      app,
+      adminCookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      ask("goodwill", "10.00"),
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect((shown.json.corrective as { default: unknown }).default).toMatchObject({
+      medium: "receipt",
+      printerId: receiptPrinterId(),
+    });
+    const { r1 } = await givenBackInCash(saleId, app);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
   });
 
   it("does not show the email address to a till that may not print receipts", async () => {

@@ -11,6 +11,13 @@ import {
 } from "@waitron/shared";
 import { refusePlainRefundOfAdvance } from "./advance-taken-off.js";
 import { invalid } from "./bill-allocation.js";
+import {
+  checkCorrectiveDelivery,
+  parseCorrectiveDelivery,
+  readCorrectiveChoice,
+  type CorrectiveChoice,
+  type CorrectiveDelivery,
+} from "./corrective-delivery.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
 import {
   readFacts,
@@ -43,6 +50,8 @@ export interface GiveBackRequest {
   way: string;
   /** The cancels the window filled in after Cancel and refund or Finish table was opened with. */
   fromCancel?: string[];
+  /** Where staff chose to send the corrective full invoice; only for a give-back that files one. */
+  correctiveDelivery?: CorrectiveDelivery;
 }
 
 export type GiveBackPart =
@@ -59,6 +68,8 @@ export interface GiveBackPlan {
   /** The rights the parts need that this person lacks. */
   needs: GiveBackRight[];
   manual: boolean;
+  /** Present only when the give-back files a corrective full invoice: where it would go. */
+  corrective?: CorrectiveChoice;
 }
 
 const PURPOSES: readonly string[] = ["dishes", "goodwill", "extra"] satisfies GiveBackPurpose[];
@@ -94,6 +105,9 @@ export function parseGiveBackRequest(body: Record<string, unknown>): GiveBackReq
     way: body.way.toLowerCase(),
     ...(body.lineIds === undefined ? {} : { lineIds: idsOf(body.lineIds, "lineIds") }),
     ...(body.fromCancel === undefined ? {} : { fromCancel: idsOf(body.fromCancel, "fromCancel") }),
+    ...(body.correctiveDelivery === undefined
+      ? {}
+      : { correctiveDelivery: parseCorrectiveDelivery(body.correctiveDelivery) }),
   };
 }
 
@@ -151,8 +165,22 @@ export async function planGiveBack(
   who: { device: DeviceBinding | null; authority: PersonAuthority },
   body: object,
 ): Promise<GiveBackPlan> {
-  const { plan, rights } = await planWithRights(tx, deps, cfg, reading, saleId, who.device, body);
-  return { ...plan, needs: rights.filter((right) => !holds(who.authority, right)) };
+  const { plan, rights, filesFullCorrective } = await planWithRights(
+    tx,
+    deps,
+    cfg,
+    reading,
+    saleId,
+    who.device,
+    body,
+  );
+  return {
+    ...plan,
+    needs: rights.filter((right) => !holds(who.authority, right)),
+    ...(filesFullCorrective && who.device !== null
+      ? { corrective: await readCorrectiveChoice(tx, deps, cfg, who.device, saleId) }
+      : {}),
+  };
 }
 
 /** The rights a give-back's parts need, whoever holds them (5.4, D9): `sale.refund` for a plain
@@ -180,7 +208,12 @@ export async function planWithRights(
   saleId: SaleId,
   device: DeviceBinding | null,
   body: object,
-): Promise<{ plan: Omit<GiveBackPlan, "needs">; rights: GiveBackRight[] }> {
+): Promise<{
+  plan: Omit<GiveBackPlan, "needs" | "corrective">;
+  rights: GiveBackRight[];
+  /** The give-back files a corrective full invoice. */
+  filesFullCorrective: boolean;
+}> {
   const request = parseGiveBackRequest(body as Record<string, unknown>);
   const facts = await readFacts(tx, deps, cfg, reading, saleId, device);
   const { view, waits } = facts;
@@ -268,6 +301,12 @@ export async function planWithRights(
   if (extra > 0) parts.push({ kind: "extra", amount: centsToDecimal(extra), way: way.way });
   if (correction !== undefined) parts.push(correction);
 
+  const filesFullCorrective = correction !== undefined && facts.fullInvoice;
+  // Checked before anything is written: a way no longer offered refuses the press.
+  if (request.correctiveDelivery !== undefined) {
+    if (!filesFullCorrective || device === null) throw invalid("correctiveDelivery");
+    await checkCorrectiveDelivery(tx, deps, device, saleId, request.correctiveDelivery);
+  }
   const rights = rightsFor({
     refund: refund > 0,
     refundCovered:
@@ -279,5 +318,6 @@ export async function planWithRights(
   return {
     plan: { parts, leftUnderWay: centsToDecimal(leftUnderWay), manual: way.manual },
     rights,
+    filesFullCorrective,
   };
 }

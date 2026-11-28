@@ -17,6 +17,7 @@ import {
 } from "@waitron/identity";
 import { AppError, centsToDecimal, type SaleId } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
+import { checkCorrectiveDelivery } from "./corrective-delivery.js";
 import type { DeviceBinding } from "./device-session.js";
 import {
   cents,
@@ -364,9 +365,16 @@ export async function giveBack(
     const rights = await resendRights(tx, ask, earlier, legs, manual);
     await authorizeRights(tx, who, rights, manualFor(manual));
     await checkResend(tx, deps, cfg, reading, saleId, ask, earlier, legs, who.personId);
+    const fileAfter = manual && earlier.correction?.state === "open" ? earlier.correction.id : null;
+    const chosen = ask.request.correctiveDelivery;
+    // The caller files with this resend's way, so it is checked as a first press's is.
+    if (fileAfter !== null && chosen !== undefined) {
+      if (who.device === null) throw invalid("correctiveDelivery");
+      await checkCorrectiveDelivery(tx, deps, who.device, saleId, chosen);
+    }
     return {
       outcome: await outcomeOf(tx, deps, cfg, earlier, ask, legs, null, pressRunning(deps.db, ask)),
-      fileAfter: manual && earlier.correction?.state === "open" ? earlier.correction.id : null,
+      fileAfter,
     };
   }
 
@@ -542,7 +550,13 @@ export async function giveBack(
         deps,
         cfg,
         opened.correction.id,
-        { submissionId: ask.ids.leg, amount: centsToDecimal(leg) },
+        {
+          submissionId: ask.ids.leg,
+          amount: centsToDecimal(leg),
+          ...(ask.request.correctiveDelivery === undefined
+            ? {}
+            : { correctiveDelivery: ask.request.correctiveDelivery }),
+        },
         {
           personId: who.personId,
           authz: { sessionId: who.sessionId, override: who.override },

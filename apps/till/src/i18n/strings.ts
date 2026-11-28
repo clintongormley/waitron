@@ -195,6 +195,20 @@ export const en = {
     "{amount} is refunded to card {card} on the separate card terminal.",
   "give_back.summary_rest":
     "{amount} cannot be refunded this way: it stays under way for other payments.",
+  "give_back.corrective_printed_a4": "Corrective invoice: printed on A4 · {printer}",
+  "give_back.corrective_printed_receipt": "Corrective invoice: printed on the receipt printer",
+  "give_back.corrective_printed_receipt_on":
+    "Corrective invoice: printed on the receipt printer · {printer}",
+  "give_back.corrective_emailed": "Corrective invoice: emailed to {address}",
+  "give_back.corrective_emailed_customer": "Corrective invoice: emailed to the customer",
+  "give_back.corrective_not_sent": "Corrective invoice: not sent; find it in Find a bill",
+  "give_back.corrective_change": "Change",
+  "give_back.corrective_heading": "Corrective invoice",
+  "give_back.corrective_receipt_on": "Receipt printer {printer}",
+  "give_back.corrective_printer_invalid": "That printer is no longer available. Choose another.",
+  "give_back.corrective_email_unavailable": "Email cannot be sent now. Choose a printer.",
+  "give_back.corrective_invalid":
+    "This way cannot be used for the corrective invoice. Choose another.",
   "give_back.pin":
     "If you cannot give refunds yourself, a supervisor or manager approves it with their PIN next.",
   "give_back.submit": "Refund {amount}",
@@ -234,6 +248,12 @@ export const en = {
   "give_back.print_later_invoice": "Its corrective invoice can be printed from Find a bill.",
   "give_back.printing_on_receipt_not_a4":
     "Its corrective invoice is printing on the receipt printer, not on A4.",
+  "give_back.corrective_done_printing":
+    "A corrective invoice for {customer} (−{amount}) is printing.",
+  "give_back.corrective_done_emailing":
+    "A corrective invoice for {customer} (−{amount}) is being emailed to {email}.",
+  "give_back.corrective_done_emailed":
+    "A corrective invoice for {customer} (−{amount}) has been emailed to {email}.",
   "give_back.pending": "{amount} is waiting for the card company's answer.",
   "give_back.rest": "{amount} is not refunded yet: it follows when the card company answers.",
   "give_back.check_again": "Check again",
@@ -2715,6 +2735,22 @@ export const es: Record<StringKey, string> = {
   "give_back.summary_terminal": "Se devuelven {amount} a la tarjeta {card} en el datáfono aparte.",
   "give_back.summary_rest":
     "{amount} no se pueden devolver así: quedan en curso para los demás pagos.",
+  "give_back.corrective_printed_a4": "Factura rectificativa: se imprime en A4 · {printer}",
+  "give_back.corrective_printed_receipt":
+    "Factura rectificativa: se imprime en la impresora de tickets",
+  "give_back.corrective_printed_receipt_on":
+    "Factura rectificativa: se imprime en la impresora de tickets · {printer}",
+  "give_back.corrective_emailed": "Factura rectificativa: se envía por correo a {address}",
+  "give_back.corrective_emailed_customer": "Factura rectificativa: se envía por correo al cliente",
+  "give_back.corrective_not_sent": "Factura rectificativa: no se envía; está en Buscar cuenta",
+  "give_back.corrective_change": "Cambiar",
+  "give_back.corrective_heading": "Factura rectificativa",
+  "give_back.corrective_receipt_on": "Impresora de tickets {printer}",
+  "give_back.corrective_printer_invalid": "Esa impresora ya no está disponible. Elige otra.",
+  "give_back.corrective_email_unavailable":
+    "Ahora no se puede enviar por correo. Elige una impresora.",
+  "give_back.corrective_invalid":
+    "No se puede usar esta forma para la factura rectificativa. Elige otra.",
   "give_back.pin":
     "Si tú no puedes devolver dinero, a continuación lo aprueba un responsable o encargado con su PIN.",
   "give_back.submit": "Devolver {amount}",
@@ -2754,6 +2790,12 @@ export const es: Record<StringKey, string> = {
     "Su factura rectificativa se puede imprimir desde Buscar cuenta.",
   "give_back.printing_on_receipt_not_a4":
     "Su factura rectificativa se está imprimiendo en la impresora de tickets, no en A4.",
+  "give_back.corrective_done_printing":
+    "Se está imprimiendo una factura rectificativa para {customer} (−{amount}).",
+  "give_back.corrective_done_emailing":
+    "Se está enviando por correo a {email} una factura rectificativa para {customer} (−{amount}).",
+  "give_back.corrective_done_emailed":
+    "Se ha enviado por correo a {email} una factura rectificativa para {customer} (−{amount}).",
   "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
   "give_back.rest":
     "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",

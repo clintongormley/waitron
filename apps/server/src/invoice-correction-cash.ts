@@ -33,6 +33,7 @@ import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { CorrectiveDelivery } from "./corrective-delivery.js";
 import "./errors.js";
 
 const ZERO = decimal("0.00");
@@ -67,7 +68,7 @@ export async function giveCorrectionCash(
   deps: InvoiceCorrectionDeps,
   cfg: DeviceRequestConfig,
   correctionId: string,
-  ask: { submissionId: string; amount: Decimal },
+  ask: { submissionId: string; amount: Decimal; correctiveDelivery?: CorrectiveDelivery },
   actor: { personId: string; authz: AuthzInput; authorization: Authorization },
 ): Promise<{ correction: InvoiceCorrectionView; refunds: TenderRefundView[]; replayed: boolean }> {
   const correction = await readCorrectionRow(tx, correctionId);
@@ -156,9 +157,16 @@ export async function giveCorrectionCash(
   }
 
   if ((await readCorrectionMoney(tx, correctionId)).completed === correction.gross)
-    await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId, {
-      print: true,
-    });
+    await fileCorrectionIn(
+      tx,
+      deps,
+      cfg,
+      correctionId,
+      actor.authz,
+      actor.personId,
+      { print: true },
+      ask.correctiveDelivery,
+    );
   return {
     correction: await readInvoiceCorrection(tx, deps.backend, cfg, correctionId),
     refunds,

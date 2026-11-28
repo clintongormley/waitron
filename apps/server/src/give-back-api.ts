@@ -7,7 +7,11 @@ import { asObject } from "./bill-payments-api.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import { giveBack } from "./give-back.js";
 import { planGiveBack } from "./give-back-plan.js";
-import { readGiveBackOutcome, type GiveBackWriteDeps } from "./give-back-press.js";
+import {
+  parseGiveBackWrite,
+  readGiveBackOutcome,
+  type GiveBackWriteDeps,
+} from "./give-back-press.js";
 import { readGiveBack } from "./give-back-read.js";
 import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
 import type { Logger } from "./logger.js";
@@ -159,7 +163,11 @@ export function mountGiveBackApi(
       if ("onReader" in result) return c.json(await result.onReader(filingDeps));
       const { outcome, fileAfter } = result;
       if (fileAfter === null) return c.json(outcome);
-      await fileCorrectionAutomatically(filingDeps, fileAfter).catch((error: unknown) => {
+      await fileCorrectionAutomatically(
+        filingDeps,
+        fileAfter,
+        parseGiveBackWrite(body).request.correctiveDelivery,
+      ).catch((error: unknown) => {
         log("error", "invoice_correction.automatic_filing_failed", {
           correctionId: fileAfter,
           errorCode: codeOf(error),

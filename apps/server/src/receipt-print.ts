@@ -515,6 +515,7 @@ async function enrollExplicitInvoiceReceipt(
   jobId: string,
   personId: string | null | undefined,
   requestKey = jobId,
+  { printerChosen = false }: { printerChosen?: boolean } = {},
 ): Promise<void> {
   if ((ticket.invoiceType !== "F1" && ticket.invoiceType !== "R1") || personId === undefined)
     return;
@@ -524,6 +525,7 @@ async function enrollExplicitInvoiceReceipt(
     personId,
     medium: "receipt",
     printJobId: jobId,
+    printerChosen,
   });
 }
 
@@ -742,9 +744,11 @@ export async function enqueueOriginalReceipt(
     personId?: string | null;
     requestKey?: string;
     language?: string;
+    /** `printers` names the printer a person chose, rather than the device's receipt role. */
+    printerChosen?: boolean;
   } = {},
 ): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
-  const { personId, requestKey, language } = options;
+  const { personId, requestKey, language, printerChosen } = options;
   const printers = options.printers ?? printerLookup(tx, cfg.origin);
   // A failed original is retried through its existing job, keeping its history.
   if (await hasOriginalReceiptJob(tx, saleId)) return "exists";
@@ -774,7 +778,9 @@ export async function enqueueOriginalReceipt(
     pageLanguage: language ?? null,
     whileSwitchedOff: printers.whileSwitchedOff === true,
   });
-  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
+  await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey, {
+    printerChosen,
+  });
   return { jobId: job.jobId, receiptCopy: duplicate };
 }
 

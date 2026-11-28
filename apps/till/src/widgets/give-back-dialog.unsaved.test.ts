@@ -1,10 +1,17 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { SCOPE, UNDER_WAY, VIEW, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import {
+  SCOPE,
+  UNDER_WAY,
+  VIEW,
+  fakeGiveBackApi,
+  previewFor,
+} from "./give-back-dialog.test-helpers.js";
+import type { CorrectiveChoice } from "../api/give-back-types.js";
 import { GiveBackSession } from "../state/give-back.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import "./give-back-dialog.js";
@@ -17,7 +24,18 @@ class GiveBackLeaveApp extends LitElement {
   static fill: { cancellationIds: string[]; reasonId: string } | null = null;
   readonly fill = GiveBackLeaveApp.fill;
   readonly leave = new LeaveController(this);
+  /** Where the next app's previews say a corrective full invoice goes; none when undefined. */
+  static corrective: CorrectiveChoice | undefined = undefined;
   readonly api = fakeGiveBackApi(GiveBackLeaveApp.view);
+  constructor() {
+    super();
+    const corrective = GiveBackLeaveApp.corrective;
+    if (corrective !== undefined)
+      this.api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
+        ...previewFor(request),
+        corrective,
+      }));
+  }
   readonly session = new GiveBackSession(SCOPE, this.api);
   readonly corrections = new InvoiceCorrectionSession(SCOPE, this.api);
   closes = 0;
@@ -43,6 +61,7 @@ afterEach(() => {
   localStorage.clear();
   GiveBackLeaveApp.view = VIEW;
   GiveBackLeaveApp.fill = null;
+  GiveBackLeaveApp.corrective = undefined;
 });
 
 async function mount() {
@@ -72,6 +91,7 @@ async function question(app: GiveBackLeaveApp) {
   await q.updateComplete;
   return q;
 }
+const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 function unload() {
   const e = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(e);
@@ -231,6 +251,147 @@ it("a window filled in after a cancel closes without asking, and asks once a dis
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
+});
+
+describe("the corrective invoice's way, in a window filled in after a cancel", () => {
+  const choice = (form: TillGiveBackDialog) =>
+    form.shadowRoot!.querySelector("till-corrective-choice")!;
+  async function chooseWay(form: TillGiveBackDialog, value: string) {
+    await vi.waitFor(() =>
+      expect(choice(form)?.shadowRoot?.querySelector("[data-corrective-change]")).toBeTruthy(),
+    );
+    choice(form).shadowRoot!.querySelector<HTMLElement>("[data-corrective-change]")!.click();
+    await vi.waitFor(() =>
+      expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).not.toBeNull(),
+    );
+    const sheet = choice(form).shadowRoot!.querySelector("till-corrective-sheet")!;
+    await sheet.updateComplete;
+    sheet
+      .shadowRoot!.querySelector("wt-combobox[name=delivery]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    await sheet.updateComplete;
+    sheet.shadowRoot!.querySelector<HTMLElement>("[data-corrective-done]")!.click();
+    await vi.waitFor(() =>
+      expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).toBeNull(),
+    );
+    await form.updateComplete;
+  }
+  beforeEach(() => {
+    GiveBackLeaveApp.fill = { cancellationIds: ["cancel-1"], reasonId: "complaint" };
+    GiveBackLeaveApp.corrective = {
+      default: { medium: "a4", printerId: "office", printerName: "Office" },
+      printers: [
+        { id: "office", name: "Office", kind: "a4" },
+        { id: "bar", name: "Bar", kind: "receipt" },
+      ],
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
+  });
+
+  it("asks first once only the way was changed", async () => {
+    const { app, form } = await mount();
+    await chooseWay(form, "print:bar");
+    expect(unload()).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect((await question(app)).open).toBe(true);
+    expect(app.closes).toBe(0);
+  });
+
+  async function sheetWithAddress(form: TillGiveBackDialog) {
+    await vi.waitFor(() =>
+      expect(choice(form)?.shadowRoot?.querySelector("[data-corrective-change]")).toBeTruthy(),
+    );
+    choice(form).shadowRoot!.querySelector<HTMLElement>("[data-corrective-change]")!.click();
+    await vi.waitFor(() =>
+      expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).not.toBeNull(),
+    );
+    const sheet = choice(form).shadowRoot!.querySelector("till-corrective-sheet")!;
+    await sheet.updateComplete;
+    sheet
+      .shadowRoot!.querySelector("wt-combobox[name=delivery]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "email" }, bubbles: true, composed: true }),
+      );
+    await sheet.updateComplete;
+    const field =
+      sheet.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!;
+    await field.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(field.shadowRoot!.querySelector("input")!),
+      "luis@example.com",
+    );
+    await sheet.updateComplete;
+    return sheet;
+  }
+
+  it("Escape in the sheet with an address typed asks first, and Keep keeps the address", async () => {
+    GiveBackLeaveApp.corrective = { ...GiveBackLeaveApp.corrective!, emailAvailable: true };
+    const { app, form } = await mount();
+    const sheet = await sheetWithAddress(form);
+    await userEvent.keyboard("{Escape}");
+    const asked = await question(app);
+    expect(asked.open).toBe(true);
+    expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).toBe(sheet);
+    asked.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await vi.waitFor(() => expect(asked.open).toBe(false));
+    expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).toBe(sheet);
+    expect(
+      sheet.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
+        .value,
+    ).toBe("luis@example.com");
+    expect(app.closes).toBe(0);
+  });
+
+  it("the sheet taken out and put back keeps the typed address, and Escape still asks first", async () => {
+    GiveBackLeaveApp.corrective = { ...GiveBackLeaveApp.corrective!, emailAvailable: true };
+    const { app, form } = await mount();
+    const sheet = await sheetWithAddress(form);
+    const parent = sheet.parentNode!;
+    const next = sheet.nextSibling;
+    sheet.remove();
+    expect(unload()).toBe(false);
+    parent.insertBefore(sheet, next);
+    await sheet.updateComplete;
+    expect(unload()).toBe(true);
+    expect(
+      sheet.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
+        .value,
+    ).toBe("luis@example.com");
+    await userEvent.keyboard("{Escape}");
+    expect((await question(app)).open).toBe(true);
+  });
+
+  it("Cancel in the sheet with an address typed closes only the sheet, as Cancel does elsewhere", async () => {
+    GiveBackLeaveApp.corrective = { ...GiveBackLeaveApp.corrective!, emailAvailable: true };
+    const { app, form } = await mount();
+    const sheet = await sheetWithAddress(form);
+    sheet.shadowRoot!.querySelector<HTMLElement>("[data-corrective-cancel]")!.click();
+    await vi.waitFor(() =>
+      expect(choice(form).shadowRoot!.querySelector("till-corrective-sheet")).toBeNull(),
+    );
+    expect((await question(app)).open).toBe(false);
+    expect(text(choice(form).shadowRoot!.querySelector("[data-corrective-way]"))).toBe(
+      "Corrective invoice: printed on A4 · Office",
+    );
+    expect(app.closes).toBe(0);
+    expect(form.shadowRoot!.querySelector("[data-summary]")).not.toBeNull();
+  });
+
+  it("closes without asking once the way is changed back", async () => {
+    const { app, form } = await mount();
+    await chooseWay(form, "print:bar");
+    await chooseWay(form, "print:office");
+    expect(unload()).toBe(false);
+    const closed = new Promise<void>((resolve) =>
+      form.addEventListener("give-back-close", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect((await question(app)).open).toBe(false);
+  });
 });
 
 it("Escape and Cancel cannot close the window while Give back is sending, and the outcome then shows", async () => {
