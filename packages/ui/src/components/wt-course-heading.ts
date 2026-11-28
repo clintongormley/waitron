@@ -66,6 +66,7 @@ export class WtCourseHeading extends LitElement {
         background: var(--wt-color-tab-ready-tint);
         color: var(--wt-color-text);
         font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .mark wt-icon {

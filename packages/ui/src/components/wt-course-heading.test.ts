@@ -147,6 +147,7 @@ it("paints the sent mark from tokens, in plain upright letters", async () => {
   el.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
   el.style.setProperty("--wt-color-success", "rgb(13, 14, 15)");
   el.style.setProperty("--wt-font-size-sm", "11px");
+  el.style.setProperty("--wt-font-weight-bold", "800");
   el.style.setProperty("--wt-radius-full", "77px");
   el.style.setProperty("--wt-space-1", "1px");
   el.style.setProperty("--wt-space-2", "2px");
@@ -154,6 +155,7 @@ it("paints the sent mark from tokens, in plain upright letters", async () => {
   expect(pill.backgroundColor).toBe("rgb(7, 8, 9)");
   expect(pill.color).toBe("rgb(10, 11, 12)");
   expect(pill.fontSize).toBe("11px");
+  expect(pill.fontWeight).toBe("800");
   expect(pill.borderTopLeftRadius).toBe("77px");
   expect([pill.paddingTop, pill.paddingRight]).toEqual(["1px", "2px"]);
   expect(pill.textTransform).toBe("none");
