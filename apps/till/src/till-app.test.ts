@@ -17782,12 +17782,19 @@ describe("the device profile decides which screens a device offers", () => {
   }
 
   it("gives a handheld with a Pass profile only Pass and Schedule, despite both screen capabilities", async () => {
-    const el = await signIn("handheld", switches, phoneFormFactor);
-    expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
-    expect(affordances(el)).toEqual(["expo", "schedule", "find-bill"]);
-    expect(headerButton(el, "station")).toBeNull();
-    for (const name of ["expo", "schedule", "find-bill"])
-      expect(headerButton(el, name)).not.toBeNull();
+    const previousSize = { width: innerWidth, height: innerHeight };
+    // The narrow Floor puts Pass in the zone chooser instead of the header.
+    await page.viewport(1280, 900);
+    try {
+      const el = await signIn("handheld", switches, phoneFormFactor);
+      expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
+      expect(affordances(el)).toEqual(["expo", "schedule", "find-bill"]);
+      expect(headerButton(el, "station")).toBeNull();
+      for (const name of ["expo", "schedule", "find-bill"])
+        expect(headerButton(el, name)).not.toBeNull();
+    } finally {
+      await page.viewport(previousSize.width, previousSize.height);
+    }
   });
 
   it("gives a till whose profile lacks the switches only Find a bill", async () => {
