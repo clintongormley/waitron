@@ -2273,7 +2273,7 @@ menu browser and the basket redraw on a change (`ContentLanguageController`), so
 within about a minute. On a bill line's name, a word of 8 letters or more can be hyphenated by that language's rules
 (`hyphens: auto` with `hyphenate-limit-chars: 8 auto auto`); a shorter one never is, so a short word
 that fits a line stays whole. A menu tile's name is never hyphenated or broken inside a word; a word
-too long for its line ends in "…". That keeps its rule only for words under 8 letters: Chromium can still
+too long for its line ends in "…". On a bill line, the limit keeps its rule only for words under 8 letters: Chromium can still
 hyphenate a longer word at a line's end even when it would fit whole on the next line, which is how
 "asado" broke before the limit. Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
 long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table
