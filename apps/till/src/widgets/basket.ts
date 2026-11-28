@@ -430,6 +430,7 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
   @property({ attribute: false }) placedPrice?: (line: OrderLine) => string | undefined;
+  @property({ attribute: false }) ungroupedSetMenuPrice?: (line: OrderLine) => string;
 
   /**
    * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has three
@@ -939,7 +940,7 @@ export class TillBasket extends LitElement {
                     >${setMenuTag(setMenuPrice)}${this.#nutrition(line)}${lineMarks(line)}</span
                   >
                   ${this.#quantityCell(line, index, sent)}
-                  ${this.#dishTotal(line, listed, line.setMenuId === undefined ? undefined : (setMenuPrice ?? "0.00"))}
+                  ${this.#dishTotal(line, listed, line.setMenuId === undefined ? undefined : (setMenuPrice ?? this.ungroupedSetMenuPrice?.(line) ?? "0.00"))}
                   ${
                     this.lineDetails
                       ? html`<wt-button

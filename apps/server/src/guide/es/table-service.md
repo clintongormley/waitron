@@ -661,8 +661,10 @@ pagas todos, se va con ellos.
 Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. Sus platos se
 mueven con él.
 
-En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
-cuenta los agrupa en menús. Para añadir platos después, toca el pedido aparcado en **Pedidos abiertos**.
+En el **Mostrador**, elige **Para llevar** y añade platos desde cualquier carpeta. La cesta
+muestra el precio a la carta de cada plato nuevo y los extras de pago. Abre **Cobrar** para comprobar
+el total una vez agrupados los platos en menús. Para añadir platos después, toca el pedido
+aparcado en **Pedidos abiertos**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
