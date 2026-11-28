@@ -95,6 +95,7 @@ export interface CaptionMetrics {
   widthOf: (text: string) => number;
   fitsJob: (text: string, width: number) => boolean;
   nameSize: number;
+  badgeSpace: number;
   inset: number;
 }
 
@@ -127,6 +128,7 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
       return false;
     },
     nameSize: Number.parseFloat(styles.fontSize),
+    badgeSpace: Number.parseFloat(styles.getPropertyValue("--wt-space-3")) || 0,
     inset: Number.parseFloat(styles.getPropertyValue("--wt-space-1")) || 0,
   };
 }
@@ -139,6 +141,7 @@ export function renderCaption({
   metrics,
   width,
   height,
+  allergy,
   outlined,
   fill,
 }: {
@@ -149,6 +152,7 @@ export function renderCaption({
   metrics?: CaptionMetrics | undefined;
   width: number;
   height: number;
+  allergy: boolean;
   outlined: boolean;
   fill?: FloorMapFill | undefined;
 }) {
@@ -165,9 +169,11 @@ export function renderCaption({
   if (cue === null) {
     return { name, content: html`<span part="name" data-fill=${fill ?? nothing}>${name}</span>` };
   }
+  const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
   const full =
     job !== null &&
-    (metrics === undefined || (height >= metrics.nameSize * 4 && metrics.fitsJob(job.text, space)));
+    (metrics === undefined ||
+      (captionHeight >= metrics.nameSize * 4 && metrics.fitsJob(job.text, space)));
   const compact = job?.compact ?? cue.text;
   const compactTime = job?.compactTime;
   const detail = full

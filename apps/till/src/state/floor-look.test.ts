@@ -213,6 +213,13 @@ describe("mapLook", () => {
     });
   });
 
+  it("does not schedule a redraw for a table with no running job clock", () => {
+    expect(nextMapJobMinute(table(free), now)).toBe(Number.POSITIVE_INFINITY);
+    expect(nextMapJobMinute(table({ timingBand: "forgotten" }), now)).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
   it("does not redraw for the bill's minute when collection is the top job", () => {
     const billTime = new Date(now - 59_000).toISOString();
     const readyTime = new Date(now - 30_000).toISOString();

@@ -86,7 +86,9 @@ it("keeps today's name if the saved fallback is wider", async () => {
     },
     table("far", 25, 7),
   ]);
-  expect(button(map, "near").querySelector('[part="name"]')?.textContent).toBe("Window 12");
+  const name = button(map, "near").querySelector<HTMLElement>('[part="name"]')!;
+  expect(name.textContent).toBe("Window 12");
+  expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
 });
 
 it("does not replace a daily name with the saved full name", async () => {
@@ -137,12 +139,37 @@ it("keeps the wait visible when the compact job label itself needs clipping", as
   ]);
   const target = button(map, "T1");
   const cue = target.querySelector<HTMLElement>('[part="cue"]')!;
+  const text = cue.querySelector<HTMLElement>(".cue-text")!;
+  expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
   const time = cue.querySelector<HTMLElement>(".cue-time");
   expect(time?.textContent).toBe("11′");
   expect(time!.getBoundingClientRect().right).toBeLessThanOrEqual(
     target.getBoundingClientRect().right,
   );
   expect(time!.scrollWidth).toBeLessThanOrEqual(time!.clientWidth);
+});
+
+it("uses the compact wait if the allergy mark leaves too little height for a full job", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(340, 280, [
+    {
+      ...table("T1", 5, 7, 3),
+      allergy: true,
+      cue: { icon: "floor-timer", text: "Forgotten" },
+      job: { text: "Chase the Kitchen", time: "17 min", compact: "Kitchen", compactTime: "17′" },
+    },
+    table("T2", 14, 7, 3),
+  ]);
+  map.style.fontSize = "17px";
+  map.requestUpdate();
+  await map.updateComplete;
+  const target = button(map, "T1");
+  const box = target.getBoundingClientRect();
+  expect(box.height).toBeGreaterThanOrEqual(68);
+  expect(box.height).toBeLessThan(80);
+  const time = target.querySelector<HTMLElement>(".cue-time");
+  expect(time?.textContent).toBe("17′");
+  expect(time!.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
 });
 
 it("fits a landscape floor by its height and leaves room at its edges", async () => {

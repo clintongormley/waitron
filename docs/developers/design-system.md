@@ -1487,7 +1487,8 @@ drawn at all while motion is reduced, and a table listed after it is drawn over 
 a job is drawn under the name in one `part="caption"` column, as `part="cue"` at `--wt-font-size-sm`, its icon at `wt-icon`'s
 `sm` size and then its text, cut with an ellipsis, and only when the name is drawn and the shorter
 side is at least 36 px (`CUE_MIN_PX`, `showsCue`). When the till supplies a job, the caption shows
-its words and time on separate lines where there is room and its compact text on smaller tables.
+its words and time on separate lines when the words fit in two lines and the caption clears the
+allergy mark. A compact caption keeps its time visible while its job text can shorten.
 The host isolates its stacking
 (`isolation: isolate`), so nothing it draws is drawn above what follows the map. An optional
 `allergy` flag draws a steady **!** at the top-left of the table or merge, using

@@ -1094,6 +1094,7 @@ export class WtFloorMap extends LitElement {
           metrics,
           width: box.width * view.scale,
           height: box.height * view.scale,
+          allergy,
           outlined: members.some((member) => member.outline !== null),
           fill: merged ? first.fill : undefined,
         })
