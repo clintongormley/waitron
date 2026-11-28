@@ -6,7 +6,7 @@
   "scripts": {
     "scenarios": "node src/scenarios.ts",
     "setup:litestream": "node src/setup-litestream.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs --noEmit",
     "probe:restart": "node src/probes/restart-after-foldback.ts",
     "probe:restart-at-limit": "node src/probes/restart-at-limit.ts",
     "probe:autocheckpoint": "node src/probes/autocheckpoint.ts",
