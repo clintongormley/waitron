@@ -24,6 +24,14 @@ function recorded({ view }: ManagerDay, target: AttendanceChange["target"]) {
   return view.record.entries.find(({ entry }) => entry.entryId === key(target))?.entry;
 }
 
+export function recordedDate(
+  day: ManagerDay,
+  target: AttendanceChange["target"],
+): string | undefined {
+  const entry = recorded(day, target);
+  return entry && storedAttendanceTime(entry.eventAt, entry.offsetMinutes).slice(0, 10);
+}
+
 function clockKind(day: ManagerDay, change: AttendanceChange): ClockKind | undefined {
   if ("missingKind" in change.target) return change.target.missingKind;
   const previous = recorded(day, change.target);
@@ -34,23 +42,31 @@ function clockKind(day: ManagerDay, change: AttendanceChange): ClockKind | undef
 }
 
 export function managerDayRows(day: ManagerDay) {
-  const rows = dayEditorRows(day.view, requested(day));
+  const asked = requested(day);
+  const requestedTargets = new Set(asked.map(({ target }) => key(target)));
   const recordedAt = (change: AttendanceChange) =>
     recorded(day, change.target)?.eventAt ?? change.at;
-  const ordered = (
-    day.item
-      ? rows
-      : rows.filter(({ at }) =>
-          day.view.record.sessions.some(
-            ({ startedAt, endedAt }) => at >= startedAt && at <= endedAt,
-          ),
-        )
-  ).sort((a, b) => Date.parse(recordedAt(a)) - Date.parse(recordedAt(b)));
-  let shift = 0;
-  return ordered.map((change, i) => {
+  const ordered = dayEditorRows(day.view, asked).sort(
+    (a, b) => Date.parse(recordedAt(a)) - Date.parse(recordedAt(b)),
+  );
+  let shift = -1;
+  let openOnWorkDate = false;
+  return ordered.flatMap((change) => {
     const kind = clockKind(day, change);
-    if (i > 0 && kind === "in") shift++;
-    return { change, kind, shift };
+    if (kind === "in") {
+      shift++;
+      const startDate =
+        recordedDate(day, change.target) ??
+        storedAttendanceTime(change.at, change.offsetMinutes).slice(0, 10);
+      openOnWorkDate = !!day.item && startDate === day.view.date;
+    }
+    const at = recordedAt(change);
+    const shown =
+      openOnWorkDate ||
+      requestedTargets.has(key(change.target)) ||
+      day.view.record.sessions.some(({ startedAt, endedAt }) => at >= startedAt && at <= endedAt);
+    if (kind === "out") openOnWorkDate = false;
+    return shown ? [{ change, kind, shift }] : [];
   });
 }
 
@@ -66,12 +82,19 @@ export function managerDayEdits(day: ManagerDay, changes: AttendanceChange[]) {
   });
 }
 
+export function dayOffsetSuffix(date: string, shiftDate: string): string {
+  const days =
+    (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${shiftDate}T00:00:00Z`)) / 86_400_000;
+  return Number.isFinite(days) && days !== 0 ? ` (${days > 0 ? "+" : ""}${days})` : "";
+}
+
 export function managerDayField(
   day: ManagerDay,
   original: AttendanceChange,
   kind: ClockKind | undefined,
   date: string,
   time: string,
+  shiftDate: string,
 ) {
   const { target } = original;
   const previous = recorded(day, target);
@@ -81,11 +104,14 @@ export function managerDayField(
   );
   const display = (at: string, offset: number) => {
     const wall = storedAttendanceTime(at, offset);
-    return wall.slice(0, 10) === date ? wall.slice(11, 16) : wall.slice(0, 16).replace("T", " ");
+    return (
+      wall.slice(11, 16) + dayOffsetSuffix(wall.slice(0, 10), shiftDate).replace(" ", "\u00a0")
+    );
   };
   const recordedTime = previous && display(previous.eventAt, previous.offsetMinutes);
+  const recordedWall = previous && storedAttendanceTime(previous.eventAt, previous.offsetMinutes);
   const before =
-    recordedTime && (request || recordedTime !== time)
+    recordedTime && (request || recordedWall?.slice(0, 16) !== `${date} ${time}`)
       ? fill(t("hours.recorded_time"), { time: recordedTime })
       : "";
   const asked =
@@ -97,5 +123,6 @@ export function managerDayField(
   return {
     label: kind ? t(`hours.entry_${kind}`) : t("attendance.time"),
     notes: [before, asked].filter(Boolean).join(" · "),
+    requested: !!request,
   };
 }

@@ -291,6 +291,7 @@ export class TillHoursApprovalScreen extends LitElement {
       code === "attendance.not_permitted"
     )
       return t("hours.approvals_not_permitted");
+    if (!read && this.editor && code === "correction.invalid") return t("hours.shift_refused");
     if (code && code !== "attendance.write_failed") return codeMessage(code);
     return t(read ? "hours.approvals_read_failed" : "hours.approvals_write_failed");
   }

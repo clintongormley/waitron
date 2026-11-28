@@ -266,8 +266,10 @@ it.each([
     expect(fields[1]!.label).toBe("Clocked out (+1)");
   }
   if (item) {
-    expect(root.textContent).toContain("17:00");
-    expect(root.textContent).toContain("01:15");
+    expect(root.querySelector(".time-note")?.textContent).toContain("Waitron: 17:00");
+    expect(root.querySelector(".time-note")?.textContent?.replaceAll("\u00a0", " ")).toContain(
+      "Javier asked for 01:15 (+1)",
+    );
   }
   const send = root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-save]")!;
   expect(send.textContent?.trim()).toBe("Save and send to Javier");
@@ -277,7 +279,7 @@ it.each([
   const date = root.querySelectorAll('wt-input[type="date"]')[1]!;
   for (const [field, value] of [
     [date, other.date],
-    [fields[1]!, "18:00"],
+    [fields[1]!, item === requested ? "17:00" : "18:00"],
   ] as const) {
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
   }
@@ -293,7 +295,9 @@ it.each([
   );
   await vi.waitFor(() => {
     expect(send.disabled).toBe(false);
-    expect(announcedTotal?.textContent).toContain("Worked would be 8 hours");
+    expect(announcedTotal?.textContent).toContain(
+      `Worked would be ${item === requested ? "7" : "8"} hours`,
+    );
     expect(root.querySelector("[aria-live=polite]")).toBe(announcedTotal);
   });
   f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
@@ -311,7 +315,7 @@ it.each([
         changes: [
           {
             target: { entryId: "original-out" },
-            at: "2026-10-13T16:00:00.000Z",
+            at: item === requested ? "2026-10-13T15:00:00.000Z" : "2026-10-13T16:00:00.000Z",
             offsetMinutes: 120,
           },
         ],
@@ -338,33 +342,45 @@ it("refreshes a finished day when a worker’s request arrived while the list wa
   await expect.element(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 });
 
-it("opens the listed finished day beside a proposal from the prior overnight shift", async () => {
-  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
-  const priorProposal = attendanceItem({ date: "2026-10-12", status: "waiting-worker" });
-  const priorOut = {
-    ...clockEntries[1]!,
-    entry: { ...clockEntries[1]!.entry, entryId: "prior-out", eventAt: "2026-10-13T02:00:00.000Z" },
-  };
-  f.getAttendanceManagerDay.mockResolvedValue({
-    ...view,
-    items: [priorProposal],
-    record: { ...view.record, entries: [priorOut, ...clockEntries] },
-  });
-  await open(f.el);
-  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
-  const root = screen(f.el)!.shadowRoot!;
-  await vi.waitFor(() =>
-    expect(root.querySelector("till-attendance-correction-dialog")).not.toBeNull(),
-  );
-  const form = root.querySelector("till-attendance-correction-dialog")!;
-  expect(
-    [
-      ...form.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
-        'wt-input[type="time"]',
-      ),
-    ].map((field) => field.value),
-  ).toEqual(["10:00", "17:00"]);
-});
+it.each([false, true])(
+  "keeps the prior overnight shift out of the selected day (request: %s)",
+  async (fromRequest) => {
+    const f = await manager({
+      items: fromRequest ? [requested] : [],
+      finishedDays: fromRequest ? [] : [{ ...other, times: [...times] }],
+    });
+    const priorProposal = attendanceItem({ date: "2026-10-12", status: "waiting-worker" });
+    const priorOut = {
+      ...clockEntries[1]!,
+      entry: {
+        ...clockEntries[1]!.entry,
+        entryId: "prior-out",
+        eventAt: "2026-10-13T02:00:00.000Z",
+      },
+    };
+    f.getAttendanceManagerDay.mockResolvedValue({
+      ...view,
+      items: fromRequest ? [priorProposal, requested] : [priorProposal],
+      record: { ...view.record, entries: [priorOut, ...clockEntries] },
+    });
+    await open(f.el);
+    await page
+      .getByRole("button", { name: fromRequest ? "Edit" : /Edit.*Javier/, exact: fromRequest })
+      .click();
+    const root = screen(f.el)!.shadowRoot!;
+    await vi.waitFor(() =>
+      expect(root.querySelector("till-attendance-correction-dialog")).not.toBeNull(),
+    );
+    const form = root.querySelector("till-attendance-correction-dialog")!;
+    expect(
+      [
+        ...form.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+          'wt-input[type="time"]',
+        ),
+      ].map((field) => field.value),
+    ).toEqual(["10:00", fromRequest ? "01:15" : "17:00"]);
+  },
+);
 
 it("shows an invalid date in the manager’s time row", async () => {
   const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
@@ -440,21 +456,53 @@ it("groups a day into shifts and sends two breaks with an added overnight shift"
   const addBreak = shift(1).getByRole("button", { name: "Add a break" });
   await addBreak.click();
   await addBreak.click();
-  await vi.waitFor(() => expect(fields(1)).toHaveLength(6));
+  await vi.waitFor(() => {
+    expect(fields(1)).toHaveLength(6);
+    expect(root.textContent).toContain("Fill in the times to see the new total.");
+  });
+  await shift(1).getByRole("button", { name: "Remove added break" }).last().click();
+  await vi.waitFor(() => expect(fields(1)).toHaveLength(4));
+  await addBreak.click();
   const addedBreaks = fields(1).filter(({ value }) => value === "");
-  for (const [index, value] of ["10:45", "11:00", "12:00", "12:15"].entries())
+  const send = page.getByRole("button", { name: "Save and send to Javier" });
+  for (const [index, value] of ["10:45", "10:30", "12:00", "12:15"].entries())
     change(addedBreaks[index]!, value);
+  change(root.querySelector("wt-textarea")!, "Add missing breaks and closing shift");
+  await send.click();
+  await vi.waitFor(() => expect(addedBreaks[1]!.error).toBe("End the break after it starts."));
+  await expect.element(send).toBeDisabled();
+  expect(root.textContent).not.toContain("Worked would be");
+  change(addedBreaks[0]!, "09:30");
+  await vi.waitFor(() => expect(addedBreaks[0]!.error).toBe("Keep the break inside its shift."));
+  change(addedBreaks[0]!, "10:45");
+  change(addedBreaks[1]!, "11:00");
+
   await page.getByRole("button", { name: "Add a shift" }).click();
   await expect.element(shift(3)).toBeVisible();
   const [start, end] = fields(3);
+  const [startDate, endDate] = fields(3, "date");
+  change(start!, "15:00");
+  change(end!, "16:00");
+  await vi.waitFor(() => expect(start!.error).toBe("This shift overlaps another shift."));
+  change(startDate!, "2026-10-14");
+  await vi.waitFor(() => expect(startDate!.error).toBe("Use the work date for a new clock-in."));
+  change(startDate!, "2026-10-13");
   change(start!, "21:00");
   change(end!, "00:45");
   await vi.waitFor(() => {
-    expect(fields(3, "date")[1]?.value).toBe("2026-10-14");
+    expect(endDate?.value).toBe("2026-10-14");
     expect(end!.label).toBe("Clocked out (+1)");
   });
-  change(root.querySelector("wt-textarea")!, "Add missing breaks and closing shift");
-  await page.getByRole("button", { name: "Save and send to Javier" }).click();
+  change(endDate!, "2026-10-13");
+  await vi.waitFor(() =>
+    expect(end!.error).toBe("The end must be after the start. Choose the actual dates."),
+  );
+  change(endDate!, "2026-10-15");
+  await vi.waitFor(() => expect(endDate!.error).toBe("Use the work date or the following date."));
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+  change(endDate!, "2026-10-14");
+  await expect.element(send).toBeEnabled();
+  await send.click();
   await vi.waitFor(() => expect(f.sendAttendanceManagerCommand).toHaveBeenCalledOnce());
   const [command] = f.sendAttendanceManagerCommand.mock.calls[0]!;
   expect(command).toMatchObject({

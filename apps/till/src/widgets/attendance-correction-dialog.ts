@@ -19,9 +19,11 @@ import type { AttendanceChange } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import {
   type ClockKind,
+  dayOffsetSuffix,
   managerDayEdits,
   managerDayField,
   managerDayRows,
+  recordedDate,
   type ManagerDay,
 } from "../screens/till-hours-day-editor.js";
 import "@waitron/ui/src/components/wt-full-screen-panel.js";
@@ -152,13 +154,49 @@ export class AttendanceCorrectionDialog extends LitElement {
       .time-row wt-input {
         min-inline-size: 0;
       }
-      .day-offset {
-        padding-inline-end: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
+      .time-field {
+        position: relative;
       }
-      .shift wt-button,
-      .add-shift {
+      .day-offset {
+        position: absolute;
+        inset-inline-start: calc(var(--wt-space-4) + var(--wt-space-1) + 5ch);
+        inset-block-start: calc((var(--wt-field-height) - var(--wt-font-size-md)) / 2);
+        color: var(--wt-color-text-muted);
+        line-height: 1;
+        pointer-events: none;
+      }
+      .shift legend {
+        inline-size: 100%;
+        padding: 0;
+      }
+      .shift-heading,
+      .shift-remove {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .shift-heading {
+        font-size: var(--wt-font-size-md);
+        min-block-size: var(--wt-space-5);
+      }
+      .shift-action {
+        --wt-action-padding: var(--wt-space-1) 0;
+        --wt-action-font-size: var(--wt-font-size-md);
+        --wt-action-text: var(--wt-color-primary-text);
         justify-self: start;
+      }
+      .shift-action.remove {
+        --wt-action-text: var(--wt-color-text-muted);
+      }
+      .shift-remove {
+        justify-content: end;
+      }
+      .break-pair,
+      .manager-reason {
+        margin-block-start: var(--wt-space-2);
+      }
+      .quiet-date {
+        visibility: hidden;
       }
       .spoken-total {
         ${visuallyHiddenStyles}
@@ -284,6 +322,14 @@ export class AttendanceCorrectionDialog extends LitElement {
     }
   }
 
+  override updated(changed: PropertyValues): void {
+    if (!changed.has("open") || !this.open || !this.managerDay?.item) return;
+    void this.renderRoot.querySelector("wt-dialog")?.updateComplete.then(() => {
+      if (this.open)
+        this.renderRoot.querySelector(".requested-time")?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
   #choices(row: TimeDraft): { at: string; offset: number }[] {
     if (!validDate(row.date) || !validTime(row.time)) return [];
     const originalWall = wallTime(row.original);
@@ -316,6 +362,65 @@ export class AttendanceCorrectionDialog extends LitElement {
     }
     return result;
   }
+  #shifts(): Map<number, number[]> {
+    const shifts = new Map<number, number[]>();
+    this.draft.rows.forEach(({ shift }, index) => {
+      if (shift === undefined) return;
+      const indices = shifts.get(shift);
+      if (indices) indices.push(index);
+      else shifts.set(shift, [index]);
+    });
+    return shifts;
+  }
+  #managerErrors(
+    day: ManagerDay,
+    changes: AttendanceChange[] | null,
+    errors: { date: string; time: string }[],
+  ): void {
+    const { date } = day.view;
+    const tomorrow = nextDate(date);
+    const { rows } = this.draft;
+    rows.forEach((row, index) => {
+      if (errors[index]!.date || row.date === date) return;
+      if (row.kind === "in" && "missingKind" in row.target) {
+        errors[index]!.date = t("hours.new_shift_date");
+      } else if (row.date !== tomorrow && row.date !== recordedDate(day, row.target)) {
+        errors[index]!.date = t("hours.time_date_range");
+      }
+    });
+    if (!changes) return;
+    const instants = changes.map(({ at }) => Date.parse(at));
+    const spans: { start: number; end: number; index: number }[] = [];
+    for (const indices of this.#shifts().values()) {
+      const inIndex = indices.find((index) => rows[index]!.kind === "in");
+      const outIndex = indices.find((index) => rows[index]!.kind === "out");
+      if (inIndex === undefined || outIndex === undefined) continue;
+      const start = instants[inIndex]!;
+      const end = instants[outIndex]!;
+      if (end <= start) {
+        errors[outIndex]!.time = t("attendance.time_order");
+        continue;
+      }
+      spans.push({ start, end, index: inIndex });
+      for (const index of indices) {
+        const kind = rows[index]!.kind;
+        if (kind !== "break_start" && kind !== "break_end") continue;
+        const at = instants[index]!;
+        if (at < start || at > end) errors[index]!.time = t("hours.break_outside_shift");
+        else if (
+          kind === "break_end" &&
+          rows[index - 1]?.kind === "break_start" &&
+          at <= instants[index - 1]!
+        )
+          errors[index]!.time = t("hours.break_time_order");
+      }
+    }
+    let latestEnd = -Infinity;
+    for (const { start, end, index } of spans.sort((a, b) => a.start - b.start)) {
+      if (start < latestEnd) errors[index]!.time = t("hours.shift_overlap");
+      latestEnd = Math.max(latestEnd, end);
+    }
+  }
   #errors(): { rows: { date: string; time: string; offset: string }[]; reason: string } {
     const rows = this.draft.rows.map((row) => ({
       date: validDate(row.date) ? "" : t("attendance.date_required"),
@@ -328,18 +433,8 @@ export class AttendanceCorrectionDialog extends LitElement {
         this.#choices(row).length > 1 && row.offset === "" ? t("attendance.offset_required") : "",
     }));
     const changes = this.#changes();
-    if (changes && this.managerDay) {
-      for (const shift of new Set(this.draft.rows.map((row) => row.shift))) {
-        const start = this.draft.rows.findIndex((row) => row.shift === shift && row.kind === "in");
-        const end = this.draft.rows.findIndex((row) => row.shift === shift && row.kind === "out");
-        if (
-          start >= 0 &&
-          end >= 0 &&
-          Date.parse(changes[end]!.at) <= Date.parse(changes[start]!.at)
-        )
-          rows[end]!.time = t("attendance.time_order");
-      }
-    } else if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)) {
+    if (this.managerDay) this.#managerErrors(this.managerDay, changes, rows);
+    else if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)) {
       rows[1]!.time = t("attendance.time_order");
     }
     const reason = this.draft.reason.trim();
@@ -499,9 +594,9 @@ export class AttendanceCorrectionDialog extends LitElement {
     this.#scope?.changed();
   }
 
-  #dateField(row: TimeDraft, index: number, label: string, error: string) {
+  #dateField(row: TimeDraft, index: number, label: string, error: string, showLabel = true) {
     const dateLabel = t("attendance.date");
-    return html`${this.managerDay ? html`<span class="clock-label" aria-hidden="true">${dateLabel} <strong>*</strong></span>` : nothing}
+    return html`${this.managerDay ? html`<span class=${showLabel ? "clock-label" : "clock-label quiet-date"} aria-hidden="true">${dateLabel} <strong>*</strong></span>` : nothing}
       <wt-input
         .variant=${this.managerDay ? "outlined" : "filled"}
         name=${`attendanceDate${index}`}
@@ -528,52 +623,54 @@ export class AttendanceCorrectionDialog extends LitElement {
       action.unchanged ||
       invalid ||
       (!!manager && all !== null && !managerDayEdits(manager, all).length);
+    const shiftDate = (row: TimeDraft) =>
+      this.draft.rows.find(({ shift, kind }) => shift === row.shift && kind === "in")?.date ||
+      manager?.view.date ||
+      "";
     const dayFields =
-      manager?.view &&
+      manager &&
       this.draft.rows.map((row) =>
-        managerDayField(manager, row.original, row.kind, row.date, row.time),
+        managerDayField(manager, row.original, row.kind, row.date, row.time, shiftDate(row)),
       );
     const lastNote =
       dayFields?.reduce((last, { notes }, index) => (notes ? index : last), -1) ?? -1;
-    const minutes = manager && all ? previewDayMinutes(manager.view, all) : undefined;
-    const worked =
-      minutes === undefined
-        ? nothing
-        : html` <span aria-hidden="true"
-            >${fill(t("hours.worked_would_be"), {
-              time: `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`,
-            })}</span
-          >`;
+    const timesInvalid = errors.rows.some(({ date, time, offset }) => date || time || offset);
+    const minutes =
+      manager && all && !timesInvalid ? previewDayMinutes(manager.view, all) : undefined;
+    const pendingTotal = t(all ? "hours.worked_total_invalid" : "hours.worked_total_pending");
+    const worked = manager
+      ? html` <span aria-hidden="true"
+          >${
+            minutes === undefined
+              ? pendingTotal
+              : fill(t("hours.worked_would_be"), {
+                  time: `${Math.floor(minutes / 60)}\u00a0h\u00a0${String(minutes % 60).padStart(2, "0")}\u00a0min`,
+                })
+          }</span
+        >`
+      : nothing;
     const timeRows = this.draft.rows.map((row, index) => {
       const field = dayFields?.[index];
-      const start =
-        manager &&
-        this.draft.rows.find(
-          (candidate) => candidate.shift === row.shift && candidate.kind === "in",
-        );
-      const dayOffset =
-        (midnight(row.date) -
-          midnight(start && start !== row ? start.date : (manager?.view.date ?? ""))) /
-        dayMilliseconds;
-      const dateSuffix =
-        Number.isFinite(dayOffset) && dayOffset !== 0
-          ? ` (${dayOffset > 0 ? "+" : ""}${dayOffset})`
-          : "";
+      const dateSuffix = manager
+        ? dayOffsetSuffix(row.date, row.kind === "in" ? manager.view.date : shiftDate(row))
+        : "";
       const label = field?.label ?? t("attendance.time");
       const time = html`
         ${manager ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
-        <wt-input
-          name=${`attendanceTime${index}`}
-          type="time"
-          required
-          .label=${`${label}${dateSuffix}`}
-          .variant=${manager ? "outlined" : "filled"}
-          .value=${live(row.time)}
-          .disabled=${this.busy || this.blocked}
-          .error=${this.#feedback.attempted ? errors.rows[index]!.time : ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
-          >${dateSuffix ? html`<span slot="end" class="day-offset" aria-hidden="true">${dateSuffix.trim()}</span>` : nothing}</wt-input
-        >
+        <div class="time-field">
+          <wt-input
+            name=${`attendanceTime${index}`}
+            type="time"
+            required
+            .label=${`${label}${dateSuffix}`}
+            .variant=${manager ? "outlined" : "filled"}
+            .value=${live(row.time)}
+            .disabled=${this.busy || this.blocked}
+            .error=${this.#feedback.attempted ? errors.rows[index]!.time : ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
+          ></wt-input
+          >${dateSuffix ? html`<span class="day-offset" aria-hidden="true">${dateSuffix.trim()}</span>` : nothing}
+        </div>
       `;
       const offset = html`
         ${
@@ -599,44 +696,48 @@ export class AttendanceCorrectionDialog extends LitElement {
           </legend>
           ${this.#dateField(row, index, t("attendance.date"), errors.rows[index]!.date)}${time}${offset}
         </fieldset>`;
-      return html`<div>
+      const previous = this.draft.rows[index - 1];
+      const first = previous?.shift !== row.shift;
+      const pair = !first && previous?.kind === "break_end" && row.kind === "break_start";
+      return html`<div class=${field?.requested ? "requested-time" : pair ? "break-pair" : nothing}>
         <div class="time-row">
           <div>${time}</div>
           <div>
-            ${this.#dateField(row, index, `${t("attendance.date")} · ${field!.label}`, errors.rows[index]!.date)}
+            ${this.#dateField(row, index, `${t("attendance.date")} · ${field!.label}`, errors.rows[index]!.date, first)}
           </div>
         </div>
         ${offset}
         ${field?.notes ? html`<p class="time-note">${field.notes} ${index === lastNote ? worked : nothing}</p>` : nothing}
-        ${row.kind === "break_end" && !row.original.at ? html`<wt-button variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows([index - 1, index])}>${t("hours.remove_break")}</wt-button>` : nothing}
+        ${row.kind === "break_end" && !row.original.at ? html`<div class="shift-remove"><wt-button class="shift-action remove" variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows([index - 1, index])}>${t("hours.remove_break")}</wt-button></div>` : nothing}
       </div>`;
     });
-    const shifts = new Map<number, number[]>();
-    if (manager)
-      this.draft.rows.forEach(({ shift }, index) => {
-        const indices = shifts.get(shift!);
-        if (indices) indices.push(index);
-        else shifts.set(shift!, [index]);
-      });
+    const shifts = this.#shifts();
     const fields = html` ${
         manager
           ? html`
               ${[...shifts].map(
                 ([shift, indices], i) =>
-                  html`<fieldset class="shift">
-                    <legend>${fill(t("hours.shift_number"), { number: String(i + 1) })}</legend>
+                  html`<fieldset class="shift" aria-labelledby=${`shift-title-${shift}`}>
+                    <legend>
+                      <div class="shift-heading">
+                        <span id=${`shift-title-${shift}`}
+                          >${fill(t("hours.shift_number"), { number: String(i + 1) })}</span
+                        >
+                        ${indices.every((index) => !this.draft.rows[index]!.original.at) ? html`<wt-button class="shift-action remove" variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows(indices)}>${t("hours.remove_shift")}</wt-button>` : nothing}
+                      </div>
+                    </legend>
                     ${indices.map((index) => timeRows[index])}
                     <wt-button
+                      class="shift-action"
                       variant="ghost"
                       .disabled=${this.busy || this.blocked}
                       @click=${() => this.#addPair(shift, "break_start", "break_end")}
                       >${t("hours.add_break")}</wt-button
                     >
-                    ${indices.every((index) => !this.draft.rows[index]!.original.at) ? html`<wt-button variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows(indices)}>${t("hours.remove_shift")}</wt-button>` : nothing}
                   </fieldset>`,
               )}
               <wt-button
-                class="add-shift"
+                class="shift-action"
                 variant="ghost"
                 .disabled=${this.busy || this.blocked}
                 @click=${() => this.#addPair(Math.max(-1, ...shifts.keys()) + 1, "in", "out")}
@@ -646,8 +747,8 @@ export class AttendanceCorrectionDialog extends LitElement {
           : timeRows
       }
       ${lastNote === -1 && worked !== nothing ? html`<p>${worked}</p>` : nothing}
-      ${manager ? html`<span class="spoken-total" aria-live="polite">${minutes === undefined ? "" : fill(t("hours.worked_would_be"), { time: formatDuration(minutes * 60_000, currentLocale()) })}</span>` : nothing}
-      <div>
+      ${manager ? html`<span class="spoken-total" aria-live="polite">${minutes === undefined ? pendingTotal : fill(t("hours.worked_would_be"), { time: formatDuration(minutes * 60_000, currentLocale()) })}</span>` : nothing}
+      <div class=${manager ? "manager-reason" : nothing}>
         ${manager ? html`<span class="clock-label" aria-hidden="true">${t("hours.why")} <strong>*</strong></span>` : nothing}
         <wt-textarea
           .hideLabel=${!!manager}
