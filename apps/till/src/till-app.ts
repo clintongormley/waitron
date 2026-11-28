@@ -3113,6 +3113,7 @@ export class TillApp extends LitElement {
   /** The tab a card-mount open switched away from, to go back to if the open fails. */
   #openedFrom?: BuiltInScreen;
   #tabLinesRead = 0;
+  #tabLinesLoad = 0;
   /** A foreground read supersedes earlier reads on start. A background read does so on success. */
   #tabLinesCurrent = 0;
   /** Only the latest requested list of bills may replace the one shown. */
@@ -13010,7 +13011,6 @@ export class TillApp extends LitElement {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const read = ++this.#tabLinesRead;
-    if (isCurrent === undefined) this.#tabLinesCurrent = read;
     try {
       const tab = await this.api.getTabLines(billId);
       if (read < this.#tabLinesCurrent || billId !== this.activeTabId || isCurrent?.() === false)
@@ -13020,7 +13020,7 @@ export class TillApp extends LitElement {
       this.tabRevision = tab.revision;
       this.#refreshOpenPayLines(billId);
     } catch {
-      if (isCurrent === undefined && read === this.#tabLinesCurrent && billId === this.activeTabId)
+      if (isCurrent === undefined && read === this.#tabLinesRead && billId === this.activeTabId)
         this.#tableOffers.liveFields = undefined;
     }
   }
@@ -13029,6 +13029,7 @@ export class TillApp extends LitElement {
   async #loadTabLines(splitRead = false): Promise<void> {
     await this.#followPartyDraft(splitRead);
     const read = ++this.#tabLinesRead;
+    this.#tabLinesLoad = read;
     this.#tabLinesCurrent = read;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
@@ -13051,17 +13052,18 @@ export class TillApp extends LitElement {
         undefined,
         splitRead,
       );
-      if (read !== this.#tabLinesCurrent) return;
-      this.tabLines = tab.lines;
-      this.tabRevision = tab.revision;
-      this.#refreshOpenPayLines(billId);
+      if (read === this.#tabLinesCurrent) {
+        this.tabLines = tab.lines;
+        this.tabRevision = tab.revision;
+        this.#refreshOpenPayLines(billId);
+      }
     } catch {
-      if (read !== this.#tabLinesCurrent || refusal?.ended.signal.aborted) return;
-      this.tabLines = [];
+      if (read === this.#tabLinesCurrent && !refusal?.ended.signal.aborted) this.tabLines = [];
     }
     const groupAnswer = await groups;
     const partyOrders = await orders;
-    if (read !== this.#tabLinesCurrent || refusal?.ended.signal.aborted) return;
+    if (read !== this.#tabLinesLoad || refusal?.ended.signal.aborted) return;
+    this.requestUpdate();
     this.#applyTabGroups(groupsRead, partyId, groupAnswer, partyOrders);
   }
 
@@ -13071,7 +13073,6 @@ export class TillApp extends LitElement {
     { groups, printProblems }: { groups: OrderGroup[] | null; printProblems: PrintProblem[] },
     orders: CurrentOrders | null,
   ): void {
-    this.requestUpdate();
     this.#showPrintProblems(read, printProblems);
     if (!this.#showGroups(read, groups ?? [], orders)) return;
     this.#groupsUnread = groups === null;
@@ -20744,7 +20745,8 @@ export class TillApp extends LitElement {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
-    this.#tabLinesCurrent = ++this.#tabLinesRead;
+    this.#tabLinesLoad = ++this.#tabLinesRead;
+    this.#tabLinesCurrent = this.#tabLinesLoad;
     this.#partyBillsRead++;
     this.#printProblemsShown = ++this.#groupsRead;
     this.#groupsShown = this.#printProblemsShown;

@@ -1,5 +1,5 @@
 /** Table refusals shown in their code's own words. */
-export const TABLE_REFUSALS = new Set([
+export const TABLE_REFUSALS: ReadonlySet<string> = new Set([
   "device.unauthorized",
   "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
