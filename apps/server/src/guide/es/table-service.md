@@ -721,8 +721,8 @@ cambiaste algún campo, puedes seguir editando o descartar los cambios.
 Pulsa **⋮** junto al selector para abrir el panel de acciones de la cuenta que tienes en pantalla.
 Comprueba el nombre y el saldo de la cuenta en la parte superior. Si necesitas introducir los datos
 de la factura, elige **Factura completa** antes de **Imprimir la cuenta**. **Juntar cuentas**
-y **Mover esta cuenta** ocupan toda la pantalla en un móvil y se abren sobre el pedido en una
-caja ancha. Pulsa **Atrás** arriba para volver.
+y **Mover esta cuenta** ocupan toda la pantalla en un móvil y se abren sobre el pedido en
+pantalla ancha. Pulsa **Atrás** arriba para volver.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe

@@ -51,48 +51,63 @@ const menus = servedMenus(
 
 const box = (element: Element) => element.getBoundingClientRect();
 
+async function openAction(action: string) {
+  const party = { ...switcherParty, tableIds: ["t1"] };
+  const targets = Array.from({ length: 18 }, (_, index) => index + 2);
+  const table = (number: number, held = false): TableState => ({
+    id: `t${number}`,
+    label: `Table ${number}`,
+    shortName: `Table ${number}`,
+    party: held ? party : null,
+    signals: [],
+    zoneId: null,
+    state: held ? "open-tab" : "free",
+    hasOpenTab: held,
+    condition: held ? "held" : "free",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+  });
+  const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+    products,
+    menus,
+    lines: [],
+    orderId: "wo-1",
+    draftStore: new DraftStore(),
+    party,
+    bills: [partyBill("wo-1", 1, "10.00"), ...targets.map((n) => partyBill(`wo-${n}`, n, "5.00"))],
+    tables: [table(1, true), ...targets.map((n) => table(n))],
+  });
+  await resized(el);
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector("[data-table-menu]")!.shadowRoot!.querySelector("button")!;
+  await userEvent.click(trigger);
+  await userEvent.click(root.querySelector(`[data-table-menu] [data-action="${action}"]`)!);
+  await resized(el);
+  return { root, trigger };
+}
+
+it("at 1024 px Move dishes goes under the order without squeezing the menu", async () => {
+  await pageAt(1024, 900);
+  const { root } = await openAction("move-dishes");
+  const ordering = root.querySelector(".ordering")!;
+  const panel = root.querySelector("[data-action-panel]")!;
+  expect(box(panel).top).toBeGreaterThanOrEqual(box(ordering).bottom);
+  const browser = root.querySelector("till-menu-browser")!;
+  const picker = box(browser.querySelector("till-menu-switcher")!);
+  const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);
+  expect(Math.abs(picker.bottom - search.bottom)).toBeLessThanOrEqual(1);
+  expect(picker.right).toBeLessThanOrEqual(search.left);
+});
+
 it.each(["merge", "move-bill"])(
   "%s keeps Back above a scrollable list and fits the order at both widths",
   async (action) => {
     await pageAt(1024, 600);
-    const party = { ...switcherParty, tableIds: ["t1"] };
-    const targets = Array.from({ length: 18 }, (_, index) => index + 2);
-    const table = (number: number, held = false): TableState => ({
-      id: `t${number}`,
-      label: `Table ${number}`,
-      shortName: `Table ${number}`,
-      party: held ? party : null,
-      signals: [],
-      zoneId: null,
-      state: held ? "open-tab" : "free",
-      hasOpenTab: held,
-      condition: held ? "held" : "free",
-      pendingDeliveries: 0,
-      pendingToServe: 0,
-      readyToServe: 0,
-      timingBand: "fresh",
-      nextReservation: null,
-      today: null,
-    });
-    const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
-      products,
-      menus,
-      lines: [],
-      orderId: "wo-1",
-      draftStore: new DraftStore(),
-      party,
-      bills: [
-        partyBill("wo-1", 1, "10.00"),
-        ...targets.map((n) => partyBill(`wo-${n}`, n, "5.00")),
-      ],
-      tables: [table(1, true), ...targets.map((n) => table(n))],
-    });
-    await resized(el);
-    const root = el.shadowRoot!;
-    const trigger = root.querySelector("[data-table-menu]")!.shadowRoot!.querySelector("button")!;
-    await userEvent.click(trigger);
-    await userEvent.click(root.querySelector(`[data-table-menu] [data-action="${action}"]`)!);
-    await resized(el);
+    const { root, trigger } = await openAction(action);
 
     const panel = root.querySelector<HTMLElement>("[data-action-panel]")!;
     const bounds = () => {

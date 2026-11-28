@@ -148,7 +148,7 @@ describe.each(["light", "dark"] as const)("Table and bill actions in the %s them
 });
 
 describe.each(["light", "dark"] as const)("Bill actions at a phone's height, %s theme", (theme) => {
-  it("is accessible with its list open and with its Merge bills step focused", async () => {
+  it.each(["merge", "move-bill"])("is accessible while opening %s", async (action) => {
     await page.viewport(375, 667);
     try {
       const { el } = await mountWidget<TillTableOrderScreen>(
@@ -162,6 +162,25 @@ describe.each(["light", "dark"] as const)("Bill actions at a phone's height, %s 
             partyBill("wo-1", 1, "10.00"),
             partyBill("wo-2", 2, "54.00", { billName: "Clint" }),
           ],
+          tables: [
+            {
+              id: "t6",
+              label: "Table 6",
+              shortName: "6",
+              party: null,
+              zoneId: null,
+              signals: [],
+              state: "free",
+              hasOpenTab: false,
+              condition: "needs_clearing",
+              pendingDeliveries: 0,
+              pendingToServe: 0,
+              readyToServe: 0,
+              timingBand: "fresh",
+              nextReservation: null,
+              today: null,
+            },
+          ],
           fullInvoices: true,
         },
         theme,
@@ -172,12 +191,16 @@ describe.each(["light", "dark"] as const)("Bill actions at a phone's height, %s 
       expect(popup.matches(":popover-open")).toBe(true);
       await expectNoA11yViolations(menu);
 
-      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="merge"]')!);
+      await userEvent.click(menu.querySelector<HTMLElement>(`[data-action="${action}"]`)!);
       await el.updateComplete;
       const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
       await expect
         .poll(() => el.shadowRoot!.activeElement)
         .toBe(panel.querySelector("[data-action-heading]"));
+      if (action === "move-bill") {
+        const target = panel.querySelector('[data-target="t6"]')!;
+        expect(target.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+      }
       await expectNoA11yViolations(panel);
     } finally {
       await page.viewport(1280, 900);
