@@ -3172,6 +3172,53 @@ for (const locale of ["en", "es"] as const) {
           ),
           { products: ["catalogue_id", "name_key", "manual_allergens", "diet"] },
         );
+        const counterName = locale === "en" ? "Downstairs bar" : "Bar de abajo";
+        const seatingName = locale === "en" ? "Bar seating" : "Mesas del bar";
+        const counterId = `@floor_zones:${stable([counterName])}`;
+        const seatingId = `@floor_zones:${stable([seatingName])}`;
+        const zones = beforeOffers.tables.floor_zones!.rows;
+        const counter = zones[counterId]!;
+        zones[seatingId] = {
+          ...counter,
+          id: seatingId,
+          name: seatingName,
+          department_id: departmentKeys[0]!,
+          order_start: null,
+          is_counter_default: 0,
+          display_order: 5,
+        };
+        Object.assign(counter, {
+          today_business_day: null,
+          today_revision: 0,
+          today_set_id: null,
+          today_layout_revision: 0,
+          today_occurrence: null,
+        });
+        beforeOffers.tables.floor_zones!.rows = byName(zones);
+        const moved = new Map<unknown, string>();
+        for (const [name, columns] of [
+          ["floor_plan_tables", ["zone_id", "label"]],
+          ["dining_tables", ["zone_id", "label"]],
+          ["floor_plans", ["zone_id", "set_id"]],
+          ["floor_plan_placements", ["plan_id", "plan_table_id"]],
+          ["floor_reset_tables", ["zone_id", "table_id"]],
+        ] as const) {
+          const table = beforeOffers.tables[name]!;
+          const replaced = Object.entries(table.rows).map(([id, row]) => {
+            const update = { ...row };
+            if (row.zone_id === counterId) update.zone_id = seatingId;
+            for (const column of ["plan_table_id", "plan_id", "table_id"]) {
+              const reference = moved.get(row[column]);
+              if (reference !== undefined) update[column] = reference;
+            }
+            const newId = `@${name}:${stable(columns.map((column) => update[column]))}`;
+            if (id === newId) return [id, row] as const;
+            moved.set(id, newId);
+            return [newId, { ...update, id: newId }] as const;
+          });
+          table.rows = byName(Object.fromEntries(replaced));
+        }
+        phases.seeded!.floor_zones! += 1;
         const { semantics, added, removed } = madridWithSharedOffers(
           beforeOffers,
           historicalSeeded,

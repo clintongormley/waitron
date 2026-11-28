@@ -161,6 +161,13 @@ export const CASA_DELGADO_ES = {
         gl: "Charcutaría",
       },
     },
+    barSeatingZone: {
+      en: "Bar seating",
+      es: "Mesas del bar",
+      ca: "Taules del bar",
+      "ca-ES-valencia": "Taules del bar",
+      gl: "Mesas do bar",
+    },
     upstairsBarZone: {
       en: "Upstairs bar",
       es: "Bar de arriba",

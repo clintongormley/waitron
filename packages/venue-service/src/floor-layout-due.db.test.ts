@@ -264,6 +264,29 @@ describe("which floor layout is due", () => {
     expect(layouts.size).toBe(2);
   });
 
+  it("has no due floor plan for a counter even when its department has a set", async () => {
+    const f = await fixture();
+    await run((tx) =>
+      configureZone(tx, {
+        zoneId: f.zones.counter,
+        departmentId: f.restaurant,
+        orderStart: "counter",
+      }),
+    );
+    const layouts = await run((tx) =>
+      VENUE_SERVICE.dueFloorLayouts(
+        tx,
+        [{ zoneId: f.zones.counter, recordedOccurrence: null }],
+        at("14:00"),
+      ),
+    );
+    expect(layouts.get(f.zones.counter)).toEqual({
+      due: { setId: null, setName: null, occurrence: null, periodName: null },
+      planned: false,
+      recordedSetName: null,
+    });
+  });
+
   it("says whether each zone's department has a set and names the recorded set", async () => {
     const f = await fixture();
     const [barSet, gone] = await run(async (tx) => {

@@ -22,7 +22,7 @@ import type { Department, FloorZone, VenueServiceApi, VenueServiceView } from ".
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
 import { clockChangeConflictText } from "./clock-change-conflict.js";
-import { refusalOf } from "./refusal.js";
+import { counterZoneRefusal, refusalOf } from "./refusal.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
@@ -302,7 +302,10 @@ export class DepartmentDialogs extends LitElement {
         (params?.field === "departmentId" && this.moving))
     )
       field = params.field as keyof Draft;
-    if (code === "department.not_found" && this.moving) field = "departmentId";
+    const counter = this.moving ? counterZoneRefusal(error, "departmentId") : undefined;
+    if (counter !== undefined && this.draft.departmentId !== submitted.departmentId) return;
+    if (this.moving && (code === "department.not_found" || counter !== undefined))
+      field = "departmentId";
     const kind = code?.startsWith("department.name_")
       ? "department"
       : code?.startsWith("zone.name_")
@@ -312,7 +315,7 @@ export class DepartmentDialogs extends LitElement {
       field = "name";
       if (this.draft.name.trim() !== submitted.name.trim()) return;
       this.refused = { name: t(`venue.${kind}_name_taken`) };
-    } else if (field) this.refused = { [field]: t("venue.field_refused") };
+    } else if (field) this.refused = { [field]: counter ?? t("venue.field_refused") };
     else this.failure = this.refusal(error);
     if (field)
       void this.updateComplete.then(() => {

@@ -293,24 +293,23 @@ it.each(["department", "zone"] as const)(
   },
 );
 
-it.each(["management.request_invalid", "department.not_found"])(
-  "puts a refused move destination beside its field: %s",
-  async (code) => {
-    const { el } = await mount(
-      ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
-      vi.fn(async () => {
-        throw { code, params: { field: "departmentId" } };
-      }),
-    );
-    await chooseOption(field(el, "departmentId"), "d2");
-    save(el).click();
-    await expect
-      .poll(() => field(el, "departmentId").error)
-      .toBe("This value was not accepted. Change it and save again.");
-    expect(save(el).disabled).toBe(false);
-    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-  },
-);
+it.each([
+  ["management.request_invalid", "This value was not accepted. Change it and save again."],
+  ["department.not_found", "This value was not accepted. Change it and save again."],
+  ["zone.counter_has_tables", "Terrace has tables. Move its tables to a table zone first."],
+])("puts a refused move destination beside its field: %s", async (code, message) => {
+  const { el } = await mount(
+    ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
+    vi.fn(async () => {
+      throw { code, params: { field: "departmentId", zoneName: "Terrace" } };
+    }),
+  );
+  await chooseOption(field(el, "departmentId"), "d2");
+  save(el).click();
+  await expect.poll(() => field(el, "departmentId").error).toBe(message);
+  expect(save(el).disabled).toBe(false);
+  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+});
 it("refuses an invalid move destination and frees Save once it is corrected", async () => {
   const { el, request } = await mount(
     ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,

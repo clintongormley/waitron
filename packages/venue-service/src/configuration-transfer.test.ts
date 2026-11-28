@@ -944,6 +944,19 @@ describe("service-period configuration", () => {
 });
 
 describe("configuration order starts", () => {
+  it("refuses a saved spare in an imported counter zone and accepts a table override", () => {
+    const validate = VENUE_SERVICE_CONFIGURATION_TRANSFER.validate!;
+    const zone = { id: "seating", department_id: RESTAURANT, order_start: null as string | null };
+    const tables = {
+      departments: [{ id: RESTAURANT, order_start: "counter" }],
+      floor_zones: [zone],
+      floor_plan_tables: [{ id: "spare", zone_id: zone.id }],
+    };
+    expect(() => validate(tables)).toThrowError(refusal("floor_plan_tables.zone_id"));
+    zone.order_start = "table";
+    expect(() => validate(tables)).not.toThrow();
+  });
+
   it.each(["departments", "floor_zones"])("refuses malformed %s order starts", (table) => {
     for (const value of [
       "tab",

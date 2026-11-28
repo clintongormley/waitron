@@ -158,6 +158,7 @@ it("provides English and Spanish for every authored staff and kitchen field", ()
     ["drinks menu", set.menus.drinksName],
     ["floor set", set.floor.setName],
     ...Object.entries(set.floor.departmentNames),
+    ["bar seating zone", set.floor.barSeatingZone],
     ["upstairs bar zone", set.floor.upstairsBarZone],
     ["deli counter zone", set.floor.deliCounterZone],
     ...set.floor.zones.map((zone) => [zone.key, zone.name] as const),
@@ -555,6 +556,7 @@ it("keeps demo prep-station names distinct from zones in every demo language", (
   const set = CASA_DELGADO_ES;
   const zones = [
     ...set.floor.zones.map((zone) => zone.name),
+    set.floor.barSeatingZone,
     set.floor.upstairsBarZone,
     set.floor.deliCounterZone,
   ];

@@ -58,6 +58,7 @@ declare module "@waitron/shared" {
     "department.order_in_progress": { departmentId: string; workingOrderId: string };
     "department.transfer_pending": { departmentId: string; requestId: string };
     "department.profile_in_use": { departmentId: string; profileId: string };
+    "zone.counter_has_tables": { field: "orderStart" | "departmentId"; zoneName: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
     /**
      * An import's refusal adds the zone's switched-off department, the routing row it refused, and

@@ -552,6 +552,7 @@ const en = {
   "venue.rename": "Rename",
   "venue.move_to_department": "Move to department",
   "venue.department_name_taken": "A department with this name already exists.",
+  "venue.counter_has_tables": "{zoneName} has tables. Move its tables to a table zone first.",
   "venue.zone_name_taken": "A zone with this name already exists.",
   "venue.table_tab": "Table service",
   "venue.ticket_then_pay": "Prepare then pay",
@@ -1511,6 +1512,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.rename": "Cambiar nombre",
   "venue.move_to_department": "Mover a departamento",
   "venue.department_name_taken": "Ya existe un departamento con este nombre.",
+  "venue.counter_has_tables":
+    "{zoneName} tiene mesas. Traslada primero las mesas a una zona con servicio en mesa.",
   "venue.zone_name_taken": "Ya existe una zona con este nombre.",
   "venue.table_tab": "Servicio de mesa",
   "venue.ticket_then_pay": "Preparar y después pagar",

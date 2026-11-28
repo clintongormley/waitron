@@ -997,6 +997,7 @@ describe("configuration transfer database path", () => {
         .where(eq(departments.isDefault, true));
       const practiceZone = await createServiceZone(tx, {
         name: "Practice tables",
+        orderStart: "table",
         departmentId: defaultDepartment!.id,
       });
       await tx.insert(diningTables).values({
@@ -4489,7 +4490,7 @@ async function shortNamedBundle(taxId: string) {
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, { name: "Short service" });
+    const department = await createDepartment(tx, { name: "Short service", orderStart: "table" });
     const zone = await createServiceZone(tx, {
       name: "Short zone",
       departmentId: department.id,
@@ -8192,6 +8193,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     const old = await createDepartment(tx, {
       name: "Shared service name",
       tradingName: "Retained brand",
+      orderStart: "table",
     });
     const zone = await createServiceZone(tx, {
       name: "Shared zone name",
@@ -8208,6 +8210,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     const live = await createDepartment(tx, {
       name: "Shared service name",
       tradingName: "Live brand",
+      orderStart: "table",
     });
     const liveZone = await createServiceZone(tx, {
       name: "Shared zone name",
@@ -8316,7 +8319,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     partKeys: [],
   });
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, { name: "Joined service" });
+    const department = await createDepartment(tx, { name: "Joined service", orderStart: "table" });
     const zone = await createServiceZone(tx, {
       name: "Joined zone",
       departmentId: department.id,
@@ -8382,7 +8385,7 @@ it("carries a kept size, naming the imported table", async () => {
     modules: ALL_MODULES,
   });
   const sourceIds = await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, { name: "Sized service" });
+    const department = await createDepartment(tx, { name: "Sized service", orderStart: "table" });
     const zone = await createServiceZone(tx, {
       name: "Sized zone",
       departmentId: department.id,

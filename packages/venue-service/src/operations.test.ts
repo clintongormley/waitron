@@ -39,6 +39,7 @@ import {
   diningTables,
   products,
   floorZones,
+  floorPlanTables,
   invoiceSeries,
   kitchenCourses,
   kitchenStations,
@@ -1359,6 +1360,67 @@ describe("service zone name refusals", () => {
   });
 });
 
+describe("keeping tables out of counter zones", () => {
+  async function seating() {
+    await seedFixtureVenue("Bar seating");
+    return scoped(async (tx) => {
+      const serving = await createDepartment(tx, { name: "Dining", orderStart: "table" });
+      const pickup = await createDepartment(tx, { name: "Takeaway", orderStart: "counter" });
+      const zone = await createServiceZone(tx, { name: "Bar seating", departmentId: serving.id });
+      return { serving, pickup, zone };
+    });
+  }
+
+  it("refuses to switch a zone with a saved spare to counter service", async () => {
+    const { zone } = await seating();
+    await scoped(async (tx) => {
+      await tx.insert(floorPlanTables).values({ zoneId: zone.id, label: "Spare" });
+    });
+    await expect(
+      scoped((tx) => setZoneSalePolicyOverride(tx, zone.id, "orderStart", "counter")),
+    ).rejects.toMatchObject({
+      code: "zone.counter_has_tables",
+      params: { field: "orderStart", zoneName: "Bar seating" },
+    });
+    expect(await scoped((tx) => resolveSalePolicy(tx, zone.id))).toMatchObject({
+      orderStart: "table",
+    });
+  });
+
+  it("refuses table zones on today's floor inheriting a department switch", async () => {
+    const { serving, zone } = await seating();
+    await scoped(async (tx) => {
+      await tx.insert(diningTables).values({ zoneId: zone.id, label: "Today", onFloor: true });
+    });
+    await expect(
+      scoped((tx) => updateDepartment(tx, serving.id, { orderStart: "counter" })),
+    ).rejects.toMatchObject({
+      code: "zone.counter_has_tables",
+      params: { field: "orderStart", zoneName: "Bar seating" },
+    });
+  });
+
+  it("refuses moving a zone with tables into a counter department until it has a table override", async () => {
+    const { pickup, zone } = await seating();
+    await scoped(async (tx) => {
+      await tx.insert(floorPlanTables).values({ zoneId: zone.id, label: "Spare" });
+    });
+    await expect(
+      scoped((tx) => configureZone(tx, { zoneId: zone.id, departmentId: pickup.id })),
+    ).rejects.toMatchObject({
+      code: "zone.counter_has_tables",
+      params: { field: "departmentId", zoneName: "Bar seating" },
+    });
+    await scoped((tx) =>
+      configureZone(tx, { zoneId: zone.id, departmentId: pickup.id, orderStart: "table" }),
+    );
+    expect(await scoped((tx) => resolveSalePolicy(tx, zone.id))).toMatchObject({
+      departmentId: pickup.id,
+      orderStart: "table",
+    });
+  });
+});
+
 describe("departments", () => {
   it("keeps inherited sale rules when configuring its existing assignment", async () => {
     await seedFixtureVenue("Repair zone policy");
@@ -2080,6 +2142,7 @@ describe("retired and moved zones", () => {
 
   it("moves a zone between departments, keeping its tables and inheriting the destination periods", async () => {
     const venue = await seedSellingVenue();
+    await scoped((tx) => setZoneSalePolicyOverride(tx, venue.barZone, "orderStart", "table"));
     const destinationMenu = await scoped(async (tx) => {
       const menu = await createMenu(tx, { name: "Destination period menu" });
       await offerMenuThroughZone(tx, venue.diningZone, menu.id, { makeDefault: true });

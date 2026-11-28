@@ -107,6 +107,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department_transfer.settings_invalid": 400,
   "department.last_active": 409,
   "zone.table_in_use": 409,
+  "zone.counter_has_tables": 409,
   "table.booked": 409,
   "table.delivery_in_progress": 409,
   "zone.order_in_progress": 409,

@@ -8,6 +8,7 @@ import type {
   FloorPlanSetsModel,
   PeriodFloorPlans,
 } from "./floor-plan-set-types.js";
+import { effectiveOrderStart } from "./zone-order-start.js";
 import { listDepartments } from "./operations.js";
 
 export type { FloorPlanSetsModel, PeriodFloorPlans };
@@ -91,21 +92,27 @@ function setRows(tx: Transaction, filter: { setIds?: readonly string[]; departme
     );
 }
 
-/** The active zones of `departmentIds`, in the order the venue lists its zones. */
+/** The active table zones of `departmentIds`, in the order the venue lists its zones. */
 async function departmentZones(
   tx: Transaction,
   departmentIds: readonly string[],
 ): Promise<{ id: string; name: string; departmentId: string }[]> {
   if (departmentIds.length === 0) return [];
-  return tx
+  const rows = await tx
     .select({
       id: floorZones.id,
       name: floorZones.name,
       departmentId: floorZones.departmentId,
+      zoneOrderStart: floorZones.orderStart,
+      departmentOrderStart: departments.orderStart,
     })
     .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(and(eq(floorZones.active, true), inArray(floorZones.departmentId, [...departmentIds])))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  return rows.filter(
+    (row) => effectiveOrderStart(row.zoneOrderStart, row.departmentOrderStart) === "table",
+  );
 }
 
 /** The Floor plans page: every active department, its zones and its sets. */

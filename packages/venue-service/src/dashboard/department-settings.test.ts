@@ -1511,6 +1511,20 @@ it("a refusal naming a Service field shows the Service tab, marks it and focuses
     service.shadowRoot!.querySelector("[name=orderStart]"),
   );
 });
+it("shows how to fix a department's refusal to switch seated zones to counter service", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "zone.counter_has_tables",
+    params: { field: "orderStart", zoneName: "Terrace" },
+  });
+  await change(el, "name", "Revised");
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  const service = shownPanel(el).querySelector("dashboard-service-settings-fields")!;
+  expect(service.errors.orderStart).toBe(
+    "Terrace has tables. Move its tables to a table zone first.",
+  );
+  expect(save(el).disabled).toBe(false);
+});
 it("a refusal landing while the name is blank marks Details and Transfers and shows Details", async () => {
   const { el } = await mount();
   let refuse!: () => void;

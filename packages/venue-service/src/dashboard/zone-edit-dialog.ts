@@ -16,6 +16,7 @@ import {
 import type { VenueServiceApi, VenueServiceView, ZoneEditInput } from "./client.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
 import { t } from "./strings.js";
+import { counterZoneRefusal } from "./refusal.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -236,16 +237,22 @@ export class ZoneEditDialog extends LitElement {
       if (!this.current(id, generation)) return;
       const { code, params } = (error ?? {}) as { code?: string; params?: { field?: Field } };
       if (code === "zone.name_taken" && this.draft?.name.trim() !== submitted.name) return;
+      const counter = counterZoneRefusal(error, "orderStart");
+      if (counter !== undefined && this.draft?.orderStart !== submitted.orderStart) return;
       const field =
-        code === "zone.name_taken"
-          ? "name"
-          : code === "management.request_invalid" &&
-              ["name", ...policyFields].includes(params?.field ?? "")
-            ? params!.field
-            : undefined;
+        counter !== undefined
+          ? "orderStart"
+          : code === "zone.name_taken"
+            ? "name"
+            : code === "management.request_invalid" &&
+                ["name", ...policyFields].includes(params?.field ?? "")
+              ? params!.field
+              : undefined;
       if (field) {
         this.refused = {
-          [field]: t(code === "zone.name_taken" ? "venue.zone_name_taken" : "venue.field_refused"),
+          [field]:
+            counter ??
+            t(code === "zone.name_taken" ? "venue.zone_name_taken" : "venue.field_refused"),
         };
         void this.updateComplete.then(() => {
           if (this.current(id, generation)) focusFirstInvalid(this.shadowRoot!);

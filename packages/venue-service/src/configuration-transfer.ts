@@ -1,3 +1,4 @@
+import { effectiveOrderStart } from "./zone-order-start.js";
 import { sql } from "drizzle-orm";
 import { serviceStepOrder } from "./service-steps.js";
 import { getCountryPack } from "@waitron/country-packs";
@@ -583,6 +584,22 @@ function validateOrderStarts(tables: Tables): void {
   }
 }
 
+function validateCounterTables(tables: Tables): void {
+  const departmentOrders = new Map(tables.departments?.map((row) => [row.id, row.order_start]));
+  const counterIds = new Set(
+    (tables.floor_zones ?? [])
+      .filter(
+        (row) =>
+          effectiveOrderStart(row.order_start, departmentOrders.get(row.department_id)) ===
+          "counter",
+      )
+      .map((row) => row.id),
+  );
+  for (const table of ["floor_plan_tables", "dining_tables"] as const) {
+    if (tables[table]?.some((row) => counterIds.has(row.zone_id))) refuse(`${table}.zone_id`);
+  }
+}
+
 function validateDepartmentDining(tables: Tables): void {
   const choices = [
     ["dining", DINING_POLICIES],
@@ -682,6 +699,7 @@ function validateVenueServiceConfiguration(
   validateOrderStarts(tables);
   validateDepartmentDining(tables);
   validateServiceHierarchy(tables);
+  validateCounterTables(tables);
   validateServiceSteps(tables);
   validateDepartmentCourses(tables);
   validateReceiptFields(tables);
