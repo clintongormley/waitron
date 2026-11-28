@@ -8,6 +8,7 @@ import { customElement, property, queryAssignedElements, state } from "lit/decor
 import { live } from "lit/directives/live.js";
 import {
   THEME_SELECTED_EVENT,
+  TickingClock,
   ThemeChoiceController,
   VENUE_LOGO_RETRY_MS,
   VenueLogoController,
@@ -32,11 +33,11 @@ import {
   floorMenuSection,
   floorMoreRow,
   floorMoreSheet,
-  floorOperatorLine,
   measureFloorControls,
   restoreFloorZoneFocus,
   type FloorKitchenRow,
 } from "./floor-bar.js";
+import { floorClockStyles, floorOperatorLine, floorShiftActions } from "./floor-clock-controls.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { canPressBuzz } from "../press-buzz.js";
@@ -208,6 +209,7 @@ export class TillShell extends LitElement {
     themeChoicesStyles,
     edgeFadeStyles,
     floorBarStyles,
+    floorClockStyles,
     css`
       :host {
         display: flex;
@@ -476,6 +478,16 @@ export class TillShell extends LitElement {
   @property() operatorName = "";
   /** Names the venue's logo for a screen reader. */
   @property() legalName = "";
+  readonly #clock = new TickingClock(
+    this,
+    undefined,
+    () =>
+      this.narrowFloor &&
+      this.clockAvailable &&
+      this.clockState !== null &&
+      this.clockState.state !== "out",
+  );
+
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
   @property({ type: Boolean }) hoursBusy = false;
@@ -1219,7 +1231,7 @@ export class TillShell extends LitElement {
     const disabled = this.clockBusy || state === null;
     const action = (kind: TillClockAction, label: string) => {
       const click = () => this.#emit("clock-action", { action: kind });
-      return inFloorMenu && kind !== "out"
+      return inFloorMenu
         ? floorMoreRow(label, click, { clock: kind, disabled })
         : html`<wt-button
             icon=${inFloorMenu ? nothing : { in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
@@ -1234,7 +1246,7 @@ export class TillShell extends LitElement {
       this.clockAvailable && state !== null && state.state !== "out"
         ? action("out", t("clock.out"))
         : nothing;
-    return html`${inFloorMenu ? floorOperatorLine(this.operatorName, this.#operatorName(), clockOut, this.operatorName && clockOut !== nothing ? (state?.shiftStart ?? null) : null) : nothing}
+    return html`${inFloorMenu ? floorOperatorLine(this.operatorName, this.clockAvailable ? state : undefined, this.#clock.now) : nothing}
     ${
       this.clockAvailable
         ? html`
@@ -1255,8 +1267,12 @@ export class TillShell extends LitElement {
                     >`
                 : state.state === "out"
                   ? action("in", t("clock.in"))
-                  : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
-                    ${inFloorMenu ? nothing : clockOut}`
+                  : inFloorMenu
+                    ? floorShiftActions(state.state, disabled, (kind) =>
+                        this.#emit("clock-action", { action: kind }),
+                      )
+                    : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
+                      ${clockOut}`
             }
             ${inFloorMenu ? nothing : this.#operatorHours()}
           `
@@ -1385,6 +1401,7 @@ export class TillShell extends LitElement {
     const items = this.#items(true);
     return floorMoreSheet(
       this.transferCount,
+      this.clockAvailable && this.clockState?.state === "on_break",
       html`
         <section aria-label=${t("floor.menu_you")}>
           ${this.#operatorActions(false, true)}${hoursApprovalMenuItem(this.hoursApprovalCount, () => this.#emit("hours-approval"), true)}
@@ -1696,8 +1713,12 @@ export class TillShell extends LitElement {
         </div>
         ${
           bottomFloor
-            ? floorControls(this, bottomFloor, this.#floorMenu(bottomFloor), (event, detail) =>
-                this.#emit(event, detail),
+            ? floorControls(
+                this,
+                bottomFloor,
+                this.#floorMenu(bottomFloor),
+                this.#clock.now,
+                (event, detail) => this.#emit(event, detail),
               )
             : startingFooter
               ? html`<div class="floor-controls">

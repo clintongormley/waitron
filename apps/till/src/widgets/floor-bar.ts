@@ -1,6 +1,5 @@
 import { css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
-import type { TillClockState } from "../api/attendance-api.js";
 import type { ResolvedKitchenScreen } from "../api/device-session-api.js";
 import type { WtRowActions } from "@waitron/ui/src/components/wt-row-actions.js";
 import type { ShellAffordance, TillShell } from "./till-shell.js";
@@ -8,14 +7,13 @@ import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/floor-api.js";
 import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import { countText, currentLocale, fill, t } from "../i18n/t.js";
+import { countText, t } from "../i18n/t.js";
 import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
 
-import { storedAttendanceTime, withHourArticle } from "./attendance-history.js";
 import { PHONE_WIDTH } from "./chooser-styles.js";
+import { floorBreakStrip } from "./floor-clock-controls.js";
 
-import "@waitron/ui/src/components/wt-initials.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 
 type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
@@ -243,34 +241,6 @@ export const floorBarStyles = css`
     --wt-font-weight-normal: var(--wt-font-weight-bold);
     color: var(--wt-color-primary-text);
   }
-  .floor-operator {
-    display: flex;
-    align-items: center;
-    gap: var(--wt-space-2);
-    padding: var(--wt-space-2) var(--wt-menu-row-padding-start);
-  }
-  .floor-operator-person {
-    flex: 1;
-    min-inline-size: 0;
-  }
-  .floor-operator .operator {
-    font-size: var(--wt-floor-name-font-size);
-    font-weight: bold;
-    overflow-wrap: anywhere;
-  }
-  .floor-operator-start {
-    display: block;
-    color: var(--wt-color-text-muted);
-    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
-  }
-  .floor-operator [data-clock-action] {
-    width: auto;
-  }
-  .floor-operator [data-clock-action]::part(button) {
-    border: 1px solid var(--wt-color-border);
-    border-radius: var(--wt-radius-md);
-    font-weight: var(--wt-font-weight-bold);
-  }
   [data-floor-other-zone] {
     margin: var(--wt-space-1) max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-2)
       max(var(--wt-space-3), env(safe-area-inset-left));
@@ -301,7 +271,11 @@ export const floorBarStyles = css`
   }
 `;
 
-export function floorMoreSheet(count: number | undefined, contents: TemplateResult) {
+export function floorMoreSheet(
+  count: number | undefined,
+  onBreak: boolean,
+  contents: TemplateResult,
+) {
   const pending = count !== undefined && count > 0;
   return html`<wt-row-actions
     class="floor-menu"
@@ -313,6 +287,7 @@ export function floorMoreSheet(count: number | undefined, contents: TemplateResu
     label=${pending ? countText(count, "shell.more_transfers", "shell.more_transfers_one") : t("shell.more")}
   >
     <wt-icon slot="trigger" aria-hidden="true" name="hamburger"></wt-icon>
+    ${onBreak ? html`<span slot="trigger" data-break-dot ?data-has-count=${pending} aria-hidden="true"></span>` : nothing}
     ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${count}></wt-count-badge>` : nothing}
     ${contents}
   </wt-row-actions>`;
@@ -397,32 +372,6 @@ export function floorMenuSection(label: StringKey, rows: TemplateResult) {
   </section>`;
 }
 
-export function floorOperatorLine(
-  name: string,
-  operator: TemplateResult,
-  clockOut: TemplateResult | typeof nothing,
-  shiftStart: TillClockState["shiftStart"],
-) {
-  const start =
-    shiftStart === null
-      ? nothing
-      : html`<time class="floor-operator-start" datetime=${shiftStart.eventAt}
-          >${fill(
-            withHourArticle("clock.started_at", shiftStart.eventAt, shiftStart.offsetMinutes),
-            {
-              time: storedAttendanceTime(shiftStart.eventAt, shiftStart.offsetMinutes).slice(
-                11,
-                16,
-              ),
-            },
-          )}</time
-        >`;
-  return html`<div class="floor-operator">
-    <wt-initials .name=${name} .locale=${currentLocale()}></wt-initials>
-    <span class="floor-operator-person">${operator}${start}</span>${clockOut}
-  </div>`;
-}
-
 export function measureFloorControls(controls: HTMLElement): number {
   const bar = controls.querySelector("footer")!;
   bar.style.setProperty(
@@ -456,10 +405,12 @@ export function floorControls(
   shell: TillShell,
   floor: TillFloorScreen,
   menu: TemplateResult,
+  now: number,
   emit: (type: string, detail?: unknown) => void,
 ): TemplateResult {
   return html`<div class="floor-controls">
     ${floor.otherZoneLine()}
+    ${shell.clockAvailable ? floorBreakStrip(shell.clockState, now, shell.clockBusy, () => emit("clock-action", { action: "break-end" })) : nothing}
     <footer data-floor-bar class="floor-bar">
       ${floor.footerControls({
         choose: () => emit("open-device-zones"),

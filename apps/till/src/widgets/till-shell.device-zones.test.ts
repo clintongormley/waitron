@@ -378,10 +378,11 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     moreTrigger.focus();
     await userEvent.keyboard("{Enter}{Enter}");
     expect(clockAction).not.toHaveBeenCalled();
-    await userEvent.tab();
-    expect(more().querySelector('[data-clock-action="out"]')?.shadowRoot?.activeElement).toBe(
-      more().querySelector('[data-clock-action="out"]')?.shadowRoot?.querySelector("button"),
-    );
+    for (const action of ["break-start", "out"]) {
+      await userEvent.tab();
+      const button = more().querySelector(`[data-clock-action="${action}"]`)!.shadowRoot!;
+      expect(button.activeElement).toBe(button.querySelector("button"));
+    }
     await userEvent.keyboard("{Escape}");
     expect(more().shadowRoot!.activeElement).toBe(moreTrigger);
 
@@ -389,10 +390,8 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await expect.element(page.getByRole("button", { name: /^Transfers.*2/ })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Close the drawer" })).toBeVisible();
     expect(more().querySelector("wt-menu-row:not([action], [divider]):empty")).toBeNull();
-    const person = more().querySelector(".operator")!;
-    expect(
-      person.closest(".floor-operator")?.querySelector('[data-clock-action="out"]'),
-    ).not.toBeNull();
+    const person = more().querySelector(".floor-operator-name")!;
+    expect(person.closest("section")?.querySelector('[data-clock-action="out"]')).not.toBeNull();
     await expect.element(page.getByRole("button", { name: "Taken off 0" })).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Back to the Dinner plan" }))
@@ -469,19 +468,19 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
 });
 
 it.each([
-  ["en-GB", "working", "16:02", "Clocked in at 17:02", "Clock out", 390, "at 17:02"],
-  ["es-ES", "on_break", "00:02", "Entrada fichada a la 01:02", "Fichar salida", 320, "a la 01:02"],
-  ["es-ES", "working", "16:02", "Entrada fichada a las 17:02", "Fichar salida", 360, "a las 17:02"],
+  ["en-GB", "16:02", "Working since 17:02", "Clock out", 390, "since 17:02"],
+  ["es-ES", "00:02", "Trabajando desde la 01:02", "Fichar salida", 320, "a la 01:02"],
+  ["es-ES", "16:02", "Trabajando desde las 17:02", "Fichar salida", 360, "a las 17:02"],
 ] as const)(
-  "shows the recorded start in narrow Floor More (%s, %s, %s)",
-  async (locale, state, utcTime, label, action, width, timePhrase) => {
+  "shows the recorded start in narrow Floor More (%s, %s)",
+  async (locale, utcTime, label, action, width, timePhrase) => {
     setLocale(locale);
     await page.viewport(width, 844);
     try {
       const clockState: TillClockState = {
         personId: "person",
         businessDay: "2026-11-26",
-        state,
+        state: "working",
         firstClockIn: false,
         lastEntryId: "entry",
         shiftStart: { eventAt: `2026-11-26T${utcTime}:00.000Z`, offsetMinutes: 60 },
@@ -501,7 +500,7 @@ it.each([
       const start = page.getByText(label, { exact: true });
       expect(start.elements(), `visible clock-in label: ${label}`).toHaveLength(1);
       await expect.element(start).toBeVisible();
-      const name = more().querySelector(".operator-label")!;
+      const name = more().querySelector(".floor-operator-name")!;
       expect(start.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
         name.getBoundingClientRect().bottom,
       );
@@ -782,6 +781,113 @@ it.each([
       await page.viewport(width, height);
     }
   } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("puts the break actions in You and keeps End break above the floor bar", async () => {
+  setLocale("en-GB");
+  await page.viewport(390, 844);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const now = Date.parse("2026-10-14T10:10:00Z");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  try {
+    const state: TillClockState = {
+      personId: "ana",
+      state: "working",
+      businessDay: "2026-10-14",
+      lastEntryId: "in",
+      firstClockIn: false,
+      shiftStart: { eventAt: new Date(now - 70 * 60_000).toISOString(), offsetMinutes: 0 },
+      breakStart: null,
+    };
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      activeScreen: "floor",
+      formFactor: "phone-portrait",
+      operatorName: "Ana",
+      transferCount: 2,
+      clockAvailable: true,
+      clockState: state,
+    });
+    el.append(document.createElement("till-floor-screen"));
+    const menu = await vi.waitFor(() => {
+      const menu = el.shadowRoot!.querySelector(".floor-menu");
+      expect(menu).toBeTruthy();
+      return menu!;
+    });
+    const you = menu.querySelector('section[aria-label="You"]')!;
+    const actions = () =>
+      Array.from(you.querySelectorAll("[data-clock-action]"), (button) =>
+        button.getAttribute("data-clock-action"),
+      );
+    expect(actions()).toEqual(["break-start", "out"]);
+    const native = (action: string) =>
+      you.querySelector(`[data-clock-action="${action}"]`)!.shadowRoot!.querySelector("button")!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(getComputedStyle(native("break-start")).borderTopWidth).toBe("1px");
+    expect(getComputedStyle(native("break-start")).justifyContent).toBe("center");
+    expect(native("break-start").getBoundingClientRect().height).toBe(46);
+    expect(native("out").getBoundingClientRect().height).toBe(46);
+    await userEvent.keyboard("{Escape}");
+    expect(you.textContent).toContain("Working since");
+    expect(you.textContent).toContain("1 h 10 min");
+    clock.mockReturnValue(now + 60_000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await el.updateComplete;
+    expect(you.textContent).toContain("1 h 11 min");
+
+    const onBreak: TillClockState = {
+      ...state,
+      state: "on_break",
+      lastEntryId: "break",
+      breakStart: { eventAt: new Date(now - 11 * 60_000).toISOString(), offsetMinutes: 0 },
+    };
+    el.clockState = onBreak;
+    await el.updateComplete;
+    expect(actions()).toEqual(["break-end"]);
+    const primary = getComputedStyle(el).getPropertyValue("--wt-color-primary").trim();
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    const buttonColour = document.createElement("span");
+    buttonColour.style.color = primary;
+    el.append(buttonColour);
+    expect(getComputedStyle(native("break-end")).backgroundColor).toBe(
+      getComputedStyle(buttonColour).color,
+    );
+    await userEvent.keyboard("{Escape}");
+    const strip = el.shadowRoot!.querySelector("[data-floor-break]")!;
+    expect(strip.textContent).toContain("On a break · 12 min");
+    expect(strip.nextElementSibling).toBe(el.shadowRoot!.querySelector("[data-floor-bar]"));
+    const dot = menu.querySelector("[data-break-dot]")!.getBoundingClientRect();
+    expect([dot.width, dot.height]).toEqual([10, 10]);
+    expect(menu.querySelector("wt-count-badge")?.count).toBe(2);
+    const dispatched = vi.fn();
+    el.addEventListener("clock-action", dispatched);
+    await userEvent.click(strip.querySelector<HTMLElement>("wt-button")!);
+    expect(dispatched).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: { action: "break-end" } }),
+    );
+
+    el.clockState = null;
+    await el.updateComplete;
+    expect(you.querySelector("[data-clock-state]")?.textContent ?? "").toContain(
+      "Clock state unknown",
+    );
+    expect(you.querySelector("[data-clock-retry]")).not.toBeNull();
+
+    el.clockAvailable = false;
+    el.clockState = onBreak;
+    await el.updateComplete;
+    expect(actions()).toEqual([]);
+    expect(you.querySelector("[data-clock-state]")).toBeNull();
+    expect(you.querySelector("[data-clock-retry]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-floor-break]")).toBeNull();
+    expect(menu.querySelector("[data-break-dot]")).toBeNull();
+    const render = vi.spyOn(el, "render");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(render).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+    vi.useRealTimers();
     await page.viewport(1280, 900);
   }
 });

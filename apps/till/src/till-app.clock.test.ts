@@ -1,7 +1,8 @@
 import { liveReadFixture } from "../test/live-connection.js";
 import { attendanceInbox, attendancePrompt } from "../test/attendance-fixtures.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { page, userEvent } from "vitest/browser";
+import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import { SessionActivity } from "./session-activity.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -10,6 +11,8 @@ import { ServerRouter } from "./api/server-router.js";
 import type { MyShift, TillClockState } from "./api/attendance-api.js";
 import {
   clockApp,
+  clockOutButton,
+  clockOutSheet,
   clockPage,
   clockState,
   deferred,
@@ -394,6 +397,7 @@ describe("till clocking integration", () => {
     await working(f.el);
     expect(f.api.endBreak).not.toHaveBeenCalled();
     await shellAction(f.el, '[data-clock-action="out"]');
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
     await vi.waitFor(() =>
       expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
     );
@@ -411,6 +415,7 @@ describe("till clocking integration", () => {
     await signIn(f.el);
     await working(f.el);
     await shellAction(f.el, '[data-clock-action="out"]');
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
     await vi.waitFor(() =>
       expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
     );
@@ -439,6 +444,7 @@ describe("till clocking integration", () => {
     await signIn(f.el);
     await working(f.el);
     await shellAction(f.el, '[data-clock-action="out"]');
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
     await shellAction(f.el, ".logout");
     await vi.waitFor(() =>
       expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
@@ -491,6 +497,116 @@ describe("till clocking integration", () => {
     expect(clockPage(f.el)).toBeNull();
   });
 
+  it("reads the shift day and lets the worker dismiss Clock out without writing", async () => {
+    const shiftStart = { eventAt: "2026-10-13T23:30:00.000Z", offsetMinutes: 120 };
+    const f = await clockApp({ state: { ...clockState("working", "in"), shiftStart } });
+    const held = deferred<Awaited<ReturnType<typeof f.api.getAttendanceDay>>>();
+    f.api.getAttendanceDay.mockReturnValueOnce(held.promise);
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    const stay = await clockOutButton(f.el, "[data-stay-clocked-in]");
+    await vi.waitFor(() =>
+      expect(stay.shadowRoot!.activeElement).toBe(stay.shadowRoot!.querySelector("button")),
+    );
+    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-10-14", {
+      signal: expect.any(AbortSignal),
+    });
+    const signal = f.api.getAttendanceDay.mock.calls[0]![1]!.signal!;
+    await userEvent.click(stay);
+    await vi.waitFor(() => expect(clockOutSheet(f.el)).toBeNull());
+    expect(signal.aborted).toBe(true);
+    held.resolve(await f.api.getAttendanceDay("2026-10-14"));
+    await held.promise;
+    expect(clockOutSheet(f.el)).toBeNull();
+    expect(f.api.clockOut).not.toHaveBeenCalled();
+    expect(f.api.logout).not.toHaveBeenCalled();
+  });
+
+  it.each(["light", "dark"] as const)(
+    "opens a bottom-docked accessible Clock out sheet in %s",
+    async (theme) => {
+      const { innerWidth: width, innerHeight: height } = window;
+      await page.viewport(390, 844);
+      try {
+        const f = await clockApp({ state: clockState("working", "in"), theme });
+        await signIn(f.el);
+        await working(f.el);
+        await shellAction(f.el, '[data-clock-action="out"]');
+        const confirm = await clockOutButton(f.el, "[data-confirm-clock-out]");
+        expect(confirm.getAttribute("variant")).toBe("primary");
+        const panel = clockOutSheet(f.el)!.shadowRoot!.querySelector("wt-full-screen-panel")!;
+        const footer = panel.querySelector("wt-foot-button-bar")!;
+        await footer.updateComplete;
+        const footerStyle = getComputedStyle(footer.shadowRoot!.querySelector("footer")!);
+        expect.soft(getComputedStyle(panel).backgroundColor).toBe(footerStyle.backgroundColor);
+        expect.soft(footerStyle.borderBlockStartWidth).toBe("0px");
+        expect(getComputedStyle(confirm.shadowRoot!.querySelector("button")!).fontSize).toBe(
+          "16px",
+        );
+        await vi.waitFor(() => {
+          const rect = panel.getBoundingClientRect();
+          expect([rect.left, rect.right, rect.bottom]).toEqual([0, 390, 844]);
+          expect(rect.height).toBeGreaterThan(150);
+          expect(rect.height).toBeLessThan(422);
+        });
+        await expectNoA11yViolations(f.host);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it("refreshes an open summary when a live entry arrives and confirms against that entry", async () => {
+    const stream = liveReadFixture();
+    const shiftStart = { eventAt: "2026-10-14T09:00:00.000Z", offsetMinutes: 120 };
+    const f = await clockApp({
+      state: { ...clockState("working", "in"), shiftStart },
+      api: { readLiveEvents: stream.read },
+    });
+    const held = deferred<Awaited<ReturnType<typeof f.api.getAttendanceDay>>>();
+    f.api.getAttendanceDay.mockReturnValueOnce(held.promise);
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    const confirm = await clockOutButton(f.el, "[data-confirm-clock-out]");
+    await vi.waitFor(() => expect(f.api.getAttendanceDay).toHaveBeenCalledTimes(1));
+    const old = f.api.getAttendanceDay.mock.calls[0]![1]!.signal!;
+    f.setState({ ...f.state(), lastEntryId: "another-till" });
+    stream.event("ready");
+    stream.event("change", '[{"type":"time_entries"}]');
+    await vi.waitFor(() => expect(f.api.getAttendanceDay).toHaveBeenCalledTimes(2));
+    expect(old.aborted).toBe(true);
+    expect(f.api.clockOut).not.toHaveBeenCalled();
+    await userEvent.click(confirm);
+    expect(f.api.clockOut).toHaveBeenCalledExactlyOnceWith("another-till", {
+      signal: expect.any(AbortSignal),
+    });
+    await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledOnce());
+  });
+
+  it("keeps the summary closed when another till clocks the worker out and back in", async () => {
+    const stream = liveReadFixture();
+    const f = await clockApp({
+      state: clockState("working", "in"),
+      api: { readLiveEvents: stream.read },
+    });
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    await clockOutButton(f.el, "[data-confirm-clock-out]");
+    stream.event("ready");
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!;
+    f.setState(clockState("out", "other-out"));
+    stream.event("change", '[{"type":"time_entries"}]');
+    await vi.waitFor(() => expect(shell.clockState?.lastEntryId).toBe("other-out"));
+    expect(clockOutSheet(f.el)).toBeNull();
+    f.setState(clockState("working", "other-in"));
+    stream.event("change", '[{"type":"time_entries"}]');
+    await vi.waitFor(() => expect(shell.clockState?.lastEntryId).toBe("other-in"));
+    expect(clockOutSheet(f.el)).toBeNull();
+  });
+
   it("a lost Clock out response still finishes logout", async () => {
     const f = await clockApp({ state: clockState("working", "in") });
     f.api.clockOut.mockImplementationOnce(async () => {
@@ -500,9 +616,25 @@ describe("till clocking integration", () => {
     await signIn(f.el);
     await working(f.el);
     await shellAction(f.el, '[data-clock-action="out"]');
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
     await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledTimes(1));
     expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
     expect(f.api.clockOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("still lets the worker clock out when the day read fails", async () => {
+    const shiftStart = { eventAt: "2026-10-14T09:00:00.000Z", offsetMinutes: 120 };
+    const f = await clockApp({ state: { ...clockState("working", "in"), shiftStart } });
+    f.api.getAttendanceDay.mockRejectedValueOnce(new TypeError("read lost"));
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    await vi.waitFor(() =>
+      expect(clockOutSheet(f.el)?.shadowRoot?.textContent).toContain(t("clock.out_unavailable")),
+    );
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
+    await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledOnce());
+    expect(f.api.clockOut).toHaveBeenCalledOnce();
   });
 
   it.each(["in", "out"] as const)(
@@ -530,6 +662,7 @@ describe("till clocking integration", () => {
       } else {
         await working(f.el);
         await shellAction(f.el, '[data-clock-action="out"]');
+        await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
         await vi.waitFor(() =>
           expect(
             f.el
@@ -638,6 +771,7 @@ describe("till clocking integration", () => {
     await signIn(f.el);
     await working(f.el);
     await shellAction(f.el, '[data-clock-action="out"]');
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
     f.api.getTill.mockReturnValueOnce(profile.promise);
     await shellAction(f.el, ".profile");
     const chooser = f.el.shadowRoot!.querySelector("till-profile-dialog")!;

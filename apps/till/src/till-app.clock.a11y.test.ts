@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import {
   clockApp,
+  clockOutButton,
   clockPage,
   pageButton,
   shellAction,
@@ -23,7 +24,7 @@ describe.each(["light", "dark"] as const)("till clocking app accessibility in %s
     ["es-ES", 390],
     ["es-ES", 1280],
   ] as const)(
-    "first page, working menu and recorded-out lock in %s at %s",
+    "first page, working menu, Clock out summary and recorded-out lock in %s at %s",
     async (locale, width) => {
       const previous = { width: innerWidth, height: innerHeight };
       await page.viewport(width, 844);
@@ -46,6 +47,10 @@ describe.each(["light", "dark"] as const)("till clocking app accessibility in %s
         await userEvent.keyboard("{Escape}");
         f.api.logout.mockRejectedValueOnce(new TypeError("offline"));
         await shellAction(f.el, '[data-clock-action="out"]');
+        const summary = page.getByRole("dialog", { name: t("clock.out_title") });
+        await expect.element(summary).toBeVisible();
+        await expectNoA11yViolations(f.host);
+        await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
         await vi.waitFor(() =>
           expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
         );

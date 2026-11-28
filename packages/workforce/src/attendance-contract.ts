@@ -106,6 +106,7 @@ export interface AttendanceDayView {
   timeZone: string;
   revision: string;
   record: TimeRecord;
+  clockOutPreviewEntries?: TimeEntryRecord[];
   paidBreakPolicy?: PaidBreakPolicy;
   approval?: DayApproval;
   items: CorrectionItem[];

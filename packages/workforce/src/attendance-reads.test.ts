@@ -739,6 +739,21 @@ it("approves an older missing out behind a newer actual in without closing the c
   expect((await day("2026-01-06")).record.sessions.map((s) => s.workedMinutes)).toEqual([480]);
 });
 
+it("supplies overnight break entries for Clock out on the open shift's start date", async () => {
+  const input = { nodeId, personId, offsetMinutes: 60, origin };
+  await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T20:00:00Z" }));
+  await run((tx) => backend.breakStart(tx, { ...input, at: "2026-01-05T23:15:00Z" }));
+  await run((tx) => backend.breakEnd(tx, { ...input, at: "2026-01-05T23:35:00Z" }));
+
+  const view = await day();
+  expect(view.record.entries.map(({ entry }) => entry.entryKind)).toEqual(["in"]);
+  expect(view).toMatchObject({
+    clockOutPreviewEntries: [{ entryKind: "break_start" }, { entryKind: "break_end" }],
+  });
+  expect((await day("2026-01-06")).record.sessions).toEqual([]);
+  expect(await day("2026-01-04")).not.toHaveProperty("clockOutPreviewEntries");
+});
+
 it("shows paid time and the actual pause in the attendance day", async () => {
   for (const [kind, at] of [
     ["clockIn", "09:00"],

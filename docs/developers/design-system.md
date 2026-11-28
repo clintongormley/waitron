@@ -941,6 +941,7 @@ Give it a `label` and, when needed, a `breakdown` with the amount and any tip or
 Place your `wt-button` actions in `wt-foot-button-bar`. It stacks them by default. Use `layout="row"`
 for the order buttons. A ghost button in the `link` slot goes below the main actions. Set
 `--wt-foot-padding-bottom` when the surrounding screen supplies its own bottom inset.
+Use the `footer` part to remove the top border when the buttons share the sheet's surface.
 Use `wt-choice-tile` for an individual option that can be picked. Supply `label`, optional `hint` and
 `selected`. `check-position="start"` keeps a leading check column for ways to pay. The default check
 is at the end. Tiles expose their own pressed state and native click, so a group can allow one

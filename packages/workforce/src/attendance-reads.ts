@@ -9,10 +9,11 @@ import type {
   AttendancePrompt,
 } from "./attendance-contract.js";
 import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
-import { compareRecording } from "./effective-entries.js";
+import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { recordRoot } from "./record-projection.js";
 import { isRecordDate } from "./record-dates.js";
-import type { TimeEntryRecord } from "./projection.js";
+import { localWallClock, type TimeEntryRecord } from "./projection.js";
+import { entriesFromOpenShift, openShiftsFor } from "./open-shift-context.js";
 import { readAttendanceRevision, projectCorrectionItems } from "./attendance-responses.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { attendanceDays, attendanceQuestions } from "./schema/attendance.js";
@@ -189,6 +190,21 @@ export async function readAttendanceDay(
   const approval = dayApprovalsForPerson(record.entries.map(({ entry }) => entry)).get(scope.date);
   record.entries = record.entries.filter(({ entry }) => entry.entryKind !== "day_approval");
   const shown = new Set(record.entries.map((e) => e.entry.entryId));
+  let clockOutPreviewEntries: TimeEntryRecord[] = [];
+  const effective = effectiveClockEntries(entries).sort(compareEvents);
+  const [open] = openShiftsFor(effective);
+  if (
+    open &&
+    localWallClock(open.start.eventAt, open.start.offsetMinutes).slice(0, 10) === scope.date
+  ) {
+    const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
+    const roots = new Set(
+      entriesFromOpenShift(effective, open).map((entry) => recordRoot(entry, byId).entryId),
+    );
+    clockOutPreviewEntries = entries.filter(
+      (entry) => !shown.has(entry.entryId) && roots.has(recordRoot(entry, byId).entryId),
+    );
+  }
   const items = projectCorrectionItems(
     entries.filter((entry) => entry.entryKind !== "day_approval"),
     commands,
@@ -199,6 +215,7 @@ export async function readAttendanceDay(
     timeZone,
     revision: await readAttendanceRevision(tx, scope.personId),
     record,
+    ...(clockOutPreviewEntries.length > 0 && { clockOutPreviewEntries }),
     ...(policy && { paidBreakPolicy: policy }),
     ...(approval && { approval }),
     items,

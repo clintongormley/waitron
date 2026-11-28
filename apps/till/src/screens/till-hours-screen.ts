@@ -5,6 +5,7 @@ import type { AttendancePrompt, HoursSelection, PersonHours } from "../api/clien
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
+  attendanceDuration as duration,
   attendanceHistory,
   attendanceStatus,
   storedAttendanceTime,
@@ -13,9 +14,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 
-function duration(minutes: number): string {
-  return `${minutes < 0 ? "−" : ""}${Math.floor(Math.abs(minutes) / 60)} h ${String(Math.abs(minutes) % 60).padStart(2, "0")} min`;
-}
 function dateAfter(date: string, days: number): string {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);

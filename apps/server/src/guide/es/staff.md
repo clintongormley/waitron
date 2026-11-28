@@ -241,7 +241,7 @@ Pulsa **Responder más tarde** para dejar las preguntas para otro inicio de sesi
 durante un descanso, pulsa **Terminar descanso** para reanudar el trabajo. Pulsa **Ahora no** para
 abrir el TPV sin registrar ninguna de estas acciones.
 
-Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.
+Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Cuando termines de trabajar, elige **Fichar salida**, revisa tu jornada y confirma. Si te vas del terminal y quieres seguir con la jornada abierta, usa **Salir**.
 
 Si falta un fichaje o su hora es incorrecta, elige **Corregir mis horas** en el menú de tu nombre.
 En un dispositivo de mano, abre **Más** si tu nombre está ahí. La opción aparece cuando puedes

@@ -577,7 +577,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   shared sheet on narrow screens. The narrow floor has the zone chooser, Map/List and ☰ at the
   bottom.
   The zone and More sheets dock against that bar, and More uses shared action rows.
-  More shows your clock-in time under your name, beside **Clock out**.
+  While you're working, More shows when your shift started, with the clock actions below your name.
   The table name opens the shared action sheet with Finish table at the end.
   The ⋮ beside the bill picker opens the current bill's actions. Merge bills and Move this bill
   open with Back above the list of choices.
@@ -605,9 +605,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   review, and settle a dispute in favour of the worker's time or send another edit. On the till,
   workers send their requests to managers. Managers can open **To approve** from **More** on
   their own till to review requests and disputes or approve the displayed finished days. Still
-  open: editing a whole day on the till, the You section’s clock actions, the break strip, the
-  clock-out summary, My hours, export markers for approval and disputes (the labour adviser is asked
-  L8), the drawer close screens, and waiter floats (A240).
+  open: editing a whole day on the till, My hours, export markers for approval and disputes (the
+  labour adviser is asked L8), the drawer close screens, and waiter floats (A240).
 
 - **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
   of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show
