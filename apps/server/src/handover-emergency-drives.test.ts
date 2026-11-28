@@ -22,6 +22,7 @@ import { createHostPlaces } from "./box-host-api.js";
 import type { BoxHostRequests } from "./box-host-client.js";
 import { resolveDriveFile } from "./drive-backup-files.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
+import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
 import { readStagedCopy } from "./handover-copy-selection.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { heldBackupKey } from "./testing/backup-key.js";
@@ -153,14 +154,20 @@ function service(options: {
     },
     log,
   );
-  const post = async (step: string, body: unknown, https = true, type = "application/json") => {
+  const post = async (
+    step: string,
+    body: unknown,
+    https = true,
+    type = "application/json",
+    headers: Record<string, string> = {},
+  ) => {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
       `${ORIGIN}/api/node/handover/emergency/${step}`,
       {
         method: "POST",
-        headers: { "content-type": type, origin: ORIGIN },
+        headers: { "content-type": type, origin: ORIGIN, ...headers },
         body: typeof body === "string" ? body : JSON.stringify(body),
       },
       https ? { incoming: { socket } } : {},
@@ -212,6 +219,34 @@ it("the switch's drive list needs a node.manage sign-in, checked before the host
     files: 1,
   });
 });
+
+it.each([
+  ["a malformed body", "{not json"],
+  ["a truncated body", '{"signIn":{"email":'],
+  ["an empty body", ""],
+  ["a null body", "null"],
+])(
+  "the switch's drive list refuses %s, even beside a valid proof cookie, before the host is asked",
+  async (_label, body) => {
+    const { drivesRoot } = await backupOnDrive();
+    const s = service({ drivesRoot });
+    const proof = await makeSwitchProof(
+      { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+      ADMIN,
+    );
+    const cookie = { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` };
+    expect((await s.post("drives", {}, true, "application/json", cookie)).status).toBe(200);
+    s.host.storageList.mockClear();
+    for (const headers of [cookie, {}]) {
+      const answer = await s.post("drives", body, true, "application/json", headers);
+      expect([answer.status, answer.body]).toEqual([
+        400,
+        { error: { code: "handover.request_invalid", params: { field: "body" } } },
+      ]);
+    }
+    expect(s.host.storageList).not.toHaveBeenCalled();
+  },
+);
 
 it("a wrong sign-in on the backup route resolves no drive path", async () => {
   const { drivesRoot, name } = await backupOnDrive();

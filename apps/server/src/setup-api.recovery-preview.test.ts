@@ -306,6 +306,45 @@ it.each<[string, (file: object) => Record<string, unknown>, string]>([
   expect(await readdir(staging)).toEqual([]);
 });
 it.each([
+  ["a blank master key", { masterKey: "  ", environment: "preproduction" }, "masterKey"],
+  ["a master key that is not text", { masterKey: 7, environment: "preproduction" }, "masterKey"],
+  [
+    "a master key over 4,096 bytes",
+    { masterKey: "x".repeat(4097), environment: "preproduction" },
+    "masterKey",
+  ],
+  ["an unknown environment", { masterKey: MASTER_KEY_TEXT, environment: "dev" }, "environment"],
+])("refuses a drive preview with %s before looking for its file", async (_label, fields, field) => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-preview-drive-gone-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  await mkdir(join(root, "sda1"), { recursive: true });
+  await mkdir(staging);
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      receiveArchive: receiveRestoreArchive(staging, root),
+      previewRestore: read,
+    },
+    () => {},
+  );
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), { nodeId: preview.nodeId });
+  const response = await app.request("/setup-api/restore/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ file: { drive: "sda1", path: name }, ...fields }),
+  });
+  expect([response.status, await response.json()]).toEqual([
+    400,
+    { error: { code: "setup.request_invalid", params: { field } } },
+  ]);
+  expect(read).not.toHaveBeenCalled();
+});
+it.each([
   ["recovery.passphrase_invalid", 422],
   ["restore.environment_mismatch", 409],
   ["restore.schema_too_new", 409],

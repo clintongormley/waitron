@@ -50,7 +50,7 @@ import {
   type HandoverOperation,
 } from "@waitron/node-db";
 import { inTurn } from "@waitron/provisioning";
-import { codeOf, createErrorBoundary, readJsonBody } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { SCRATCH_DIR } from "@waitron/store";
 import type { FollowProgress } from "@waitron/stream";
@@ -435,7 +435,7 @@ export function mountHandoverEmergencyApi(
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
       if (!isJsonRequest(c.req.raw)) refuseRequest("body");
-      const body = await readJsonBody<unknown>(c);
+      const body = await readRawJsonBody<unknown>(c);
       if (!isRecord(body) || Object.keys(body).some((key) => key !== "signIn"))
         refuseRequest("body");
       const { personId } = await inTurn(deps.node, "handover-emergency", async () => {

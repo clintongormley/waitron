@@ -59,7 +59,7 @@ export function mountSetupDriveRoutes(
         const type = c.req.header("content-type")?.toLowerCase() ?? "";
         const json = isJsonRequest(c.req.raw);
         if (!json && !type.startsWith("application/octet-stream")) invalidRequest("artifact");
-        const read = (fields?: Map<string, string>) => {
+        const read = (fields?: ReadonlyMap<string, string>) => {
           const get = (name: string, header: string) =>
             fields ? fields.get(name) : c.req.header(header);
           const masterKey = asMasterKey(get("masterKey", "x-waitron-master-key"), "masterKey");
@@ -73,6 +73,7 @@ export function mountSetupDriveRoutes(
           fields: ["masterKey", "environment"],
           exactFields: json,
           drive: true,
+          check: json ? (fields) => void read(fields) : undefined,
         });
         try {
           const { masterKey, environment } = headers ?? read(upload.fields);
