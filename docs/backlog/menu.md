@@ -795,7 +795,7 @@ copy, follows sold-out changes and explains refusals in English and Spanish. At 
 the till orders from the bill's folders and moves a set menu with its dishes.
 
 _2026-11-28: [D22](../superpowers/plans/2026-11-28-a1515-4-d22-draft-reservations.md) removed the
-draft reservation fields and columns._
+draft reservation fields from requests and replies._
 
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.

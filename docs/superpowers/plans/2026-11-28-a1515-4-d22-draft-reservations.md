@@ -18,3 +18,6 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/inmut
 ```
 
 Estimate product +8/−75, tests +35/−130 and generated files about +5/−22. The normal push hook runs lint and typechecks. The core migration and Till/Server contract call for two Claude run-it reviews. Open the PR with **Resets venues** and state that earlier backups cannot be restored. Record changed checks by file and line, before and after, and D22 basis. Start implementation after watcher clearance.
+
+_2026-11-28, 16:11 CET. The watcher narrowed D22 to removing the fields from requests and replies.
+The two nullable columns can go with the next core rebuild that already requires a venue reset._

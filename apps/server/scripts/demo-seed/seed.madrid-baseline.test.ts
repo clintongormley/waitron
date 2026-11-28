@@ -2045,14 +2045,14 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "added_at", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
       );
-      draftLines.columns.push({
-        name: "set_menu_id",
-        type: "TEXT",
-        notnull: 0,
-        dflt_value: null,
-        pk: 0,
-      });
-      for (const row of Object.values(draftLines.rows)) row.set_menu_id = null;
+      for (const [name, type] of [
+        ["set_menu_id", "TEXT"],
+        ["set_menu_reserved_line_id", "TEXT"],
+        ["set_menu_reserved_place", "INTEGER"],
+      ] as const) {
+        draftLines.columns.push({ name, type, notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(draftLines.rows)) row[name] = null;
+      }
       const draftLineKeys = draftLines.foreignKeys;
       draftLineKeys.splice(
         4,
