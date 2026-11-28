@@ -20,7 +20,8 @@ const SHEET_TOKENS = [
   "--wt-menu-sheet-shadow: 0px -3px 7px rgb(1, 2, 3)",
   "--wt-menu-sheet-handle-width: 37px",
   "--wt-menu-sheet-handle-height: 6px",
-  "--wt-color-surface-sunken: rgb(4, 5, 6)",
+  "--wt-color-border: rgb(4, 5, 6)",
+  "--wt-field-line-width: 2px",
   "--wt-duration-move: 9s",
   "--wt-space-4: 23px",
 ].join(";");
@@ -51,7 +52,7 @@ function riseOf(panel: WtFullScreenPanel) {
   }));
 }
 
-test("a rising panel has rounded top corners, square bottom ones and an upward shadow", async () => {
+test("a rising panel has rounded top corners edged with a line, square bottom ones and an upward shadow", async () => {
   const panel = await mountPanel("rising");
   const look = getComputedStyle(panel);
   expect(look.borderTopLeftRadius).toBe("13px");
@@ -59,6 +60,9 @@ test("a rising panel has rounded top corners, square bottom ones and an upward s
   expect(look.borderBottomLeftRadius).toBe("0px");
   expect(look.borderBottomRightRadius).toBe("0px");
   expect(look.boxShadow).toBe("rgb(1, 2, 3) 0px -3px 7px 0px");
+  expect(look.borderTopStyle).toBe("solid");
+  expect(look.borderTopWidth).toBe("2px");
+  expect(look.borderTopColor).toBe("rgb(4, 5, 6)");
 });
 
 test("a rising panel draws a centred, unnamed handle above its header that takes no tab stop", async () => {

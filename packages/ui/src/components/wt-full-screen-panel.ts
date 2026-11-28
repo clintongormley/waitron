@@ -19,6 +19,7 @@ export class WtFullScreenPanel extends LitElement {
         grid-template-rows: auto auto minmax(0, 1fr) auto;
         border-radius: var(--wt-radius-lg) var(--wt-radius-lg) 0 0;
         box-shadow: var(--wt-menu-sheet-shadow);
+        border-block-start: var(--wt-field-line-width) solid var(--wt-color-border);
       }
 
       .handle {
@@ -27,7 +28,7 @@ export class WtFullScreenPanel extends LitElement {
         height: var(--wt-menu-sheet-handle-height);
         margin-block: var(--wt-space-2) calc(var(--wt-space-1) / 2);
         border-radius: var(--wt-radius-full);
-        background: var(--wt-color-surface-sunken);
+        background: var(--wt-color-border);
       }
 
       @media (forced-colors: active) {

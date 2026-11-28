@@ -900,8 +900,9 @@ immediately above your foot actions. In a wide till order, set `--wt-dialog-inse
 on the full-screen dialog to the measured edge of the order column. The dialog covers the order
 and its backdrop dims the display. Leave the inset at zero on a narrow screen.
 
-Set `rising` to make the panel a sheet risen from the bottom of the screen: rounded top corners,
-a handle above the header and an upward shadow. It slides up into place each time it appears,
+Set `rising` to make the panel a sheet risen from the bottom of the screen: rounded top corners
+edged with a border-coloured line, a border-coloured handle above the header, so both show in
+either theme, and an upward shadow. It slides up into place each time it appears,
 whether newly added to the page or shown again after `hidden` or `display: none`, unless the
 device asks for reduced motion.
 
