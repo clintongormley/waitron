@@ -224,6 +224,7 @@ const openTable: TableState = {
 const smallPartyBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-7",
   revision: 0,
   invoiceType: "F2",
@@ -472,6 +473,7 @@ function counterOrderAfterCard(id: string): HeldOrder {
     invoiceType: "F2",
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
   };
 }
@@ -26589,6 +26591,7 @@ describe("A737 Find a bill page", () => {
       zoneId: null,
       dining: "eat_in",
       diningChoice: "none",
+      discounts: [],
       expectedEdit: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-1" },

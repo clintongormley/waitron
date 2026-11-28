@@ -284,6 +284,7 @@ function placedServer() {
     zoneId: null,
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     expectedEdit: null,
     id: "wo-placed",
     orderNumber: 12,

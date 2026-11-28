@@ -1586,6 +1586,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
         {
           dining: "eat_in",
           diningChoice: "none",
+          discounts: [],
           workingOrderId: "wo-7",
           revision: 0,
           invoiceType: "F2",
@@ -3322,6 +3323,7 @@ describe("till-app table ordering: the guests the receipt prints", () => {
   const bill = (overrides: Partial<PartyBill> = {}): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId: "wo-7",
     revision: 0,
     invoiceType: "F2",
@@ -3707,6 +3709,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
   ): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",
@@ -4500,6 +4503,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
   ): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

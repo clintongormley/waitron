@@ -29,6 +29,7 @@ export const footerParty: TableParty = {
 export const footerBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-4",
   revision: 7,
   invoiceType: "F2",

@@ -10421,6 +10421,7 @@ describe("till-app: recording an unpaid departure", () => {
   const creditedBill = (workingOrderId: string, amountDue: string): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

@@ -5,6 +5,7 @@ import type {
   Dining,
   BillSetMenuState,
   DiscountNotice,
+  PendingDiscountView,
   ServedSetMenuCopy,
   OptionSnapshot,
   OptionSelection,
@@ -161,6 +162,8 @@ export interface HeldOrder {
   setMenuCopies?: ServedSetMenuCopy[];
   /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
+  /** Its pending discounts; none on a settled or abandoned bill. */
+  discounts: PendingDiscountView[];
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**

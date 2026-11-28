@@ -30,6 +30,7 @@ import {
   thousandthsToDecimal,
   centsToDecimal,
   type DiscountNotice,
+  type PendingDiscountView,
 } from "@waitron/shared";
 import { sql, eq, and, isNull, type SQL, exists, or, ne } from "drizzle-orm";
 import { type OrderEditAuthority, readBillEditState } from "./bill-editing.js";
@@ -53,6 +54,7 @@ import { soldProduct } from "./stored-order-lines.js";
 import { readBillSignals } from "./table-signals.js";
 import type { WorkingOrderDeps } from "./working-order-context.js";
 import { optional } from "./working-order-station-queue.js";
+import { readPendingOff } from "./bill-discounts-off-sql.js";
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
@@ -114,6 +116,7 @@ export interface HeldOrder {
   setMenuCopies?: ServedSetMenuCopy[];
   /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
+  discounts: PendingDiscountView[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -183,13 +186,14 @@ export interface HeldOrder {
 export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderSummary[]> {
   return deps.db.withWriteLock(async () => {
     const tx = deps.db;
+    const off = await readPendingOff(tx);
     const rows = await tx
       .select({
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         partyId: workingOrders.partyId,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
-        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) - ${off.of(workingOrders.id)} as text)`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -498,6 +502,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id], "published")).get(id)! : {}),
       ...discountNoticesOf(await readBillsDiscountNotices(tx, [id]), id),
+      discounts: (await readPendingOff(tx, { bills: [id] })).discountsOf(id),
       lines,
     };
   });

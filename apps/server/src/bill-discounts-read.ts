@@ -27,7 +27,7 @@ export interface HeldBill {
   names: Map<string, { name: string; variantName: string | null }>;
 }
 
-function targetOf(row: PendingDiscount): PendingBillDiscount["target"] {
+export function targetOf(row: PendingDiscount): PendingBillDiscount["target"] {
   if (row.lineId !== null) return { kind: "line", lineId: row.lineId };
   if (row.setMenuId !== null) return { kind: "set_menu", lineId: row.setMenuLineId };
   return { kind: "bill" };

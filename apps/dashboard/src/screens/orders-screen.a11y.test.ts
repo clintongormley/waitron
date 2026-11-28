@@ -32,6 +32,7 @@ const row: OrderRowDto = {
 const detail = {
   row,
   lines: [],
+  discounts: [],
   invoices: [],
   tenders: [],
   payments: [],

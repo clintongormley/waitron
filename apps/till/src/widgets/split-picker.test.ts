@@ -93,6 +93,7 @@ function source(
     bill: {
       dining: "eat_in",
       diningChoice: "none",
+      discounts: [],
       workingOrderId: id,
       revision: 0,
       invoiceType: "F2",

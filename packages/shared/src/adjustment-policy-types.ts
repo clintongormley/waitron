@@ -55,3 +55,24 @@ export interface DiscountNotice {
   reasonId: string;
   reapplyOn: { lineId: string } | null;
 }
+
+/** A comp or discount given on an open bill and not yet written into its prices, once however
+ * many rows (`given_together`) hold it, `id`, `target`, `origin` and `reasonName` being the first row's. `amount` is the fixed amount
+ * given, null for a comp or a percentage; `takes` is what it takes off the bill's total now; both
+ * sum its rows. `holds`, as `workOutHeldBill` decides: `cut_down` when a fixed amount cannot all
+ * come off what it was given on, `set_menu_gone` when its set-menu row is gone, so it takes
+ * nothing; `yes` only when every row holds, otherwise the first row's that does not. */
+export interface PendingDiscountView {
+  id: string;
+  target:
+    | { kind: "bill" }
+    | { kind: "line"; lineId: string }
+    | { kind: "set_menu"; lineId: string | null };
+  action: Exclude<AdjustmentAction, "cancel">;
+  percentBp: number | null;
+  amount: string | null;
+  takes: string;
+  holds: "yes" | "set_menu_gone" | "cut_down";
+  origin: "given" | "bill_share";
+  reasonName: string;
+}

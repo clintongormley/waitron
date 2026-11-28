@@ -27,7 +27,9 @@ import {
   centsToDecimal,
   type OptionSnapshot,
   optionSnapshotNames,
+  type PendingDiscountView,
 } from "@waitron/shared";
+import { readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 import { inArray, eq, desc, asc, sql, or, and } from "drizzle-orm";
 import {
   type InvoiceDeliveryAttempt,
@@ -131,6 +133,8 @@ export interface OrderInvoicePdfDownload {
 export interface OrderDetail {
   row: OrderRow;
   lines: OrderLine[];
+  /** An open bill's pending discounts, which its lines' totals do not yet take off. */
+  discounts: PendingDiscountView[];
   invoices: OrderInvoice[];
   tenders: OrderTender[];
   payments: OrderBillPayment[];
@@ -146,15 +150,13 @@ export async function readVisibleOrder(
   tx: Transaction,
   id: string,
   scope: OrderListFilter["scope"],
+  off?: PendingOff,
 ): Promise<OrderRow> {
-  const { rows } = await listOrders(tx, {
-    status: "all",
-    dates: "any",
-    credited: false,
-    limit: 1,
-    only: id,
-    scope,
-  });
+  const { rows } = await listOrders(
+    tx,
+    { status: "all", dates: "any", credited: false, limit: 1, only: id, scope },
+    off,
+  );
   const row = rows[0];
   if (row === undefined) throw new AppError("working_order.not_found", { workingOrderId: id });
   return row;
@@ -167,10 +169,12 @@ export async function readOrderDetail(
   emailTransport: boolean,
   includeInvoiceRecipientEmail = false,
 ): Promise<OrderDetail> {
-  const row = await readVisibleOrder(tx, id, scope);
+  const off = await readPendingOff(tx, { bills: [id] });
+  const row = await readVisibleOrder(tx, id, scope, off);
   return {
     row,
     lines: row.kind === "bill" ? await readBillLines(tx, id) : await readSaleLines(tx, id),
+    discounts: row.kind === "bill" ? off.discountsOf(id) : [],
     invoices: row.saleId === null ? [] : await readInvoices(tx, row.saleId),
     tenders: row.saleId === null ? [] : await readTenders(tx, row.saleId),
     payments: row.kind === "bill" ? await readBillPayments(tx, id) : [],

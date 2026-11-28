@@ -97,6 +97,7 @@ function bill(id: string, number: number | null, over: Partial<PartyBill> = {}):
   return {
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId: id,
     revision: 0,
     invoiceType: "F2",

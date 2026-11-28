@@ -1,6 +1,6 @@
 import type { RecipientIdentifierType, RecipientIdentifier } from "@waitron/country-packs";
 import type { DashboardRequest, DownloadedFile } from "@waitron/dashboard-kit";
-import type { AllergenDeclaration as AllergenEntry } from "@waitron/shared";
+import type { AllergenDeclaration as AllergenEntry, PendingDiscountView } from "@waitron/shared";
 import { ReportingApi } from "./reporting-api.js";
 
 export interface InvoiceCustomerSearchDto {
@@ -90,6 +90,8 @@ export interface OrderDetailDto {
     sent: boolean;
     sentNutrition: { allergens: AllergenDeclaration; dietaryDeclarations: string[] } | null;
   }[];
+  /** An open bill's pending discounts, which its lines' totals do not yet take off. */
+  discounts: PendingDiscountView[];
   invoices: {
     kind: "invoice" | "corrective" | "replacement" | "substitution";
     invoiceType?: "F1" | "F2";

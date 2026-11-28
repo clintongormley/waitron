@@ -11,6 +11,12 @@ import {
 import { activityLog, sales, workingOrderLines, type Transaction } from "@waitron/db";
 import { inTx, lineIdOf, type AdjustmentVenue } from "./adjustment-venue.js";
 
+/** Who gives a discount: the complaint reason's id and the staff member asking. */
+export interface DiscountGiver {
+  reasonId: Pick<AdjustmentVenue["reasonId"], "complaint">;
+  staffId: string;
+}
+
 /**
  * Holds a discount on an open bill through the store, as the till will give it: 10% under the
  * complaint reason, asked for by the venue's staff member, unless `row` says otherwise. `row` names
@@ -18,7 +24,7 @@ import { inTx, lineIdOf, type AdjustmentVenue } from "./adjustment-venue.js";
  */
 export async function holdDiscount(
   tx: Transaction,
-  venue: Pick<AdjustmentVenue, "reasonId" | "staffId">,
+  venue: DiscountGiver,
   row: Partial<NewPendingDiscount>,
 ): Promise<string> {
   const reason = await findAdjustmentReason(tx, venue.reasonId.complaint);
@@ -37,10 +43,26 @@ export async function holdDiscount(
   });
 }
 
+/** 10% off the whole of `billId`, under the complaint reason `complaint`, asked for by the venue's
+ * operator. Answers the row's id. */
+export function holdTenPercent(
+  venue: Pick<AdjustmentVenue, "db"> & { operatorId: string },
+  complaint: string,
+  billId: string,
+): Promise<string> {
+  return inTx(venue, (tx) =>
+    holdDiscount(
+      tx,
+      { reasonId: { complaint }, staffId: venue.operatorId },
+      { workingOrderId: billId },
+    ),
+  );
+}
+
 /** 50.00 off line `lineNo` of `billId`, more than it costs: it no longer holds as given. */
 export async function cutDownOn(
   venue: Pick<AdjustmentVenue, "db">,
-  giver: Pick<AdjustmentVenue, "reasonId" | "staffId">,
+  giver: DiscountGiver,
   billId: string,
   lineNo = 1,
 ): Promise<string> {

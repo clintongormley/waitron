@@ -716,6 +716,7 @@ describe("getHeldOrder", () => {
       dining: "eat_in",
       diningChoice: "none",
       kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
+      discounts: [],
       lines: [
         {
           productId: coffeeId,

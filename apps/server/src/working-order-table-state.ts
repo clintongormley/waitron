@@ -35,6 +35,7 @@ import { type FamilyBill, readBillsOfParties } from "./parties.js";
 import { readTableSteps, stepSignal } from "./service-step-signals.js";
 import { readPartySignals, tableSignals, type SeatedPartyFacts } from "./table-signals.js";
 import { parseUnservedLines, minutesSince } from "./working-order-station-queue.js";
+import { readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 
 /** The seated party a table belongs to, as the floor shows it. */
 export interface TableParty {
@@ -153,6 +154,7 @@ export async function listTablesWithState(
   now: Date = new Date(),
   log?: Logger,
 ): Promise<TableState[]> {
+  const off = await readPendingOff(tx);
   const result = await tx.execute<{
     id: string;
     label: string;
@@ -177,7 +179,9 @@ export async function listTablesWithState(
       dt.id, dt.label, dt.short_name, dt.zone_id, dt.needs_clearing_since,
       cast(coalesce(tab.open_bills, 0) as int) as open_bills,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
-      tab.tab_total,
+      -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
+      -- the mapping below -- see its doc comment for why it is text and not an integer cast.
+      cast(tab.tab_total - ${off.ofEach(sql`tab.open_bill_ids`)} as text) as tab_total,
       cast(coalesce(tab.pending_to_serve, 0) as int) as pending_to_serve,
       cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
@@ -192,9 +196,8 @@ export async function listTablesWithState(
              -- at most one ti per wol, so this LEFT JOIN neither multiplies wol rows (line_count /
              -- tab_total stay correct) nor double-counts.
              cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
-             -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
-             -- the mapping below -- see its doc comment for why it is text and not an integer cast.
-             cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
+             coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as tab_total,
+             json_group_array(distinct wo.id) filter (where wo.status = 'open') as open_bill_ids,
              -- Order-timing alerts: the wait start + thresholds of each unserved kitchen line whose
              -- ticket item was fired or requested, so a HELD one does not age here, and a
              -- pass-controlled one ages from requested_at; one JSON object per line -- never a band
@@ -245,7 +248,7 @@ export async function listTablesWithState(
   `);
 
   const today = await readTodayTables(tx);
-  const { seated, facts } = await readSeatedParties(tx, log);
+  const { seated, facts } = await readSeatedParties(tx, off, log);
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
@@ -388,6 +391,7 @@ function openingBillOf(bills: readonly FamilyBill[]): string | null {
  */
 async function readSeatedParties(
   tx: Transaction,
+  off: PendingOff,
   log: Logger | undefined,
 ): Promise<{ seated: Map<string, TableParty>; facts: Map<string, SeatedPartyFacts> }> {
   const members = await tx
@@ -413,7 +417,7 @@ async function readSeatedParties(
   }
   const partyIds = [...firstZones.keys()];
   const labels = await partyTableLabels(tx, partyIds);
-  const bills = await readBillsOfParties(tx, partyIds, log);
+  const bills = await readBillsOfParties(tx, partyIds, log, off);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds, bills);
   const reminders = await readReleaseReminders(tx, partyIds, firstZones);
   const notes = await VENUE_SERVICE.readKitchenNotes(

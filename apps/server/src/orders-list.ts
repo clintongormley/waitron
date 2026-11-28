@@ -23,6 +23,7 @@ import {
   ordersWordRank,
   readOrderListPlaces,
 } from "./orders-list-places.js";
+import { readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 import "./errors.js";
 
 export const ORDER_STATUSES = [
@@ -143,14 +144,14 @@ function billScope(filter: OrderListFilter): SQL {
 }
 
 // Money columns are cast to text: `rawCentsToDecimal` refuses the number an uncast integer arrives as.
-function rowsSql(filter: OrderListFilter): SQL {
+function rowsSql(filter: OrderListFilter, off: PendingOff): SQL {
   return sql`
   select 'bill' as kind, wo.id as id, wo.opened_at as at, wo.order_number as order_number, wo.label as label,
          wo.party_id as party_id, p.name as party_name, coalesce(dd.label, wo.delivery_table_label) as delivery_label,
          s.id as sale_id, sr.code as series_code, s.invoice_number as invoice_number,
          s.counterparty_tax_id as counterparty_tax_id,
          cast(s.total as text) as sale_total,
-         cast((select coalesce(sum(l.line_total), 0) from working_order_lines l where l.working_order_id = wo.id) as text) as lines_total,
+         cast((select coalesce(sum(l.line_total), 0) from working_order_lines l where l.working_order_id = wo.id) - ${off.of(sql`wo.id`)} as text) as lines_total,
          ${CORRECTIONS} as corrections, null as operator_id, null as operator_name,
          ${BILL_STATUS} as status, ud.recorded_at as departed_at, p.table_names as party_table_names, wo.bill_name, wo.delivery_table_id
   from working_orders wo
@@ -342,17 +343,18 @@ function whereOf(clauses: SQL[]): SQL {
 
 /**
  * One page of rows: closest match first when searched by words, then newest first by `at`, then
- * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due,
+ * by id. Its queries do not grow with the page: the bills holding pending discounts (two more,
+ * their discounts and lines, when any does), the page, then the invoices' amounts due,
  * payments before an invoice (two), corrective numbers, tables and staff, each for the whole page
  * and each skipped when the page has nothing to ask.
  */
-export function ordersPageSql(filter: OrderListFilter): SQL {
+export function ordersPageSql(filter: OrderListFilter, off: PendingOff): SQL {
   const clauses = filterClauses(filter);
   const words = wordSearch(filter);
   if (words === undefined) {
     if (filter.after !== undefined) clauses.push(cursorClause(filter.after, false));
     return sql`
-    with r as (${rowsSql(filter)})
+    with r as (${rowsSql(filter, off)})
     select r.*, ${CREDITED} as credited
     from r where ${whereOf(clauses)}
     order by r.at desc, r.id desc
@@ -363,7 +365,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
   const rankedClauses = [sql`r.search_rank is not null`];
   if (filter.after !== undefined) rankedClauses.push(cursorClause(filter.after, true));
   return sql`
-    with base as (${rowsSql(filter)}),
+    with base as (${rowsSql(filter, off)}),
     ranked as materialized (
       select r.*, ${ordersWordRank(words)} as search_rank
       from base r where ${whereOf(clauses)}
@@ -374,8 +376,16 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
     limit ${filter.limit + 1}`;
 }
 
-export async function listOrders(tx: Transaction, filter: OrderListFilter): Promise<OrderPage> {
-  const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter));
+/** `off` is read for the page unless the caller has read it already for what the page shows. */
+export async function listOrders(
+  tx: Transaction,
+  filter: OrderListFilter,
+  off?: PendingOff,
+): Promise<OrderPage> {
+  const pending =
+    off ??
+    (await readPendingOff(tx, filter.only === undefined ? undefined : { bills: [filter.only] }));
+  const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter, pending));
   const raw = read.slice(0, filter.limit);
   const last = raw[filter.limit - 1];
   const next =
@@ -393,13 +403,14 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
 export function ordersTableSql(
   filter: OrderListFilter,
   request: OrderTableRequest,
-  count = false,
+  count: boolean,
+  off: PendingOff,
 ): SQL {
   const words = wordSearch(filter);
   const matches =
     words === undefined
-      ? sql`with r as (${rowsSql(filter)}), matched as (select r.* from r where ${whereOf(filterClauses(filter))})`
-      : sql`with base as (${rowsSql(filter)}), ranked as materialized (
+      ? sql`with r as (${rowsSql(filter, off)}), matched as (select r.* from r where ${whereOf(filterClauses(filter))})`
+      : sql`with base as (${rowsSql(filter, off)}), ranked as materialized (
         select r.*, ${ordersWordRank(words)} as search_rank
         from base r where ${whereOf(filterClauses(filter))}
       ), matched as (select r.* from ranked r where r.search_rank is not null)`;
@@ -422,12 +433,15 @@ export async function listOrdersTablePage(
   filter: OrderListFilter,
   request: OrderTableRequest,
 ): Promise<{ rows: OrderRow[]; total: number; page: number; pageSize: number }> {
+  const off = await readPendingOff(tx);
   const { rows: counts } = await tx.execute<{ total: number }>(
-    ordersTableSql(filter, request, true),
+    ordersTableSql(filter, request, true, off),
   );
   const total = counts[0]!.total;
   const page = Math.min(request.page, Math.max(0, Math.ceil(total / DEFAULT_ORDER_PAGE_SIZE) - 1));
-  const { rows: raw } = await tx.execute<RawRow>(ordersTableSql(filter, { ...request, page }));
+  const { rows: raw } = await tx.execute<RawRow>(
+    ordersTableSql(filter, { ...request, page }, false, off),
+  );
   return { rows: await hydrateOrderRows(tx, raw), total, page, pageSize: DEFAULT_ORDER_PAGE_SIZE };
 }
 

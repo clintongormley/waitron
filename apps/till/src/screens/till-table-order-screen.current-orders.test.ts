@@ -43,6 +43,7 @@ function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
   return {
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

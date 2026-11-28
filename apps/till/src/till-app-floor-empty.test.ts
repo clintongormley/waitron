@@ -93,6 +93,7 @@ const openTable: TableState = {
 const openBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-7",
   revision: 0,
   invoiceType: "F2",

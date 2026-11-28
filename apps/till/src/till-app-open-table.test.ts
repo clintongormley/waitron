@@ -2318,6 +2318,7 @@ describe("A803 opening bill", () => {
   ): PartyBill => ({
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

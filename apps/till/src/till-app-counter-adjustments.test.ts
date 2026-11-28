@@ -111,6 +111,7 @@ function heldOrder(
     zoneId: null,
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     kitchenNote: {
       scope: { workingOrderId: "wo-9" },
       note: null,

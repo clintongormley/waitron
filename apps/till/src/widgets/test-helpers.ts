@@ -883,6 +883,7 @@ export function partyBillOf(
   return {
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 1,
     invoiceType: "F2",

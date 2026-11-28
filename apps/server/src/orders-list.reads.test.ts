@@ -20,6 +20,7 @@ import {
   ordersTableSql,
   type OrderListFilter,
 } from "./orders-list.js";
+import { NO_PENDING_OFF } from "./bill-discounts-off-sql.js";
 
 // Wrapped before the store opens its connections, so every registration of the matcher counts.
 let rankCalls = 0;
@@ -90,21 +91,21 @@ async function readsFor(limit: number, table = false) {
 }
 
 describe("reads per page", () => {
-  it("asks the same seven reads for three rows of every shape as for fifty", async () => {
+  it("asks the same eight reads for three rows of every shape as for fifty, none holding a pending discount", async () => {
     for (let n = 0; n < 17; n++) await oneOfEach();
     const three = await readsFor(3);
     expect(three.statuses).toEqual(["left_without_paying", "waiting_for_payment", "open"]);
-    expect(three.reads).toBe(7);
+    expect(three.reads).toBe(8);
     const fifty = await readsFor(50);
     expect(fifty.statuses).toHaveLength(50);
-    expect(fifty.reads).toBe(7);
+    expect(fifty.reads).toBe(8);
     expect((await readsFor(1)).reads).toBeLessThanOrEqual(7);
     const table = await readsFor(50, true);
     expect(table.statuses).toHaveLength(50);
-    expect(table.reads).toBe(8);
+    expect(table.reads).toBe(9);
     const last = await readsFor(1, true);
     expect(last.statuses).toEqual(["open"]);
-    expect(last.reads).toBe(6);
+    expect(last.reads).toBe(7);
   });
 });
 
@@ -171,9 +172,9 @@ describe("which index a read starts from", () => {
       const results: string[] = [];
       const paging = { page: 0, sortKey: "", sortDirection: "descending" } as const;
       for (const query of [
-        ordersPageSql({ ...ANY, ...filter }),
-        ordersTableSql({ ...ANY, ...filter }, paging),
-        ordersTableSql({ ...ANY, ...filter }, paging, true),
+        ordersPageSql({ ...ANY, ...filter }, NO_PENDING_OFF),
+        ordersTableSql({ ...ANY, ...filter }, paging, false, NO_PENDING_OFF),
+        ordersTableSql({ ...ANY, ...filter }, paging, true, NO_PENDING_OFF),
       ]) {
         const { rows } = await tx.execute<{ detail: string }>(sql`explain query plan ${query}`);
         results.push(rows.map((row) => row.detail).join("\n"));
