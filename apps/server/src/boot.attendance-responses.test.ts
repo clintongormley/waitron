@@ -175,7 +175,6 @@ describe("attendance response boot with permanent workforce", () => {
             "/api/attendance/manager/lookups",
             "/api/attendance/manager/queue",
             `/api/attendance/manager/day?personId=${venue.personId}&date=2026-01-05`,
-            `/api/attendance/manager/commands/${crypto.randomUUID()}`,
             "/management-api/attendance/lookups",
             "/management-api/attendance/queue",
             `/management-api/attendance/day?personId=${venue.personId}&date=2026-01-05`,

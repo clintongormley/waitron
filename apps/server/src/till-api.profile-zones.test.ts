@@ -120,7 +120,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET /api/attendance/manager/lookups | none: venue-wide manager record | till-attendance-api.test.ts "reads and approves another person's finished day from a manager's clock-only till" |
  * | GET /api/attendance/manager/queue | none: venue-wide manager record | same clock-only manager case |
  * | GET /api/attendance/manager/day | none: venue-wide manager record | same clock-only manager case |
- * | GET /api/attendance/manager/commands/:commandId | none: requester-owned receipt | till-attendance-api.test.ts "settles a worker's request as the signed-in manager and scopes receipt recovery to that manager" |
  * | POST /api/attendance/manager/commands | none: venue-wide manager record | same manager settlement case |
  * | POST /api/attendance/manager/approve-days | none: venue-wide manager record | same clock-only manager case |
  * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".

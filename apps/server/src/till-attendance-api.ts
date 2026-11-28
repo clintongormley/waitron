@@ -252,19 +252,6 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       );
     }),
   );
-  app.get("/api/attendance/manager/commands/:commandId", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "clock-in", passive: true });
-      return c.json(
-        await withTransaction(deps.db, async (tx) => {
-          await admitManager(tx, session);
-          noQuery(c);
-          const commandId = id(c.req.param("commandId"), "commandId");
-          return readAttendanceCommand(tx, { commandId, requestedByPersonId: session.personId });
-        }),
-      );
-    }),
-  );
   app.post("/api/attendance/manager/commands", (c) =>
     run(c, log, async () => {
       const session = await managerWriteSession(c);

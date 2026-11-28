@@ -428,7 +428,6 @@ const actionRoutes = [
   ["GET", "/api/attendance/manager/lookups", 403],
   ["GET", "/api/attendance/manager/queue", 403],
   ["GET", "/api/attendance/manager/day", 403],
-  ["GET", "/api/attendance/manager/commands/:commandId", 403],
   ["POST", "/api/attendance/manager/commands", 403],
   ["POST", "/api/attendance/manager/approve-days", 403],
   ["POST", "/api/parties/:id/drafts/:did/discard", 401],

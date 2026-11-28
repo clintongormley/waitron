@@ -522,7 +522,6 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
       "GET /api/attendance/manager/lookups",
       "GET /api/attendance/manager/queue",
       "GET /api/attendance/manager/day",
-      "GET /api/attendance/manager/commands/:commandId",
       "POST /api/attendance/manager/commands",
       "POST /api/attendance/manager/approve-days",
     ],

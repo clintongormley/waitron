@@ -120,7 +120,6 @@ const managerRoutes = [
   ["manager/lookups", undefined],
   ["manager/queue", undefined],
   ["manager/day?personId=ID&date=2026-01-05", undefined],
-  ["manager/commands/ID", undefined],
   ["manager/commands", {}],
   ["manager/approve-days", { days: [] }],
 ] as const;
@@ -159,9 +158,42 @@ async function managerCookie() {
   );
   return {
     deviceId: device.deviceId,
+    sessionId: session.id,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
   };
 }
+
+it.each([
+  ["ended", 401, "session.required"],
+  ["admission", 403, "attendance.not_permitted"],
+  ["suspended", 403, "attendance.not_permitted"],
+] as const)(
+  "refuses all manager routes if the manager's access changes: %s",
+  async (change, status, code) => {
+    const { cookie, sessionId } = await managerCookie();
+    if (change === "ended") {
+      await suite.db
+        .update(tillSessions)
+        .set({ endedAt: instant.toISOString() })
+        .where(eq(tillSessions.id, sessionId));
+    } else if (change === "admission") {
+      await suite.db
+        .delete(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, venue.profileId));
+    } else {
+      await suite.db
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, managerId));
+    }
+
+    for (const [path, body] of managerRoutes) {
+      const response = await request(pathOf(path), body, cookie);
+      expect(response.status, path).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  },
+);
 
 it("reads and approves another person's finished day from a manager's clock-only till", async () => {
   const { cookie, deviceId } = await managerCookie();
@@ -216,7 +248,7 @@ it("settles a worker's request as the signed-in manager and scopes receipt recov
   expect(response.status).toBe(200);
   const result = await response.json();
   expect(result).toMatchObject({ commandId, replayed: false });
-  const receipt = await request(`manager/commands/${commandId}`, undefined, cookie);
+  const receipt = await request(`commands/${commandId}`, undefined, cookie);
   expect(await receipt.json()).toEqual({ ...result, replayed: true });
   expect(await (await request(`commands/${commandId}`)).json()).toBeNull();
   const inbox = (await (await request("inbox")).json()) as AttendanceInbox;
@@ -228,6 +260,7 @@ it("settles a worker's request as the signed-in manager and scopes receipt recov
 
 it("keeps a request pending when a manager's PIN is entered on the worker's session", async () => {
   const itemId = await pending();
+  await setBuiltInRoleForTest(suite.db, venue.personId, "admin");
   const before = await snapshot();
   for (const action of ["approve", "decline"] as const) {
     const response = await request("commands", {
@@ -240,6 +273,16 @@ it("keeps a request pending when a manager's PIN is entered on the worker's sess
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   }
+  const bareApproval = await request("commands", {
+    action: "approve",
+    commandId: randomUUID(),
+    itemId,
+    expectedRevision: await revision(),
+  });
+  expect(bareApproval.status).toBe(400);
+  expect(await bareApproval.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "action" } },
+  });
   expect((await request(`items/${itemId}/approvers?action=approve`)).status).toBe(404);
   expect(await snapshot()).toEqual(before);
 });
@@ -438,43 +481,64 @@ function gate() {
   });
   return { promise, resolve };
 }
-it("rechecks a manager's permission after the command body arrives", async () => {
-  const itemId = await pending();
-  const { cookie } = await managerCookie();
-  const body = {
-    action: "approve",
-    commandId: randomUUID(),
-    expectedRevision: await revision(),
-    itemId,
-  };
-  const readingBody = gate();
-  const resumeBody = gate();
-  const raw = new Request("http://test/api/attendance/manager/commands", {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = raw.text.bind(raw);
-  raw.text = async () => {
-    readingBody.resolve();
-    await resumeBody.promise;
-    return text();
-  };
+it.each(["permission", "session"] as const)(
+  "rechecks a manager's %s after the command body arrives",
+  async (change) => {
+    const { cookie, sessionId } = await managerCookie();
+    const date = "2026-01-05";
+    const path = change === "permission" ? "commands" : "approve-days";
+    let body: unknown;
+    if (change === "permission") {
+      body = {
+        action: "approve",
+        commandId: randomUUID(),
+        itemId: await pending(),
+        expectedRevision: await revision(),
+      };
+    } else {
+      const personId = venue.personId;
+      const day = await request(`manager/day?personId=${personId}&date=${date}`, undefined, cookie);
+      expect(day.status).toBe(200);
+      const { approval } = await day.json();
+      body = { days: [{ personId, date, digest: approval.digest }] };
+    }
 
-  const asked = venue.app.request(raw);
-  const before = await snapshot();
-  try {
-    await readingBody.promise;
-    await setBuiltInRoleForTest(suite.db, managerId, "staff");
-  } finally {
-    resumeBody.resolve();
-  }
-  const response = await asked;
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-  expect(await snapshot()).toEqual(before);
-});
+    const readingBody = gate();
+    const resumeBody = gate();
+    const raw = new Request(`http://test/api/attendance/manager/${path}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = raw.text.bind(raw);
+    raw.text = async () => {
+      readingBody.resolve();
+      await resumeBody.promise;
+      return text();
+    };
 
+    const before = await snapshot();
+    const asked = venue.app.request(raw);
+    try {
+      await readingBody.promise;
+      if (change === "permission") await setBuiltInRoleForTest(suite.db, managerId, "staff");
+      else {
+        await suite.db
+          .update(tillSessions)
+          .set({ endedAt: instant.toISOString() })
+          .where(eq(tillSessions.id, sessionId));
+      }
+    } finally {
+      resumeBody.resolve();
+    }
+    const response = await asked;
+    expect(response.status).toBe(change === "permission" ? 403 : 401);
+    expect(await response.json()).toMatchObject({
+      error: { code: change === "permission" ? "authorization.not_permitted" : "session.required" },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 it.each(["session", "admission", "device", "profile"] as const)(
   "rechecks %s after authentication while the human write is queued",
   async (kind) => {
