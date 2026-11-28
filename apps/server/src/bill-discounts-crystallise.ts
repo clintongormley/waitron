@@ -15,6 +15,7 @@ import {
   insertInChunks,
   recordActivity,
   workingOrderLines,
+  type AdjustmentSplit,
   type Transaction,
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/menu";
@@ -177,17 +178,23 @@ function partChanges(worked: WorkedBillDiscount, parts: Parts): PartChange[] {
   });
 }
 
-/** Writes `worked`'s figures into the parts it moved and records it once over every part it
- * covers; answers nothing, having left `parts` as the bill now stands. */
+/** What one discount's writing left to record: the parts it covered as it found them, the rows it
+ * split off, and what it took off each line. */
+interface Written {
+  covered: Row[];
+  splits: AdjustmentSplit[];
+  lines: LineTaken[];
+}
+
+/** Writes `worked`'s figures into the parts it moved, leaving `parts` as the bill now stands. */
 async function writeWorked(
   tx: Transaction,
   cfg: TradingContext,
   billId: string,
   parts: Parts,
-  given: { discount: PendingBillDiscount; held: HeldDiscount; line: Row | null; dish: Row | null },
+  discount: PendingBillDiscount,
   worked: WorkedBillDiscount,
-): Promise<void> {
-  const { discount, held, line, dish } = given;
+): Promise<Written> {
   const covered = coveredRows(discount, parts).map((row) => ({ ...row }));
   const changed = partChanges(worked, parts);
   // Split parts numbered in the order the working-out numbered them.
@@ -231,13 +238,32 @@ async function writeWorked(
     }
     Object.assign(row, { quantity: priced.quantity, unit: priced.unit, lineTotal: priced.total });
   }
-  const before = sumDecimals(covered.map((row) => lineGross(row, row.quantity)));
   const lines = fitted(
     taken.map((one) => ({ ...one, reduction: decimalToCents(one.reduction) })),
     worked.takes,
     () => ({ lineId: changed[0]!.change.row.id, quantity: changed[0]!.priced.quantity }),
   );
-  const reduction = centsToDecimal(worked.takes);
+  return { covered, splits, lines };
+}
+
+/** One discount given as one row of the till (`given_together`), though a split left it on
+ * several lines: the held row of its first part, the line that part is on and its dish, the
+ * quantity of every part's line, and what writing each part left to record. */
+interface Given {
+  held: HeldDiscount;
+  line: Row | null;
+  dish: Row | null;
+  quantity: number;
+  written: Written[];
+}
+
+/** Records `given` once over every line and part its parts covered (plan D5). */
+async function recordGiven(tx: Transaction, billId: string, given: Given): Promise<void> {
+  const { held, line, dish, quantity } = given;
+  const covered = given.written.flatMap((one) => one.covered);
+  const before = sumDecimals(covered.map((row) => lineGross(row, row.quantity)));
+  const lines = given.written.flatMap((one) => one.lines);
+  const takes = lines.reduce((sum, { reduction }) => sum + reduction, 0);
   const id = await recordAdjustment(tx, {
     workingOrderId: billId,
     line:
@@ -246,19 +272,19 @@ async function writeWorked(
         : {
             id: line.id,
             name: staffPresentationName(line),
-            quantity: thousandthsToDecimal(line.quantity),
+            quantity: thousandthsToDecimal(quantity),
             listUnitPriceGross: centsToDecimal(line.list ?? line.unit),
             creditedTo: line.creditedTo,
             stage: stageOf(dish!),
           },
-    splits,
-    quantity: line === null ? null : thousandthsToDecimal(line.quantity),
+    splits: given.written.flatMap(({ splits }) => splits),
+    quantity: line === null ? null : thousandthsToDecimal(quantity),
     reason: { id: held.reasonId, name: held.reasonName, policy: held.policySnapshot },
     action: held.action,
     percentBp: held.percentBp,
     beforeAmount: before,
-    afterAmount: centsToDecimal(decimalToCents(before) - worked.takes),
-    reduction,
+    afterAmount: centsToDecimal(decimalToCents(before) - takes),
+    reduction: centsToDecimal(takes),
     nominalValue: sumDecimals(covered.map((row) => listValue(row, row.quantity))),
     requestedBy: held.requestedBy,
     approvedBy: held.approvedBy,
@@ -342,13 +368,25 @@ export async function crystalliseBillDiscounts(
     rowOf: new Map(rows.map((row) => [row.id, { ...row }])),
     partsOf: new Map(rows.map(({ id }) => [id, [id]])),
   };
+  // Recorded before the next discount writes, so a split it makes carries the record's lines.
+  let open: Given | null = null;
   for (const one of worked) {
     const discount = input.discounts.find(({ id }) => id === one.id)!;
     const held = heldOf.get(one.id)!;
     if (one.holds !== "set_menu_gone") {
       const line = discount.target.kind === "bill" ? null : lineOf.get(discount.target.lineId!)!;
-      const dish = line?.parentLineId == null ? line : lineOf.get(line.parentLineId)!;
-      await writeWorked(tx, cfg, billId, parts, { discount, held, line, dish }, one);
+      if (open !== null && open.held.givenTogether !== held.givenTogether) {
+        await recordGiven(tx, billId, open);
+        open = null;
+      }
+      const written = await writeWorked(tx, cfg, billId, parts, discount, one);
+      if (open !== null) {
+        open.written.push(written);
+        open.quantity += line?.quantity ?? 0;
+      } else {
+        const dish = line?.parentLineId == null ? line : lineOf.get(line.parentLineId)!;
+        open = { held, line, dish, quantity: line?.quantity ?? 0, written: [written] };
+      }
     }
     const stood = standing.find(({ discountId }) => discountId === one.id);
     if (stood !== undefined) {
@@ -372,5 +410,6 @@ export async function crystalliseBillDiscounts(
       });
     }
   }
+  if (open !== null) await recordGiven(tx, billId, open);
   await bumpRevision(tx, [billId]);
 }

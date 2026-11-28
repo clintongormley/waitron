@@ -630,6 +630,43 @@ describe("refuseDiscountsNotHolding", () => {
 });
 
 describe("a split line's pending discounts", () => {
+  it("are written as one discount, counted once, with what it takes off each line", async () => {
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: beers, ...amountOf(99) }));
+    const part = (
+      await inTx(venue, (tx) =>
+        splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }]),
+      )
+    ).get(beers)!.id;
+    expect(await inTx(venue, (tx) => pendingOn(tx, billId))).toHaveLength(2);
+    const report = () =>
+      inTx(venue, async (tx) => {
+        const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
+        const day = currentBusinessDay(clock);
+        return (
+          await computeAdjustmentReport(tx, { ...clock, fromBusinessDay: day, toBusinessDay: day })
+        ).overall.count;
+      });
+    const counted = await report();
+    expect(await crystallisesAsShown(billId)).toBe(99);
+    const written = await inTx(venue, (tx) => adjustmentsOn(tx, billId));
+    expect(written).toMatchObject([{ lineId: beers, action: "discount_amount", reduction: 99 }]);
+    const taken = await inTx(venue, (tx) =>
+      tx
+        .select({ lineId: adjustmentLines.lineId, reduction: adjustmentLines.reduction })
+        .from(adjustmentLines)
+        .where(eq(adjustmentLines.adjustmentId, written[0]!.id)),
+    );
+    expect(new Map(taken.map(({ lineId, reduction }) => [lineId, reduction]))).toEqual(
+      new Map([
+        [beers, 66],
+        [part, 33],
+      ]),
+    );
+    expect((await report()) - counted).toBe(1);
+  });
+
   it("are copied to the new part, an amount shared by quantity, the cent on the earlier part", async () => {
     const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
     const beers = await lineIdOf(venue, billId, 1);
