@@ -7,7 +7,7 @@ import type { TabLine, TabLines } from "./api/kitchen-api.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { bill as setMenuBill } from "../test/set-menu-widgets.js";
-import { cleanupWidgets, partyBillOf } from "./widgets/test-helpers.js";
+import { cleanupWidgets, partyBillOf, quantityButton } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import type { TillPortionPicker } from "./widgets/portion-picker.js";
 import {
@@ -188,7 +188,7 @@ async function openSetMenuMove(overrides: Record<string, unknown> = {}) {
     pick: async (id: string) => {
       await picker().updateComplete;
       await userEvent.click(
-        picker().shadowRoot!.querySelector<HTMLElement>(`[data-pick="${id}"]`)!,
+        quantityButton(picker().shadowRoot!.querySelector(`[data-pick="${id}"]`)!),
       );
     },
     chooseBill: (id: string) =>
@@ -209,6 +209,9 @@ describe("set menus in Move dishes", () => {
 
     await move.pick("daily-1");
     await move.chooseBill("new");
+    expect(move.root.querySelector("[data-move-dishes-confirm]")!.textContent).toContain(
+      "Move 1 item to a new bill",
+    );
     await move.confirm();
     await vi.waitFor(() =>
       expect(moved).toHaveBeenCalledWith("wo-4", ["daily-1"], null, expect.any(Object)),
@@ -701,9 +704,9 @@ describe("A803 move dishes app:", () => {
     await flush(el, 6);
     const picker = order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker")!;
     await picker.updateComplete;
-    expect(
-      picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
-    ).toBe(true);
+    expect(quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!).disabled).toBe(
+      true,
+    );
     expect(picker.rows[0]!.blocked).toEqual({ reason: "floor", kept: "3.00" });
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
@@ -756,9 +759,9 @@ describe("A803 move dishes app:", () => {
     const picker = order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker")!;
     expect(picker).not.toBeNull();
     await picker.updateComplete;
-    expect(
-      picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
-    ).toBe(true);
+    expect(quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!).disabled).toBe(
+      true,
+    );
     expect(picker.rows[0]!.blocked).toEqual({ reason: "floor", kept: "3.00" });
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
@@ -1030,7 +1033,7 @@ describe("A803 move dishes app:", () => {
     await userEvent.click(menu().querySelector<HTMLElement>('[data-action="move-dishes"]')!);
     await vi.waitFor(() => expect(picker()).not.toBeNull());
     await userEvent.click(
-      picker()!.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!,
+      quantityButton(picker()!.shadowRoot!.querySelector('[data-pick="line-1"]')!),
     );
     await userEvent.click(root.querySelector<HTMLElement>('[data-move-dishes-to="bill-1"]')!);
     await userEvent.click(move());
@@ -1046,9 +1049,12 @@ describe("A803 move dishes app:", () => {
     await userEvent.click(review()!);
 
     await vi.waitFor(() => expect(picker()?.picks).toEqual(new Set(["line-1"])));
-    expect(root.querySelector('[data-move-dishes-to="bill-1"]')?.getAttribute("aria-pressed")).toBe(
-      "true",
-    );
+    expect(
+      root
+        .querySelector('[data-move-dishes-to="bill-1"]')
+        ?.shadowRoot?.querySelector("button")
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(moveDishes).toHaveBeenCalledTimes(1);
     await userEvent.click(move());
     await vi.waitFor(() => expect(moveDishes).toHaveBeenCalledTimes(2));
@@ -1087,7 +1093,7 @@ describe("A803 move dishes app:", () => {
     await userEvent.click(menu().querySelector<HTMLElement>('[data-action="move-dishes"]')!);
     await order.updateComplete;
     await picker()!.updateComplete;
-    picker()!.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!.click();
+    quantityButton(picker()!.shadowRoot!.querySelector('[data-pick="line-1"]')!).click();
     await order.updateComplete;
     order.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="new"]')!.click();
     await order.updateComplete;
@@ -1348,7 +1354,7 @@ describe("A803 move dishes app:", () => {
       await userEvent.click(menu().querySelector<HTMLElement>('[data-action="move-dishes"]')!);
       await shown.updateComplete;
       await picker()!.updateComplete;
-      picker()!.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-3"]')!.click();
+      quantityButton(picker()!.shadowRoot!.querySelector('[data-pick="line-3"]')!).click();
       await shown.updateComplete;
       shown.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="new"]')!.click();
       await shown.updateComplete;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, quantityButton } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { OtherDraft, TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -116,7 +116,7 @@ const panel = (el: TillTableOrderScreen) =>
 const picker = (el: TillTableOrderScreen) =>
   panel(el)!.querySelector<TillPortionPicker>("till-portion-picker")!;
 const destinations = (el: TillTableOrderScreen) => [
-  ...panel(el)!.querySelectorAll<HTMLElement>("[data-move-dishes-to]"),
+  ...panel(el)!.querySelectorAll<HTMLElementTagNameMap["wt-choice-tile"]>("[data-move-dishes-to]"),
 ];
 const destination = (el: TillTableOrderScreen, id: string) =>
   panel(el)!.querySelector<HTMLElement>(`[data-move-dishes-to="${id}"]`)!;
@@ -125,7 +125,10 @@ const confirm = (el: TillTableOrderScreen) =>
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
 const pressed = (el: TillTableOrderScreen) =>
   destinations(el)
-    .filter((choice) => choice.getAttribute("aria-pressed") === "true")
+    .filter(
+      (choice) =>
+        choice.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed") === "true",
+    )
     .map((choice) => choice.dataset.moveDishesTo);
 
 async function openMoveDishes(el: TillTableOrderScreen) {
@@ -134,16 +137,20 @@ async function openMoveDishes(el: TillTableOrderScreen) {
   await el.updateComplete;
 }
 
-async function tick(el: TillTableOrderScreen, id: string) {
-  const box = picker(el).shadowRoot!.querySelector<HTMLInputElement>(`[data-pick="${id}"]`)!;
-  await userEvent.click(box);
-  await el.updateComplete;
-  await picker(el).updateComplete;
+const quantity = (el: TillTableOrderScreen, id: string) =>
+  picker(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-stepper"]>(`[data-pick="${id}"]`)!;
+
+async function toggleRow(el: TillTableOrderScreen, id: string) {
+  const control = quantity(el, id);
+  const target = control.value > 0 ? 0 : control.max!;
+  const step = target > control.value ? 1 : -1;
+  for (let left = Math.abs(target - control.value); left > 0; left--) {
+    await changeCount(el, id, step);
+  }
 }
 
-async function step(el: TillTableOrderScreen, which: "dec" | "inc", id: string) {
-  const button = picker(el).shadowRoot!.querySelector<HTMLElement>(`[data-pick-${which}="${id}"]`)!;
-  await userEvent.click(button);
+async function changeCount(el: TillTableOrderScreen, id: string, step: -1 | 1) {
+  quantityButton(quantity(el, id), step).click();
   await el.updateComplete;
   await picker(el).updateComplete;
 }
@@ -252,8 +259,9 @@ describe("A803 move dishes panel", () => {
   it("choosing it opens the panel with its heading focused", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    const heading = panel(el)!.querySelector("h2")!;
-    expect(textOf(heading)).toBe("Move dishes from Bill 2");
+    const heading = panel(el)!.querySelector("[data-action-heading]")!;
+    expect(textOf(heading)).toBe("Move dishes");
+    expect(panel(el)!.querySelector("wt-top-bar")!.subtitle).toBe("from Bill 2");
     await expect.poll(() => el.shadowRoot!.activeElement).toBe(heading);
     expect(panel(el)!.closest("[data-action-panel]")).not.toBeNull();
     expect(picker(el).rows.map((row) => row.members.map((member) => member.id))).toEqual([
@@ -293,7 +301,9 @@ describe("A803 move dishes panel", () => {
     });
     await openMoveDishes(el);
     await picker(el).updateComplete;
-    const labels = [...picker(el).shadowRoot!.querySelectorAll("label")].map(textOf);
+    const labels = [...picker(el).shadowRoot!.querySelectorAll("[data-pick-row] .name")].map(
+      textOf,
+    );
     expect(labels).toHaveLength(3);
     expect(labels[0]).toContain("Cheese");
     expect(labels[0]).not.toContain("bacon");
@@ -301,7 +311,7 @@ describe("A803 move dishes panel", () => {
     expect(labels[2]).toContain("Iberian ham ×0.32");
   });
 
-  it("offers the party's other open bills, one holding a payment included, in number order, then + New bill", async () => {
+  it("offers the party's other open bills, one holding a payment included, in number order, then New bill", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     expect(destinations(el).map((choice) => choice.dataset.moveDishesTo)).toEqual([
@@ -310,19 +320,18 @@ describe("A803 move dishes panel", () => {
       "wo-4",
       "new",
     ]);
-    expect(destinations(el).map(textOf)).toEqual([
+    expect(destinations(el).map((choice) => choice.label)).toEqual([
       "Bill 1 · Ana",
       "Bill 3",
       "Bill 4",
-      "+ New bill",
+      "New bill",
     ]);
-    expect(destinations(el).map((choice) => choice.getAttribute("aria-pressed"))).toEqual([
-      "false",
-      "false",
-      "false",
-      "false",
-    ]);
-    expect(textOf(panel(el)!.querySelector("[data-move-dishes-to-heading]")!)).toBe("Move to");
+    expect(
+      destinations(el).map((choice) =>
+        choice.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed"),
+      ),
+    ).toEqual(["false", "false", "false", "false"]);
+    expect(textOf(panel(el)!.querySelector("[data-move-dishes-to-heading]")!)).toBe("Move them to");
   });
 
   it("offers a bill holding a pending payment, which still owes its total", async () => {
@@ -345,7 +354,7 @@ describe("A803 move dishes panel", () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
     await openMoveDishes(el);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     await userEvent.click(destination(el, "wo-4"));
     await el.updateComplete;
     el.bills = BILLS.map((bill) =>
@@ -363,26 +372,33 @@ describe("A803 move dishes panel", () => {
     await openMoveDishes(el);
     expect(textOf(confirm(el))).toBe("Move");
     expect(confirm(el).disabled).toBe(true);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     expect(confirm(el).disabled).toBe(true);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     await userEvent.click(destinations(el)[0]!);
     await el.updateComplete;
-    expect(destinations(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+    expect(pressed(el)).toEqual(["wo-1"]);
     expect(confirm(el).disabled).toBe(true);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     expect(confirm(el).disabled).toBe(false);
   });
 
-  it("ticking the Caña row and pressing − twice, then Move, sends the first two Cañas to Bill 4", async () => {
+  it("starts at zero and names the first two Cañas and their destination before moving them", async () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
-    await step(el, "dec", "c1");
     await userEvent.click(destination(el, "wo-4"));
     await el.updateComplete;
+    expect(confirm(el).disabled).toBe(true);
+    const control = quantity(el, "c1");
+    expect(control.value).toBe(0);
+    const plus = quantityButton(control);
+    await userEvent.click(plus);
+    await el.updateComplete;
+    expect(textOf(confirm(el))).toBe("Move 1 dish to Bill 4");
+    await userEvent.click(plus);
+    await el.updateComplete;
+    expect(textOf(confirm(el))).toBe("Move 2 dishes to Bill 4");
     await userEvent.click(confirm(el));
     await el.updateComplete;
     expect(sent).toEqual([
@@ -392,13 +408,14 @@ describe("A803 move dishes panel", () => {
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
   });
 
-  it("with + New bill, Move sends toBillId null", async () => {
+  it("with New bill, Move sends toBillId null", async () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
     await openMoveDishes(el);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     await userEvent.click(destinations(el).at(-1)!);
     await el.updateComplete;
+    expect(textOf(confirm(el))).toBe("Move 1 dish to a new bill");
     await userEvent.click(confirm(el));
     expect(sent).toEqual([{ lineIds: ["h1"], toBillId: null, review: expect.any(Function) }]);
   });
@@ -425,14 +442,14 @@ describe("A803 move dishes panel", () => {
     const [beerRow, ham] = picker(el).rows;
     expect(beerRow!.blocked).toBeNull();
     expect(ham!.blocked).toEqual({ reason: "floor", kept: "21.00" });
-    await tick(el, "c1");
+    await toggleRow(el, "c1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
   });
   it("the Move to choices are a group named by their heading", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     const group = panel(el)!.querySelector<HTMLElement>('[role="group"]')!;
-    await expect.element(group).toHaveAccessibleName("Move to");
+    await expect.element(group).toHaveAccessibleName("Move them to");
     expect([...group.querySelectorAll<HTMLElement>("[data-move-dishes-to]")]).toEqual(
       destinations(el),
     );
@@ -455,7 +472,7 @@ describe("A803 move dishes panel", () => {
       const el = await mountScreen();
       const sent = capture(el, "move-dishes");
       await openMoveDishes(el);
-      await tick(el, "h1");
+      await toggleRow(el, "h1");
       await userEvent.click(destination(el, "wo-4"));
       await el.updateComplete;
       expect(pressed(el)).toEqual(["wo-4"]);
@@ -506,9 +523,11 @@ describe("A803 move dishes panel", () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
     await openMoveDishes(el);
-    await tick(el, "h1");
-    await userEvent.click(panel(el)!.querySelector<HTMLElement>("[data-action-back]")!);
-    await el.updateComplete;
+    await toggleRow(el, "h1");
+    await userEvent.click(
+      panel(el)!.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!,
+    );
+    await expect.poll(() => panel(el)).toBeNull();
     expect(panel(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     expect(sent).toEqual([]);
@@ -518,11 +537,12 @@ describe("A803 move dishes panel", () => {
     const el = await mountScreen();
     const sent = capture(el, "move-dishes");
     await openMoveDishes(el);
-    await expect.poll(() => el.shadowRoot!.activeElement?.tagName).toBe("H2");
-    await tick(el, "h1");
+    await expect
+      .poll(() => el.shadowRoot!.activeElement?.hasAttribute("data-action-heading"))
+      .toBe(true);
+    await toggleRow(el, "h1");
     await userEvent.keyboard("{Escape}");
-    await el.updateComplete;
-    expect(panel(el)).toBeNull();
+    await expect.poll(() => panel(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
     expect(sent).toEqual([]);
   });
@@ -532,7 +552,7 @@ describe("A803 move dishes panel", () => {
       const el = await mountScreen();
       const sent = capture(el, "move-dishes");
       await openMoveDishes(el);
-      await tick(el, "h1");
+      await toggleRow(el, "h1");
       await userEvent.click(destinations(el).at(-1)!);
       await el.updateComplete;
       el.busy = true;
@@ -540,40 +560,26 @@ describe("A803 move dishes panel", () => {
       return { el, sent };
     }
 
-    it("a tick changes nothing", async () => {
+    it("a quantity attempt changes nothing", async () => {
       const { el } = await busyPanel();
-      await tick(el, "c1");
+      await toggleRow(el, "c1");
       expect(picker(el).picks).toEqual(new Set(["h1"]));
     });
 
     it("a destination tap changes nothing", async () => {
       const { el } = await busyPanel();
-      await userEvent.click(destinations(el)[0]!);
+      destinations(el)[0]!.shadowRoot!.querySelector("button")!.click();
       await el.updateComplete;
       expect(pressed(el)).toEqual(["new"]);
     });
 
     it("Move sends nothing and the panel stays", async () => {
       const { el, sent } = await busyPanel();
-      await userEvent.click(confirm(el));
+      confirm(el).click();
       await el.updateComplete;
       expect(sent).toEqual([]);
       expect(panel(el)).not.toBeNull();
     });
-  });
-
-  it("choosing Move dishes again from the ⋮ while it is open starts with nothing picked and no destination", async () => {
-    const el = await mountScreen();
-    await openMoveDishes(el);
-    await tick(el, "h1");
-    await userEvent.click(destinations(el)[0]!);
-    await el.updateComplete;
-    expect(picker(el).picks).toEqual(new Set(["h1"]));
-    expect(pressed(el)).toEqual(["wo-1"]);
-    await openMoveDishes(el);
-    expect(picker(el).picks).toEqual(new Set());
-    expect(pressed(el)).toEqual([]);
-    expect(confirm(el).disabled).toBe(true);
   });
 });
 
@@ -590,9 +596,9 @@ describe("A803 move dishes refresh:", () => {
   it("a re-read in which one picked dish left the bill keeps the row's first members", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
-    await step(el, "dec", "c1");
+    await toggleRow(el, "c1");
+    await changeCount(el, "c1", -1);
+    await changeCount(el, "c1", -1);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
     el.lines = [...BEERS.slice(1), HAM];
     el.billBalance = {
@@ -619,7 +625,7 @@ describe("A803 move dishes refresh:", () => {
       lines: [BEERS[0]!, BEERS[1]!, noted(BEERS[2]!), noted(BEERS[3]!), HAM],
     });
     await openMoveDishes(el);
-    await tick(el, "c3");
+    await toggleRow(el, "c3");
     expect(picker(el).picks).toEqual(new Set(["c3", "c4"]));
     el.lines = [...BEERS, HAM];
     await el.updateComplete;
@@ -650,7 +656,7 @@ describe("A803 move dishes refresh:", () => {
     };
     const el = await mountScreen({ lines: [...BEERS, HAM].map(counted) });
     await openMoveDishes(el);
-    await tick(el, "c1");
+    await toggleRow(el, "c1");
     expect(offerReads.count).toBeGreaterThan(0);
     offerReads.count = 0;
     el.requestUpdate();
@@ -669,8 +675,8 @@ describe("A803 move dishes refresh:", () => {
       return reads.count;
     };
     const nonePicked = await update();
-    await tick(el, "c1");
-    await tick(el, "h1");
+    await toggleRow(el, "c1");
+    await toggleRow(el, "h1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
     const oneDrawing = [...BEERS, HAM].length + 1;
     expect(await update()).toBeLessThan(nonePicked + oneDrawing);
@@ -687,8 +693,8 @@ describe("A803 move dishes refresh:", () => {
       return reads.count;
     };
     const nonePicked = await reread();
-    await tick(el, "c1");
-    await tick(el, "h1");
+    await toggleRow(el, "c1");
+    await toggleRow(el, "h1");
     const oneDrawing = [...BEERS, HAM].length + 1;
     expect(await reread()).toBeLessThanOrEqual(nonePicked + oneDrawing);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
@@ -737,7 +743,7 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("move-dishes", (event) => (captured = event as CustomEvent));
     await openMoveDishes(el);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     await send(el, "wo-1");
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
@@ -747,19 +753,6 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
       review: expect.any(Function),
     });
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
-  });
-
-  it("says on the native checkbox, the element a screen reader announces, whether a dish is picked", async () => {
-    const el = await mountScreen();
-    await openMoveDishes(el);
-    const checked = (id: string) => {
-      const box = picker(el).shadowRoot!.querySelector(`[data-pick="${id}"]`);
-      expect(box).toBeInstanceOf(HTMLInputElement);
-      return (box as HTMLInputElement).checked;
-    };
-    expect([checked("c1"), checked("h1")]).toEqual([false, false]);
-    await tick(el, "h1");
-    expect([checked("c1"), checked("h1")]).toEqual([false, true]);
   });
 
   it("sends nothing while no dish is picked, even when Move's native button is pressed", async () => {
@@ -783,35 +776,33 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     expect(ids).not.toContain("x1");
   });
 
-  it("Back clears the picks, so a row ticked again takes all its dishes", async () => {
+  it("Back clears the picks, so a new opening starts at zero", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
+    await toggleRow(el, "c1");
+    await changeCount(el, "c1", -1);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3"]));
-    await userEvent.click(panel(el)!.querySelector<HTMLElement>("[data-action-back]")!);
-    await el.updateComplete;
+    await userEvent.click(
+      panel(el)!.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!,
+    );
+    await expect.poll(() => panel(el)).toBeNull();
     await openMoveDishes(el);
-    await tick(el, "c1");
+    await toggleRow(el, "c1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4"]));
   });
 
   it("a − or + left over from a closed panel does not replace a new panel's picks", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
-    const oldPicker = picker(el);
-    const oldDec = oldPicker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      '[data-pick-dec="c1"]',
-    )!;
-    const oldInc = oldPicker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      '[data-pick-inc="c1"]',
-    )!;
+    await toggleRow(el, "c1");
+    await changeCount(el, "c1", -1);
+    const old = quantity(el, "c1");
+    const oldDec = quantityButton(old, -1);
+    const oldInc = quantityButton(old);
     expect([oldDec.disabled, oldInc.disabled]).toEqual([false, false]);
     expect(await send(el)).toHaveLength(1);
     await openMoveDishes(el);
-    await tick(el, "h1");
+    await toggleRow(el, "h1");
     for (const old of [oldDec, oldInc]) {
       old.click();
       await el.updateComplete;
@@ -820,20 +811,20 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     }
   });
 
-  it("ticking a grouped row sends every member's id", async () => {
+  it("choosing every portion of a grouped row sends every member's id", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
+    await toggleRow(el, "c1");
     expect(await send(el)).toEqual([
       { lineIds: ["c1", "c2", "c3", "c4"], toBillId: null, review: expect.any(Function) },
     ]);
   });
 
-  it("unticking a grouped row leaves none of its members", async () => {
+  it("reducing a grouped row to zero leaves none of its members", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await tick(el, "c1");
+    await toggleRow(el, "c1");
+    await toggleRow(el, "c1");
     expect(picker(el).picks).toEqual(new Set());
     expect(confirm(el).disabled).toBe(true);
   });
@@ -841,10 +832,10 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
   it("stepping a grouped row back up adds the next member", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
-    await step(el, "dec", "c1");
-    await step(el, "inc", "c1");
+    await toggleRow(el, "c1");
+    await changeCount(el, "c1", -1);
+    await changeCount(el, "c1", -1);
+    await changeCount(el, "c1", 1);
     expect(await send(el)).toEqual([
       { lineIds: ["c1", "c2", "c3"], toBillId: null, review: expect.any(Function) },
     ]);
@@ -854,7 +845,7 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
     const decaf = { ...BEERS[3]!, note: "Decaf" };
     const el = await mountScreen({ lines: [BEERS[0]!, BEERS[1]!, BEERS[2]!, decaf, HAM] });
     await openMoveDishes(el);
-    await tick(el, "c4");
+    await toggleRow(el, "c4");
     el.lines = [...BEERS, HAM];
     await el.updateComplete;
     await picker(el).updateComplete;
@@ -869,36 +860,35 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
       bills: [partyBill("wo-2", 2, "32.00", { billName: "{bill}" }), partyBill("wo-1", 1, "10.00")],
     });
     await openMoveDishes(el);
-    expect(textOf(panel(el)!.querySelector("h2")!)).toBe("Move dishes from Bill 2 · {bill}");
+    expect(panel(el)!.querySelector("wt-top-bar")!.subtitle).toBe("from Bill 2 · {bill}");
   });
 
   const buttonFill = (host: Element) =>
     getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
 
   it.each(["light", "dark"] as const)(
-    "draws Move quiet like Back until it can send, then blue (%s theme)",
+    "draws Move quiet until it can send, then in the primary colour (%s theme)",
     async (theme) => {
       const el = await mountScreen();
       el.parentElement!.setAttribute("data-theme", theme);
       await openMoveDishes(el);
-      const back = panel(el)!.querySelector("[data-action-back]")!;
       await userEvent.click(destinations(el)[0]!);
       await el.updateComplete;
       await (confirm(el) as unknown as { updateComplete: Promise<unknown> }).updateComplete;
       expect(confirm(el).hasAttribute("disabled")).toBe(true);
       expect(confirm(el).getAttribute("variant")).toBe("secondary");
-      expect(buttonFill(confirm(el))).toBe(buttonFill(back));
-      await tick(el, "h1");
+      const quiet = buttonFill(confirm(el));
+      await toggleRow(el, "h1");
       await (confirm(el) as unknown as { updateComplete: Promise<unknown> }).updateComplete;
       expect(confirm(el).hasAttribute("disabled")).toBe(false);
       expect(confirm(el).getAttribute("variant")).toBe("primary");
-      expect(buttonFill(confirm(el))).not.toBe(buttonFill(back));
+      expect(buttonFill(confirm(el))).not.toBe(quiet);
     },
   );
 });
 
 describe("on a phone with the order's foot held at the bottom", () => {
-  it("holds the panel's Move dishes row above the foot, not under it", async () => {
+  it("draws the dish rows edge to edge and keeps the action above the foot", async () => {
     const { width, height } = { width: innerWidth, height: innerHeight };
     await page.viewport(390, 600);
     try {
@@ -915,59 +905,38 @@ describe("on a phone with the order's foot held at the bottom", () => {
       await resized(el);
       await openMoveDishes(el);
       await resized(el);
-      const dock = el.shadowRoot!.querySelector<HTMLElement>("[data-order-dock]")!;
-      expect(dock.checkVisibility()).toBe(true);
-      // The panel's end 100 px below the window's, so its row is held at the window's foot.
-      scrollTo(0, scrollY + panel(el)!.getBoundingClientRect().bottom - (innerHeight + 100));
-      const row = panel(el)!.querySelector("wt-form-actions")!.getBoundingClientRect();
-      expect(row.bottom).toBeLessThan(panel(el)!.getBoundingClientRect().bottom - 50);
       const button = confirm(el).getBoundingClientRect();
-      const x = button.left + button.width / 2;
-      const y = button.top + button.height / 2;
-      expect(y).toBeLessThan(innerHeight);
-      const hit = el.shadowRoot!.elementFromPoint(x, y);
-      expect(hit === confirm(el) || confirm(el).contains(hit)).toBe(true);
-      expect(button.bottom).toBeLessThanOrEqual(dock.getBoundingClientRect().top + 0.5);
+      const dialog = el.shadowRoot!.querySelector("wt-dialog[data-action-panel]")!;
+      const viewport = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(viewport).toMatchObject({ width: 390, height: 600 });
+      expect(button.bottom).toBeLessThan(viewport.bottom);
+      expect(button).toMatchObject({ left: 12, width: 366 });
+      const row = picker(el).shadowRoot!.querySelector('[data-pick-row="c1"]')!;
+      expect(row.getBoundingClientRect()).toMatchObject({ left: 0, width: 390 });
+      const name = row.querySelector(".name")!;
+      expect(name.getBoundingClientRect().left).toBe(16);
+      expect(getComputedStyle(name)).toMatchObject({ fontSize: "16px", fontWeight: "500" });
+      expect(getComputedStyle(row.querySelector(".extra")!).fontSize).toBe("13px");
+      expect(getComputedStyle(confirm(el).shadowRoot!.querySelector("button")!).fontSize).toBe(
+        "16px",
+      );
+      const pill = destinations(el)[0]!.shadowRoot!.querySelector("button")!;
+      expect(getComputedStyle(pill).fontSize).toBe("15px");
     } finally {
       await page.viewport(width, height);
     }
   });
-
-  it("paints the panel's row in the panel's colour on the till's page", async () => {
-    const { el, host } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
-      products: [],
-      lines: [...BEERS, HAM],
-      orderId: "wo-2",
-      party,
-      bills: BILLS,
-      billBalance: null,
-      tables: [table("t4")],
-    });
-    // As till-app does for the page.
-    host.style.setProperty("--wt-form-actions-surface", "var(--wt-color-bg)");
-    host.style.background = "var(--wt-color-bg)";
-    await openMoveDishes(el);
-    const aside = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
-    const row = panel(el)!.querySelector("wt-form-actions")!;
-    expect(getComputedStyle(aside).backgroundColor).not.toBe(
-      getComputedStyle(host).backgroundColor,
-    );
-    expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(aside).backgroundColor);
-  });
 });
 
-it("fallback layout Escape closes the popup without closing its action panel", async () => {
+it("fallback layout returns to the bill menu after Escape closes Move dishes", async () => {
   const el = await mountScreen();
   await openMoveDishes(el);
-  const popup = document.createElement("div");
-  popup.setAttribute("popover", "auto");
-  popup.style.cssText = "position:fixed;top:100px;left:100px";
-  popup.innerHTML = "<button>Popup action</button>";
-  panel(el)!.append(popup);
-  popup.showPopover();
-  popup.querySelector("button")!.focus();
+  const dialog = el.shadowRoot!.querySelector("wt-dialog[data-action-panel]")!;
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
-  await el.updateComplete;
-  expect(panel(el)).not.toBeNull();
-  expect(popup.matches(":popover-open")).toBe(false);
+  await closed;
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(menu(el));
+  expect(panel(el)).toBeNull();
 });

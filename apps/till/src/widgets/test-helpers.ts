@@ -28,6 +28,9 @@ import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import indexHtml from "../../index.html?raw";
 import type { TillShell } from "./till-shell.js";
 
+export const quantityButton = (stepper: Element, step: -1 | 1 = 1) =>
+  stepper.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-step="${step}"]`)!;
+
 declare module "vitest/browser" {
   interface BrowserCommands {
     // Moves the real cursor off every element, clearing CSS `:hover`. See `parkPointer` in

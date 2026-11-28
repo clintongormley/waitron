@@ -826,20 +826,11 @@ When one guest decides to pay for their own drinks, move those dishes onto a bil
 the **⋮** menu and choose **Move dishes**. It is there for a table's bill that is still open, even
 when part of it is paid.
 
-The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes, each
-with its extras under its name, and a weighed dish with its weight, such as **Iberian ham ×0.32**.
-Tick a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
-**4** beside it: ticking the row takes all of them, or as many as the bill's payments allow, and **−** and **+** then set how many, shown as
-**2 of 4**, with the amount of those moving. A
-weighed dish has a tick only, because it moves whole.
+Choose how many to move with **+** and **−**. Each row shows how many are on the bill. Extras go with
+their dish, and weighed dishes move whole. Leave enough on the bill to cover any payments.
 
-Some ticks are grey, with the reason under the dish:
-
-- **Payments keep €40.00 on this bill: move fewer dishes**: choose fewer dishes so the bill keeps
-  enough for its payments, including any still in progress. The other dishes can still go.
-
-Under **Move to**, choose where the dishes go: one of the table's other open bills, or **+ New
-bill**. A bill that has already taken a payment simply owes more afterwards. **Move** stays quiet until you have ticked a dish and chosen where it goes.
+Under **Move them to**, choose one of the table's other open bills or **New bill**. The button at
+the bottom tells you how many you are moving and where they will go. Press it to move the dishes.
 After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
 Each dish keeps its course and stays sent, fired or served as it was. Moving dishes off a
 part-paid bill until its payments cover what is left leaves it paid in full, and its invoice is

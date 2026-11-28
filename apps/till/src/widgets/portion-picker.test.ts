@@ -96,6 +96,28 @@ const disabled = (button: HTMLElement | null) => button?.hasAttribute("disabled"
 afterEach(cleanupWidgets);
 
 describe("till-portion-picker", () => {
+  it("shows a fresh read's corrected quantity and describes its limit on the stepper", async () => {
+    const lines = BEERS.slice(0, 2);
+    const { el } = await picker(lines, null, new Set(["c1"]));
+    el.setAttribute("mode", "quantity");
+    await el.updateComplete;
+    const stepper = el.shadowRoot!.querySelector("wt-stepper")!;
+    const plus = stepper.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!;
+    plus.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(stepper.value).toBe(2);
+    el.picks = new Set(["c1"]);
+    el.rows = rowsOf(lines, balance("10.00", "5.00"), el.picks);
+    await el.updateComplete;
+    await stepper.updateComplete;
+    expect(stepper.value).toBe(1);
+    expect(plus.disabled).toBe(true);
+    const group = stepper.shadowRoot!.querySelector('[role="group"]')!;
+    expect(stepper.shadowRoot!.activeElement).toBe(group);
+    expect(group.getAttribute("aria-description")).toEqual(
+      expect.stringContaining("Payments keep"),
+    );
+  });
   it("registers as a custom element", () => {
     expect(customElements.get("till-portion-picker")).toBe(TillPortionPicker);
   });

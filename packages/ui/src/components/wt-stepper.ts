@@ -167,6 +167,7 @@ export class WtStepper extends LitElement {
     `Decrease ${label}`;
   @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
     `Increase ${label}`;
+  @property() description = "";
   /** Names the bin, given `label`; with none, − is disabled at `min` and there is no bin. */
   @property({ attribute: false }) removeLabel: ((label: string) => string) | null = null;
 
@@ -209,15 +210,19 @@ export class WtStepper extends LitElement {
     this.#focused = (this.renderRoot as ShadowRoot).activeElement;
   }
 
-  // − and the bin are different buttons, so the one holding focus can be drawn away. Focus goes to
-  // +, never to the bin, where a held Enter would remove; with + disabled, to the group meanwhile.
+  // The group holds focus when a limit disables the active step, so held Enter cannot reverse it.
+  // When − becomes a bin, + can take focus since the bin must never receive a held Enter.
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
     const focused = this.#focused;
     this.#focused = null;
-    if (focused === null || focused.isConnected) return;
+    if (
+      !(focused instanceof HTMLButtonElement) ||
+      (focused.isConnected && (!focused.disabled || this.disabled))
+    )
+      return;
     const plus = this.renderRoot.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
-    if (!plus.disabled) {
+    if (!focused.isConnected && !plus.disabled) {
       plus.focus();
       return;
     }
@@ -239,6 +244,7 @@ export class WtStepper extends LitElement {
         part="stepper"
         role="group"
         aria-label=${this.label}
+        aria-description=${this.description || nothing}
       >
         ${
           removeLabel !== null && atMin

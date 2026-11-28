@@ -5,6 +5,19 @@ import "../index.js";
 
 afterEach(cleanup);
 
+test("selected pills use the dark fill and keep a native pressed state without a check", async () => {
+  const tile = await mount(
+    '<wt-choice-tile variant="pill" label="Bill 2" selected></wt-choice-tile>',
+  );
+  host.style.setProperty("--wt-color-text", "rgb(25, 35, 45)");
+  host.style.setProperty("--wt-color-surface", "rgb(245, 244, 243)");
+  const button = tile.shadowRoot!.querySelector("button")!;
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  expect(tile.shadowRoot!.querySelector("[part=check]")).toBeNull();
+  expect(getComputedStyle(button).backgroundColor).toBe("rgb(25, 35, 45)");
+  expect(getComputedStyle(button).color).toBe("rgb(245, 244, 243)");
+});
+
 test("reserves the leading check column and paints selection with the shared tokens", async () => {
   const tile = await mount(
     '<wt-choice-tile label="Whole bill" hint="€80.52" check-position="start"></wt-choice-tile>',

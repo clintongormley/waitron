@@ -50,6 +50,20 @@ export class WtChoiceTile extends LitElement {
         border-radius: calc(var(--wt-radius-md) + var(--wt-field-line-width-active));
       }
 
+      :host([variant="pill"]) button {
+        min-block-size: var(--wt-tap-min);
+        padding-inline: var(--wt-space-4);
+        border-radius: var(--wt-radius-full);
+        font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
+      }
+
+      :host([variant="pill"]) button[aria-pressed="true"] {
+        --wt-choice-border-width: var(--wt-field-line-width);
+        --wt-choice-border: var(--wt-color-text);
+        background: var(--wt-color-text);
+        color: var(--wt-color-surface);
+      }
+
       [part="label"] {
         flex: 1;
         font-weight: var(--wt-font-weight-bold);
@@ -80,22 +94,24 @@ export class WtChoiceTile extends LitElement {
   @property() hint = "";
   @property({ type: Boolean }) selected = false;
   @property({ type: Boolean }) disabled = false;
+  @property({ reflect: true }) variant: "tile" | "pill" = "tile";
   @property({ attribute: "check-position", reflect: true }) checkPosition:
     "start" | "end" | "none" = "end";
 
   override render() {
+    const checkPosition = this.variant === "pill" ? "none" : this.checkPosition;
     const check = html`<span part="check" aria-hidden="true"
       >${this.selected ? html`<wt-icon name="choice-check" size="md"></wt-icon>` : nothing}</span
     >`;
     return html`<button
       type="button"
       ?disabled=${this.disabled}
-      aria-pressed=${this.checkPosition === "none" ? nothing : String(this.selected)}
+      aria-pressed=${this.variant === "tile" && checkPosition === "none" ? nothing : String(this.selected)}
     >
-      ${this.checkPosition === "start" ? check : nothing}
+      ${checkPosition === "start" ? check : nothing}
       <span part="label">${this.label}</span>
       ${this.hint === "" ? nothing : html`<span part="hint">${this.hint}</span>`}
-      ${this.checkPosition === "end" ? check : nothing}
+      ${checkPosition === "end" ? check : nothing}
     </button>`;
   }
 }
