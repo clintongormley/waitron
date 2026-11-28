@@ -402,7 +402,10 @@ export async function readFacts(
         : { available: false, reason: null };
     const amounts = portionAmounts.get(line.id);
     const corrected = correctableById.get(line.id);
-    const credited = includeDishDetails && cancel === undefined ? corrected?.credited : undefined;
+    const credited =
+      includeDishDetails && cancel === undefined && !view.givenFree
+        ? corrected?.credited
+        : undefined;
     return {
       ...view,
       ...availability,

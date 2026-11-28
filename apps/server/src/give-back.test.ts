@@ -584,6 +584,10 @@ describe("readGiveBack: the lines", () => {
       portionAmounts: ["3.29", "3.29", "3.30"],
     });
     expect(lineOf(view, "Water").portionAmounts).toBeUndefined();
+    await gaveCash(saleId, ask("goodwill", "4.00"));
+    const water = lineOf(await read(saleId), "Water");
+    expect(water.givenFree).toBe(true);
+    expect(water).not.toHaveProperty("credited");
   });
 
   it("offers only the remaining amount on a grouped row reduced by a filed refund", async () => {
