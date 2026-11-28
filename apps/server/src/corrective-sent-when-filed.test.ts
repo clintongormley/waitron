@@ -304,7 +304,7 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
           state: "completed",
           corrective: {
             saleId: r1,
-            customer: "Harbour Foods",
+            customerName: "Harbour Foods",
             amount: "10.00",
             delivery: { medium: "receipt", status: "queued" },
           },

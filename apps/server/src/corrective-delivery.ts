@@ -88,7 +88,7 @@ export async function sendFiledCorrective(
 export interface SentCorrective {
   saleId: string;
   invoiceNumber: string;
-  customer: string | null;
+  customerName: string | null;
   /** The money it takes off the invoice, as a positive amount. */
   amount: string;
   /** How it is being sent, in the till's delivery-status shape; null when nothing was sent. */
@@ -105,7 +105,7 @@ export async function readSentCorrective(
   const [sale] = await tx
     .select({
       customerTaxId: sales.counterpartyTaxId,
-      customer: sales.counterpartyLegalName,
+      customerName: sales.counterpartyLegalName,
       total: sales.total,
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
@@ -121,7 +121,7 @@ export async function readSentCorrective(
   return {
     saleId: correctiveSaleId,
     invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
-    customer: sale.customer,
+    customerName: sale.customerName,
     amount: centsToDecimal(-sale.total),
     delivery: status?.current ?? null,
   };
