@@ -49,6 +49,10 @@ export const floorClockStyles = css`
     padding: 0 var(--wt-menu-row-padding-start) var(--wt-space-2);
   }
 
+  .floor-clock-actions wt-button::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+  }
+
   [data-floor-break] {
     display: flex;
     align-items: center;

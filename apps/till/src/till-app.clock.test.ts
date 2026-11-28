@@ -546,6 +546,14 @@ describe("till clocking integration", () => {
         const confirm = await clockOutButton(f.el, "[data-confirm-clock-out]");
         expect(confirm.getAttribute("variant")).toBe("primary");
         const panel = clockOutSheet(f.el)!.shadowRoot!.querySelector("wt-full-screen-panel")!;
+        const footer = panel.querySelector("wt-foot-button-bar")!;
+        await footer.updateComplete;
+        const footerStyle = getComputedStyle(footer.shadowRoot!.querySelector("footer")!);
+        expect.soft(getComputedStyle(panel).backgroundColor).toBe(footerStyle.backgroundColor);
+        expect.soft(footerStyle.borderBlockStartWidth).toBe("0px");
+        expect(getComputedStyle(confirm.shadowRoot!.querySelector("button")!).fontSize).toBe(
+          "16px",
+        );
         await vi.waitFor(() => {
           const rect = panel.getBoundingClientRect();
           expect([rect.left, rect.right, rect.bottom]).toEqual([0, 390, 844]);

@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-foot-button-bar.js";
@@ -7,10 +8,41 @@ import "@waitron/ui/src/components/wt-initials.js";
 import type { MyShift, TillClockState } from "../api/attendance-api.js";
 import type { TillApi } from "../api/client.js";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
-import type { SignInClockAction } from "../state/clock-sign-in.js";
+import { clockMessage, type SignInClockAction } from "../state/clock-sign-in.js";
+import type { ClockingSnapshot } from "../state/clocking.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { storedAttendanceTime, withHourArticle } from "../widgets/attendance-history.js";
 import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
+
+export const signInClockLayout = css`
+  .app:has(> :is(till-clock-in-screen, till-attendance-questions)) {
+    --wt-foot-padding-bottom: calc(var(--wt-space-1) + env(safe-area-inset-bottom, 0px));
+    height: calc(100% + 2 * var(--wt-page-padding, 0px));
+    margin: calc(-1 * var(--wt-page-padding, 0px));
+  }
+`;
+
+export function renderClockInScreen(
+  signIn: number,
+  api: TillApi,
+  displayName: string,
+  action: SignInClockAction,
+  snapshot: ClockingSnapshot,
+) {
+  return keyed(
+    signIn,
+    html`<till-clock-in-screen
+      .api=${api}
+      .displayName=${displayName}
+      .busy=${snapshot.busy}
+      .reading=${snapshot.reading}
+      .action=${action}
+      .breakStart=${snapshot.state?.breakStart ?? null}
+      .canAct=${snapshot.state?.state === (action === "in" ? "out" : "on_break")}
+      .error=${clockMessage(snapshot)}
+    ></till-clock-in-screen>`,
+  );
+}
 
 function shiftFor(shifts: readonly MyShift[], now: number): MyShift | undefined {
   const today = localIsoDate(new Date(now));

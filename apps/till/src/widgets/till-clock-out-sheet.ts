@@ -1,4 +1,4 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { localCalendarDate, timeZoneOffsetMinutes } from "@waitron/shared";
@@ -34,6 +34,13 @@ export class TillClockOutSheet extends LitElement {
         inline-size: 100%;
         block-size: auto;
         max-block-size: 100%;
+        background: var(--wt-color-surface);
+      }
+      wt-foot-button-bar::part(footer) {
+        border-block-start: 0;
+      }
+      [data-confirm-clock-out] {
+        --wt-action-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
       }
       @media (min-width: 800px) {
         wt-full-screen-panel {
@@ -218,6 +225,20 @@ export class TillClockOutSheet extends LitElement {
       </wt-full-screen-panel>
     </wt-dialog>`;
   }
+}
+
+export function renderClockOutSheet(
+  api: Pick<AttendanceApi, "getAttendanceDay">,
+  state: TillClockState | null,
+  close: (confirmed: boolean) => void,
+) {
+  if (state === null || state.state === "out") return nothing;
+  return html`<till-clock-out-sheet
+    .api=${api}
+    .clockState=${state}
+    @clock-out-dismiss=${() => close(false)}
+    @clock-out-confirm=${() => close(true)}
+  ></till-clock-out-sheet>`;
 }
 
 declare global {

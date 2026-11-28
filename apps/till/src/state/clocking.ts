@@ -31,6 +31,7 @@ const empty = (): ClockingSnapshot => ({
   error: null,
   refusal: null,
 });
+export const IDLE_CLOCK = Object.freeze(empty());
 
 function refusal(error: unknown): { code: string } | null {
   const code = (error as { code?: unknown } | null)?.code;

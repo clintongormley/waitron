@@ -47,7 +47,7 @@ export class WtFootButtonBar extends LitElement {
   ];
 
   override render() {
-    return html`<footer>
+    return html`<footer part="footer">
       <div class="actions"><slot></slot></div>
       <slot name="link"></slot>
     </footer>`;

@@ -168,8 +168,8 @@ import {
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
-import "./screens/till-clock-in-screen.js";
-import "./widgets/till-clock-out-sheet.js";
+import { renderClockInScreen, signInClockLayout } from "./screens/till-clock-in-screen.js";
+import { renderClockOutSheet } from "./widgets/till-clock-out-sheet.js";
 import "./screens/till-attendance-questions.js";
 import "./screens/till-hours-screen.js";
 import { HoursController, type HoursSnapshot } from "./state/hours.js";
@@ -180,6 +180,7 @@ import type {
 } from "@waitron/workforce/attendance-contract";
 import {
   ClockingController,
+  IDLE_CLOCK,
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
@@ -649,13 +650,6 @@ const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
 const NO_PARTY_DRAFTS: readonly PartyDraft[] = Object.freeze([]);
 // One object each, so a boot's reset of state still at rest schedules no update.
 const NO_REFRESH_RETRIES: Partial<Record<RefreshList, RefreshRetry>> = Object.freeze({});
-const IDLE_CLOCK: ClockingSnapshot = Object.freeze({
-  state: null,
-  reading: false,
-  busy: false,
-  error: null,
-  refusal: null,
-});
 
 interface ReleasedBill {
   personId: string;
@@ -1856,11 +1850,7 @@ export class TillApp extends LitElement {
         height: 100%;
       }
 
-      .app:has(> :is(till-clock-in-screen, till-attendance-questions)) {
-        --wt-foot-padding-bottom: calc(var(--wt-space-1) + env(safe-area-inset-bottom, 0px));
-        height: calc(100% + 2 * var(--wt-page-padding, 0px));
-        margin: calc(-1 * var(--wt-page-padding, 0px));
-      }
+      ${signInClockLayout}
 
       .app > wt-banner {
         flex: none;
@@ -5646,7 +5636,8 @@ export class TillApp extends LitElement {
       return;
     const action = event.detail.action;
     if (action === "out") {
-      this.clockOutOpen = this.clockSnapshot.state.state !== "out";
+      const state = this.clockSnapshot.state;
+      this.clockOutOpen = state !== null && state.state !== "out";
       return;
     }
     if (action === "in" && !this.clockPage && this.#attendance !== undefined) {
@@ -24333,25 +24324,16 @@ export class TillApp extends LitElement {
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
-      ${
-        this.clockOutOpen &&
-        this.#clocking &&
-        this.clockSnapshot.state &&
-        this.clockSnapshot.state.state !== "out"
-          ? html`<till-clock-out-sheet
-              .api=${this.api}
-              .clockState=${this.clockSnapshot.state}
-              @clock-out-dismiss=${() => {
-                this.clockOutOpen = false;
-              }}
-              @clock-out-confirm=${() => {
-                if (!this.clockOutOpen || this.clockSnapshot.state?.state === "out") return;
-                this.clockOutOpen = false;
-                void this.#performClockAction("out");
-              }}
-            ></till-clock-out-sheet>`
-          : nothing
-      }
+      ${renderClockOutSheet(
+        this.api,
+        this.clockOutOpen && this.#clocking ? this.clockSnapshot.state : null,
+        (confirmed) => {
+          if (!this.clockOutOpen) return;
+          this.clockOutOpen = false;
+          if (confirmed && this.clockSnapshot.state?.state !== "out")
+            void this.#performClockAction("out");
+        },
+      )}
       ${this.#renderAllergyDialog()} ${this.#renderMoveAllergyDialog()}
       ${
         conflicts !== null && conflicts.current()
@@ -25111,18 +25093,12 @@ export class TillApp extends LitElement {
                     }}
                   ></till-attendance-questions>`
                 : this.clockPage
-                  ? keyed(
+                  ? renderClockInScreen(
                       this.#signIns,
-                      html`<till-clock-in-screen
-                        .api=${this.api}
-                        .displayName=${this.operatorName}
-                        .busy=${this.clockSnapshot.busy}
-                        .reading=${this.clockSnapshot.reading}
-                        .action=${this.clockPage}
-                        .breakStart=${this.clockSnapshot.state?.breakStart ?? null}
-                        .canAct=${this.clockSnapshot.state?.state === (this.clockPage === "in" ? "out" : "on_break")}
-                        .error=${clockMessage(this.clockSnapshot)}
-                      ></till-clock-in-screen>`,
+                      this.api,
+                      this.operatorName,
+                      this.clockPage,
+                      this.clockSnapshot,
                     )
                   : shellFormFactor !== undefined
                     ? keyed(

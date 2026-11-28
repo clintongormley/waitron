@@ -826,6 +826,8 @@ it("puts the break actions in You and keeps End break above the floor bar", asyn
     await userEvent.click(menu.shadowRoot!.querySelector("button")!);
     expect(getComputedStyle(native("break-start")).borderTopWidth).toBe("1px");
     expect(getComputedStyle(native("break-start")).justifyContent).toBe("center");
+    expect(native("break-start").getBoundingClientRect().height).toBe(46);
+    expect(native("out").getBoundingClientRect().height).toBe(46);
     await userEvent.keyboard("{Escape}");
     expect(you.textContent).toContain("Working since");
     expect(you.textContent).toContain("1 h 10 min");
