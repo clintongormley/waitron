@@ -81,13 +81,12 @@ export class WtDishPickRow extends LitElement {
       input:indeterminate + [part="mark"] {
         border-color: var(--wt-color-primary);
         background: transparent;
-        color: var(--wt-color-primary-text);
       }
 
       input:indeterminate + [part="mark"]::before {
         content: "";
         inline-size: var(--wt-space-3);
-        border-block-start: var(--wt-field-line-width-active) solid currentColor;
+        border-block-start: var(--wt-field-line-width-active) solid var(--wt-color-primary);
       }
 
       #dish-description {
@@ -140,8 +139,8 @@ export class WtDishPickRow extends LitElement {
       <input
         type="checkbox"
         name=${this.name}
-        aria-labelledby="dish-label"
-        aria-describedby="dish-quantity dish-description dish-amount"
+        aria-labelledby="dish-quantity dish-label"
+        aria-describedby="dish-description dish-amount"
         .checked=${live(this.checked)}
         .indeterminate=${live(this.indeterminate)}
         ?disabled=${this.disabled}

@@ -13,12 +13,14 @@ const rowHtml =
 test("a partly selected row can be selected in full from the keyboard", async () => {
   const row = (await mount(rowHtml)) as HTMLElementTagNameMap["wt-dish-pick-row"];
   row.indeterminate = true;
+  row.style.setProperty("--wt-color-primary", "rgb(45, 55, 65)");
   await row.updateComplete;
-  const checkbox = page.getByRole("checkbox", { name: "Croquetas", exact: true });
+  const checkbox = page.getByRole("checkbox", { name: "3 Croquetas", exact: true });
   const input = checkbox.element() as HTMLInputElement;
   expect(input.indeterminate).toBe(true);
   const mark = row.shadowRoot!.querySelector('[part="mark"]')!;
   expect(getComputedStyle(mark).gridTemplateRows.split(" ")).toHaveLength(1);
+  expect(getComputedStyle(mark, "::before").borderBlockStartColor).toBe("rgb(45, 55, 65)");
   expect(input.name).toBe("dish");
   const seen: boolean[] = [];
   host.addEventListener("wt-change", (event) =>

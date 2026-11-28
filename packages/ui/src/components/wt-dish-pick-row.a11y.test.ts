@@ -16,8 +16,8 @@ describe.each(["light", "dark"] as const)("wt-dish-pick-row a11y (%s theme)", (t
           description="With garlic mayonnaise" ${state}></wt-dish-pick-row>`,
         theme,
       );
-      const checkbox = page.getByRole("checkbox", { name: "Croquetas", exact: true });
-      await expect.element(checkbox).toHaveAccessibleDescription("3 With garlic mayonnaise €12.00");
+      const checkbox = page.getByRole("checkbox", { name: "3 Croquetas", exact: true });
+      await expect.element(checkbox).toHaveAccessibleDescription("With garlic mayonnaise €12.00");
       if (state === "disabled") await expect.element(checkbox).toBeDisabled();
       else await expect.element(checkbox).toBeEnabled();
       await expectNoA11yViolations(host, { enable: ["target-size"] });

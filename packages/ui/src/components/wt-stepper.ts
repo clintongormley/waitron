@@ -90,6 +90,11 @@ export class WtStepper extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      :host([variant="portion"]) {
+        align-items: center;
+        min-block-size: var(--wt-tap-min);
+      }
+
       .stepper.portion {
         align-items: center;
         height: calc(var(--wt-space-6) + var(--wt-space-1));

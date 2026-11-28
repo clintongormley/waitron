@@ -46,12 +46,21 @@ test("the portion stepper shows the selected count out of the maximum as it chan
   const { count, plus, minus, group } = parts(el);
   expect(count.textContent?.trim()).toBe("1 of 3");
   expect(group.getBoundingClientRect().height).toBe(36);
-  expect(minus.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  const target = minus.getBoundingClientRect();
+  expect(target.height).toBeGreaterThanOrEqual(44);
+  expect(target.width).toBeGreaterThanOrEqual(44);
+  const hostBox = el.getBoundingClientRect();
+  expect(target.top).toBeGreaterThanOrEqual(hostBox.top);
+  expect(target.bottom).toBeLessThanOrEqual(hostBox.bottom);
 
   el.formatCount = (value, max) => `${value} de ${max}`;
   plus.click();
   await el.updateComplete;
   expect(count.textContent?.trim()).toBe("2 de 3");
+
+  el.max = null;
+  await el.updateComplete;
+  expect(count.textContent?.trim()).toBe("2");
 });
 
 test("wt-change bubbles out of a shadow root", async () => {
