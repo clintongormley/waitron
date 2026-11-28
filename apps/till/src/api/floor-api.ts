@@ -755,24 +755,23 @@ export class FloorApi extends InvoiceDeliveryApi {
       ...(invoiceChoice === undefined ? {} : { invoiceChoice }),
     });
   }
-  /**
-   * Move whole dishes, named by line id, from one bill of a party to another, or to a new bill of
-   * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
-   * bill they went to. Rejects, among others, `bill.received_exceeds_total`,
-   * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
-   * `invoiceChoice` answers `bill.merge_invoice_choice_required` for a move that takes every dish,
-   * and is sent only when given, as {@link mergeBills} sends it.
-   */
+  /** Moves the chosen dishes and answers with the bill they joined. A table destination always
+   * starts a new bill. A null bill id starts one at the current table. */
   moveDishes(
     fromBillId: string,
     lineIds: readonly string[],
-    toBillId: string | null,
-    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
+    to: string | null | { toTableId: string },
+    revisions: BillRevisions & {
+      expectedEdits: BillEditExpected[];
+      otherPartyId?: string | null;
+      expectedOtherPartyRevision?: number;
+      closedZoneId?: string;
+    },
     invoiceChoice?: MergeInvoiceChoice,
   ): Promise<{ billId: string; invoice?: TillSaleResult }> {
     return this.#request(`/api/bills/${fromBillId}/move-dishes`, "POST", {
       lineIds,
-      toBillId,
+      ...(to === null || typeof to === "string" ? { toBillId: to } : to),
       ...revisions,
       ...(invoiceChoice === undefined ? {} : { invoiceChoice }),
     });

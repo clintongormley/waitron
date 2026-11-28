@@ -337,6 +337,13 @@ function flagged(line: OrderLine): boolean {
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "move-dishes";
+type DishDestination = string | null | { toTableId: string; prompt: object };
+
+export type MoveDishesDetail = {
+  lineIds: string[];
+  toBillId: string | null;
+  review?: () => void;
+} & ({ toTableId?: never } | { toTableId: string; prompt: object });
 /** The pay section's controls by what a tap on one starts: the tender's Cash and Card, the
  * bill-payment ways and Pay the rest, or the handheld's Pay. */
 type PayControl = "tender" | "bill-pay" | "sheet";
@@ -344,7 +351,7 @@ type PayControl = "tender" | "bill-pay" | "sheet";
 interface ActionDraft {
   tableId: string | null;
   picks: Picks;
-  moveTo: string | null | undefined;
+  moveTo: DishDestination | undefined;
   whole: ReadonlySet<string>;
   billPicks: ReadonlyMap<string, Picks>;
   staying: string;
@@ -358,7 +365,7 @@ export interface MoveBillDetail {
 }
 
 export interface TableRelocationOpenDetail {
-  verb: TableVerb;
+  verb: TableVerb | "move-dishes";
   table: TableState | null;
   prompt: object;
   ready: () => void;
@@ -588,7 +595,8 @@ class TabPayStore extends WorkingOrderStore {
   }
 }
 
-type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-table-pick";
+type ActionStep =
+  "closed" | "pick" | "move-dishes" | "move-dishes-table" | "split-table" | "split-table-pick";
 
 /** What the foot says when a refusal's own sentence would claim the rows were read again and they
  * were not. */
@@ -1653,14 +1661,12 @@ export class TillTableOrderScreen extends LitElement {
   #splitNames = new Map<string, string>();
   #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
   @state() private moveDishesPicks: Picks = new Set();
-  /** Where Move dishes sends the picks: a bill's id, null for a new bill, undefined while none is
-   * chosen. */
-  @state() private moveDishesTo: string | null | undefined = undefined;
+  @state() private moveDishesTo: DishDestination | undefined = undefined;
   /** The rows Move dishes last drew, which a re-read's picks are tidied from. */
   #moveDishesDrawn?: DishSources & { rows: readonly PickRow[] };
   #dishGroups?: { sources: DishSources; groups: PickGroups };
   /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
-  #moveDishesCounted: string | null | undefined;
+  #moveDishesCounted: DishDestination | undefined;
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -5977,7 +5983,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #prepareRelocation(
-    verb: TableVerb,
+    verb: TableRelocationOpenDetail["verb"],
     table: TableState | null,
     proceed: (prompt: object) => void,
   ): void {
@@ -6007,6 +6013,14 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #pickTable(table: TableState): void {
+    if (this.actionStep === "move-dishes-table") {
+      this.#prepareRelocation("move-dishes", table, (prompt) => {
+        this.moveDishesTo = { toTableId: table.id, prompt };
+        this.#backToDishes();
+        this.#actionScope?.changed();
+      });
+      return;
+    }
     const verb: TableVerb =
       this.actionVerb === "move" || this.actionVerb === "move-bill" ? this.actionVerb : "join";
     this.#prepareRelocation(verb, table, (prompt) => this.#sendTableAction(verb, table, prompt));
@@ -6757,6 +6771,10 @@ export class TillTableOrderScreen extends LitElement {
 
   readonly #beforeTableActionClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.busy) return false;
+    if (this.actionStep === "move-dishes-table") {
+      this.#backToDishes();
+      return false;
+    }
     if (this.splitAsking) {
       this.#leaveSplitQuestion();
       void this.#focusOnceDrawn("[data-split-confirm]");
@@ -6820,6 +6838,8 @@ export class TillTableOrderScreen extends LitElement {
         return this.#targetPicker();
       case "move-dishes":
         return this.#moveDishesStep();
+      case "move-dishes-table":
+        return this.#tablePicker();
       case "split-table":
         return this.#splitTableStep();
       case "split-table-pick":
@@ -7080,6 +7100,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #tablePicker(): TemplateResult {
     const moveBill = this.actionVerb === "move-bill";
+    const moveDishes = this.actionStep === "move-dishes-table";
     const closed = (zoneId: string | null) =>
       this.zones.some((zone) => zone.id === zoneId && zone.closed);
     const targets = this.#tableTargets();
@@ -7099,37 +7120,45 @@ export class TillTableOrderScreen extends LitElement {
                   ></wt-choice-tile>`
                 : nothing
             }
-            ${targets.map((table) =>
-              tableTarget(
+            ${targets.map((table) => {
+              const guests = table.party?.guestCount;
+              const occupiedHint =
+                guests == null
+                  ? t("floor.status_seated")
+                  : countText(guests, "table.menu_guests", "table.menu_guest");
+              return tableTarget(
                 table,
                 this.party?.id,
                 (picked) => this.#pickTable(picked),
                 true,
                 closed(table.zoneId),
-                moveBill && /^\d+$/.test(tableShownName(table))
-                  ? fill(t("floor.table_title"), { table: tableShownName(table) })
-                  : undefined,
-              ),
-            )}
+                moveBill || moveDishes ? this.#targetTableName(table) : undefined,
+                moveDishes ? occupiedHint : undefined,
+              );
+            })}
           </div>`
     }`;
     return tableActionStep(
       "target",
       {
         title: t(
-          moveBill
-            ? "table.action_move_bill"
-            : this.actionVerb === "move"
-              ? "table.action_move_guests"
-              : "table.action_join",
+          moveDishes
+            ? "table.action_move_dishes"
+            : moveBill
+              ? "table.action_move_bill"
+              : this.actionVerb === "move"
+                ? "table.action_move_guests"
+                : "table.action_join",
         ),
-        subtitle: moveBill
-          ? (this.#shownBillLabel() ?? "")
-          : this.party === null
-            ? ""
-            : this.#partyScope(this.party),
+        subtitle: moveDishes
+          ? this.#moveDishesSubtitle()
+          : moveBill
+            ? (this.#shownBillLabel() ?? "")
+            : this.party === null
+              ? ""
+              : this.#partyScope(this.party),
         label: heading,
-        showLabel: moveBill,
+        showLabel: moveBill || moveDishes,
       },
       body,
       this.busy,
@@ -7141,7 +7170,22 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  #targetTableName(table: TableState): string {
+    const name = tableShownName(table);
+    return /^\d+$/.test(name) ? fill(t("floor.table_title"), { table: name }) : name;
+  }
+
+  #moveDishesSubtitle(): string {
+    const bill = this.#shownBillLabel();
+    return bill === undefined
+      ? ""
+      : fill(t("table.move_dishes_heading"), {
+          bill: currentLocale() === "es-ES" ? billLabelInText(bill) : bill,
+        });
+  }
+
   #tablePickerHeading(): string {
+    if (this.actionStep === "move-dishes-table") return t("table.move_dishes_to");
     const party = this.party;
     if (party === null) return t("table.actions_title");
     if (this.actionVerb === "move-bill") {
@@ -7193,9 +7237,11 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The chosen destination while it is still offered: a re-read can take a bill out of the party's
    * bills or present it after it was chosen. */
-  #moveDishesChosen(): string | null | undefined {
+  #moveDishesChosen(): DishDestination | undefined {
     const to = this.moveDishesTo;
     if (to === null || to === undefined) return to;
+    if (typeof to === "object")
+      return this.#tableTargets().some((table) => table.id === to.toTableId) ? to : undefined;
     return this.#otherOpenBills().some((bill) => bill.workingOrderId === to) ? to : undefined;
   }
 
@@ -7216,7 +7262,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #moveDishesBlocker(
-    chosen: string | null | undefined,
+    chosen: DishDestination | undefined,
     source: BillSetMenuState | undefined,
     lineIds: readonly string[],
   ): { message?: string; blocked: boolean } {
@@ -7259,13 +7305,18 @@ export class TillTableOrderScreen extends LitElement {
     const blocker = this.#moveDishesBlocker(chosen, sources.setMenus, lineIds);
     const canMove = lineIds.length > 0 && chosen !== undefined && !blocker.blocked;
     const bills = this.#otherOpenBills();
-    const source = this.#shownBillLabel();
     const inText = (bill: string) => (currentLocale() === "es-ES" ? billLabelInText(bill) : bill);
     const toBill = bills.find((bill) => bill.workingOrderId === chosen);
+    const table =
+      chosen !== null && typeof chosen === "object"
+        ? this.tables.find((table) => table.id === chosen.toTableId)
+        : undefined;
     const to =
-      toBill === undefined
-        ? t("table.move_dishes_new_destination")
-        : fill(t("table.move_dishes_destination"), { bill: inText(billNumberLabel(toBill)) });
+      table !== undefined
+        ? fill(t("table.move_dishes_table_destination"), { table: this.#targetTableName(table) })
+        : toBill === undefined
+          ? t("table.move_dishes_new_destination")
+          : fill(t("table.move_dishes_destination"), { bill: inText(billNumberLabel(toBill)) });
     const picksMenu = sources.setMenus?.setMenus.some(({ lineId }) =>
       this.moveDishesPicks.has(lineId),
     );
@@ -7274,8 +7325,7 @@ export class TillTableOrderScreen extends LitElement {
       : countText(lineIds.length, "table.move_dishes_count", "table.move_dishes_count_one");
     const heading = {
       title: t("table.action_move_dishes"),
-      subtitle:
-        source === undefined ? "" : fill(t("table.move_dishes_heading"), { bill: inText(source) }),
+      subtitle: this.#moveDishesSubtitle(),
       label: t("table.move_dishes_how_many"),
       showLabel: true,
     };
@@ -7312,6 +7362,22 @@ export class TillTableOrderScreen extends LitElement {
       <div class="move-dishes-destinations" role="group" aria-labelledby="move-dishes-to-heading">
         ${bills.map((bill) => destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId))}
         ${destination("new", t("table.new_bill_menu"), null)}
+        ${
+          this.#tableTargets().length === 0
+            ? nothing
+            : html`<wt-choice-tile
+                variant="pill"
+                data-move-dishes-to="table"
+                .label=${table === undefined ? t("table.move_dishes_another_table") : this.#targetTableName(table)}
+                .selected=${table !== undefined}
+                ?disabled=${this.busy}
+                @click=${(event: Event) => {
+                  if (!this.#actionControlCurrent(event)) return;
+                  this.actionStep = "move-dishes-table";
+                  this.#stepFocus = "step";
+                }}
+              ></wt-choice-tile>`
+        }
       </div>`;
     const footer = html`<div class="table-action-message" role="status" data-move-price-preview>
         ${blocker.message === undefined ? nothing : html`<p>${blocker.message}</p>`}
@@ -7323,38 +7389,49 @@ export class TillTableOrderScreen extends LitElement {
           ?disabled=${!canMove || this.busy}
           @click=${(event: Event) => this.#confirmMoveDishes(event)}
         >
-          ${
-            lineIds.length === 0 || chosen === undefined
-              ? t("table.move_dishes_confirm")
-              : fill(t("table.move_dishes_action"), { count, to })
-          }
+          <span class="move-dishes-action-label">
+            ${
+              lineIds.length === 0 || chosen === undefined
+                ? t("table.move_dishes_confirm")
+                : fill(t("table.move_dishes_action"), { count, to })
+            }
+          </span>
         </wt-button>
       </wt-foot-button-bar>`;
     return tableActionStep("move-dishes", heading, body, this.busy, footer);
+  }
+
+  #backToDishes(): void {
+    this.#relocationPrompt = null;
+    this.relocationRefusal = "";
+    this.actionStep = "move-dishes";
+    this.#stepFocus = "step";
   }
 
   #confirmMoveDishes(event: Event): void {
     const button = event.currentTarget as HTMLElementTagNameMap["wt-button"];
     if (!this.#actionControlCurrent(event) || button.disabled) return;
     const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
-    const toBillId = this.#moveDishesChosen();
-    if (lineIds.length === 0 || toBillId === undefined) return;
+    const destination = this.#moveDishesChosen();
+    if (lineIds.length === 0 || destination === undefined) return;
     const rows = this.#moveDishesRows();
     const picks = this.moveDishesPicks;
+    const toTable = destination !== null && typeof destination === "object";
     this.#closeActions();
     const review = () => {
       if (!this.isConnected || this.actionStep !== "closed") return;
       this.actionVerb = "move-dishes";
       this.actionStep = "move-dishes";
       this.moveDishesPicks = tidyPicks(rows, this.#dishGroupsFor(this.#dishSources()), picks);
-      this.moveDishesTo =
-        toBillId === null || this.#otherOpenBills().some((bill) => bill.workingOrderId === toBillId)
-          ? toBillId
-          : undefined;
+      this.moveDishesTo = toTable ? undefined : destination;
+      this.moveDishesTo = this.#moveDishesChosen();
       this.#stepFocus = "step";
       this.#watchActions();
     };
-    this.#dispatch("move-dishes", { lineIds, toBillId, review });
+    const detail: MoveDishesDetail = toTable
+      ? { lineIds, toBillId: null, ...destination, review }
+      : { lineIds, toBillId: destination, review };
+    this.#dispatch("move-dishes", detail);
   }
 }
 

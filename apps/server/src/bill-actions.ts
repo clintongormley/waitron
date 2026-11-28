@@ -412,13 +412,13 @@ export async function moveDishes(
   }
   // Before the dishes move: their check of the simplified-invoice limit reads the kept invoice type.
   if (invoices !== null) await carryMergeInvoice(tx, destinationId, invoices);
-  const before = await readSentWork(tx, fromBillId);
+  const before = options.tellKitchen === false ? null : await readSentWork(tx, fromBillId);
   await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
     paidAlone: options.paidAlone,
   });
   if (options.sourceMayBeOverpaid !== true) await assertBillInvariant(tx, [fromBillId]);
-  if (options.tellKitchen !== false) await enqueueMovedSlips(tx, cfg, before, destinationId);
+  if (before !== null) await enqueueMovedSlips(tx, cfg, before, destinationId);
   return { billId: destinationId };
 }
 

@@ -1,13 +1,13 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { writePartyAllergy } from "@waitron/venue-service";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readPartyAllergy, writeKitchenNote, writePartyAllergy } from "@waitron/venue-service";
+import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { seatTable } from "./parties.js";
+import { holderOf, seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import {
   inTx,
@@ -20,7 +20,19 @@ import {
 import { openTillSession } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { ACME } from "./testing/bill-invoice-fixture.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
+import { createStation } from "./kitchen.js";
+import { applyPartyAllergyPatch } from "./party-allergy.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { makeSharedPrinter } from "./testing/kitchen-print.test-support.js";
+import { addFixtureExtra } from "./testing/portion-bill.js";
+import { setStationPrinting } from "./testing/station-printing.js";
+import { routeProductTo } from "./testing/zone-offers.js";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { readPartyKitchenNote } from "./order-kitchen-note.js";
 import "./errors.js";
 
 // The HTTP surface of Move dishes: the session guard, the body screens, the answer, the status of
@@ -45,25 +57,26 @@ useVenueDb({
 });
 
 /** A party at a fresh table whose first bill holds one of each dish named, in order. */
-async function seated(...names: string[]): Promise<{ partyId: string; tabId: string }> {
+async function seated(
+  ...names: string[]
+): Promise<{ partyId: string; tabId: string; tableId: string; label: string }> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, {
-      label: `Mesa ${randomUUID().slice(0, 8)}`,
-      zoneId: venue.zoneId,
-    });
+    const label = `Mesa ${randomUUID().slice(0, 8)}`;
+    const table = await createTable(tx, { label, zoneId: venue.zoneId });
     const { partyId, tabId } = await seatTable(tx, venue.cfg, {
       tableId: table.id,
       guestCount: null,
       operatorId: venue.operatorId,
     });
     await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.operatorId);
-    await addTabRound(
-      tx,
-      venue.cfg,
-      tabId,
-      names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
-    );
-    return { partyId, tabId };
+    if (names.length > 0)
+      await addTabRound(
+        tx,
+        venue.cfg,
+        tabId,
+        names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+      );
+    return { partyId, tabId, tableId: table.id, label };
   });
 }
 
@@ -174,6 +187,225 @@ function invoiced(billId: string): { names: string[]; tenders: number[] } {
     .sort((a, b) => a - b);
   return { names, tenders };
 }
+
+async function toTable(
+  source: { partyId: string; tabId: string },
+  picks: string[],
+  target: { tableId: string; partyId?: string; tabId?: string },
+) {
+  return {
+    lineIds: picks,
+    toTableId: target.tableId,
+    partyId: source.partyId,
+    expectedPartyRevision: revisionOf(source.partyId),
+    otherPartyId: target.partyId ?? null,
+    ...(target.partyId === undefined
+      ? {}
+      : { expectedOtherPartyRevision: revisionOf(target.partyId) }),
+    expectedEdits: await editsOf(
+      source.tabId,
+      ...(target.tabId === undefined || target.tabId === source.tabId ? [] : [target.tabId]),
+    ),
+  };
+}
+
+describe("moving dishes to another table", () => {
+  it("gives an occupied table a new bill and sends one slip from the original bill", async () => {
+    const printerId = await inTx(venue, async (tx) => {
+      const station = await createStation(tx, { name: "Dish moves" });
+      for (const { id } of tx.all<{ id: string }>(
+        sql`select id from products where name in ('Seafood rice', 'Small beer')`,
+      )) {
+        await routeProductTo(tx, id, station.id);
+      }
+      await setStationPrinting(tx, { printMovedSlips: true, printHeldWork: true }, [station.id]);
+      return makeSharedPrinter(tx, "Dish move slips", [station.id]);
+    });
+    const source = await seated("Small beer", "Tarta");
+    const target = await seated("Tarta");
+    const [beer, cake] = lineIdsOf(source.tabId);
+    const { rice, extra } = await inTx(venue, async (tx) => {
+      await writeKitchenNote(tx, { partyId: source.partyId }, 0, "Bring cake at the end");
+      await writeKitchenNote(tx, { partyId: target.partyId }, 0, "Change the cutlery");
+      await placeGroups(tx, venue.cfg, source.partyId, {
+        billId: source.tabId,
+        operatorId: venue.operatorId,
+        groups: [
+          {
+            release: "hold",
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+          },
+        ],
+      });
+      const [row] = tx.all<{ id: string }>(sql`
+        select id from working_order_lines where working_order_id = ${source.tabId} and group_id is not null
+      `);
+      const ref = { kind: "working", id: beer! } as const;
+      await applyPartyAllergyPatch(
+        tx,
+        source.partyId,
+        {
+          party: {
+            answer: "allergies",
+            guests: [{ who: "Guest", allergens: { eggs: {} }, note: null }],
+          },
+          ticks: [{ line: ref, guestIndex: 0 }],
+        },
+        venue.operatorId,
+        [{ ref, workingLineId: beer!, draftLineId: null }],
+      );
+      return {
+        rice: row!.id,
+        extra: await addFixtureExtra(tx, venue.cfg, source.tabId, beer!, venue.offerFor("Tarta")),
+      };
+    });
+    const printed = () =>
+      venue.db
+        .all<{ payload: Uint8Array }>(
+          sql`select payload from print_jobs where printer_id = ${printerId} order by rowid`,
+        )
+        .map(({ payload }) => decodeTicket(payload));
+    const count = printed().length;
+    const numberOf = (id: string) =>
+      venue.db.all<{ order_number: number }>(
+        sql`select order_number from working_orders where id = ${id}`,
+      )[0]!.order_number;
+    const words = kitchenTicketWords("es");
+    const targetLines = lineIdsOf(target.tabId);
+
+    const answer = await post(source.tabId, await toTable(source, [beer!, rice], target));
+
+    expect(answer.status).toBe(200);
+    const moved = answer.json.billId as string;
+    expect(moved).not.toBe(target.tabId);
+    expect(lineIdsOf(source.tabId)).toEqual([cake]);
+    expect(lineIdsOf(target.tabId)).toEqual(targetLines);
+    expect(lineIdsOf(moved)).toEqual(expect.arrayContaining([beer, rice, extra]));
+    await inTx(venue, async (tx) => {
+      expect((await readPartyKitchenNote(tx, source.partyId)).note).toBe("Bring cake at the end");
+      expect((await readPartyKitchenNote(tx, target.partyId)).note).toBe("Change the cutlery");
+    });
+    expect(
+      venue.db.all(sql`
+      select wo.party_id, wl.parent_line_id from working_orders wo
+      join working_order_lines wl on wl.working_order_id = wo.id where wl.id = ${extra}
+    `),
+    ).toEqual([{ party_id: target.partyId, parent_line_id: beer }]);
+    expect(
+      venue.db.all(sql`
+      select g.state from order_groups g join working_order_lines l on l.group_id = g.id
+      where l.id = ${rice}
+    `),
+    ).toEqual([{ state: "held" }]);
+    const allergy = await inTx(venue, (tx) => readPartyAllergy(tx, target.partyId));
+    expect(allergy.guests.map(({ who }) => who)).toEqual(["Guest"]);
+    expect(allergy.ticks.map(({ workingLineId }) => workingLineId)).toEqual([beer]);
+    const newSlips = printed().slice(count);
+    expect(newSlips.some((paper) => paper.includes(words.noteChanged))).toBe(false);
+    const slips = newSlips.filter((paper) => paper.includes(words.moved));
+    expect(slips).toEqual([
+      expect.stringContaining(`${numberOf(source.tabId)} -> ${numberOf(moved)}`),
+    ]);
+    expect(slips[0]).toContain(`${words.fromPlace}${source.label}`);
+    expect(slips[0]).toContain(`${words.toPlace}${target.label}`);
+    expect(slips[0]).toContain("Change the cutlery");
+    expect(slips[0]).not.toContain("Bring cake at the end");
+    expect(slips[0]).toContain("BEER SMALL");
+    expect(slips[0]).toContain(words.hold);
+    expect(slips[0]).toContain("RICE PAN");
+  });
+
+  it("seats a free table and puts the selected dish on its new bill", async () => {
+    const source = await seated("Seafood rice", "Small beer");
+    const [rice, beer] = lineIdsOf(source.tabId);
+    const table = await inTx(venue, async (tx) => {
+      await writeKitchenNote(tx, { partyId: source.partyId }, 0, "Bring cake at the end");
+      return createTable(tx, { label: "Free table for dishes", zoneId: venue.zoneId });
+    });
+
+    const answer = await post(source.tabId, await toTable(source, [beer!], { tableId: table.id }));
+
+    expect(answer.status).toBe(200);
+    const bill = answer.json.billId as string;
+    const partyId = await inTx(venue, (tx) => holderOf(tx, table.id));
+    expect(partyId).not.toBeNull();
+    expect(partyId).not.toBe(source.partyId);
+    expect((await inTx(venue, (tx) => readPartyKitchenNote(tx, partyId!))).note).toBeNull();
+    expect(venue.db.all(sql`select id from working_orders where party_id = ${partyId}`)).toEqual([
+      { id: bill },
+    ]);
+    expect(lineIdsOf(bill)).toEqual([beer]);
+    expect(lineIdsOf(source.tabId)).toEqual([rice]);
+  });
+
+  it("rolls back the split when the bill move refuses a table already held by that party", async () => {
+    const source = await seated("Seafood rice", "Small beer");
+    const lines = lineIdsOf(source.tabId);
+    const revision = revisionOf(source.partyId);
+
+    const answer = await post(source.tabId, await toTable(source, [lines[1]!], source));
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "table.already_in_party", params: { tableId: source.tableId } },
+    });
+    expect(lineIdsOf(source.tabId)).toEqual(lines);
+    expect(revisionOf(source.partyId)).toBe(revision);
+    expect(
+      venue.db.all(sql`select id from working_orders where party_id = ${source.partyId}`),
+    ).toEqual([{ id: source.tabId }]);
+  });
+
+  it("carries the chosen full invoice to an occupied table when every dish leaves", async () => {
+    const source = await seated("Seafood rice");
+    const target = await seated("Small beer");
+    const [bill] = venue.db.all<{ revision: number }>(
+      sql`select revision from working_orders where id = ${source.tabId}`,
+    );
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, source.tabId, {
+      revision: bill!.revision,
+      invoiceType: "F1",
+      recipient: ACME,
+    });
+    const lines = lineIdsOf(source.tabId);
+
+    const answer = await post(source.tabId, {
+      ...(await toTable(source, lines, target)),
+      invoiceChoice: { keep: "from", from: { taxId: ACME.taxId }, into: null },
+    });
+
+    expect(answer.status).toBe(200);
+    const moved = answer.json.billId as string;
+    expect(moved).not.toBe(target.tabId);
+    expect(lineIdsOf(moved)).toEqual(lines);
+    expect(
+      venue.db.all(sql`
+      select party_id, invoice_type, recipient_tax_id from working_orders where id = ${moved}
+    `),
+    ).toEqual([{ party_id: target.partyId, invoice_type: "F1", recipient_tax_id: ACME.taxId }]);
+  });
+
+  it("refuses a Counter order before creating a new bill at the table", async () => {
+    const counter = randomUUID();
+    const target = await seated();
+    await inTx(venue, (tx) => createOpenOrder(tx, venue.cfg, counter, [], null));
+    const lines = lineIdsOf(counter);
+
+    const answer = await post(counter, {
+      lineIds: lines,
+      toTableId: target.tableId,
+      otherPartyId: target.partyId,
+      expectedOtherPartyRevision: revisionOf(target.partyId),
+      expectedEdits: await editsOf(counter, target.tabId),
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "bill.not_at_table", params: { workingOrderId: counter } },
+    });
+    expect(lineIdsOf(counter)).toEqual(lines);
+  });
+});
 
 describe("A803 move dishes route:", () => {
   it("moving to a new bill answers 200 with the new bill's id", async () => {

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, quantityButton } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  panelBackButton,
+  PHONE_FONT,
+  quantityButton,
+} from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { OtherDraft, TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -89,6 +96,7 @@ async function mountScreen(
     draftStore?: DraftStore;
     otherDrafts?: OtherDraft[];
     groups?: OrderGroup[];
+    tables?: TableState[];
   } = {},
 ) {
   const shownParty = over.party === undefined ? party : over.party;
@@ -102,7 +110,7 @@ async function mountScreen(
     party: shownParty,
     bills: over.bills ?? BILLS,
     billBalance: over.balance ?? null,
-    tables: shownParty === null ? [] : [table("t4")],
+    tables: over.tables ?? (shownParty === null ? [] : [table("t4")]),
   });
   return el;
 }
@@ -365,6 +373,34 @@ describe("A803 move dishes panel", () => {
     expect(confirm(el).disabled).toBe(false);
     await userEvent.click(confirm(el));
     expect(sent).toEqual([{ lineIds: ["h1"], toBillId: "wo-4", review: expect.any(Function) }]);
+  });
+
+  it("keeps the quantity when Back returns from the table picker", async () => {
+    const el = await mountScreen({
+      tables: [
+        table("t4"),
+        { ...table("t7"), party: { ...party, id: "other-party", displayName: "7", guestCount: 3 } },
+      ],
+    });
+    await openMoveDishes(el);
+    await changeCount(el, "c1", 1);
+    const root = el.shadowRoot!;
+    const another = () => root.querySelector<HTMLElement>('[data-move-dishes-to="table"]')!;
+    expect(another()).not.toBeNull();
+    await userEvent.click(another());
+    const target = root.querySelector("[data-target-picker]")!;
+    expect(textOf(target.querySelector("[data-action-heading]")!)).toBe("Move dishes");
+    expect(target.querySelector("wt-top-bar")!.subtitle).toBe("from Bill 2");
+    expect(
+      target.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>('[data-target="t7"]')!.hint,
+    ).toBe("3 guests");
+    await userEvent.click(panelBackButton(root.querySelector<HTMLElement>("[data-action-back]")!));
+
+    expect(quantity(el, "c1").value).toBe(1);
+    expect(confirm(el).disabled).toBe(true);
+    await expect
+      .poll(() => root.activeElement)
+      .toBe(panel(el)!.querySelector("[data-action-heading]"));
   });
 
   it("Move is quiet until a dish and a destination are chosen", async () => {
@@ -890,18 +926,20 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
 describe("on a phone with the order's foot held at the bottom", () => {
   it("draws the dish rows edge to edge and keeps the action above the foot", async () => {
     const { width, height } = { width: innerWidth, height: innerHeight };
-    await page.viewport(390, 600);
+    const phoneFont = await loadPhoneFont();
     try {
-      const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+      await page.viewport(390, 600);
+      const { el, host } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
         products: [],
         lines: [...BEERS, HAM],
         orderId: "wo-2",
         party,
-        bills: BILLS,
+        bills: [BILLS[1]!, BILLS[3]!],
         billBalance: null,
-        tables: [table("t4")],
+        tables: [table("t4"), table("t7")],
         handheld: true,
       });
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
       await resized(el);
       await openMoveDishes(el);
       await resized(el);
@@ -921,8 +959,15 @@ describe("on a phone with the order's foot held at the bottom", () => {
         "16px",
       );
       const pill = destinations(el)[0]!.shadowRoot!.querySelector("button")!;
-      expect(getComputedStyle(pill).fontSize).toBe("15px");
+      expect(getComputedStyle(pill)).toMatchObject({ fontFamily: PHONE_FONT, fontSize: "15px" });
+      const [bill, newBill, anotherTable] = destinations(el).map((choice) =>
+        choice.getBoundingClientRect(),
+      );
+      expect(bill!.left).toBe(12);
+      expect(newBill!.top).toBe(bill!.top);
+      expect(anotherTable!.top).toBe(bill!.top);
     } finally {
+      document.fonts.delete(phoneFont);
       await page.viewport(width, height);
     }
   });
