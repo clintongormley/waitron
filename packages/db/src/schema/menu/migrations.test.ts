@@ -38,6 +38,7 @@ beforeAll(() => {
 });
 
 const TABLES = [
+  "customer_menu_styles",
   "menus",
   "menu_items",
   "categories",
@@ -405,6 +406,7 @@ describe("the menu tables carry no taxpayer column", () => {
     }
 
     expect(primaryKeys).toEqual({
+      customer_menu_styles: "id",
       menus: "id",
       menu_items: "id",
       categories: "id",
@@ -427,6 +429,7 @@ describe("the menu tables carry no taxpayer column", () => {
 
     expect(foreignKeys).toEqual({
       "categories(parent_id)": "categories(id) on delete restrict",
+      "customer_menu_styles(logo_image)": "media_images(filename) on delete restrict",
       "extra_list_items(list_id)": "extra_lists(id) on delete cascade",
       "extra_list_items(product_id)": "products(id) on delete restrict",
       "menu_item_variant_overrides(menu_item_id, product_id)":
@@ -442,6 +445,7 @@ describe("the menu tables carry no taxpayer column", () => {
         "products(parent_id, id) on delete restrict",
       "menu_items(menu_id)": "menus(id) on delete cascade",
       "menu_items(product_id)": "products(id) on delete restrict",
+      "menus(customer_menu_style_id)": "customer_menu_styles(id) on delete restrict",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
       "product_modifiers(option_list_id)": "option_lists(id) on delete cascade",
@@ -459,6 +463,7 @@ describe("the menu tables carry no taxpayer column", () => {
     });
 
     expect(checks).toEqual({
+      customer_menu_styles_appearance_ck: `json_valid("customer_menu_styles"."appearance") and json_type("customer_menu_styles"."appearance") = 'object'`,
       menus_home_order_ck: `"menus"."home_order" in ('home_first', 'menu_first')`,
       menus_kind_ck: `"menus"."kind" in ('menu', 'set_menu')`,
       menus_online_photos_ck: `"menus"."online_photos" in ('none', 'small', 'large')`,
@@ -525,6 +530,8 @@ describe("the menu tables carry no taxpayer column", () => {
     }
     expect(indexes).toEqual({
       categories_parent_idx: { unique: false, columns: "parent_id" },
+      customer_menu_styles_name_key_uq: { unique: true, columns: "name_key" },
+      customer_menu_styles_one_default_uq: { unique: true, columns: "is_default" },
       extra_list_items_list_product_uq: { unique: true, columns: "list_id, product_id" },
       extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
       sections_one_root_per_menu_uq: { unique: true, columns: "owner_menu_id, role" },

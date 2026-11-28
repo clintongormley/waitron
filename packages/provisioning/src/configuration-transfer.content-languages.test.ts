@@ -23,10 +23,14 @@ import { applyVenue } from "./venue-apply.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { planVenue } from "./venue-plan.js";
 
-const menu = ALL_MODULES.find((module) => module.name === "menu")!;
-const transfer = menu.configurationTransfer!;
+const menuModule = ALL_MODULES.find((module) => module.name === "menu")!;
+const transfer = menuModule.configurationTransfer!;
 if (transfer.kind !== "tables") throw new Error("menu must transfer its configuration");
-const tables = transfer.tables;
+// This fixture replaces menu-owned rows while keeping the venue's core menu rows.
+const tables = transfer.tables.map((table) =>
+  table.name === "customer_menu_styles" ? { name: table.name } : table,
+);
+const menu = { ...menuModule, configurationTransfer: { ...transfer, tables } };
 
 function bundleFor(country: string, province: string | null, languages: unknown) {
   const bundle = configurationBundle();
@@ -36,6 +40,16 @@ function bundleFor(country: string, province: string | null, languages: unknown)
   // Menu has no set of its own, so a copy of its tables alone carries no set version.
   bundle.modules = {};
   bundle.tables = Object.fromEntries(tables.map(({ name }) => [name, []]));
+  bundle.tables.customer_menu_styles = [
+    {
+      id: "96d2e3d4-541c-458c-ba91-4f426069b929",
+      name: "Default",
+      name_key: "default",
+      is_default: 1,
+      appearance: "{}",
+      updated_at: bundle.createdAt,
+    },
+  ];
   bundle.contentLanguages = { defaultLanguage: "en", languages } as typeof bundle.contentLanguages;
   return bundle;
 }

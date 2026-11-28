@@ -113,7 +113,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("device_profiles", "state", STATE),
   classify("invoice_series", "state", STATE),
   classify("menus", "state", STATE),
-  classify("customer_menu_styles", "state", STATE),
   classify("categories", "state", STATE),
   classify("products", "state", STATE),
   classify("product_takeaway_vat_rates", "state", STATE),
@@ -276,6 +275,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 
   // menu
+  classify("customer_menu_styles", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("menu_items", "state", MENU_STATE),
   classify("menu_item_variant_overrides", "state", MENU_STATE),
