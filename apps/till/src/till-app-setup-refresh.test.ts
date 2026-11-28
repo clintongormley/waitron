@@ -85,7 +85,7 @@ function menu(
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,
@@ -130,7 +130,7 @@ function state(version: string, liveFields = "lf-1", setupRevision?: string): Me
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     menus: [{ menuId: "lunch", versionId: version, orderable: true, endedPeriodName: null }],
     unavailable: { products: [], optionLabels: [] },

@@ -426,12 +426,6 @@
   "src/widgets/invoice-recipient-dialog.unsaved.test.ts": 3,
   "src/widgets/join-with-dialog.a11y.test.ts": 0.7,
   "src/widgets/join-with-dialog.test.ts": 0.4,
-  "src/widgets/keep-open-dialog.a11y.test.ts": 1.1,
-  "src/widgets/keep-open-dialog.save-state.test.ts": 0.5,
-  "src/widgets/keep-open-dialog.test.ts": 0.4,
-  "src/widgets/keep-open-dialog.unsaved.test.ts": 0.7,
-  "src/widgets/keep-open.a11y.test.ts": 0.9,
-  "src/widgets/keep-open.test.ts": 2.3,
   "src/widgets/kitchen-columns-dialog.a11y.test.ts": 1.3,
   "src/widgets/kitchen-columns-dialog.test.ts": 2.1,
   "src/widgets/last-added.a11y.test.ts": 0.7,
@@ -578,6 +572,5 @@
   "src/widgets/track-dialog.test.ts": 0.8,
   "src/widgets/unpaid-departure-dialog.a11y.test.ts": 0.9,
   "src/widgets/unpaid-departure-dialog.test.ts": 0.6,
-  "src/widgets/unpaid-departure-dialog.unsaved.test.ts": 0.7,
-  "src/widgets/zone-keep-open.test.ts": 2.8
+  "src/widgets/unpaid-departure-dialog.unsaved.test.ts": 0.7
 }

@@ -10,7 +10,6 @@ import {
   newId,
   nowIso,
   table,
-  timeOfDay,
   tsString,
 } from "./columns.js";
 
@@ -36,19 +35,8 @@ export const floorZones = table(
     todaySetId: id("today_set_id").references((): AnySQLiteColumn => floorPlanSets.id),
     todayLayoutRevision: count("today_layout_revision").notNull().default(0),
     todayOccurrence: label("today_occurrence"),
-    keptOpenDay: day("kept_open_day"),
-    keptOpenFrom: timeOfDay("kept_open_from"),
-    keptOpenUntil: timeOfDay("kept_open_until"),
   },
   (t) => [
-    check(
-      "floor_zones_kept_open_ck",
-      sql`(${t.keptOpenDay} is null and ${t.keptOpenFrom} is null and ${t.keptOpenUntil} is null) or (${t.keptOpenDay} is not null and ${t.keptOpenFrom} is not null and ${t.keptOpenUntil} is not null)`,
-    ),
-    check(
-      "floor_zones_kept_open_step_ck",
-      sql`substr(${t.keptOpenUntil}, 4, 2) in ('00', '15', '30', '45')`,
-    ),
     foreignKey({
       columns: [t.departmentId],
       foreignColumns: [departments.id],

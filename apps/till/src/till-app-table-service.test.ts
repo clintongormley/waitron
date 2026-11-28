@@ -174,7 +174,7 @@ function zoneOffers(
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,
@@ -3606,7 +3606,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           periodName: null,
           periodOccurrenceKey: null,
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
         menus: (zoneId === floorZone.id ? diningOffers : counterOffers).menus.map((menu) => ({
           menuId: menu.id,
@@ -3660,7 +3660,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           periodName: null,
           periodOccurrenceKey: null,
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
         menus:
           zoneId === floorZone.id

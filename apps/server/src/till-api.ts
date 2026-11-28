@@ -14,7 +14,6 @@ import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountLineCancelApi } from "./line-cancel-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountFloorTodayApi } from "./floor-today-api.js";
-import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountPartyAllergyApi } from "./party-allergy-api.js";
 import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
@@ -138,7 +137,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountOrderKitchenNoteApi(app, deps, log, run);
   mountPartyAllergyApi(app, deps, log, run);
-  mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
   mountFloorTodayApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);

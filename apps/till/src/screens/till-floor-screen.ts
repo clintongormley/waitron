@@ -10,7 +10,7 @@ import {
 } from "../widgets/floor-bar.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "../state/live-gate.js";
-import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
+import { servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
 import {
   LitElement,
@@ -2421,12 +2421,11 @@ export class TillFloorScreen extends LitElement {
           return zone?.closesAt
             ? html`<div class="service-period" data-zone-control>
                 <p role="status">
-                  ${fill(t(zone.closed ? "keep_open.zone_closed" : "keep_open.zone_closes"), {
+                  ${fill(t(zone.closed ? "floor.zone_closed_now" : "floor.zone_closes_today"), {
                     zone: zone.name,
                     time: zone.closesAt,
                   })}
                 </p>
-                ${zoneKeepOpen({ zoneId: zone.id, zoneName: zone.name, closesAt: zone.closesAt, running: !zone.closed, extendedUntil: null }, this.api, zone.id)}
               </div>`
             : nothing;
         })()}

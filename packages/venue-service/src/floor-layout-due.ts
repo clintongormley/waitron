@@ -91,8 +91,7 @@ const NO_LAYOUT: DueFloorLayout = {
   periodName: null,
 };
 
-/** The due run's period's set, else the department's default; a zone's own closed times and
- *  keep open play no part. */
+/** The due run's period's set, else the department's default; zone closed times do not affect the due layout. */
 export async function dueFloorLayouts(
   tx: Transaction,
   zones: readonly {

@@ -135,7 +135,7 @@ export interface BusinessDayStartPreview {
     startsAt?: string;
     endsAt?: string;
     rangeIndex: number;
-    reason: "range" | "endpoint_day" | "all_day" | "transition_strip" | "overlap" | "kept_open";
+    reason: "range" | "endpoint_day" | "all_day" | "transition_strip" | "overlap";
   }[];
   conflictCount: number;
   unlistedCount: number;

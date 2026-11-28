@@ -1117,7 +1117,7 @@ describe("venue service routing", () => {
         service: {
           open: true,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: "Always",
           periodOccurrenceKey: expect.any(String),
           keepOpen: {
@@ -2628,7 +2628,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: "Always",
           periodOccurrenceKey: expect.any(String),
           keepOpen: {
@@ -2728,7 +2728,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: "Always",
           periodOccurrenceKey: expect.any(String),
           keepOpen: {
@@ -2799,7 +2799,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: true,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: "Always",
           periodOccurrenceKey: expect.any(String),
           keepOpen: {
@@ -2870,7 +2870,7 @@ describe("zone offers from the published menus", () => {
         service: {
           open: false,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: null,
           periodOccurrenceKey: null,
           keepOpen: null,

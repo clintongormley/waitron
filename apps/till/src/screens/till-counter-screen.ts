@@ -215,7 +215,7 @@ export class TillCounterScreen extends LitElement {
     zoneOpen: true,
     periodName: null,
     periodOccurrenceKey: null,
-    zoneKeepOpen: null,
+    closedZoneName: null,
     keepOpen: null,
   };
   @property() departmentName = "";
@@ -395,7 +395,7 @@ export class TillCounterScreen extends LitElement {
     const balance = this.overpaidBalance;
     const overpaid = balance != null && overpaidOf(balance) !== null ? balance : null;
     return html`<div class="body grid-body">
-      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
+      ${servicePeriod(this.service, this.departmentName, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
         <div class="menu-column">
           <div class="menu-cell">

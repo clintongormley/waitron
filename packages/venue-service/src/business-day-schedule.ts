@@ -1,5 +1,5 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { asc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   departments,
   floorZones,
@@ -22,8 +22,7 @@ import {
 } from "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
 import { addDays } from "./hours-rules.js";
-import { minuteOfServiceDay, parseClosedRanges, rangeSpan } from "./service-day.js";
-import { serviceDayWallContext } from "./service-day-context.js";
+import { parseClosedRanges, rangeSpan } from "./service-day.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "@waitron/module";
@@ -290,43 +289,6 @@ export async function businessDayClockConflicts(
     unlistedCount: ranges.length - listed.size,
   };
 }
-/** A keep-open saved for the night before the change runs under the old changeover. */
-export async function keptOpenConflicts(
-  tx: Transaction,
-  before: BusinessDayClock,
-  candidate: BusinessDayClock,
-  effectiveBusinessDay: string,
-): Promise<BusinessDayClockConflict[]> {
-  const tonight = addDays(effectiveBusinessDay, -1);
-  const zones = await tx
-    .select({
-      departmentId: floorZones.departmentId,
-      departmentName: departments.name,
-      zoneId: floorZones.id,
-      zoneName: floorZones.name,
-      endsAt: floorZones.keptOpenUntil,
-    })
-    .from(floorZones)
-    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(eq(floorZones.keptOpenDay, tonight), eq(departments.active, true)))
-    .orderBy(
-      asc(departments.name),
-      asc(departments.id),
-      asc(floorZones.displayOrder),
-      asc(floorZones.name),
-      asc(floorZones.id),
-    );
-  const oldCutover = cutoverForBusinessDay(before, tonight);
-  const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
-  return zones
-    .filter((row) => (minuteOfServiceDay(row.endsAt!, oldCutover) || 1440) > newEnd)
-    .map((row) => ({
-      ...row,
-      endsAt: row.endsAt!.slice(0, 5),
-      rangeIndex: 0,
-      reason: "kept_open" as const,
-    }));
-}
 export async function assertBusinessDayClockChange(
   tx: Transaction,
   before: BusinessDayClock,
@@ -334,14 +296,7 @@ export async function assertBusinessDayClockChange(
   effectiveBusinessDay: string,
 ): Promise<void> {
   const result = await businessDayClockConflicts(tx, before, candidate, effectiveBusinessDay);
-  const keptOpen = await keptOpenConflicts(tx, before, candidate, effectiveBusinessDay);
-  const conflictCount = result.conflictCount + keptOpen.length;
-  if (conflictCount > 0)
-    throw new AppError("venue.business_day_hours_conflict", {
-      conflicts: [...result.conflicts, ...keptOpen],
-      conflictCount,
-      unlistedCount: result.unlistedCount,
-    });
+  if (result.conflictCount > 0) throw new AppError("venue.business_day_hours_conflict", result);
 }
 export async function assertBusinessDayScheduleWrite(
   tx: Transaction,

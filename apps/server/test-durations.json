@@ -1190,7 +1190,6 @@
   "src/till-api.expo-board.test.ts": 2.9,
   "src/till-api.fiscal-sale-paths.test.ts": 36.8,
   "src/till-api.groups.test.ts": 9,
-  "src/till-api.keep-open.test.ts": 7.7,
   "src/till-api.kitchen-note.test.ts": 5.3,
   "src/till-api.move-bill.test.ts": 11.3,
   "src/till-api.move-dishes.test.ts": 3.4,

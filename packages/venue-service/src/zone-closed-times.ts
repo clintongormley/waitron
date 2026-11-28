@@ -10,8 +10,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { resolveZoneContext, wireTime } from "./operations.js";
-import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
+import { resolveZoneContext } from "./operations.js";
+import { parseClosedRanges, type ClosedRange, rangeSpanInDay } from "./service-day.js";
 import {
   momentAt,
   readDayPlan,
@@ -161,43 +161,12 @@ export async function readZoneClosedTimes(
   });
 }
 
-export function withoutZoneExtension(
-  ranges: readonly ClosedRange[],
-  extension: ClosedRange | null,
-  cutover: string,
-): ClosedRange[] {
-  if (extension === null) return [...ranges];
-  const extended = rangeSpan(extension, cutover);
-  return ranges.flatMap((range) => {
-    const span = rangeSpan(range, cutover);
-    if (span.end <= extended.start || span.start >= extended.end) return [range];
-    return [
-      ...(span.start < extended.start
-        ? [{ startsAt: range.startsAt, endsAt: extension.startsAt }]
-        : []),
-      ...(span.end > extended.end ? [{ startsAt: extension.endsAt, endsAt: range.endsAt }] : []),
-    ];
-  });
-}
-
-export function zoneExtensionForRange(
-  extension: ClosedRange | null,
-  closure: ClosedRange,
-  cutover: string,
-): ClosedRange | null {
-  if (extension === null) return null;
-  const span = rangeSpan(extension, cutover);
-  const closed = rangeSpan(closure, cutover);
-  return span.start < closed.end && span.end > closed.start ? extension : null;
-}
-
-export interface ZoneClosure {
+interface ZoneClosure {
+  name: string;
   ranges: ClosedRange[];
-  extension: ClosedRange | null;
 }
 
-/** Each zone's closures and saved extension on the business day `at` falls in, read once for
- *  every zone named, or every service zone when none are. */
+/** The day's closures for the named zones, or all service zones when no ids are supplied. */
 export async function zoneClosureDays(
   tx: Transaction,
   zoneIds: readonly string[] | undefined,
@@ -207,7 +176,7 @@ export async function zoneClosureDays(
   const clock = prepared?.clock ?? (await readVenueClock(tx));
   const moment = momentAt(at, clock, prepared);
   const zones = new Map<string, ZoneClosure>();
-  if (moment === null) return { clock, moment, dayContext: null, cutover: clock.dayCutover, zones };
+  if (moment === null) return { moment, dayContext: null, zones };
   const dayContext = serviceDayContext(clock, moment.businessDay);
   const plan =
     (prepared?.moment?.businessDay === moment.businessDay ? prepared.plan : undefined) ??
@@ -220,9 +189,7 @@ export async function zoneClosureDays(
           .select({
             zoneId: floorZones.id,
             departmentId: floorZones.departmentId,
-            keptOpenDay: floorZones.keptOpenDay,
-            startsAt: floorZones.keptOpenFrom,
-            endsAt: floorZones.keptOpenUntil,
+            name: floorZones.name,
           })
           .from(floorZones)
           .innerJoin(departments, eq(departments.id, floorZones.departmentId))
@@ -237,38 +204,20 @@ export async function zoneClosureDays(
   const parentOf = new Map(parents.map((zone) => [zone.zoneId, zone]));
   for (const [zoneId, days] of closures) {
     const parent = parentOf.get(zoneId);
+    if (parent === undefined) continue;
     zones.set(zoneId, {
+      name: parent.name,
       ranges: closuresInHours(
-        parent === undefined
-          ? []
-          : (hours.get(parent.departmentId)?.get(moment.businessDay)?.ranges ?? []),
+        hours.get(parent.departmentId)?.get(moment.businessDay)?.ranges ?? [],
         days.get(moment.businessDay) ?? [],
         dayContext,
       ),
-      extension:
-        parent?.keptOpenDay !== moment.businessDay
-          ? null
-          : { startsAt: wireTime(parent.startsAt!), endsAt: wireTime(parent.endsAt!) },
     });
   }
-  return { clock, moment, dayContext, cutover: dayContext.dayCutover, zones };
+  return { moment, dayContext, zones };
 }
 
 export type ZoneClosureDays = Awaited<ReturnType<typeof zoneClosureDays>>;
-
-export async function zoneClosureDay(
-  tx: Transaction,
-  zoneId: string,
-  at: Date,
-  prepared?: ServiceDay,
-) {
-  const { zones, ...day } = await zoneClosureDays(tx, [zoneId], at, prepared);
-  return {
-    ...day,
-    ranges: zones.get(zoneId)?.ranges ?? [],
-    extension: zones.get(zoneId)?.extension ?? null,
-  };
-}
 
 export function closedZoneIdsIn(days: ZoneClosureDays): ReadonlySet<string> {
   const closed = new Set<string>();
@@ -285,7 +234,7 @@ function activeClosure(days: ZoneClosureDays, closure: ZoneClosure): ClosedRange
     moment: { minute },
     dayContext,
   } = days;
-  return withoutZoneExtension(closure.ranges, closure.extension, days.cutover).find((range) => {
+  return closure.ranges.find((range) => {
     const { start, end } = rangeSpanInDay(range, dayContext);
     return start <= minute && minute < end;
   });
@@ -308,7 +257,8 @@ export async function assertZoneTakesNewOrders(
 ): Promise<void> {
   const days = await zoneClosureDays(tx, [zoneId], at);
   const closure = days.zones.get(zoneId);
-  const active = closure === undefined ? undefined : activeClosure(days, closure);
+  if (closure === undefined) return;
+  const active = activeClosure(days, closure);
   if (active === undefined) return;
   if (zoneConfirmation?.zoneId === zoneId) {
     await recordActivity(tx, {
@@ -320,13 +270,9 @@ export async function assertZoneTakesNewOrders(
     });
     return;
   }
-  const [zone] = await tx
-    .select({ name: floorZones.name })
-    .from(floorZones)
-    .where(eq(floorZones.id, zoneId));
   throw new AppError("service_zone.closed", {
     zoneId,
-    closedZoneName: zone!.name,
+    closedZoneName: closure.name,
     closesAt: active.startsAt,
   });
 }

@@ -243,7 +243,7 @@ it("says the read failed, not that the zone has no tables, when the re-read afte
           periodName: null,
           periodOccurrenceKey: null,
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
         context: {
           departmentName: "Restaurant",

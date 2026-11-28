@@ -146,14 +146,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Extras cannot be moved separately",
     es: "Los extras no se pueden pasar por separado",
   },
-  "zone_extension.invalid": {
-    en: "Choose a later time, in 15-minute steps, before the end of the day.",
-    es: "Elige una hora posterior, en pasos de 15 minutos, antes del final del día.",
-  },
-  "zone_extension.not_allowed": {
-    en: "This area cannot stay open after its department closes, or has no closing time left today.",
-    es: "Esta zona no puede seguir abierta cuando su departamento ha cerrado, o hoy ya no tiene hora de cierre.",
-  },
   "station.destination_invalid": {
     en: "That station cannot take the work now. Choose another.",
     es: "Esa estación no puede recibir el trabajo ahora. Elige otra.",

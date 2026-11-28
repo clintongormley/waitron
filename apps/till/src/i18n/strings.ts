@@ -507,14 +507,8 @@ export const en = {
   "clock.recorded_out": "Clocked out",
   "clock.logout_failed": "Your finish was recorded. This device is locked.",
 
-  "keep_open.zone_button": "Keep {zone} open later",
-  "keep_open.zone_heading": "Keep {zone} open later today",
-  "keep_open.zone_closes": "{zone} closes at {time} today.",
-  "keep_open.zone_closed": "{zone} is closed now.",
-  "keep_open.until": "Until",
-  "keep_open.end_of_day": "End of the day ({time})",
-  "keep_open.save": "Keep open",
-  "keep_open.stop": "End the extension",
+  "floor.zone_closes_today": "{zone} closes at {time} today.",
+  "floor.zone_closed_now": "{zone} is closed now.",
 
   "station_today.open": "Open",
   "station_today.closed": "Closed for today",
@@ -3129,14 +3123,8 @@ export const es: Record<StringKey, string> = {
   "clock.recorded_out": "Salida registrada",
   "clock.logout_failed": "Tu salida está registrada. Este dispositivo está bloqueado.",
 
-  "keep_open.zone_button": "Ampliar el horario de {zone}",
-  "keep_open.zone_heading": "Ampliar hoy el horario de {zone}",
-  "keep_open.zone_closes": "Hoy {zone} cierra a las {time}.",
-  "keep_open.zone_closed": "{zone} está cerrada ahora.",
-  "keep_open.until": "Hasta",
-  "keep_open.end_of_day": "Fin del día ({time})",
-  "keep_open.save": "Ampliar",
-  "keep_open.stop": "Quitar la ampliación",
+  "floor.zone_closes_today": "Hoy {zone} cierra a las {time}.",
+  "floor.zone_closed_now": "{zone} está cerrada ahora.",
 
   "station_today.open": "Abierta",
   "station_today.closed": "Cerrada por hoy",

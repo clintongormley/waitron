@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "49fba495-2db6-4913-9e8e-5652cbb00a19",
+  "id": "add09670-bbe9-4067-861c-dde51f9f5622",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4140,20 +4140,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "set_menu_reserved_line_id": {
-          "name": "set_menu_reserved_line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_menu_reserved_place": {
-          "name": "set_menu_reserved_place",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -4268,10 +4254,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "order_draft_lines_set_menu_ck": {
-          "name": "order_draft_lines_set_menu_ck",
-          "value": "(\"order_draft_lines\".\"set_menu_reserved_line_id\" is null and \"order_draft_lines\".\"set_menu_reserved_place\" is null)\n        or (\"order_draft_lines\".\"set_menu_id\" is not null and \"order_draft_lines\".\"set_menu_reserved_line_id\" is not null\n          and \"order_draft_lines\".\"set_menu_reserved_place\" is not null)"
-        },
         "order_draft_lines_quantity_ck": {
           "name": "order_draft_lines_quantity_ck",
           "value": "\"order_draft_lines\".\"quantity\" > 0"
@@ -4608,27 +4590,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "kept_open_day": {
-          "name": "kept_open_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "kept_open_from": {
-          "name": "kept_open_from",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "kept_open_until": {
-          "name": "kept_open_until",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -4680,14 +4641,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "floor_zones_kept_open_ck": {
-          "name": "floor_zones_kept_open_ck",
-          "value": "(\"floor_zones\".\"kept_open_day\" is null and \"floor_zones\".\"kept_open_from\" is null and \"floor_zones\".\"kept_open_until\" is null) or (\"floor_zones\".\"kept_open_day\" is not null and \"floor_zones\".\"kept_open_from\" is not null and \"floor_zones\".\"kept_open_until\" is not null)"
-        },
-        "floor_zones_kept_open_step_ck": {
-          "name": "floor_zones_kept_open_step_ck",
-          "value": "substr(\"floor_zones\".\"kept_open_until\", 4, 2) in ('00', '15', '30', '45')"
-        },
         "floor_zones_order_start_ck": {
           "name": "floor_zones_order_start_ck",
           "value": "\"floor_zones\".\"order_start\" in ('table', 'counter')"

@@ -385,7 +385,8 @@ the season painter continues saving through the season-week route._
 - **Zone and period extensions remain separate (A366 slice 3 Part B, 2026-10-09).** Cancelling
   a department's period extension does not delete its zones' overrides. **2026-10-24, A789 slice
   2:** the period extension is gone; a zone extension is measured against its department's own
-  hours for the day, and the zone line still reports its own closure.
+  hours for the day, and the zone line still reports its own closure. **2026-11-28, A1626 PR 2:**
+  zone extensions are retired too. Change the day’s hours in Calendar.
 
 - **A department row's arrow (A301, #1335, A261 step 2).** Departments start open, unlike the
   Products, menu Structure and menu prices trees, which start closed, and a folded department is

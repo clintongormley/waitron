@@ -630,8 +630,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "kitchen_notices_quantity_ck",
   "kitchen_notices_rerouted_to_ck",
   "kitchen_stations_thresholds_ordered",
-  "floor_zones_kept_open_ck",
-  "floor_zones_kept_open_step_ck",
   "kitchen_stations_closed_sends_to_ck",
   "kitchen_stations_closed_sends_to_not_self_ck",
   "kitchen_stations_warm_after_ck",

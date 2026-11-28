@@ -95,7 +95,7 @@ const zoneOffers = (id: string): ZoneOffers => ({
     periodName: null,
     periodOccurrenceKey: null,
     keepOpen: null,
-    zoneKeepOpen: null,
+    closedZoneName: null,
   },
   context: {
     dining: null,

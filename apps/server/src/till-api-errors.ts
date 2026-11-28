@@ -135,8 +135,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "menu.reset_required": 500,
   "device.forbidden_station": 403,
   "kitchen_notice.not_found": 404,
-  "zone_extension.invalid": 400,
-  "zone_extension.not_allowed": 409,
   "service_zone.not_found": 404,
   // The request is sound; the device's profile may not work in that zone.
   "service_zone.not_allowed": 403,

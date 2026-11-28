@@ -436,11 +436,8 @@ export class BusinessDayStartEditor extends LitElement {
         all_day: "business_day.conflict_all_day",
         transition_strip: "business_day.conflict_strip",
         overlap: "business_day.conflict_overlap",
-        kept_open: "business_day.conflict_kept_open",
       } as const
     )[conflict.reason];
-    const reason =
-      conflict.reason === "kept_open" ? fill(key, { time: conflict.endsAt ?? "" }) : t(key);
     const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
@@ -449,7 +446,7 @@ export class BusinessDayStartEditor extends LitElement {
       conflict.date === undefined ? weekday : formatDayAndMonth(conflict.date),
       conflict.periodName ?? conflict.periodId,
       conflict.startsAt && conflict.endsAt ? `${conflict.startsAt}–${conflict.endsAt}` : undefined,
-      reason,
+      t(key),
     ]
       .filter(Boolean)
       .join(" · ");
@@ -461,15 +458,10 @@ export class BusinessDayStartEditor extends LitElement {
   }
   #conflictLines(preview: BusinessDayStartPreview): {
     ranges: string[];
-    keptOpen: string[];
     count: number;
   } {
-    const distinct = (conflicts: BusinessDayStartPreview["conflicts"]) => [
-      ...new Set(conflicts.map((conflict) => this.#conflict(conflict))),
-    ];
-    const ranges = distinct(preview.conflicts.filter(({ reason }) => reason !== "kept_open"));
-    const keptOpen = distinct(preview.conflicts.filter(({ reason }) => reason === "kept_open"));
-    return { ranges, keptOpen, count: ranges.length + keptOpen.length + preview.unlistedCount };
+    const ranges = [...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))];
+    return { ranges, count: ranges.length + preview.unlistedCount };
   }
   override render() {
     const model = this.model;
@@ -580,7 +572,6 @@ export class BusinessDayStartEditor extends LitElement {
                                           </li>`
                                         : nothing
                                     }
-                                    ${conflicts!.keptOpen.map((line) => html`<li>${line}</li>`)}
                                   </ul>`
                               : nothing
                           }

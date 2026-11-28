@@ -1341,7 +1341,7 @@ export class TillTableOrderScreen extends LitElement {
     zoneOpen: true,
     periodName: null,
     periodOccurrenceKey: null,
-    zoneKeepOpen: null,
+    closedZoneName: null,
     keepOpen: null,
   };
   @property({ attribute: false }) api?: TillApi;
@@ -4400,16 +4400,16 @@ export class TillTableOrderScreen extends LitElement {
     if (this.service === null) return html`<div class="grid-region"></div>`;
     if (this.service?.open === false)
       return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
+        ${servicePeriod(this.service, this.departmentName, this.zoneName, this.receiptEquipment)}
       </div>`;
     if (!this.menus.some((menu) => menu.orderable))
       return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
+        ${servicePeriod(this.service, this.departmentName, this.zoneName, this.receiptEquipment)}
         <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
         ${this.setMenuCopies.length === 0 ? nothing : keyed(this.orderId, this.#menuBrowser(draft))}
       </div>`;
     return html`<div class="grid-region">
-      ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
+      ${servicePeriod(this.service, this.departmentName, this.zoneName, this.receiptEquipment)}
       ${keyed(this.orderId, this.#menuBrowser(draft))}
     </div>`;
   }

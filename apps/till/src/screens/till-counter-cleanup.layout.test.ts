@@ -152,7 +152,7 @@ for (const kind of ["counter", "table"] as const) {
         zoneOpen: true,
         periodName: "Late service",
         periodOccurrenceKey: "night",
-        zoneKeepOpen: null,
+        closedZoneName: null,
         keepOpen: {
           periodId: "late",
           periodName: "Late service",

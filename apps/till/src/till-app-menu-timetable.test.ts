@@ -85,7 +85,7 @@ function offers(
       periodName: null,
       periodOccurrenceKey: "fixture-period-1",
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,
@@ -129,7 +129,7 @@ function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenu
       periodName: null,
       periodOccurrenceKey: "fixture-period-1",
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     menus: menus.map((menu) => ({
       menuId: menu.id,
@@ -673,7 +673,7 @@ describe("period service at the counter", () => {
         periodName: "Breakfast",
         periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
     };
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn(async () => running) });
@@ -729,7 +729,7 @@ describe("period service at the counter", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: TERRACE_OFFERS.menus.map((menu) => ({ ...menu, orderable: false })),
     };
@@ -789,7 +789,7 @@ describe("period service at the counter", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       defaultMenuId: null,
       menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, orderable: false, isDefault: false })),
@@ -825,7 +825,7 @@ describe("period service at the counter", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       defaultMenuId: null,
       menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, isDefault: false, orderable: false })),
@@ -857,7 +857,7 @@ describe("period service at the counter", () => {
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     };
     const endedAs = (name: string | null) => (menuId: string) =>
       menuId === "desayunos" ? name : null;
@@ -908,7 +908,7 @@ describe("period service at the counter", () => {
         periodName: "Breakfast",
         periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: BAR_OFFERS.menus.map((menu) => ({ ...menu, orderable: menu.id === "desayunos" })),
     };
@@ -921,7 +921,7 @@ describe("period service at the counter", () => {
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: BAR_OFFERS.menus.map((menu) => ({
         ...menu,
@@ -1513,7 +1513,7 @@ describe("an open table's order", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: DINING_ROOM_OFFERS.menus.map((menu) => ({ ...menu, orderable: false })),
     };
@@ -1557,7 +1557,7 @@ describe("an open table's order", () => {
         periodName: "Breakfast",
         periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
         ...menu,
@@ -1572,7 +1572,7 @@ describe("an open table's order", () => {
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       defaultMenuId: "almuerzo",
       menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
@@ -1651,7 +1651,7 @@ describe("an open table's order", () => {
         periodName: "Breakfast",
         periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: DINING_ROOM_OFFERS.menus.map((menu) => ({
         ...menu,
@@ -1789,7 +1789,7 @@ describe("a dish whose period ended earlier today", () => {
     periodName: "Breakfast",
     periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
     keepOpen: null,
-    zoneKeepOpen: null,
+    closedZoneName: null,
   };
   const lunchRunning = {
     ...breakfastRunning,

@@ -193,41 +193,6 @@ describe("zone service rules on floor_zones", () => {
   });
 });
 
-describe("today's zone keep-open constraints", () => {
-  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-  it.each([
-    ["2026-11-12", null, null, "floor_zones_kept_open_ck"],
-    [null, "21:00", "22:00", "floor_zones_kept_open_ck"],
-    ["2026-11-12", "21:00", "22:10", "floor_zones_kept_open_step_ck"],
-  ])(
-    "refuses incomplete or off-quarter-hour keep-open %s / %s / %s",
-    async (day, from, until, constraint) => {
-      const zone = await seedZone(suite.db, { name: "Terrace" });
-      const error = await captureError(() =>
-        suite.db.execute(sql`update floor_zones
-      set kept_open_day = ${day}, kept_open_from = ${from}, kept_open_until = ${until} where id = ${zone.id}`),
-      );
-      expect(engineErrorMessage(error)).toContain(constraint);
-    },
-  );
-  it("stores a quarter-hour keep-open and clears all three values", async () => {
-    const zone = await seedZone(suite.db, { name: "Terrace" });
-    for (const [day, from, until] of [
-      ["2026-11-12", "21:00", "22:15"],
-      [null, null, null],
-    ]) {
-      await suite.db.execute(
-        sql`update floor_zones set kept_open_day=${day}, kept_open_from=${from}, kept_open_until=${until} where id=${zone.id}`,
-      );
-      expect(
-        suite.db.get(
-          sql`select kept_open_day, kept_open_from, kept_open_until from floor_zones where id=${zone.id}`,
-        ),
-      ).toEqual({ kept_open_day: day, kept_open_from: from, kept_open_until: until });
-    }
-  });
-});
-
 describe("today's map on floor_zones", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   it("a new zone reads revision zero and no business day", async () => {

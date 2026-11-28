@@ -2045,14 +2045,14 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "added_at", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
       );
-      for (const [name, type] of [
-        ["set_menu_id", "TEXT"],
-        ["set_menu_reserved_line_id", "TEXT"],
-        ["set_menu_reserved_place", "INTEGER"],
-      ] as const) {
-        draftLines.columns.push({ name, type, notnull: 0, dflt_value: null, pk: 0 });
-        for (const row of Object.values(draftLines.rows)) row[name] = null;
-      }
+      draftLines.columns.push({
+        name: "set_menu_id",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      for (const row of Object.values(draftLines.rows)) row.set_menu_id = null;
       const draftLineKeys = draftLines.foreignKeys;
       draftLineKeys.splice(
         4,
@@ -2290,16 +2290,6 @@ for (const locale of ["en", "es"] as const) {
           },
         },
         {
-          from: "zone_extensions",
-          into: "floor_zones",
-          match: { from: "zone_id", into: "id" },
-          columns: {
-            business_day: "kept_open_day",
-            starts_at: "kept_open_from",
-            ends_at: "kept_open_until",
-          },
-        },
-        {
           from: "floor_today_tables",
           into: "dining_tables",
           match: { from: "table_id", into: "id" },
@@ -2502,14 +2492,9 @@ for (const locale of ["en", "es"] as const) {
       phases[phase] = Object.fromEntries(
         Object.entries(phases[phase]!).sort(([a], [b]) => a.localeCompare(b)),
       );
-      const zoneColumns = expected[phase].tables.floor_zones!.columns;
-      const todayZoneColumns = zoneColumns.splice(-5);
-      todayZoneColumns.find((column) => column.name === "today_business_day")!.notnull = 0;
-      zoneColumns.splice(
-        zoneColumns.findIndex((column) => column.name === "kept_open_day"),
-        0,
-        ...todayZoneColumns,
-      );
+      expected[phase].tables.floor_zones!.columns.find(
+        (column) => column.name === "today_business_day",
+      )!.notnull = 0;
       expected[phase].tables.floor_zones!.foreignKeys = expected[phase].tables
         .floor_zones!.foreignKeys.reverse()
         .map((key, id) => ({ ...key, id }));
@@ -2547,14 +2532,8 @@ for (const locale of ["en", "es"] as const) {
       );
       delete phases[phase]!.floor_today_tables;
       delete phases[phase]!.floor_today_zones;
-      for (const table of ["floor_zones", "kitchen_stations"])
-        for (const column of expected[phase].tables[table]!.columns)
-          if (
-            ["kept_open_day", "kept_open_from", "kept_open_until", "closed_on_day"].includes(
-              column.name,
-            )
-          )
-            column.notnull = 0;
+      stations.columns.find((column) => column.name === "closed_on_day")!.notnull = 0;
+      delete expected[phase].tables.zone_extensions;
       delete phases[phase]!.zone_extensions;
       delete phases[phase]!.station_day_states;
       delete phases[phase]!.department_floor_plan_sets;

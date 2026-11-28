@@ -191,21 +191,6 @@ export interface StationMoveAnswer {
   personNotSignedIn?: true;
 }
 
-export interface KeepOpenZone {
-  id: string;
-  name: string;
-  endsAt: string;
-  running: boolean;
-  extendedUntil: string | null;
-  dayEndsAt: string;
-  choices: readonly string[];
-}
-
-export interface ZoneExtensionWrite {
-  until: string | null;
-  override?: { personId: string; pin: string };
-}
-
 export interface StationTodayWrite {
   openDishes?: "send" | "leave";
   state: "open" | "closed";
@@ -543,16 +528,6 @@ export class KitchenApi extends DeviceSessionApi {
   ): Promise<void> {
     return this.#request(
       `/api/device/stations/${encodeURIComponent(stationId)}/today`,
-      "PUT",
-      body,
-    );
-  }
-  keepOpen(zoneId: string): Promise<{ zone: KeepOpenZone | null }> {
-    return this.#request(`/api/service-zones/${encodeURIComponent(zoneId)}/keep-open`, "GET");
-  }
-  keepZoneOpen(zoneId: string, body: ZoneExtensionWrite): Promise<void> {
-    return this.#request(
-      `/api/service-zones/${encodeURIComponent(zoneId)}/zone-extension`,
       "PUT",
       body,
     );

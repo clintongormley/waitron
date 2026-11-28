@@ -75,7 +75,7 @@ export async function mountEquipmentApp(
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
     }),
     setServiceZone: vi.fn(),

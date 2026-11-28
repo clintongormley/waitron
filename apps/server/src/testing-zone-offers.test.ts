@@ -181,7 +181,7 @@ describe("offerProducts", () => {
         zoneOpen: true,
         periodName: "Always",
         periodOccurrenceKey: expect.any(String),
-        zoneKeepOpen: null,
+        closedZoneName: null,
         keepOpen: {
           periodId: savedPeriod!.id,
           periodName: "Always",

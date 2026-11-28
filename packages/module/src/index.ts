@@ -68,7 +68,6 @@ export type {
   KitchenNote,
   KitchenNoteSnapshot,
   StationNoticeDish,
-  KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,
   PrintedDepartmentReceipt,

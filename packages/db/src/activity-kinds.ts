@@ -72,18 +72,6 @@ export interface ActivityKindData {
   readonly "job_role.member_removed": { readonly staffRoleId: string; readonly name: string };
 
   readonly "zone.closed_action_confirmed": { readonly closesAt: string };
-  readonly "zone.kept_open": {
-    readonly businessDay: string;
-    readonly from: string;
-    readonly until: string;
-    readonly authorizedBy: string;
-  };
-  readonly "zone.keep_open_ended": {
-    readonly businessDay: string;
-    readonly from: string;
-    readonly until: string;
-    readonly authorizedBy: string;
-  };
   readonly "station.closed_for_day": {
     readonly businessDay: string;
     readonly sendsTo: string | null;
@@ -209,8 +197,6 @@ export const ACTIVITY_KINDS = {
   "job_role.member_added": { subject: "person" },
   "job_role.member_removed": { subject: "person" },
   "zone.closed_action_confirmed": { subject: "zone" },
-  "zone.kept_open": { subject: "zone" },
-  "zone.keep_open_ended": { subject: "zone" },
   "station.closed_for_day": { subject: "station" },
   "station.reopened": { subject: "station" },
   "handover.return_clash_accepted": { subject: "node" },

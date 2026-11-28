@@ -58,15 +58,12 @@ function request(taxId: string): VenueRequest {
     },
   };
 }
-it("exports neither today's keep-open nor station closure, and imports both as open", async () => {
+it("leaves today's floor changes and station closure behind when importing", async () => {
   const prepared = await applyHistoricalTestVenue(planVenue(request("B44001122"), ALL_MODULES), {
     db: source.db,
     modules: ALL_MODULES,
   });
   await withTransaction(source.db, async (tx) => {
-    await tx.execute(
-      sql`update floor_zones set kept_open_day='2026-11-12', kept_open_from='22:00:00', kept_open_until='23:30:00'`,
-    );
     const [zone] = await tx.select({ id: floorZones.id }).from(floorZones);
     await setZoneSalePolicyOverride(tx, zone!.id, "orderStart", "table");
     const [master] = await tx
@@ -133,9 +130,6 @@ it("exports neither today's keep-open nor station closure, and imports both as o
   ).toThrowError(expect.objectContaining({ code: "setup.configuration_outdated" }));
   expect(bundle.tables.floor_zones!.length).toBeGreaterThan(0);
   expect(bundle.tables.kitchen_stations!.length).toBeGreaterThan(0);
-  for (const row of bundle.tables.floor_zones!)
-    for (const column of ["kept_open_day", "kept_open_from", "kept_open_until"])
-      expect(row).not.toHaveProperty(column);
   for (const row of bundle.tables.floor_zones!)
     for (const column of [
       "today_business_day",
@@ -229,15 +223,6 @@ it("exports neither today's keep-open nor station closure, and imports both as o
   ]);
   expect(target.db.all(sql`select today_business_day from floor_zones`)).toEqual(
     bundle.tables.floor_zones!.map(() => ({ today_business_day: null })),
-  );
-  expect(
-    target.db.all(sql`select kept_open_day, kept_open_from, kept_open_until from floor_zones`),
-  ).toEqual(
-    bundle.tables.floor_zones!.map(() => ({
-      kept_open_day: null,
-      kept_open_from: null,
-      kept_open_until: null,
-    })),
   );
   expect(
     target.db.all(sql`select closed_on_day, closed_sends_to_station_id from kitchen_stations`),

@@ -8,6 +8,9 @@ import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activityLog,
+  departments,
+  deviceProfiles,
+  devices,
   parties,
   partyTables,
   workingOrders,
@@ -487,9 +490,44 @@ describe("closed zones take no new service", () => {
       const answer = await request(v, "GET", "/api/zones");
       expect(answer.status).toBe(200);
       expect(answer.json).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: v.zoneId, closed })]),
+        expect.arrayContaining([
+          expect.objectContaining({ id: v.zoneId, closed, closesAt: "23:30" }),
+        ]),
       );
     }
+  });
+
+  it("lists a floor zone of an inactive department with a null closing time", async () => {
+    const v = await venue();
+    at("23:45");
+    const before = await request(v, "GET", "/api/zones");
+    expect(before.status).toBe(200);
+    expect(before.json).toContainEqual(
+      expect.objectContaining({ id: v.zoneId, closed: true, closesAt: "23:30" }),
+    );
+    await withTransaction(suite.db, async (tx) => {
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, v.deviceId));
+      await tx
+        .update(deviceProfiles)
+        .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
+        .where(eq(deviceProfiles.id, device!.profileId));
+      const [zone] = await tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, v.zoneId));
+      await tx
+        .update(departments)
+        .set({ active: false })
+        .where(eq(departments.id, zone!.departmentId));
+    });
+    const answer = await request(v, "GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    expect(answer.json).toContainEqual(
+      expect.objectContaining({ id: v.zoneId, closed: false, closesAt: null, serviceMode: null }),
+    );
   });
 });
 

@@ -253,9 +253,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
       name: "floor_zones",
       leaveBehindWhenFalse: "active",
       omit: [
-        "kept_open_day",
-        "kept_open_from",
-        "kept_open_until",
         "today_business_day",
         "today_revision",
         "today_set_id",

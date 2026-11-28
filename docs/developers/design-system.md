@@ -5592,11 +5592,10 @@ Closing asks where new work goes; it starts with the station's "When closed for 
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
 A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
 deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
-The counter and table order screens show the
-period's end as status text. A zone with a closed time today that has not yet ended, whether it
-closes later or is closed now, has Keep {zone} open later, whose dialog offers server-provided times and allows ending an existing extension. Both destination and endpoint dialogs
-use the shared draft scope and save-action state, with reconnect cases in their
-`*.unsaved.test.ts` suites under `apps/till/src/widgets/`.
+The Counter and table order screens show the period's end or name the closed zone in a status line.
+On the floor, the selected zone shows its next scheduled closing time, or says it is closed now.
+The station destination dialog uses the shared draft scope and save-action state. Its reconnect
+cases are in `apps/till/src/widgets/station-today-dialog.unsaved.test.ts`.
 Routes shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a column
 for Every zone and each active service zone, and rows in a tree under All categories, with No
 category last while a product has no category or that row holds a saved choice. A row's label is its

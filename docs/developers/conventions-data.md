@@ -677,9 +677,8 @@ and works out each from that date's own plan, season and special day (`readDayPl
 refuses a `week` query (`packages/venue-service/src/station-service-times.ts`). The staffing season
 painter instead passes the selected season's weekdays directly to the shared reader. The special-day
 staffing painter passes the edited special day's own plan, including when another repeating day
-would stand on one of its dates. All requested stations share the schedule and routing reads. Planning
-ignores today's station closures and kept-open extensions. Every active station, including the default, answers dated department ranges through the same
-planner. `StationServiceTimes` carries only `days`. Calendar day boxes reuse the same passive
+would stand on one of its dates. All requested stations share the schedule and routing reads. Every active station, including the
+default, answers dated department ranges through the same planner. `StationServiceTimes` carries only `days`. Calendar day boxes reuse the same passive
 batch or selected station read for managers and viewers. Year always uses the batch. A deleted station's
 id is refused (`station.not_found`). The default station's staffing guides also show scheduled demand from
 period menus and untimed routes.
@@ -889,9 +888,8 @@ named below. The season painter saves through `PUT …/seasons/:seasonId/weeks`;
 department hours. `zoneClosureDays` intersects the layered zone closures with the department's
 resolved hours for the actual business day, sharing one day plan and batched department read.
 A department without hours, including an inactive one, contributes no effective zone closure.
-Saved keep-open extensions are subtracted after that intersection. Time shape, permitted endpoints,
-overlap, skipped-time, ownership and business-day-change checks remain at their existing writers.
-The reader cases are in `zone-closed-times.test.ts` and `keep-open.test.ts`; route and import
+Time shape, permitted endpoints, overlap, skipped-time, ownership and business-day-change checks
+remain at their existing writers. The reader cases are in `zone-closed-times.test.ts`; route and import
 acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.test.ts` and
 `configuration-transfer.test.ts` under `packages/venue-service/src/`.
 
@@ -2338,38 +2336,26 @@ The station-hour assertions were retained at that checkpoint. **2026-10-10:** sl
 retires their subject, the station-hours schema and its writers. The menu endpoint checks remain.
 These experiments are not a complete-slice result.
 
-### Today's station destination and zone extension
+### Today's station destination
 
 A station's by-hand state and chosen destination belong to one business date. A closed station
 follows that destination, then the active venue default if the destination is missing or the walk
 cycles. A deleted station is not offered as a destination. With no active default, a failed walk
 has no replacement. Opening the station does not move already sent work back.
-The station row holds `closed_on_day` and `closed_sends_to_station_id`; the zone row holds
-`kept_open_day`, `kept_open_from` and `kept_open_until`. A day other than today's business date
-reads as unset. Configuration exports omit all five columns, so a new venue starts without
-today's service choices.
+The station row holds `closed_on_day` and `closed_sends_to_station_id`. A day other than today's
+business date reads as unset. Configuration exports omit both columns, so a new venue starts with
+its stations open. The station-today controls record `station.closed_for_day` and `station.reopened`
+in `activity_log`, with the acting person and device recorded separately from the authoriser.
 
-Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
-`routing-store.test.ts`, `keep-open.test.ts`,
-and `configuration-transfer.floor-kitchen.test.ts`. Changes made through the keep-open and
-station-today controls are written to `activity_log` as `zone.kept_open`, `zone.keep_open_ended`,
-`station.closed_for_day` or `station.reopened`; the acting person and device are recorded separately
-from the authoriser.
+Focused checks are in `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
+`routing-store.test.ts`, `todays-choices-history.test.ts` and
+`apps/server/src/configuration-transfer.floor-kitchen.test.ts`.
 
-To keep a zone open through its next closed range, choose **Keep Terrace open later** beside
-the till's service line, in its closed-zone notice or on the floor's selected-zone bar. Choose
-a later quarter-hour and confirm; staff without the service permission can ask a manager to
-approve with a PIN. **End the extension** removes today's zone override. The server checks that
-the department stays open throughout the requested range: a zone can be kept open only while its
-department's own hours for the day run (`zone_extension.not_allowed`, `department_closed`).
-The zone override lifts its closed times; it changes no menu timetable or price.
-
-The real-route cases in `apps/server/src/till-api.keep-open.test.ts` seat a table during the
-zone's extension and refuse it at its exact end, and refuse an extension beyond the department's
-closing time without writing. `packages/venue-service/src/keep-open.test.ts` checks a department
-gap, an extension spanning two closed ranges, and the pricing path without zone-extension queries. The till's
-`zone-keep-open.test.ts`, `zone-keep-open-screens.test.ts` and menu-refresh cases check the
-zone write, manager retry and refreshed controls.
+**2026-11-28, A1626 PR 2.** The till asks before seating guests or adding dishes in a closed
+zone. Use Calendar to change the day's scheduled hours. The earlier Keep open behavior and its
+tests are under “Today's station destination and zone extension” at
+`e16bc0c3b2cce034a9db5b0f472fb8fe91f80cbd`. The FK2 fixture converter and the November 25
+Till client split inventory retain the shapes used at those checkpoints.
 
 **Transactions**
 
@@ -2494,8 +2480,7 @@ transfer's `afterImport`).
 Which set is due at a moment is venue-service's answer (`dueFloorLayouts`,
 `packages/venue-service/src/floor-layout-due.ts`): the set of the department's period running,
 else the next run later today, else the last that ran, never one starting earlier than the
-recorded run while that still matches; with no run, the department's default. A zone's own closed
-times and keep open play no part. Every reset records what it was made from on
+recorded run while that still matches; with no run, the department's default. The department's run selects the layout even while the zone is closed. Every reset records what it was made from on
 `floor_zones`: `today_business_day`, `today_set_id`, `today_layout_revision` and the run's `today_occurrence`
 (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). The zones read offers Update layout
 while the due set, or its revision, differs from today's record (`layoutOffer`).
@@ -2695,7 +2680,7 @@ Delete succeed. A successful hierarchy Delete clears its saved, today, reset and
 including tables with no today row and reset targets with no live table. Shared menus, venue dates
 and holidays remain; owned routing, periods, opening overrides, transfer settings and service steps are removed.
 The preview does not list the deleted item's own service periods and their staff menu settings,
-its hours and zone closed times, its service settings, service steps or zone extensions, though
+its hours and zone closed times, its service settings or its service steps, though
 Delete removes them (owner, 2026-11-14, A1528).
 
 Ordering profiles keep one department. A nonretired ordering profile bound to the department

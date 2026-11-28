@@ -161,7 +161,7 @@ it("keeps the first counter menu choice focused in one handheld row", async () =
         periodName: "Lunch",
         periodOccurrenceKey: "lunch",
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
     });
     const browser = menuBrowser(el);
@@ -216,7 +216,7 @@ describe("closed zone ordering", () => {
           periodName: "Lunch",
           periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
@@ -234,7 +234,7 @@ describe("closed zone ordering", () => {
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       };
       await el.updateComplete;
       await cards.updateComplete;
@@ -567,7 +567,7 @@ it.each(retirementLooks)(
               periodName: null,
               periodOccurrenceKey: null,
               keepOpen: null,
-              zoneKeepOpen: null,
+              closedZoneName: null,
             },
             takesCash: true,
             stage: state === "collect" ? "collect" : "order",

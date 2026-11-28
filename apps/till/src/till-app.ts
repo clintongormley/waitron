@@ -1797,19 +1797,6 @@ function keepOpenMoved(
   );
 }
 
-function zoneKeepOpenMoved(
-  next: MenuStateAnswer["service"]["zoneKeepOpen"],
-  current: MenuStateAnswer["service"]["zoneKeepOpen"] | undefined,
-): boolean {
-  return (
-    next?.zoneId !== current?.zoneId ||
-    next?.zoneName !== current?.zoneName ||
-    next?.closesAt !== current?.closesAt ||
-    next?.running !== current?.running ||
-    next?.extendedUntil !== current?.extendedUntil
-  );
-}
-
 /**
  * Owns the one {@link WorkingOrderStore}, which belongs to the till and survives a change of operator,
  * and the one {@link TillApi}. Screens emit composed events; this element decides what happens next. A
@@ -5835,7 +5822,7 @@ export class TillApp extends LitElement {
             periodName: null,
             periodOccurrenceKey: null,
             keepOpen: null,
-            zoneKeepOpen: null,
+            closedZoneName: null,
           },
         });
         if (handheld) this.profileServiceZones = [];
@@ -5902,7 +5889,7 @@ export class TillApp extends LitElement {
             periodName: null,
             periodOccurrenceKey: null,
             keepOpen: null,
-            zoneKeepOpen: null,
+            closedZoneName: null,
           },
         },
         false,
@@ -6653,8 +6640,8 @@ export class TillApp extends LitElement {
         state.service.zoneOpen !== this.counterService?.zoneOpen ||
         state.service.periodName !== this.counterService?.periodName ||
         state.service.periodOccurrenceKey !== this.counterService?.periodOccurrenceKey ||
-        keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen) ||
-        zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
+        state.service.closedZoneName !== this.counterService?.closedZoneName ||
+        keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen);
       this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
       const busy = this.#counterMenuBusy();
       const counterMoved =
@@ -6683,8 +6670,8 @@ export class TillApp extends LitElement {
         state.service.zoneOpen !== this.tableService?.zoneOpen ||
         state.service.periodName !== this.tableService?.periodName ||
         state.service.periodOccurrenceKey !== this.tableService?.periodOccurrenceKey ||
-        keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen) ||
-        zoneKeepOpenMoved(state.service.zoneKeepOpen, this.tableService?.zoneKeepOpen);
+        state.service.closedZoneName !== this.tableService?.closedZoneName ||
+        keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen);
       if (
         !menusMoved(this.tableMenus, state.menus) &&
         state.liveFields === this.#tableOffers.liveFields &&
@@ -12894,7 +12881,7 @@ export class TillApp extends LitElement {
                 periodName: null,
                 periodOccurrenceKey: null,
                 keepOpen: null,
-                zoneKeepOpen: null,
+                closedZoneName: null,
               },
             },
             false,
@@ -12917,7 +12904,7 @@ export class TillApp extends LitElement {
               periodName: null,
               periodOccurrenceKey: null,
               keepOpen: null,
-              zoneKeepOpen: null,
+              closedZoneName: null,
             },
           },
           false,
@@ -24574,11 +24561,6 @@ export class TillApp extends LitElement {
         @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) =>
           this.#selectFilters(e.detail.filters)}
         @counter-zone-selected=${(event: Event) => this.#requestLeave(() => this.#onCounterZoneSelected(event))}
-        @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
-          e.stopPropagation();
-          void this.#menuPoll.readNow(e.detail.zoneId);
-          void this.#refreshFloorZones();
-        }}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${

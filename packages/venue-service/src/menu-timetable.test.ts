@@ -285,7 +285,7 @@ describe("Always fixture periods", () => {
         expect(offers.service).toEqual({
           open: true,
           zoneOpen: true,
-          zoneKeepOpen: null,
+          closedZoneName: null,
           periodName: "Always",
           periodOccurrenceKey: expect.any(String),
           keepOpen: {
@@ -877,7 +877,7 @@ describe("the menu a zone starts on", () => {
     expect(offers.service).toEqual({
       open: true,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: "Mornings",
       periodOccurrenceKey: expect.any(String),
       keepOpen: {
@@ -1911,7 +1911,7 @@ describe("statements", () => {
     expect(priced.service).toEqual({
       open: true,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
@@ -2209,7 +2209,7 @@ describe("department service periods", () => {
     });
   });
 
-  it("does not offer keep-open when the venue clock cannot be read", async () => {
+  it("shows no period or zone closing information when the venue clock cannot be read", async () => {
     const v = await serviceVenue();
     await db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
@@ -2224,7 +2224,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: true,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: "Lunch",
       periodOccurrenceKey: expect.any(String),
       keepOpen: {
@@ -2258,7 +2258,7 @@ describe("department service periods", () => {
     expect(afternoon.service).toEqual({
       open: true,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: "Afternoon",
       periodOccurrenceKey: expect.any(String),
       keepOpen: {
@@ -2341,7 +2341,7 @@ describe("department service periods", () => {
       service: {
         open: false,
         zoneOpen: true,
-        zoneKeepOpen: null,
+        closedZoneName: null,
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
@@ -2359,7 +2359,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: false,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: {
@@ -2385,7 +2385,7 @@ describe("department service periods", () => {
     expect(result.service).toEqual({
       open: true,
       zoneOpen: true,
-      zoneKeepOpen: null,
+      closedZoneName: null,
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
