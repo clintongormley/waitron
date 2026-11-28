@@ -152,6 +152,7 @@ test.runIf(process.platform === "darwin").each([false, true])(
       rmSync(dir, { recursive: true });
     }
   },
+  20_000, // Three 5-second waits, a 1-second hold, and time to start and stop the compilers.
 );
 
 test.each([
