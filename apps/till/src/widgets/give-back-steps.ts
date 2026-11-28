@@ -197,7 +197,8 @@ const cardBack = (amount: string, card: string) =>
         .replace("{card}", () => card);
 
 /** What went back, what waits, and why anything did not, from the write's answer. A cash
- * correction prints its own receipt; any other says where to print it (D14). */
+ * correction prints its own receipt; any other says where to print it (D14), unless the box is
+ * already sending its corrective invoice. */
 function outcomeLines(
   outcome: GiveBackOutcome,
   way: GiveBackWay | undefined,
@@ -224,9 +225,13 @@ function outcomeLines(
           ? t("give_back.done_terminal").replace("{amount}", () => money(back))
           : cardBack(money(back), card),
     );
+  const corrected = outcome.parts.filter(
+    (part) => part.kind === "correction" && part.state === "completed",
+  );
   if (
     way?.way !== "cash" &&
-    outcome.parts.some((part) => part.kind === "correction" && part.state === "completed")
+    corrected.length > 0 &&
+    !corrected.some((part) => (part.corrective?.delivery ?? null) !== null)
   )
     lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
   if (positive(pending))

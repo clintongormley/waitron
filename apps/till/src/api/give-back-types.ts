@@ -113,6 +113,8 @@ export interface GiveBackOutcome {
     state: "completed" | "pending" | "failed" | "not_started";
     refundId?: string;
     correctionId?: string;
+    /** A filed corrective full invoice; `delivery` is null when the box sent nothing. */
+    corrective?: { delivery: object | null };
   }[];
   /** A later part refused after an earlier one moved money. */
   refusal: { code: string; params: Record<string, unknown> } | null;
