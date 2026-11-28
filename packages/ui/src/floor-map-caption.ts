@@ -31,7 +31,8 @@ export const captionStyles = css`
 
   /* Clear, left and right, of the thickest outline drawn inside the shape: Overdue's. */
   [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
-  [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"]:not([data-job]) {
+  [part="table"]:has(> [part="shape"][data-outline])
+    > [part="caption"]:is(:not([data-job]), [data-short-inset]) {
     max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
   }
 
@@ -42,6 +43,10 @@ export const captionStyles = css`
 
   [part="caption"][data-job] {
     max-width: calc(100% - 2 * (var(--wt-space-2) + var(--wt-space-1) / 2));
+  }
+
+  [part="caption"][data-short-inset] {
+    max-width: calc(100% - 2 * var(--wt-space-1));
   }
 
   :is([part="caption"][data-compact], .name-probe, .job-probe) {
@@ -184,7 +189,12 @@ export function renderCaption({
   const inset = metrics?.inset ?? 0;
   const space = width - (outlined ? 2 * (inset + 1) : 0) - (fill === undefined ? 0 : 2 * inset);
   const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
-  const jobSpace = width - 2 * ((metrics?.jobInset ?? 0) + (fill === undefined ? 0 : inset));
+  const compactSpace = outlined ? space : space - 2 * inset;
+  const singleLine =
+    job !== null && metrics !== undefined && metrics.jobWidthOf(job.text) <= compactSpace;
+  const jobSpace = singleLine
+    ? compactSpace
+    : width - 2 * ((metrics?.jobInset ?? 0) + (fill === undefined ? 0 : inset));
   const full =
     job !== null &&
     (metrics === undefined ||
@@ -196,8 +206,8 @@ export function renderCaption({
   const showCompact =
     compact !== undefined &&
     (metrics === undefined ||
-      (captionHeight >= metrics.compactHeight && metrics.jobWidthOf(compact) <= jobSpace));
-  const nameSpace = cue !== null && (full || showCompact) ? jobSpace : space;
+      (captionHeight >= metrics.compactHeight && metrics.jobWidthOf(compact) <= compactSpace));
+  const nameSpace = cue === null ? space : full ? jobSpace : showCompact ? compactSpace : space;
   const fullWidth = shortLabel === undefined ? 0 : (metrics?.widthOf(label) ?? 0);
   const name =
     shortLabel !== undefined &&
@@ -235,6 +245,7 @@ export function renderCaption({
       data-fill=${fill ?? nothing}
       ?data-job=${job !== null}
       ?data-compact=${job !== null && !full}
+      ?data-short-inset=${job !== null && (!full || singleLine)}
     >
       <span part="name">${name}</span> ${detail}
     </span>`,

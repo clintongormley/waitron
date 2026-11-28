@@ -337,7 +337,6 @@ function mapJob(
         text: t("floor.job_fire"),
         time: t("floor.job_now"),
         compact: t("floor.job_fire_short"),
-        compactTime: t("floor.job_now"),
       };
     case "held": {
       const { dueAt } = soonestHeld(members, now);

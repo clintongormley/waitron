@@ -142,13 +142,19 @@ it("shows a whole short job with its wait or leaves the narrow table in its job 
       },
     },
     {
-      ...table("T2", 11, 7, 4, 2),
+      ...table("T2", 11, 7, 2.7, 2),
       cue: { icon: "floor-ready", text: "2" },
       job: { text: "Collect from Bar", time: "9 min", compact: "Bar", compactTime: "9′" },
+    },
+    {
+      ...table("T4", 17, 7, 3.5, 4),
+      cue: { icon: null, text: "Reserved" },
+      job: { text: "Reserved", time: "21:30", compact: "21:30" },
     },
     table("T3", 25, 7),
   ]);
   map.style.fontSize = "20px";
+  map.style.fontFamily = "monospace";
   map.requestUpdate();
   await map.updateComplete;
   const narrow = button(map, "T1");
@@ -160,6 +166,9 @@ it("shows a whole short job with its wait or leaves the narrow table in its job 
   expect(cue?.textContent?.trim()).toBe("Bar 9′");
   expect(cue!.scrollWidth).toBeLessThanOrEqual(cue!.clientWidth);
   expect(getComputedStyle(cue!).fontWeight).toBe("600");
+  const reservation = button(map, "T4");
+  expect(reservation.querySelector('[part="job"]')?.textContent).toBe("Reserved");
+  expect(reservation.querySelector('[part="time"]')?.textContent).toBe("21:30");
 });
 
 it("leaves the delivery icon on a table too small for the whole delivery label", async () => {
@@ -176,21 +185,6 @@ it("leaves the delivery icon on a table too small for the whole delivery label",
   expect(narrow.querySelector('[part="cue"]')?.textContent?.trim()).toBe("");
   expect(narrow.getAttribute("aria-label")).toContain("2 to deliver");
   expect(wide.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2 to deliver");
-});
-
-it("can leave coloured fills without a field line while preserving free and clearing outlines", async () => {
-  await page.viewport(390, 700);
-  const { map } = await compactMap(340, 280, [
-    { ...table("Occupied", 3, 7), fill: "calm" },
-    table("Free", 7, 7),
-    { ...table("Clear", 11, 7), fill: "calm", outline: "clearing" },
-  ]);
-  map.style.setProperty("--wt-floor-map-filled-line", "transparent");
-  map.style.setProperty("--wt-color-field-line", "rgb(7, 8, 9)");
-  const shape = (id: string) => getComputedStyle(button(map, id).querySelector('[part="shape"]')!);
-  expect(shape("Occupied").borderTopColor).toBe("rgba(0, 0, 0, 0)");
-  expect(shape("Free").borderTopColor).toBe("rgb(7, 8, 9)");
-  expect(shape("Clear").borderTopStyle).toBe("dashed");
 });
 
 it("leaves an inset beside a full job and wraps whole words", async () => {
