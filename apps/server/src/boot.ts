@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { attachRequestReceiveLimits } from "./request-receive-limits.js";
-import { receiveRestoreArchive, releaseDrives } from "./drive-backup-files.js";
+import { receiveRestoreArchive, type DriveHost } from "./drive-backup-files.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
@@ -860,8 +860,6 @@ export interface StartServerSeams {
   };
   /** The folder the host mounts USB drives under; unset, `STORAGE_DRIVES_ROOT`. */
   drivesRoot?: string;
-  /** Setup's release of the USB drives after a restore stages its copy; unset, the host's. */
-  releaseDrives?: () => Promise<void>;
 }
 
 /**
@@ -1005,6 +1003,11 @@ async function bootServer(
   const hostClient = seams.boxHost ?? boxHostClient();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   const hostPlaces = createHostPlaces();
+  const drives: DriveHost = {
+    requests: localHostRequests,
+    places: hostPlaces,
+    root: seams.drivesRoot,
+  };
   const boxHost = keepTimeServiceOn(hostClient, log, now);
   const timeServiceSynchronised = timeServiceReader(boxHost);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
@@ -1500,13 +1503,9 @@ async function bootServer(
         recoveryOperationPath: readVariable(base, "WAITRON_RECOVERY_OPERATION_FILE"),
         receiveArchive: receiveRestoreArchive(
           join(config.stateDir, RESTORE_STAGING_DIR),
-          seams.drivesRoot,
+          drives.root,
         ),
-        releaseDrives:
-          seams.releaseDrives ??
-          (() => releaseDrives({ host: localHostRequests, places: hostPlaces, log })),
-        driveHost: { requests: localHostRequests, places: hostPlaces },
-        drivesRoot: seams.drivesRoot,
+        drives,
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
         clearStagedRecovery: recoveryPreparation.clearStaged,
@@ -4461,7 +4460,7 @@ async function bootServer(
         uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
         restart,
       },
-      drives: { requests: localHostRequests, places: hostPlaces, root: seams.drivesRoot },
+      drives,
     },
     log,
   );

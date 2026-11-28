@@ -35,7 +35,7 @@ export interface ArchiveUploadOptions {
 function invalid(field = "artifact"): AppError {
   return new AppError("setup.request_invalid", { field });
 }
-function capacity(): AppError {
+export function capacity(): AppError {
   return new AppError("restore.archive_resource_limit", {});
 }
 export type ReceiveArchive = (

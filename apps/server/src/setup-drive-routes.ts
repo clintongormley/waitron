@@ -38,13 +38,13 @@ export function mountSetupDriveRoutes(
     runDriveList(c, log, async () => {
       c.header("Cache-Control", "no-store");
       assertOwnerTransport(c);
-      const host = deps.driveHost;
+      const host = deps.drives;
       if (host === undefined) throw new AppError("setup.not_ready", {});
       if (!isJsonRequest(c.req.raw)) invalidRequest("body");
       const body = await readDriveJson(c.req.raw, SETUP_DRIVE_LIST_BODY_MAX);
       if (typeof body !== "object" || body === null || Array.isArray(body)) invalidRequest("body");
       if (Object.keys(body).length > 0) invalidRequest("body");
-      return c.json(await listHostDriveBackups(host, { root: deps.drivesRoot, log }), 200);
+      return c.json(await listHostDriveBackups(host, { root: host.root, log }), 200);
     }),
   );
 
@@ -68,14 +68,14 @@ export function mountSetupDriveRoutes(
             invalidRequest("environment");
           return { masterKey, environment } as const;
         };
-        if (!json) read();
+        const headers = json ? undefined : read();
         const upload = await deps.receiveArchive!(c.req.raw, {
           fields: ["masterKey", "environment"],
           exactFields: json,
           drive: true,
         });
         try {
-          const { masterKey, environment } = read(json ? upload.fields : undefined);
+          const { masterKey, environment } = headers ?? read(upload.fields);
           c.header("Cache-Control", "no-store");
           const answer = await readingDriveFile(upload.drivePath, async () =>
             preview({

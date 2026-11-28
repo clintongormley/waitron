@@ -104,11 +104,7 @@ export interface SetupDeps {
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   receiveArchive?: ReceiveArchive;
   stageRestore?: (request: ArchiveRequest, options: { oldBoxGone: boolean }) => Promise<void>;
-  /** Lets go of the USB drives once a restore has staged its copy of a file on one; never throws. */
-  releaseDrives?: () => Promise<void>;
-  driveHost?: DriveHost;
-  /** The folder the host mounts USB drives under; unset, `STORAGE_DRIVES_ROOT`. */
-  drivesRoot?: string;
+  drives?: DriveHost;
   /** `WAITRON_RECOVERY_OPERATION_FILE` as the start reads it; a restore without recovery details
    * is refused when it is unset. */
   recoveryOperationPath?: string;

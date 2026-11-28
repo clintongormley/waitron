@@ -68,7 +68,7 @@ import {
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
-import { isJsonRequest } from "./drive-backup-files.js";
+import { isJsonRequest, releaseDrives } from "./drive-backup-files.js";
 import "./errors.js";
 
 function recoveryCredentials(
@@ -831,7 +831,8 @@ export function mountSetupOperationRoutes(
               },
               { oldBoxGone },
             );
-            if (drive) await deps.releaseDrives?.();
+            if (drive && deps.drives !== undefined)
+              await releaseDrives({ host: deps.drives.requests, places: deps.drives.places, log });
             mustRestart();
             // The restore is already recorded, so it must still answer and restart; the next start
             // that reaches the server's boot clears the staging folder.

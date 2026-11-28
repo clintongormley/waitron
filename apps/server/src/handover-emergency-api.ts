@@ -151,7 +151,7 @@ interface Deps {
     uploadLimit?: number;
   };
   /** The box's host, asked as the server once the switch's sign-in has passed. */
-  drives: DriveHost<"storageList" | "storageRelease"> & { root?: string };
+  drives: DriveHost;
 }
 
 export interface EmergencyHandover {

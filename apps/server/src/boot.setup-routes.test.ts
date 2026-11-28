@@ -8,7 +8,7 @@ import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { ownContactUrl } from "./box-name.js";
-import type { BoxHostClient } from "./box-host-client.js";
+import type { BoxHostClient, BoxHostRequests } from "./box-host-client.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { spawn, spawnSync } from "node:child_process";
@@ -1868,11 +1868,18 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       const drive = await driveHolding(artifact);
       let observed: { stateDir: string; kills: unknown[] } | undefined;
-      const releaseDrives = vi.fn(async () => {
+      let atRelease: { staged: boolean; kills: unknown[] } | undefined;
+      const storageRelease = vi.fn(async () => {
         order.push("released");
         // Staged: the restore's record is written. Not yet restarting: nothing has been signalled.
-        await readFile(join(observed!.stateDir, "flows/restore/record.json"));
-        expect(observed!.kills).toEqual([]);
+        atRelease = {
+          staged: await readFile(join(observed!.stateDir, "flows/restore/record.json")).then(
+            () => true,
+            () => false,
+          ),
+          kills: [...observed!.kills],
+        };
+        return { available: true as const, released: 1 };
       });
       stage.mockImplementationOnce(async (...args) => {
         const actual =
@@ -1909,13 +1916,20 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             order.push("restart");
             expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
           },
-          { base: OPERATION_FILE_BASE, seams: { drivesRoot: drive.root, releaseDrives } },
+          {
+            base: OPERATION_FILE_BASE,
+            seams: {
+              drivesRoot: drive.root,
+              boxHostRequests: { storageRelease } as unknown as BoxHostRequests,
+            },
+          },
         );
       } finally {
         await rm(drive.root, { recursive: true, force: true });
       }
       expect(order).toEqual(["staged", "released", "restart"]);
-      expect(releaseDrives).toHaveBeenCalledOnce();
+      expect(storageRelease).toHaveBeenCalledOnce();
+      expect(atRelease).toEqual({ staged: true, kills: [] });
     } finally {
       await venue.store.close();
       await source.store.close();
@@ -1969,7 +1983,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           });
           await poll(() => (kills.length > 0 ? kills.length : undefined));
         },
-        { seams: { drivesRoot: drive.root, releaseDrives: async () => {} } },
+        {
+          seams: {
+            drivesRoot: drive.root,
+            boxHostRequests: {
+              storageRelease: async () => ({ available: true, released: 0 }),
+            } as unknown as BoxHostRequests,
+          },
+        },
       );
     } finally {
       await rm(drive.root, { recursive: true, force: true });

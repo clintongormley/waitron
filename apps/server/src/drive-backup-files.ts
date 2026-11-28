@@ -14,6 +14,7 @@ import "./errors.js";
 import { freeBytes as statFreeBytes } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import {
+  capacity,
   receiveSetupArchive,
   type ArchiveUpload,
   type ArchiveUploadOptions,
@@ -45,9 +46,11 @@ export interface DriveBackupList {
 }
 
 /** The box's host and the places every host route shares; boot makes one of each. */
-export interface DriveHost<Calls extends "storageList" | "storageRelease" = "storageList"> {
-  requests: Pick<BoxHostRequests, Calls>;
+export interface DriveHost {
+  requests: Pick<BoxHostRequests, "storageList" | "storageRelease">;
   places: HostPlaces;
+  /** The folder the host mounts USB drives under; unset, `STORAGE_DRIVES_ROOT`. */
+  root?: string;
 }
 
 export interface ResolvedDriveFile {
@@ -75,17 +78,15 @@ export interface TakenDriveFile {
 }
 
 function refuse(code: InvalidCode, field: string): AppError {
-  return code === "handover.request_invalid"
-    ? new AppError("handover.request_invalid", { field })
-    : new AppError("setup.request_invalid", { field });
-}
-
-function capacity(): AppError {
-  return new AppError("restore.archive_resource_limit", {});
+  return new AppError(code, { field });
 }
 
 function unreadable(): AppError {
   return new AppError("restore.drive_file_unreadable", {});
+}
+
+function isUnreadableStick(error: unknown): boolean {
+  return !isAppError(error) && UNREADABLE.has(errnoOf(error) ?? "");
 }
 
 function skipped(name: string): boolean {
@@ -206,9 +207,7 @@ export async function resolveDriveFile(
     const takenAt = parseBackupArchiveKey(segments.at(-1)!)!.timestamp.toISOString();
     return { path, size: found.size, takenAt };
   } catch (error) {
-    if (isAppError(error)) throw error;
-    if (UNREADABLE.has(errnoOf(error) ?? "")) throw unreadable();
-    throw error;
+    throw isUnreadableStick(error) ? unreadable() : error;
   }
 }
 
@@ -223,7 +222,7 @@ export async function readingDriveFile<T>(
   try {
     return await work();
   } catch (error) {
-    if (isAppError(error) || !UNREADABLE.has(errnoOf(error) ?? "")) throw error;
+    if (!isUnreadableStick(error)) throw error;
     // A read of an already-open file names no path, and a pulled stick can stay mounted with its
     // details cached, so an error naming no path counts as the stick's.
     const named = (error as { path?: unknown }).path;
@@ -269,8 +268,7 @@ export async function takeDriveFile(
     if (isAppError(error) || options.signal?.aborted) throw error;
     const code = errnoOf(error) ?? "";
     if (code === "ENOSPC" || code === "EDQUOT") throw capacity();
-    if (UNREADABLE.has(code)) throw unreadable();
-    throw error;
+    throw isUnreadableStick(error) ? unreadable() : error;
   }
 }
 

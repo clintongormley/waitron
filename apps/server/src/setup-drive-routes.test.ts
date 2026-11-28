@@ -35,12 +35,12 @@ async function fixture(
   });
   await mkdir(join(root, "sda1", "backups"), { recursive: true });
   await writeFile(join(root, "sda1", "backups", name), Uint8Array.from([1, 2, 3]));
-  const host = { storageList: vi.fn(storageList) };
+  const host = { storageList: vi.fn(storageList), storageRelease: vi.fn() };
   const places = createHostPlaces();
   const app = new Hono();
   mountSetup(
     app,
-    { environment: "preproduction", driveHost: { requests: host, places }, drivesRoot: root },
+    { environment: "preproduction", drives: { requests: host, places, root } },
     () => {},
   );
   return { app, host, places, name, root };
@@ -150,8 +150,7 @@ it("the drive list answers while setup's one-at-a-time queue is held", async () 
     app,
     {
       environment: "preproduction",
-      driveHost: { requests: host, places },
-      drivesRoot: root,
+      drives: { requests: host, places, root },
       firstSetup: { coordinator, assertOtherAllowed: async () => {} },
     },
     () => {},
