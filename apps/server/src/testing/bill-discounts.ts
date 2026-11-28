@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
@@ -85,8 +85,9 @@ export function discountsHeldOn(venue: Pick<AdjustmentVenue, "db">, billId: stri
 }
 
 /**
- * Every adjustment record on `billId` with its adjustment lines, every column but ids and times,
- * each line named by its line number, so two bills' records compare.
+ * Every adjustment record on `billId` in the order written, with its adjustment lines, every
+ * column but ids and times, each line named by its line number, so two bills' records compare.
+ * Two records can share a millisecond, so the order is the rows', not their times'.
  */
 export async function writtenAdjustments(tx: Transaction, billId: string) {
   const numbered = await tx
@@ -99,7 +100,7 @@ export async function writtenAdjustments(tx: Transaction, billId: string) {
     .select()
     .from(adjustments)
     .where(eq(adjustments.workingOrderId, billId))
-    .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
+    .orderBy(sql`${adjustments}.rowid`);
   const linesOf = new Map<string, { lineId: string; reduction: number; quantity: number }[]>();
   if (records.length > 0) {
     const all = await tx
