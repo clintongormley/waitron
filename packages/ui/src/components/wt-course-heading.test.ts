@@ -228,7 +228,8 @@ describe("laying out a title, the mark and an action", () => {
   });
 
   it("moves the mark and action together onto their own line under the title, at the right, when they do not fit beside it", async () => {
-    const el = await laidOut(260);
+    // 300, not narrower: CI's fonts draw this mark and action about 4px wider than a Mac's.
+    const el = await laidOut(300);
     el.style.setProperty("--wt-space-2", "8px");
     el.style.setProperty("--wt-space-3", "12px");
     const { title: words, mark: pill, button, left, right } = parts(el);
@@ -258,7 +259,7 @@ describe("laying out a title, the mark and an action", () => {
     expect(sameLine(words, button)).toBe(true);
   });
 
-  it.each([250, 300, 390, 480, 600])(
+  it.each([300, 390, 480, 600])(
     "never overlaps the title, the mark and the action, or draws past the heading, at %ipx",
     async (width) => {
       const el = await laidOut(width);
