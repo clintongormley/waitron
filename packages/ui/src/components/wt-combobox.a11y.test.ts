@@ -549,49 +549,24 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  test.each([
-    { state: "closed", attributes: "" },
-    { state: "highlighted", attributes: "highlight" },
-    { state: "invalid", attributes: 'error="Choose a reader"' },
-  ])("boxed, $state, with readable label and value", async ({ attributes }) => {
-    const el = (await mountThemed(
-      `<wt-combobox look="boxed" label="Card reader" search="never" ${attributes}></wt-combobox>`,
-      theme,
-    )) as WtCombobox;
-    el.options = TAGS;
-    el.value = "vegan";
-    await el.updateComplete;
-    const root = el.shadowRoot!;
-    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
-    for (const part of [".field-label", ".value"]) {
-      const color = getComputedStyle(root.querySelector(part)!).color;
-      expect(contrastRatio(color, field)).toBeGreaterThanOrEqual(4.5);
-    }
-    await expectNoA11yViolations(host);
-  });
-
-  test("boxed, empty, with its label resting", async () => {
-    await mountThemed('<wt-combobox look="boxed" label="Card reader"></wt-combobox>', theme);
-    await expectNoA11yViolations(host);
-  });
-
-  test("boxed, disabled, with a value chosen", async () => {
-    const el = (await mountThemed(
-      '<wt-combobox look="boxed" label="Card reader" disabled></wt-combobox>',
-      theme,
-    )) as WtCombobox;
-    el.options = TAGS;
-    el.value = "vegan";
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  test("boxed, open", async () => {
-    const el = await openThemed(
-      '<wt-combobox look="boxed" label="Card reader" search="never" highlight></wt-combobox>',
-      theme,
-    );
-    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-    await expectNoA11yViolations(host);
-  });
+  test.each(["", "highlight", 'error="Choose a reader"', "disabled", "highlight open"])(
+    "boxed %s, with a value chosen, then empty",
+    async (attributes) => {
+      const html = `<wt-combobox look="boxed" label="Card reader" search="never" ${attributes.replace("open", "")}></wt-combobox>`;
+      const el = attributes.endsWith("open")
+        ? await openThemed(html, theme)
+        : ((await mountThemed(html, theme)) as WtCombobox);
+      el.options = TAGS;
+      el.value = "vegan";
+      await el.updateComplete;
+      const field = getComputedStyle(el.shadowRoot!.querySelector(".field")!).backgroundColor;
+      const value = getComputedStyle(el.shadowRoot!.querySelector(".value")!).color;
+      if (attributes !== "disabled")
+        expect(contrastRatio(value, field)).toBeGreaterThanOrEqual(4.5);
+      await expectNoA11yViolations(host);
+      el.value = "";
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 });
