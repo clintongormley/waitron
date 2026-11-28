@@ -17,26 +17,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill holds set menus, which are only for a seated table or a takeaway or delivery order. Keep it as it is, or cancel or move the dishes in its set menus first.",
     es: "Esta cuenta tiene menús, que solo son para una mesa ocupada o un pedido para llevar o a domicilio. Déjala como está, o anula o mueve antes los platos de sus menús.",
   },
-  "set_menu.not_selling": {
-    en: "{setMenuName} is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
-    es: "{setMenuName} ya no está a la venta. Elige un menú a la venta o pide los platos a la carta.",
-  },
-  "set_menu.holds_dishes": {
-    en: "{setMenuName} holds {dishNames}. Cancel those dishes or use Move to put them in another set menu. If the guests still want a cancelled dish, order it à la carte.",
-    es: "{setMenuName} tiene {dishNames}. Anula esos platos o usa Mover para pasarlos a otro menú. Si los clientes aún quieren un plato anulado, pídelo a la carta.",
-  },
-  "set_menu.needed_by_draft": {
-    en: "Only {setMenuName} has a place for {dishNames} in the unsent order. Remove them from the order first, or keep the set menu.",
-    es: "Solo {setMenuName} tiene sitio para {dishNames} en el pedido sin enviar. Quítalos primero del pedido o mantén el menú.",
-  },
-  "set_menu.no_place": {
-    en: "There is no place for {dishName} in the set menus on this bill. Add a set menu with a place for it, or order the dish à la carte.",
-    es: "No hay sitio para {dishName} en los menús de esta cuenta. Añade un menú con sitio para el plato o pídelo a la carta.",
-  },
-  "set_menu.place_taken": {
-    en: "The place you chose for {dishName} is taken. Choose a free place in a set menu or leave the dish where it is.",
-    es: "El sitio que elegiste para {dishName} está ocupado. Elige un sitio libre en un menú o deja el plato donde está.",
-  },
   "set_menu.moves_with_set_menu": {
     en: "{dishName} can only move together with its set menu. Move the set menu as well, or leave it on this bill.",
     es: "{dishName} solo puede moverse junto con su menú. Mueve también el menú o deja el plato en esta cuenta.",

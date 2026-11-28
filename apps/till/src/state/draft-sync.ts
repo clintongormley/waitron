@@ -23,7 +23,6 @@ export type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
-  | { setMenuNoPlace: string; draftLineId?: string }
   | { closedZone: ClosedZoneQuestion; submissionId: string; answered?: AnsweredAllergy }
   | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
   | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
@@ -241,8 +240,6 @@ function lineKey(input: DraftLineInput): string {
     input.variantId,
     input.menuVersionId,
     input.setMenuId ?? null,
-    input.setMenuReservedLineId ?? null,
-    input.setMenuReservedPlace ?? null,
     input.note,
     input.courseId,
     input.makeAt ?? null,

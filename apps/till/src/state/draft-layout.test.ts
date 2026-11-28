@@ -302,10 +302,18 @@ describe("set-menu amounts in the order panel", () => {
 describe("one draft line's price, as the panel total adds it", () => {
   const sauce = { listId: "extras", productId: "sauce", name: "Sauce", quantity: 2, price: "0.25" };
 
-  it("prices a set-menu dish at its landing place's share, keeping its paid extras", () => {
+  it("adds paid extras to the selected variant's price or its saved set-menu supplement", () => {
     const sirloin = line("sirloin", undefined, undefined, { setMenuId: "daily", extras: [sauce] });
-    expect(draftLinePrice(sirloin, () => "5.00").toString()).toBe("5.50");
-    expect(draftLinePrice(sirloin).toString()).toBe("0.50");
+    const large = {
+      ...sirloin,
+      product: {
+        ...sirloin.product,
+        variantId: "large",
+        productPrices: { [sirloin.product.id]: "18.00", large: "24.00" },
+      },
+    };
+    expect(draftLinePrice(large, () => "5.00").toString()).toBe("5.50");
+    expect(draftLinePrice(large).toString()).toBe("24.50");
   });
 
   it("prices a weighed dish by its quantity", () => {

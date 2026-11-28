@@ -7,7 +7,7 @@ import {
   toDraftLineInput as draftInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
-import { draftLayout } from "./draft-layout.js";
+import { draftLayout, draftLinePrice } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
 import { asServedAllergens, asServedDiet } from "./as-served.js";
 import { nutritionDietLabels } from "../diet-labels.js";
@@ -837,7 +837,7 @@ describe("orderLineMergeKey (D10, the shared rule)", () => {
   });
 });
 
-it("restores a set-menu draft line from its recorded offer and preserves its wire fields", () => {
+it("restores the recorded offer but clears a legacy set-menu reservation on save", () => {
   const ordinary = offer({ id: "hake", productId: "hake", unitPrice: "20.00" });
   const recorded = { ...ordinary, unitPrice: "5.00" };
   const saved = {
@@ -883,8 +883,8 @@ it("restores a set-menu draft line from its recorded offer and preserves its wir
     extras: [],
     noMerge: false,
     setMenuId: "daily",
-    setMenuReservedLineId: "first-menu",
-    setMenuReservedPlace: 0,
+    setMenuReservedLineId: null,
+    setMenuReservedPlace: null,
   });
   expect(orderLineMergeKey(restored)).toBeNull();
 });
@@ -942,6 +942,16 @@ describe("a set-menu draft line whose own version is not the copy on sale", () =
     ),
   });
   const unknown = [null, []];
+
+  it("prices a restored variant from the copy on sale while its own price is unknown", () => {
+    const offer = { ...onSale, aLaCartePrices: { d1: { "v-small": "22.00" } } };
+    const restored = fromDraftLine(line("v-small"), new Map(), undefined, () => ({
+      offer,
+      versionId: "d1",
+    }));
+    expect(restored.earlierPriceUnknown).toBe(true);
+    expect(draftLinePrice(restored)).toBe("22.00");
+  });
 
   it.each([null, "v-small"])(
     "is not reviewed, with its extras, when its own menu's dish is not known (variant %s)",

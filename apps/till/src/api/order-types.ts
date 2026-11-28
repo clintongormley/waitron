@@ -21,8 +21,6 @@ export interface SaleLine {
    * `menu.version_changed` when it is not the live one; absent means the live one. */
   menuVersionId?: string;
   setMenuId?: string;
-  setMenuReservedLineId?: string;
-  setMenuReservedPlace?: number;
   quantity: string;
   extras?: ExtraSelection[];
   options?: OptionSelection[];

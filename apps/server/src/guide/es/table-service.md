@@ -631,10 +631,13 @@ cuestan las variantes. Toca el producto para elegir una y ver su precio.
 
 ## Menús {#set-menus}
 
-Añade los platos que piden los clientes, desde cualquier carpeta. La cuenta los agrupa en los
-menús más baratos que encuentra cada vez que cambia el pedido, y cobra a la carta un plato que no cabe en
-ninguno. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
+Añade los platos que piden los clientes, desde cualquier carpeta. Cuando envías los platos de una mesa,
+la cuenta los agrupa en los menús más baratos que encuentra. Cobra a la carta los platos que quedan
+fuera. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
 desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
+
+En una mesa, un plato sin agrupar muestra su propio precio con los extras de pago hasta que lo
+envías. El total del pedido puede bajar si el plato pasa a formar parte de un menú.
 
 Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
 libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del
@@ -649,8 +652,7 @@ Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. 
 mueven con él.
 
 En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
-cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, toca el pedido
-aparcado en **Pedidos abiertos**.
+cuenta los agrupa en menús. Para añadir platos después, toca el pedido aparcado en **Pedidos abiertos**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 

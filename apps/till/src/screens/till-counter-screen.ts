@@ -23,13 +23,7 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import {
-  centsToDecimal,
-  formatMoney,
-  sumDecimals,
-  type BillSetMenuState,
-  type DishMove,
-} from "@waitron/shared";
+import { centsToDecimal, formatMoney, sumDecimals, type BillSetMenuState } from "@waitron/shared";
 import {
   NO_ORDERING_COPIES,
   draftPlacementId,
@@ -40,7 +34,6 @@ import {
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { lineGross } from "../state/order-line.js";
-import { lineProductName } from "../widgets/product-name.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { notCheapestText } from "../widgets/set-menu-presentation.js";
 import "../widgets/menu-browser.js";
@@ -292,15 +285,6 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = NO_ORDERING_COPIES;
   @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
   @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
-  @property({ attribute: false }) saveSetMenuCount?: (
-    menuId: string,
-    count: number,
-  ) => Promise<string | undefined>;
-
-  @property({ attribute: false }) moveSetMenuDishes?: (
-    moves: readonly DishMove[],
-  ) => Promise<string | undefined>;
-
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
@@ -333,13 +317,6 @@ export class TillCounterScreen extends LitElement {
       .setMenuCopies=${copies}
       .ownSetMenuOffer=${this.ownSetMenuOffer}
       .setMenuCourses=${this.setMenuCourses}
-      .setMenuDishNames=${new Map(
-        this.store.lines.flatMap((line) =>
-          line.setMenuId === undefined || line.workingOrderLineId === undefined
-            ? []
-            : [[line.workingOrderLineId, lineProductName(line.product)]],
-        ),
-      )}
       .filters=${this.selectedFilters}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}

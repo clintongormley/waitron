@@ -61,7 +61,7 @@ export type NotOfferedExtra = Pick<
  * order carries back, so one renderer serves both.
  */
 export interface LineSelection {
-  setMenu?: { id: string; reserved?: OrderLine["setMenuReserved"] };
+  setMenu?: { id: string };
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
@@ -73,7 +73,6 @@ export interface LineSelection {
 
 export interface OrderLine {
   setMenuId?: string;
-  setMenuReserved?: import("@waitron/shared").DishPlace | null;
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
@@ -144,7 +143,6 @@ function newLine(product: TillProduct, quantity: string, selection?: LineSelecti
     line.setMenuId = selection.setMenu.id;
     line.noMerge = true;
     line.courseId = product.courseId ?? undefined;
-    if (selection.setMenu.reserved !== undefined) line.setMenuReserved = selection.setMenu.reserved;
   }
   if (selection?.note !== undefined) {
     line.note = selection.note;

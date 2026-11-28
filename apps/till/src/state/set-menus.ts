@@ -4,21 +4,16 @@ import {
   placeInOrder,
   type BillSetMenuState,
   type DishToPlace,
-  type DishMove,
   type ServedSetMenu,
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import type { PartyBill } from "../api/floor-api.js";
 import type { FreshDraftLine } from "../api/drafts-api.js";
 import type { TillMenuOffer } from "../api/menu-api.js";
-import { lineProductName } from "../widgets/product-name.js";
 import type { OrderLine } from "./working-order.js";
 
 export type OrderingCopy = { copy: ServedSetMenuCopy; versionId: string };
 export const NO_ORDERING_COPIES: OrderingCopy[] = [];
-export type SetMenuChange =
-  { menuId: string; count: number } | { remove: string } | { moves: readonly DishMove[] };
-
 type BillCopies = Pick<PartyBill, "setMenus" | "setMenuCopies">;
 
 export function orderingCopies(
@@ -131,7 +126,7 @@ export function withCopiesRead<B extends BillCopies>(bill: B, read: BillCopies):
   };
 }
 
-export function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {
+function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {
   return draft.flatMap((line, index): DishToPlace[] =>
     line.setMenuId === undefined || line.workingOrderLineId !== undefined
       ? []
@@ -140,7 +135,6 @@ export function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {
             id: draftPlacementId(line, index),
             productId: line.product.productId ?? line.product.id,
             variantId: line.product.variantId ?? null,
-            reserved: line.setMenuReserved ?? null,
           },
         ],
   );
@@ -160,20 +154,6 @@ export function draftPlacementId(line: OrderLine, index: number): string {
 export function menusWithCopies(bill: BillSetMenuState) {
   const copies = new Map(bill.copies.map((copy) => [copy.id, copy]));
   return bill.setMenus.map((menu) => ({ menu, copy: copies.get(menu.copyId)! }));
-}
-
-export function draftNamesLosingPlace(
-  bill: BillSetMenuState,
-  draft: readonly OrderLine[],
-  removed: readonly string[],
-): string[] {
-  const before = draftPlacements(bill, draft).placed;
-  const remaining = bill.setMenus.filter(({ lineId }) => !removed.includes(lineId));
-  const unplaced = new Set(draftPlacements({ ...bill, setMenus: remaining }, draft).unplaced);
-  const names = new Map(
-    draft.map((line, index) => [draftPlacementId(line, index), lineProductName(line.product)]),
-  );
-  return [...new Set(before.filter(({ id }) => unplaced.has(id)).map(({ id }) => names.get(id)!))];
 }
 
 export function sentMenuDishes(bill: BillSetMenuState | null | undefined) {

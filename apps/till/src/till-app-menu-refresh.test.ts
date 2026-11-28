@@ -4324,67 +4324,6 @@ it.each(["paid and cleared", "left for another operator"])(
   },
 );
 
-it("keeps the correction, and the copy recorded meanwhile, when a set-menu change was out as the copies were read", async () => {
-  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
-  const saved = deferred<unknown>();
-  const { el, store, answer } = await rereadOut(
-    {
-      setSetMenuCount: vi.fn().mockReturnValue(saved.promise),
-    },
-    [onSale(special, "v2")],
-  );
-  const held = heldDaily(dailyCopy(hakeDish({ fish: {} })));
-  const changed = counter(el).saveSetMenuCount!("special", 1);
-  await flush(el);
-  expect(api.setSetMenuCount).toHaveBeenCalledOnce();
-  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
-  saved.resolve({
-    setMenus: {
-      ...held.setMenus,
-      copies: [...held.setMenus.copies, setMenuCopyOf(special, "v2")],
-      recorded: { daily: "v1", special: "v2" },
-    },
-    partyRevision: 8,
-  });
-  await changed;
-  await flush(el);
-
-  expect(store.revision).toBe(8);
-  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
-  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
-    ["daily-copy", { fish: {}, eggs: {} }],
-    ["special-copy", { milk: {} }],
-  ]);
-});
-
-it("keeps a copy the order recorded after its copies were asked for again", async () => {
-  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
-  const { el, answer } = await rereadOut(
-    {
-      setSetMenuCount: vi.fn().mockImplementation(async () => {
-        const { setMenus } = heldDaily(dailyCopy(hakeDish({ fish: {} })));
-        return {
-          setMenus: {
-            ...setMenus,
-            copies: [...setMenus.copies, setMenuCopyOf(special, "v2")],
-            recorded: { daily: "v1", special: "v2" },
-          },
-          partyRevision: 8,
-        };
-      }),
-    },
-    [onSale(special, "v2")],
-  );
-  await counter(el).saveSetMenuCount!("special", 1);
-
-  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
-
-  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
-    ["daily-copy", { fish: {}, eggs: {} }],
-    ["special-copy", { milk: {} }],
-  ]);
-});
-
 it("drops an answer about the copies of an order placed since they were asked for", async () => {
   const { el, store, answer } = await rereadOut({
     placeOrder: vi.fn().mockResolvedValue({}),

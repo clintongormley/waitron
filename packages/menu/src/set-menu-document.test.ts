@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
+import type { MenuDocument } from "@waitron/shared";
 import {
   kitchenCourses,
   menuItems,
@@ -17,6 +18,7 @@ import { assertOffPublishedMenus } from "./delete.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import {
+  applyLiveFields,
   buildMenuDocument,
   buildMenuDocuments,
   documentOffers,
@@ -160,6 +162,75 @@ const publish = (menuId: string = f.lunch) =>
   );
 const copied = async () => (await build()).document.setMenus?.[f.daily];
 const fromLive = async () => (await live())!.document.setMenus?.[f.daily];
+
+async function readPrices(document: MenuDocument, dinner?: MenuDocument) {
+  const copy = document.setMenus![f.daily]!;
+  const versions = [{ versionId: "lunch", document }];
+  if (dinner !== undefined) versions.push({ versionId: "dinner", document: dinner });
+  const state = await app((tx) => applyLiveFields(tx, [document], undefined, [{ copy, versions }]));
+  return { offers: state.setMenuOffers.get(copy)!, digest: state.liveFields };
+}
+
+it("shows the holding menu's published price when its offer overrides the product price", async () => {
+  await place();
+  await app(async (tx) =>
+    updateMenuItem(tx, f.lunch, await itemId(tx, f.lunch, f.sirloin), {
+      grossPrice: "21.00",
+    }),
+  );
+  await publish();
+  const { document } = (await live())!;
+  const dinner = await placeInNewMenu("Dinner");
+  await publish(dinner);
+  const dinnerDocument = (await app((tx) => readLiveMenu(tx, dinner)))!.document;
+  const { offers } = await readPrices(document, dinnerDocument);
+  expect(offers.find(({ productId }) => productId === f.sirloin)?.aLaCartePrices).toEqual({
+    lunch: { [f.sirloin]: "21.00" },
+    dinner: { [f.sirloin]: "18.00" },
+  });
+});
+
+it("keeps the published offer's price when the product is edited without republishing", async () => {
+  await place();
+  await publish();
+  await app((tx) => updateProduct(tx, f.sirloin, { unitPrice: "20.00" }));
+  const { document } = (await live())!;
+  const { offers } = await readPrices(document);
+  expect(offers.find(({ productId }) => productId === f.sirloin)?.aLaCartePrices).toEqual({
+    lunch: { [f.sirloin]: "18.00" },
+  });
+});
+
+it("serves the product and variant prices separately from the set-menu supplements", async () => {
+  await place();
+  const { document } = await build();
+  const state = await readPrices(document);
+  expect(state.offers).toEqual([
+    expect.objectContaining({
+      productId: f.soup,
+      unitPrice: "0.00",
+      aLaCartePrices: { lunch: { [f.soup]: "7.00" } },
+    }),
+    expect.objectContaining({
+      productId: f.sirloin,
+      unitPrice: "5.00",
+      aLaCartePrices: { lunch: { [f.sirloin]: "18.00" } },
+    }),
+    expect.objectContaining({
+      productId: f.wine,
+      variants: [expect.objectContaining({ id: f.glass, unitPrice: "1.50" })],
+      aLaCartePrices: { lunch: { [f.wine]: "4.00", [f.glass]: "4.50" } },
+    }),
+  ]);
+  await app(async (tx) => {
+    await tx.update(products).set({ unitPrice: null }).where(eq(products.id, f.glass));
+  });
+  const inherited = await readPrices(document);
+  expect(inherited.digest).not.toBe(state.digest);
+  expect(inherited.offers.find(({ productId }) => productId === f.wine)?.aLaCartePrices).toEqual({
+    lunch: { [f.wine]: "4.00", [f.glass]: "4.00" },
+  });
+});
 
 it("freezes surcharges and keeps ordinary offers and prices separate", async () => {
   await place();

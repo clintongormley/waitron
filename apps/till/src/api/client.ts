@@ -430,7 +430,6 @@ export class TillApi extends FindBillApi {
     kitchenNote?: string | null;
     lateSend?: LateSend;
     closedZoneId?: string;
-    firstSetMenuId?: string;
   }): Promise<{
     id: string;
     orderNumber: number;

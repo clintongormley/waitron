@@ -12,7 +12,7 @@ import {
   sections,
   type Transaction,
 } from "@waitron/db";
-import { AppError, effectiveColor, DEFAULT_HOME_ORDER } from "@waitron/shared";
+import { AppError, centsToDecimal, effectiveColor, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
 import { readMenuDefaultColor } from "./settings.js";
@@ -56,6 +56,7 @@ import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { readSetMenuDrafts } from "./set-menus.js";
 import { freezeSetMenu } from "./set-menu-document.js";
+import { aLaCarteUnitCents, offersByProduct } from "./a-la-carte-price.js";
 import "./errors.js";
 
 export type {
@@ -623,6 +624,7 @@ function setMenuOffersInOrder(copy: PublishedSetMenu): SetMenuFrozenOffer[] {
 interface LiveProductRow {
   active: boolean;
   available: boolean;
+  unitPrice: number;
   courseId: string | null;
   category: string | null;
 }
@@ -675,6 +677,7 @@ async function readLiveRows(
         id: products.id,
         active: products.active,
         available: products.available,
+        unitPrice: effectiveProductColumns.unitPrice,
         courseId: effectiveProductColumns.courseId,
         category: categories.name,
       })
@@ -728,7 +731,7 @@ function liveFieldsDigest({
           ordinary,
           [...setMenuProductIds].sort().map((id) => {
             const row = products.get(id);
-            return [id, row !== undefined && sellable(row)];
+            return [id, row !== undefined && sellable(row), row?.unitPrice ?? null];
           }),
         ];
   return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
@@ -788,7 +791,10 @@ export async function applyLiveFields(
   tx: Transaction,
   documents: readonly MenuDocument[],
   menuItemIds?: ReadonlySet<string>,
-  setMenuCopies: readonly PublishedSetMenu[] = [],
+  setMenuCopies: readonly {
+    copy: PublishedSetMenu;
+    versions: readonly { versionId: string; document: MenuDocument }[];
+  }[] = [],
 ): Promise<{
   offers: Map<string, LiveOffer[]>;
   setMenuOffers: Map<PublishedSetMenu, ServedSetMenuOffer[]>;
@@ -807,8 +813,16 @@ export async function applyLiveFields(
       ),
     ]),
   );
-  const copies = new Map(setMenuCopies.map((copy) => [copy, setMenuOffersInOrder(copy)]));
-  const rows = await readLiveRows(tx, [...offersOf.values()].flat(), [...copies.values()].flat());
+  const copies = setMenuCopies.map((entry) => ({
+    ...entry,
+    frozen: setMenuOffersInOrder(entry.copy),
+  }));
+  const ordinaryByDocument = new Map<MenuDocument, ReadonlyMap<string, FrozenOffer>>();
+  const rows = await readLiveRows(
+    tx,
+    [...offersOf.values()].flat(),
+    copies.flatMap(({ frozen }) => frozen),
+  );
   for (const [menuId, frozen] of offersOf)
     offers.set(
       menuId,
@@ -817,20 +831,28 @@ export async function applyLiveFields(
         return live === undefined ? [] : [live];
       }),
     );
-  for (const [copy, frozen] of copies)
+  for (const { copy, versions, frozen } of copies) {
+    const ordinary = versions.map(({ versionId, document }) => {
+      let offers = ordinaryByDocument.get(document);
+      if (offers === undefined)
+        ordinaryByDocument.set(document, (offers = offersByProduct(document)));
+      return [versionId, offers] as const;
+    });
     setMenuOffers.set(
       copy,
       frozen.flatMap((offer) => {
-        const live = serveSetMenuOffer(offer, rows);
+        const live = serveSetMenuOffer(offer, rows, ordinary);
         return live === undefined ? [] : [live];
       }),
     );
+  }
   return { offers, setMenuOffers, liveFields: liveFieldsDigest(rows) };
 }
 
 function serveSetMenuOffer(
   offer: SetMenuFrozenOffer,
   rows: LiveRows,
+  ordinary: readonly (readonly [string, ReadonlyMap<string, FrozenOffer>])[],
 ): ServedSetMenuOffer | undefined {
   const { countsAsCourseId, variants, ...frozen } = offer;
   const live = serveOffer(
@@ -841,7 +863,27 @@ function serveSetMenuOffer(
   const variantCountsAs = Object.fromEntries(
     variants.map((variant) => [variant.id, variant.countsAsCourseId]),
   );
-  return { ...live, countsAsCourseId, variantCountsAs };
+  const dishCents = rows.products.get(live.productId)!.unitPrice;
+  const aLaCartePrices = Object.fromEntries(
+    ordinary.map(([versionId, offers]) => {
+      const offer = offers.get(live.productId);
+      const price = (id: string | null) =>
+        centsToDecimal(
+          aLaCarteUnitCents(offer, id, {
+            dishCents,
+            variantCents: id === null ? null : rows.products.get(id)!.unitPrice,
+          }),
+        );
+      return [
+        versionId,
+        Object.fromEntries([
+          [live.productId, price(null)],
+          ...live.variants.map(({ id }) => [id, price(id)]),
+        ]),
+      ];
+    }),
+  );
+  return { ...live, countsAsCourseId, variantCountsAs, aLaCartePrices };
 }
 
 function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {

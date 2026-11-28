@@ -61,5 +61,5 @@ export function bill(...menus: (readonly [lineId: string, copy: SetMenuCopy])[])
 }
 
 export function dish(productId: string, id = productId): DishToPlace {
-  return { id, productId, variantId: null, reserved: null };
+  return { id, productId, variantId: null };
 }

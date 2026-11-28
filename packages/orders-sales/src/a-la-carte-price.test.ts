@@ -1,9 +1,10 @@
 import { products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { aLaCarteUnitCents } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FrozenOffer, MenuDocument } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { aLaCarteUnitCents, setMenuALaCartePrices } from "./a-la-carte-price.js";
+import { setMenuALaCartePrices } from "./a-la-carte-price.js";
 
 describe("aLaCarteUnitCents", () => {
   const offer = {

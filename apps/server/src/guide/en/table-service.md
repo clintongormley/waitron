@@ -594,10 +594,13 @@ cost. Tap the product to choose one and see its price.
 
 ## Set menus {#set-menus}
 
-Add the dishes the guests order, from any folder. The bill groups them into the cheapest set
-menus it finds each time the order changes, and charges a dish that fits none à la carte. A set menu's
-folder shows which dishes it includes and which cost extra: open it from the grid, or type its
-name in **Search** and tap the result.
+Add the dishes the guests order, from any folder. When you send dishes at a table, the bill
+groups them into the cheapest set menus it finds. It charges any dish outside those menus à la carte.
+Open a set-menu folder to see the dishes and supplements. Find it in the grid or by name in
+**Search**.
+
+At a table, an ungrouped dish shows its own price with paid extras until you send it. The order
+total can drop when the dish joins a set menu.
 
 Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
 are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A dish you comp
@@ -612,7 +615,7 @@ To move a set menu to another bill, open **Move dishes** and select the set menu
 with it.
 
 At the **Counter**, choose **Take away**, then add the dishes from any folder: the bill groups
-them into set menus as it does at a table. To add dishes later, tap the parked order under **Open orders**.
+them into set menus. To add dishes later, tap the parked order under **Open orders**.
 
 ## Give a table a short name {#short-names}
 
