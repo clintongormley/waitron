@@ -102,7 +102,11 @@ AEAT is no longer blocked.
 
 ## Step 2 — ~~Order the deli's sello de entidad~~ Not needed (owner, 2026-11-25)
 
-> **2026-11-27:** the owner now prefers a seal ("I misunderstood what the seal certificate was for, so I think we do need one, or it'd be better to use one"). How the box makes its key: [A853 design](../superpowers/specs/2026-11-27-a853-seal-key-on-the-box-design.md).
+> **2026-11-28 (owner): no seal.** "I'm abandoning seal certs, they are too expensive." The box
+> files with the representative certificate. A853, which would have let the box make a seal's key,
+> is withdrawn; a cloud box would later file with Waitron's own certificate instead
+> ([backlog](../backlog/later.md#waitron-files-with-its-own-certificate-for-cloud-failover-customers)).
+> This replaces the 2026-11-27 note that preferred a seal.
 
 > **The deli does not need a seal.** It files under its own representante certificate, on its own box;
 > each owner has their own certificate. For a venue in Waitron Cloud, which also files for itself under
@@ -248,7 +252,7 @@ deadline passed on 29 July 2025.
 - ❌ File the declaración responsable anywhere. It is published, never submitted.
 - ❌ Get a certificate for Waitron, or a Spanish NIF for it, or any legal vehicle — as long as
   Waitron only produces the software and the deli files under its own credential.
-- ❌ Colaboración social (acuerdo Tipo 017) or apoderamientos (`IZ862`/`IZ863`). Those are only
+- ❌ Colaboración social (acuerdo Tipo 017) or apoderamientos (`IZ860`/`IZ861`). Those are only
   for submitting *on behalf of* clients, which this design deliberately avoids.
 - ❌ Change your personal certificate in any way.
 

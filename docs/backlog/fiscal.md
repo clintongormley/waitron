@@ -888,23 +888,6 @@ Not established: how AEAT answers a certificate that is only expired (the one te
 too, and its company is closed), a company seal at either address, where a seal keeps the tax ID
 (owner: no seal is needed), and a Windows export.
 
-## A853. The box makes a company seal's private key itself
-
-- **Decided out of A795 (2026-10-18), design §2.7 and §3.9.** FNMT's seal procedure: «Esta operación
-  deberá realizarse en una máquina del suscriptor» — the key pair and certificate request are made on
-  the subscriber's machine, and FNMT returns only the certificate
-  (`docs/compliance/getting-to-production.md:181-182`, `:199-200`; `action-plan.md:108-109`). Setup
-  and A795 both install only a `.p12` file, so a seal's key has to be made on another computer and
-  moved to the box. The flow: the box makes the key and the request, shows the request to paste into
-  FNMT's form, keeps the key while the request is with FNMT, and takes back only the issued
-  certificate. One design for setup's first install and for renewal on A795's card. It also decides
-  whether the box keeps the previous seal's key, since the owner then has no file of their own, and
-  what the card shows while a request is pending.
-- **Design for the owner (2026-11-27):** [2026-11-27-a853-seal-key-on-the-box-design.md](../superpowers/specs/2026-11-27-a853-seal-key-on-the-box-design.md),
-  with two questions (setup, and the previous seal's key). The owner asked for it on 2026-11-27:
-  "I misunderstood what the seal certificate was for, so I think we do need one, or it'd be better
-  to use one", then "A853 yes".
-
 ## VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68)
 
 **Design approved by the owner 2026-11-21:** [2026-11-21-vat-rates-design.md](../superpowers/specs/2026-11-21-vat-rates-design.md). The owner changed the model that day: one dine-in rate for everything eaten or drunk on the premises, supplied by Waitron with dates; a dated takeaway rate per product; no labels; set menus with no VAT of their own, and none taken away when its products' takeaway rates differ. On 24 November the owner replaced that refusal: taken away, a set menu's price is divided between its dishes in proportion to their à la carte prices, each part at its dish's takeaway rate. The history below is kept for the earlier decisions it records.
@@ -1104,6 +1087,13 @@ what is recorded and by whom, how a person adds an incident the box cannot see (
 the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
+
+**No company seal: A853 withdrawn (owner, 2026-11-28).** "I'm abandoning seal certs, they are too
+expensive." A853 would have let the box make a seal's private key and the request for FNMT
+([design](../superpowers/specs/2026-11-27-a853-seal-key-on-the-box-design.md),
+[plan](../superpowers/plans/2026-11-28-a853-seal-key-on-the-box.md)); none of it was built. Every box
+files with its customer's representative certificate; a cloud box would later file with Waitron's
+own certificate instead ([later.md](later.md#waitron-files-with-its-own-certificate-for-cloud-failover-customers)).
 
 **When a table's ticket is issued (owner, 2026-11-17 and 2026-11-19).** Moved here from the deleted MEAL-END-TICKET and ADVISER-CLOSE-OF-DAY-TICKET plans. Print the bill issues the ticket, paid or not. Dishes not yet served do not hold it back: "Warn, let staff print". "once a bill is printed (its invoice issued), neither invoice switch may happen". A bill still open when the business day ends is issued then: D1 "Calendar day it ended (Recommended)" for its date, D2 "New: close of business day (Recommended)" for what the record names as having issued it, and D3–D6 "Accept all four (Recommended)": nothing prints at the close, a bill with dishes the kitchen is not making is left open, table bills only, and bills a restored box found open are left for staff to review, never issued automatically. (2026-11-19, while building: D3 went back to the owner, because a bill then recorded as a walkout gets no printed ticket.) The adviser's confirmation is still awaited ([the 19 November sheet](../compliance/2026-11-19-adviser-meeting.md)).
 

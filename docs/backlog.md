@@ -327,10 +327,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **Next action:** decide how an uncertain physical delivery should be recovered; request deduplication alone does not establish one physical print.
   [Detail](backlog/fiscal.md#uncertain-receipt-delivery)
 
-- **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
-  Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
-
 - **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** Under the
   [design](superpowers/specs/2026-11-21-vat-rates-design.md), each product has its own dated
   takeaway rate, everything eaten here files at the one dine-in rate, and a set menu has no VAT of
@@ -1659,6 +1655,11 @@ _Formerly the "Later and parked" paragraph under What's built._
 
 - **A1507. Google sign-in, built in, through one Waitron-owned Google setup.** Not a go-live
   requirement (owner, 2026-11-11). [Detail](backlog/later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup)
+- **Waitron files with its own certificate for cloud-failover customers.** Parked (owner,
+  2026-11-28): every box files with its customer's representative certificate for now. Later, a
+  paying cloud-failover customer's box would hand its records to a Waitron Cloud filing service
+  that sends them under Waitron's own certificate, so a cloud box can look them up after a failure.
+  [Detail](backlog/later.md#waitron-files-with-its-own-certificate-for-cloud-failover-customers)
 [Detail](backlog/later.md#later-and-parked)
 
 ---

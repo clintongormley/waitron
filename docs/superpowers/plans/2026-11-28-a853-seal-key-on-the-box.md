@@ -1,5 +1,9 @@
 # A853: the box makes a company seal's key itself — implementation plan
 
+> **Withdrawn 2026-11-28 (owner): no company seal.** "I'm abandoning seal certs, they are too
+> expensive." Nothing here was built; kept as the record. See `docs/backlog/fiscal.md` →
+> Decisions and deliberate limits.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Status: written 2026-11-28 by lane L; revised the same day after a fresh-context read

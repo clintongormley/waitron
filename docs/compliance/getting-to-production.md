@@ -428,9 +428,13 @@ branch.
 **Model B — we submit on clients' behalf.** Requires our own qualified certificate, hence our own
 Spanish NIF, hence a Spanish legal vehicle. Then per client, one of:
 
-- **Apoderamiento** registered in AEAT's Registro de Apoderamientos — specific codes **`IZ862`**
-  and **`IZ863`**, or the general Ley 58/2003 poder which subsumes both. The client grants it
-  from the sede: *Registro de apoderamientos → Alta de poder para trámites tributarios
+- **Apoderamiento** registered in AEAT's Registro de Apoderamientos — specific codes **`IZ860`**
+  (*«Remisión y consulta de registros de facturación por servicio web»*) and **`IZ861`**
+  (*«Consulta de registros de facturación»*), from AEAT's list of delegable procedures
+  ([Relación de trámites habilitados para el apoderamiento](https://www2.agenciatributaria.gob.es/L/inwinvoc/es.aeat.dit.adu.itti.apoder.ApoderaAyudaW),
+  read 2026-11-28). `IZ862` and `IZ863` are for AEAT's own free invoicing app (*«Emisión de
+  facturas mediante aplicación de facturación de la AEAT»*), not for outside software. The client
+  grants it from the sede: *Registro de apoderamientos → Alta de poder para trámites tributarios
   específicos → Sistemas Informáticos de Facturación y VERI\*FACTU*.
 - **Colaboración social** — **acuerdo Tipo 017**, contact **`comunicacion.sepri@correo.aeat.es`**.
   Veri\*Factu procedures were adapted to convenios 001, 002 and 017 as of 3 Feb 2025.
@@ -441,9 +445,10 @@ AEAT verbatim on the general permission:
 > de identificación admitidas por la AEAT, incluyendo la representación, el apoderamiento y la
 > colaboración social, haciendo uso de un certificado cualificado por parte del tercero.
 
-Two qualifications on Model B: it is **not automatic** — AEAT rejects submissions where the
-convenio does not cover the trámite, or where no active apoderamiento exists (errors 4105/4112),
-so enrol early. And it **never transfers liability**: *"esta posibilidad no exime al obligado a
+Two qualifications on Model B: it is **not automatic** — AEAT rejects a submission whose
+certificate holder is not the taxpayer, a collaborator, an attorney or a successor (error 4112,
+*«El titular del certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o
+Sucesor»*), so enrol early. And it **never transfers liability**: *"esta posibilidad no exime al obligado a
 expedir facturas de la responsabilidad sobre dicho cumplimiento."* We would absorb the
 operational burden and the failure modes without relieving the client of anything.
 
@@ -451,6 +456,45 @@ operational burden and the failure modes without relieving the client of anythin
 an onboarding flow that chases every client through the AEAT sede — none of which the first
 client needs. It is also purely additive later: the credential seam is identical and only the
 presented identity changes.
+
+> **2026-11-28 (owner):** Model A stays: every box files with its customer's representative
+> certificate. Model B, under the Tipo 017 agreement, is parked as the later plan for paying
+> cloud-failover customers only: [backlog](../backlog/later.md#waitron-files-with-its-own-certificate-for-cloud-failover-customers).
+> Asking customers to register a power of attorney on AEAT's website is ruled out: "this would
+> also cause 90% of customers to abandon us. doing anything on the AEAT website will be
+> complicated."
+
+### What Waitron could look up under Model B (read 2026-11-28)
+
+Model B only works for a cloud failover if the cloud box can look up what the failed box sent.
+What AEAT's documents say, none of it run:
+
+- **Under a power of attorney, Waitron looks up as the taxpayer would**, seeing every record filed
+  under the tax number (IZ860 or IZ861 above). Without one, a lookup is refused: error 4140,
+  *«No puede acceder a la consulta de facturas al no estar apoderado en los trámites necesarios»*
+  ([error list](https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/errores.properties)).
+- **Under the Tipo 017 agreement alone, it should see only the records it sent.** The authorisation
+  forms say *«La presente autorización se circunscribe al mencionado envío electrónico»*
+  ([research/2026-10-09-operations.md](research/2026-10-09-operations.md) §4.6). The lookup's
+  `IndicadorRepresentante` flag *«Permite, a quien realiza la cosulta, obtener los registros de
+  facturación en los que figura como representante»*
+  ([web service description](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf)
+  v1.0.3, §6.4.1), and the FAQ says AEAT *«ofrecerá servicios que permitan descargar los registros
+  de facturación a quien los remitió»*
+  ([FAQ, Sistemas VERI\*FACTU](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/sistemas-verifactu.html),
+  page dated 27 November 2026). Records sent under the customer's own certificate before a
+  switch would therefore not be visible to Waitron. That the flag returns exactly the records
+  Waitron sent is a reading, not a test.
+- **The same document names a cloud platform sending with its own certificate** as a case it
+  provides for: *«una plataforma en la nube (que utiliza su propio certificado para la
+  remisión)»* (version 0.4.0's notes).
+- **A batch holds one taxpayer's records:** *«Todos los registros de facturación que se envíen en un
+  mismo lote deben corresponder al mismo obligado tributario»* (same FAQ).
+- **A looked-up record carries its type, corrected invoices, description, recipients, VAT
+  breakdown, totals, chaining, generation time and fingerprint**
+  (`RespuestaDatosRegistroFacturacionType` in AEAT's `RespuestaConsultaLR.xsd`, archived in the
+  `verifactu` repository under `sources/archive/`), but never the dishes: a Veri\*Factu record has
+  no item lines.
 
 **One consequence of Model A when we host.** The client's key then lives on our infrastructure. A
 representante certificate is issued to a named natural person obliged to keep sole control of

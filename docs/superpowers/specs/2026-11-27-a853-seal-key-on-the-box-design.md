@@ -1,5 +1,9 @@
 # A853 — the box makes a company seal's key itself — design
 
+> **Withdrawn 2026-11-28 (owner): no company seal.** "I'm abandoning seal certs, they are too
+> expensive." Nothing here was built; kept as the record. See `docs/backlog/fiscal.md` →
+> Decisions and deliberate limits.
+
 Status: written 2026-11-27 by lane L; the owner answered both questions that day (last section). Plan:
 [2026-11-28-a853-seal-key-on-the-box.md](../plans/2026-11-28-a853-seal-key-on-the-box.md). Backlog:
 `docs/backlog/fiscal.md`, A853.
