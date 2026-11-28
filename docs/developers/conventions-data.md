@@ -1305,10 +1305,7 @@ its payments and settlement stay on it, and a later refund corrects the replacem
 a sale owes is its total plus its own correctives except the replacement, plus the replacement's
 correctives. `correctivesOf(corrective, saleId)` in `packages/db/src/correctives-of.ts` is that
 set, as a condition on the caller's own `sales` row named `corrective`. Money readers and "has it been credited" tests use it. The lines the guard below
-allows instead, each with its reason there: the correction target's own sums and history in
-`packages/core/src/record-correction.ts` and `correction-history.ts`, the order list's number
-search, the lines that find a replacement itself, the first-corrective check in
-`record-replacement.ts`, and top-sellers' line netting.
+allows instead are listed there, each with its reason.
 
 `scripts/corrective-sums.test.ts` holds the rule, and is weaker than its name. It reads non-test
 `.ts` files under `apps/*/src` and `packages/*/src`, leaving out `testing/` folders, one LINE at a

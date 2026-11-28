@@ -1057,7 +1057,7 @@ describe("readGiveBack: a receipt replaced after AEAT refused it", () => {
   });
 });
 
-describe("a receipt given money back in part, then replaced after AEAT refused it", () => {
+describe("readGiveBack and planGiveBack: a receipt given money back in part, then replaced after AEAT refused it", () => {
   it("offers what is left of the receipt after the earlier refund, and refuses a cent more", async () => {
     const b = await tab([
       ["Paella", "2"],

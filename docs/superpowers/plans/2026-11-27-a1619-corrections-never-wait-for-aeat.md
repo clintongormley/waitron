@@ -348,6 +348,8 @@ already name it (`correction-target.ts:12-17`).
   PR 2. Recommended.
 - **D11:** move an earlier refund's VAT day to the replacement's real day, as for later refunds
   (`vat-movements.ts:150`). Recommended in PR 2, with a test first; a VAT figure, not read further.
+  As built (2026-11-28, after review): the refund keeps its own day, and the date fix moves it on its
+  issue date, beside the receipt's own move, so a period already filed does not change.
 - **D12:** a full invoice (R1 then R4 "S") follows the same core change but stays off
   (`put-right.ts:30`). Recommended.
 
@@ -360,7 +362,7 @@ fiscal-verifactu, server and reporting. The `verifactu` mode is a separate PR of
 No schema change. Full review with two Codex angles; the owner lands it.
 
 **Cleared (watcher, 2026-11-27 17:10):** D8 (a): replace at the whole 50.00; the earlier 5.00 refund keeps
-counting against the original (AEAT nets 45.00). D9 reworded "already replaced". D10: the same-clock earlier
+counting against the original. D9 reworded "already replaced". D10: the same-clock earlier
 refund stays out of PR 2, named in the PR body as a known limit, plus one line on the adviser's confirmation
 list. D11 and D12 as written. **AEAT test service:** run 46070947073 (verifactu b979412f9f, mode
 `replacement-after-credit`) accepted it: each receipt dated tomorrow refused `1112`; the 5.00 refund (R5 I) and

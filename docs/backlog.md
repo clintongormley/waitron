@@ -358,6 +358,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the same way, naming the same customer. It needs a new `live-aeat` mode in the
   `verifactu` repo, which needs the owner's approval, by A985's precedent. Left open by Q37-FIX.
   Turning on full-invoice replacement (`FULL_INVOICE_REPLACEMENT_ON`, A1407) waits for this probe.
+  (2026-11-28, A1619 PR 2: run 46070947073 sent the R5 "S" while the receipt's date was still in the
+  future, alone and after a refund, and AEAT's test service answered `Correcto`; the send after the
+  date has passed, and the R4 "S", are still to run.)
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
   The advisor is asked only to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).

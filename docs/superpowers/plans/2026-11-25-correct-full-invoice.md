@@ -230,8 +230,8 @@ wordings, a row with no `fullInvoice`), `codes.test.ts`.
 **Leaves:** a full invoice is corrected as a receipt is. A cancelled dish's own money still goes back plain with
 no corrective and is on the accountant's list, as today. Until PR 4a, an R1 filed after a card prints nothing and
 is printed from Find a bill: a receipt's rule today. A refused **R1** has no fix on the dashboard, as an R5 has
-none (`put-right.test.ts`), and an F1 holding an R1 can never get its R4 (`sale.replacement_not_first`); the PR
-says so. Sale-path read changed: no.
+none (`put-right.test.ts`), and an F1 holding an R1 can never get its R4 (`sale.replacement_not_first`; 2026-11-28: since A1619 PR 2
+it can, while full-invoice replacement stays switched off); the PR says so. Sale-path read changed: no.
 
 The till's `sale.correction_unsupported` words (`codes.ts`, "This is a full invoice naming a customer…") must also
 cover a full-invoice correction refused because the invoice names nobody or is not a full invoice.
