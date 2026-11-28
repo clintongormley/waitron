@@ -221,7 +221,7 @@ it("keeps keyboard focus on Serve 1 while a portion is sent and after it lands",
   ]);
 });
 
-it("follows the open row with keyboard focus when a serve regroups it, then falls to Dish details", async () => {
+it("follows the open row with keyboard focus when a serve regroups it, and closes it once the row holding its last portion has another to serve", async () => {
   const ready = { readyAt: at(55) };
   const el = await mount(
     sentCurrent([
@@ -259,8 +259,7 @@ it("follows the open row with keyboard focus when a serve regroups it, then fall
     ]),
     [burgers[0]!, ...burgers.slice(1).map((line) => ({ ...line, servedAt: at(59) }))],
   );
-  expect(opened(el)).toEqual([["burger-1", "2 of 3 served", ["Serve 1"]]]);
-  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-serve=one]"));
+  expect(opened(el)).toEqual([]);
   expect(serves).toEqual([
     { items: [{ lineId: "burger-2", quantity: "1" }] },
     { items: [{ lineId: "burger-3", quantity: "1" }] },
@@ -300,6 +299,77 @@ it("leaves keyboard focus where the person moves it after a serve that did not l
   el.requestUpdate();
   await el.updateComplete;
   expect(focused(el)).toBe(find(el, toggle("bravas")));
+});
+
+it("leaves focus where the browser puts it after a pointer press on Serve, while sent and after it lands", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]));
+  await tap(el, toggle("bravas"));
+  await tap(el, "[data-sent-serve=one]");
+  el.busy = true;
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(focused(el)).not.toBe(find(el, toggle("bravas")));
+  const where = focused(el);
+  await served(
+    el,
+    sentCurrent([
+      sentDish("bravas", { quantity: "3.000", servedQuantity: "1.000", servedAt: at(59) }),
+    ]),
+  );
+  expect(opened(el)).toEqual([["bravas", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+  expect(focused(el)).toBe(where);
+});
+
+/** A plain block outside the panel, pressed with the pointer: focus falls to the page. */
+function outside() {
+  const block = document.createElement("div");
+  block.textContent = "elsewhere";
+  block.style.blockSize = "40px";
+  document.body.append(block);
+  return block;
+}
+
+it("lets go of keyboard focus once the pointer presses elsewhere on the page", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]));
+  const block = outside();
+  try {
+    find(el, toggle("bravas"))!.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    await userEvent.tab();
+    await keyboardServe(el);
+    await userEvent.click(page.elementLocator(block));
+    expect(document.activeElement).toBe(document.body);
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(document.activeElement).toBe(document.body);
+    await served(el, el.snapshot!.current);
+    expect(document.activeElement).toBe(document.body);
+  } finally {
+    block.remove();
+  }
+});
+
+it("lets go of keyboard focus once it moves out of the panel", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]));
+  const elsewhere = document.createElement("button");
+  elsewhere.textContent = "elsewhere";
+  document.body.append(elsewhere);
+  try {
+    find(el, toggle("bravas"))!.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    await userEvent.tab();
+    await keyboardServe(el);
+    elsewhere.focus();
+    elsewhere.remove();
+    expect(document.activeElement).toBe(document.body);
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(document.activeElement).toBe(document.body);
+  } finally {
+    elsewhere.remove();
+  }
 });
 
 it("a wholly served row, a held row and a row not yet released open with no Serve", async () => {
@@ -470,7 +540,7 @@ it.each<[string, (el: Panel) => Promise<void> | void]>([
   expect(details).toEqual([]);
 });
 
-it("stays open after Serve 1 when the served portion joins an identical one further along", async () => {
+it("follows the open row when Serve 1 joins its portion to another row, and closes once that row has a portion of its own to serve", async () => {
   const ready = { readyAt: at(55) };
   const el = await mount(
     sentCurrent([
@@ -501,7 +571,6 @@ it("stays open after Serve 1 when the served portion joins an identical one furt
     { items: [{ lineId: "burger-2", quantity: "1" }] },
     { items: [{ lineId: "burger-3", quantity: "1" }] },
   ]);
-  // With none of it left, the row holding its served portions stays open.
   el.snapshot = {
     ...el.snapshot!,
     current: sentCurrent([
@@ -512,7 +581,28 @@ it("stays open after Serve 1 when the served portion joins an identical one furt
   };
   el.lines = [burgers[0]!, ...burgers.slice(1).map((line) => ({ ...line, servedAt: at(59) }))];
   await el.updateComplete;
-  expect(opened(el)).toEqual([["burger-1", "2 of 3 served", ["Serve 1"]]]);
+  expect(opened(el)).toEqual([]);
+  expect(find(el, "[data-sent-serve]")).toBeNull();
+});
+
+it("Serve 1 until nothing is left keeps the same row open, with no Serve", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "2.000" })]));
+  await tap(el, toggle("bravas"));
+  await tap(el, "[data-sent-serve=one]");
+  const servedOf = (quantity: string) =>
+    sentCurrent([
+      sentDish("bravas", { quantity: "2.000", servedQuantity: quantity, servedAt: at(59) }),
+    ]);
+  el.snapshot = { ...el.snapshot!, current: servedOf("1.000") };
+  await el.updateComplete;
+  expect(opened(el)).toEqual([["bravas", "1 of 2 served", ["Serve 1"]]]);
+  await tap(el, "[data-sent-serve=one]");
+  el.snapshot = { ...el.snapshot!, current: servedOf("2.000") };
+  await el.updateComplete;
+  expect(find(el, `li[data-open] ${toggle("bravas")}`)).not.toBeNull();
+  expect(text(find(el, "li[data-open] .row-more")!)).toBe("Served");
+  expect(find(el, "li[data-open] [data-sent-serve]")).toBeNull();
+  expect(find(el, "li[data-open] [data-sent-details]")).not.toBeNull();
 });
 
 it("keeps the box open with its buttons disabled while busy, and sends nothing", async () => {

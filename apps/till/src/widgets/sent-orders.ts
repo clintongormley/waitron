@@ -170,18 +170,25 @@ export class TillSentOrders extends LitElement {
     target: EventTarget;
   };
   #suppressClick = false;
-  /** A serve sent from the open row's focused button: focus stays in that row, on a Serve of the
-   * same kind where there is one, until the row draws other than as it was pressed. */
+  /** A serve sent from the keyboard on the open row's focused button: focus stays in that row, on
+   * a Serve of the same kind where there is one, until the row draws other than as it was pressed,
+   * a pointer presses anywhere, or focus moves out of the row. */
   #focusAfterServe?: { opening: string; kind: SentServe["kind"]; drawn: string };
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
-  readonly #startPointer = () => {
+  readonly #startPointer = () => this.#releaseHeading();
+  readonly #endFocusHold = () => {
     this.#focusAfterServe = undefined;
-    this.#releaseHeading();
   };
   #focusing = false;
   readonly #focusMoved = () => {
     if (!this.#focusing) this.#focusAfterServe = undefined;
+  };
+  /** Only a move to another element ends the hold; focus dropped to the page is what it mends. */
+  readonly #focusLeft = (event: Event) => {
+    const to = (event as FocusEvent).relatedTarget;
+    if (to instanceof Node && this.renderRoot.querySelector("li[data-open]")?.contains(to) !== true)
+      this.#focusAfterServe = undefined;
   };
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #ageTimer?: ReturnType<typeof setTimeout>;
@@ -195,8 +202,10 @@ export class TillSentOrders extends LitElement {
     this.#opening = "";
     super.connectedCallback();
     this.addEventListener("pointerdown", this.#startPointer, true);
+    document.addEventListener("pointerdown", this.#endFocusHold, true);
     // On the shadow root: a move between two of its controls does not reach the host.
     this.renderRoot.addEventListener("focusin", this.#focusMoved);
+    this.renderRoot.addEventListener("focusout", this.#focusLeft);
     this.#gestures = new Gestures(this, {
       holdStart: ({ target }) => {
         if (target === this.#pressed?.target) this.#suppressClick = true;
@@ -235,7 +244,9 @@ export class TillSentOrders extends LitElement {
   }
   override disconnectedCallback(): void {
     this.removeEventListener("pointerdown", this.#startPointer, true);
+    document.removeEventListener("pointerdown", this.#endFocusHold, true);
     this.renderRoot.removeEventListener("focusin", this.#focusMoved);
+    this.renderRoot.removeEventListener("focusout", this.#focusLeft);
     this.#focusAfterServe = undefined;
     this.#gestures?.disconnect();
     this.#gestures = undefined;
@@ -430,7 +441,8 @@ export class TillSentOrders extends LitElement {
       .find((each) => each.id === row.id);
     if (live === undefined || sentRowDrawn(live, this.lines) !== drawn) return;
     this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
-    if ((this.renderRoot as ShadowRoot).activeElement === event.currentTarget)
+    const fromKeys = (event as MouseEvent).detail === 0;
+    if (fromKeys && (this.renderRoot as ShadowRoot).activeElement === event.currentTarget)
       this.#focusAfterServe = { opening, kind: serve.kind, drawn };
     this.#releasePointer();
   }

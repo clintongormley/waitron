@@ -92,9 +92,10 @@ const opened = (opening: string, row: SentRow): Opened => ({
 
 /**
  * Which sent row is open in place, one at a time. A serve can join a portion to another row and
- * change which line a row starts with, so the open row is followed by its portions: to the row now
- * holding the first of its unserved ones still unserved, or else any of them. It closes when the
- * bill or party changes or no row holds any of them.
+ * change which line a row starts with, so the open row is followed by its portions: to the row
+ * holding the first of its unserved ones still unserved; once none is, to a row holding any of its
+ * portions that has none left. It closes when the bill or party changes or no row qualifies, so
+ * the box never moves onto portions left to serve that the person did not open.
  */
 export class OpenSentRow {
   #open?: Opened;
@@ -119,7 +120,9 @@ export class OpenSentRow {
         : (open.left
             .map((id) => rows.find((each) => holds(each.left, id)))
             .find((each) => each !== undefined) ??
-          rows.find((each) => open.portions.some((id) => holds(each.slices, id))));
+          rows.find(
+            (each) => each.left.length === 0 && open.portions.some((id) => holds(each.slices, id)),
+          ));
     this.#open = row && opened(opening, row);
   }
 }
