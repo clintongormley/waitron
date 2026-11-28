@@ -6561,8 +6561,10 @@ always stand alone.
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
-or a count of it. On a sent row that joins served dishes to dishes left, Void and Comp act on those
-left, and Void served and Comp served on the served ones alone (named by their own lines). Fire now releases every member of the row with its extras in one group.
+or a count of it. On a sent row that joins served portion lines to lines with dishes left, Void and
+Comp act on the lines left, and Void served and Comp served on the served lines alone (named by
+their own lines). A single line partly served is one line, so there Void and Comp take the whole
+line, served portions included, and Void served and Comp served are not offered. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
 setting. On the station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: the counter basket
