@@ -220,17 +220,20 @@ it("leaves an inset beside a full job and wraps whole words", async () => {
       shortName: "R12",
       cue: { icon: "floor-ready", text: "2" },
       job: {
-        text: "Collect from the Kitchen",
+        text: "Collect from Bar",
         time: "9 min",
-        compact: "Kitchen",
+        compact: "Bar",
         compactTime: "9′",
       },
     },
   ]);
+  map.style.fontFamily = "monospace";
+  map.requestUpdate();
+  await map.updateComplete;
   const target = button(map, "T1");
   expect(target.querySelector('[part="name"]')?.textContent).toBe("R12");
   const job = target.querySelector('[part="job"]')!;
-  expect(job.textContent).toBe("Collect from the Kitchen");
+  expect(job.textContent).toBe("Collect from Bar");
   const tile = target.getBoundingClientRect();
   const label = document.createRange();
   label.selectNodeContents(job);
