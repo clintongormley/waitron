@@ -136,10 +136,29 @@ describe("till-device-sheet", () => {
       "paymentSlipPrinterId",
       "cashDrawerPrinterId",
     ]);
-    const noDrawer = await mountSheet({ capabilities: ["print-receipt"] });
+    const noDrawer = await mountSheet({
+      capabilities: ["print-receipt", "integrated-card-payment"],
+    });
     expect(rows(noDrawer.el)).toEqual(["cardReaderId", "receiptPrinterId", "paymentSlipPrinterId"]);
-    const noReceipt = await mountSheet({ capabilities: ["open-cash-drawer"] });
+    const noReceipt = await mountSheet({
+      capabilities: ["open-cash-drawer", "integrated-card-payment"],
+    });
     expect(rows(noReceipt.el)).toEqual(["cardReaderId", "cashDrawerPrinterId"]);
+    const noCard = await mountSheet({ capabilities: ["print-receipt", "open-cash-drawer"] });
+    expect(rows(noCard.el)).toEqual([
+      "receiptPrinterId",
+      "paymentSlipPrinterId",
+      "cashDrawerPrinterId",
+    ]);
+  });
+
+  it("draws a practice payment's fixed reader with no reader listed", async () => {
+    const { el } = await mountSheet({
+      equipment: { roles: [roleOf("card_terminal", null, [])] },
+      fixedReader: { name: "Simulator" },
+    });
+    expect(box(el, "cardReaderId").options.map((option) => option.label)).toEqual(["Simulator"]);
+    expect(box(el, "cardReaderId").disabled).toBe(true);
   });
 
   it("draws a chevron on every dropdown, even with one choice, and the device icon on its button", async () => {
@@ -166,10 +185,9 @@ describe("till-device-sheet", () => {
         composed: true,
       }),
     );
-    expect(picks).toEqual([
-      { role: "receipt", kind: "printer", id: "p2", takeOver: false, via: "scan" },
-    ]);
+    expect(picks).toEqual([{ kind: "printer", id: "p2", via: "scan" }]);
     el.equipment = equipment(R2, TERRACE, TERRACE);
+    el.notice = { message: "Picked up Terrace", tone: "info" };
     await el.updateComplete;
 
     const lit = (name: string) => box(el, name).highlight;
@@ -180,6 +198,27 @@ describe("till-device-sheet", () => {
     ]);
     expect(isOpen(el)).toBe(true);
     expect(scanner(el)).not.toBeNull();
+  });
+
+  it("highlights what each answer changed when two scans were sent before the first answer", async () => {
+    film();
+    const { el } = await mountSheet();
+    await open(el);
+    for (const detail of [
+      { kind: "reader", id: "r3" },
+      { kind: "printer", id: "p2" },
+    ])
+      scanner(el)!.dispatchEvent(new CustomEvent("equipment-scanned", { detail, bubbles: true }));
+    const lit = () => rows(el).filter((name) => box(el, name).highlight);
+
+    el.equipment = equipment(R3);
+    el.notice = { message: "Picked up Reader 3", tone: "info" };
+    await el.updateComplete;
+    expect(lit()).toEqual(["cardReaderId"]);
+    el.equipment = equipment(R3, TERRACE, TERRACE);
+    el.notice = { message: "Picked up Terrace", tone: "info" };
+    await el.updateComplete;
+    expect(lit()).toEqual(["receiptPrinterId", "paymentSlipPrinterId"]);
   });
 
   it("sends a free pick at once, asks Take it? for a held one, and offers a busy reader unpickable", async () => {
@@ -227,6 +266,13 @@ describe("till-device-sheet", () => {
     expect(sheet(el).label).toBe(t("device_sheet.label_problem"));
   });
 
+  it("keeps a reader refusal on screen when the reader list comes back empty", async () => {
+    const { el } = await mountSheet({ errors: { card_terminal: "Take it first" } });
+    el.equipment = { roles: [roleOf("card_terminal", null, [])] };
+    await el.updateComplete;
+    expect(box(el, "cardReaderId")?.error).toBe("Take it first");
+  });
+
   it("adds the NFC sentence where the browser supports NFC, and drops it once NFC proved unavailable", async () => {
     const hint = (el: TillDeviceSheet) =>
       el.shadowRoot!.querySelector("[data-device-sheet-hint]")!.textContent!.trim();
@@ -247,5 +293,12 @@ describe("till-device-sheet", () => {
     expect(el.shadowRoot!.querySelector("[data-device-sheet-notice]")!.textContent).toContain(
       "Picked up Reader 3",
     );
+  });
+
+  it("keeps Allow NFC while permission is prompt, after a sticker's notice too", async () => {
+    const { el } = await mountSheet({ nfcPermission: "prompt" });
+    el.notice = { message: "Picked up Reader 3", tone: "info" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-pay-nfc]")).not.toBeNull();
   });
 });

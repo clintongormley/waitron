@@ -8,6 +8,7 @@ import { setLocale } from "../i18n/t.js";
 import "./device-sheet.js";
 import type { TillDeviceSheet } from "./device-sheet.js";
 import type { DeviceEquipment } from "../api/device-session-api.js";
+import type { CapabilityFlag } from "../layout.js";
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 
 const R2 = equipmentItem("r2", "Reader 2", { portable: true, provider: "sumup" });
@@ -29,6 +30,8 @@ const equipment: DeviceEquipment = {
   ],
 };
 
+const CARD_AND_RECEIPT: CapabilityFlag[] = ["print-receipt", "integrated-card-payment"];
+
 let camera: ReturnType<typeof cameraShowing> | undefined;
 const [width, height] = [innerWidth, innerHeight];
 
@@ -47,7 +50,7 @@ afterEach(async () => {
 async function opened(theme: Theme, props: Partial<TillDeviceSheet> = {}) {
   const mounted = await mountWidget<TillDeviceSheet>(
     "till-device-sheet",
-    { equipment, capabilities: ["print-receipt"], nfcPermission: "prompt", ...props },
+    { equipment, capabilities: CARD_AND_RECEIPT, nfcPermission: "prompt", ...props },
     theme,
   );
   mounted.el.show();
@@ -70,7 +73,7 @@ describe.each(["light", "dark"] as const)("till-device-sheet a11y (%s theme)", (
       new DOMException("Permission denied", "NotAllowedError"),
     );
     const { host } = await opened(theme, {
-      capabilities: ["print-receipt", "open-cash-drawer"],
+      capabilities: [...CARD_AND_RECEIPT, "open-cash-drawer"],
       notice: { message: "Picked up Reader 2", tone: "info" },
       badge: true,
     });

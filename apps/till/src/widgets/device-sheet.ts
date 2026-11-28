@@ -33,26 +33,35 @@ registerIcons({
     "M3.5 5a5.5 5.5 0 0 1 0 6l-1.2-.8a4 4 0 0 0 0-4.4l1.2-.8zm3-1.5a8.3 8.3 0 0 1 0 9l-1.2-.8a6.9 6.9 0 0 0 0-7.4l1.2-.8zM9.5 2a11 11 0 0 1 0 12l-1.2-.8a9.6 9.6 0 0 0 0-10.4L9.5 2z",
 });
 
-/** A choice made in the sheet. A scanned sticker names its kind; the server picks its roles, and
- * `role` is the one the app counts it against. */
+/** A choice made in the sheet. A scanned sticker names its kind; the server picks its roles. */
 export type DeviceSheetPick =
   | { role: EquipmentRole; id: string; takeOver: boolean; via: "list" }
-  | {
-      role: "card_terminal" | "receipt";
-      kind: EquipmentCode["kind"];
-      id: string;
-      takeOver: false;
-      via: "scan";
-    };
+  | { kind: EquipmentCode["kind"]; id: string; via: "scan" };
 
 type SheetRole = "card_terminal" | "receipt" | "payment_slip" | "cash_drawer";
 
-const ROWS: { role: SheetRole; name: string; needs: CapabilityFlag | null }[] = [
-  { role: "card_terminal", name: "cardReaderId", needs: null },
+/** Each row's flag is the one that offers what the row serves: Charge, a printed receipt or slip,
+ * the drawer. */
+const ROWS: { role: SheetRole; name: string; needs: CapabilityFlag }[] = [
+  { role: "card_terminal", name: "cardReaderId", needs: "integrated-card-payment" },
   { role: "receipt", name: "receiptPrinterId", needs: "print-receipt" },
   { role: "payment_slip", name: "paymentSlipPrinterId", needs: "print-receipt" },
-  { role: "cash_drawer", name: "cashDrawerPrinterId", needs: null },
+  { role: "cash_drawer", name: "cashDrawerPrinterId", needs: "open-cash-drawer" },
 ];
+
+function changedRoles(
+  before: DeviceEquipment | null | undefined,
+  after: DeviceEquipment | null,
+): Set<EquipmentRole> {
+  return new Set(
+    (after?.roles ?? [])
+      .filter(
+        (role) =>
+          before?.roles.find((each) => each.role === role.role)?.resolved?.id !== role.resolved?.id,
+      )
+      .map((role) => role.role),
+  );
+}
 
 /**
  * Pay's device button and the sheet it opens: a camera that keeps scanning stickers, and one
@@ -197,8 +206,7 @@ export class TillDeviceSheet extends LitElement {
 
   /** As the server last said; `null` before it has been read. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
-  /** The device profile's flags: the drawer row needs `open-cash-drawer`, the receipt and slip
-   * rows `print-receipt`. */
+  /** The device profile's flags, which choose the rows. */
   @property({ attribute: false }) capabilities: readonly CapabilityFlag[] = [];
   /** Money is moving: nothing in the sheet may change, and an open sheet closes. */
   @property({ type: Boolean }) disabled = false;
@@ -225,8 +233,6 @@ export class TillDeviceSheet extends LitElement {
   @state() private asking: { role: EquipmentRole; item: EquipmentItem } | null = null;
   @state() private highlighted: ReadonlySet<EquipmentRole> = new Set();
   @query("wt-row-actions") private sheet!: WtRowActions;
-  /** The equipment when the latest scan was sent; its answer is compared with it. */
-  #beforeScan: DeviceEquipment | null | undefined;
 
   show(): void {
     this.sheet?.show();
@@ -236,23 +242,15 @@ export class TillDeviceSheet extends LitElement {
     this.sheet?.hide({ restoreFocus: true });
   }
 
+  /** The app sets a sticker's notice in the same turn as the equipment its answer stored, so each
+   * notice is compared with the equipment shown just before it: scans answered one after another
+   * each light what their own answer changed. */
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("equipment") && this.#beforeScan !== undefined && this.equipment !== null) {
-      const before = this.#beforeScan;
-      const after = this.equipment;
-      if (after !== before) {
-        this.#beforeScan = undefined;
-        this.highlighted = new Set(
-          after.roles
-            .filter(
-              (role) =>
-                before?.roles.find((each) => each.role === role.role)?.resolved?.id !==
-                role.resolved?.id,
-            )
-            .map((role) => role.role),
-        );
-      }
-    }
+    if (!changed.has("notice") || this.notice === null || !this.open) return;
+    this.highlighted =
+      this.notice.tone === "info" && changed.has("equipment")
+        ? changedRoles(changed.get("equipment"), this.equipment)
+        : new Set();
   }
 
   #emit<T>(type: string, detail: T): void {
@@ -264,25 +262,16 @@ export class TillDeviceSheet extends LitElement {
     if (this.open) return;
     this.asking = null;
     this.highlighted = new Set();
-    this.#beforeScan = undefined;
   }
 
   #scanned(event: CustomEvent<EquipmentCode>): void {
     event.stopPropagation();
     const { kind, id } = event.detail;
-    this.#beforeScan = this.equipment;
-    this.#emit<DeviceSheetPick>("device-sheet-pick", {
-      role: kind === "reader" ? "card_terminal" : "receipt",
-      kind,
-      id,
-      takeOver: false,
-      via: "scan",
-    });
+    this.#emit<DeviceSheetPick>("device-sheet-pick", { kind, id, via: "scan" });
   }
 
   #pickFromList(role: EquipmentRole, id: string, takeOver: boolean): void {
     this.highlighted = new Set();
-    this.#beforeScan = undefined;
     this.#emit<DeviceSheetPick>("device-sheet-pick", { role, id, takeOver, via: "list" });
   }
 
@@ -373,37 +362,59 @@ export class TillDeviceSheet extends LitElement {
 
   #fields(): TemplateResult[] {
     return ROWS.flatMap((row) => {
-      if (row.needs !== null && !this.capabilities.includes(row.needs)) return [];
-      const role = listedRole(this.equipment, row.role, this.capabilities);
+      if (!this.capabilities.includes(row.needs)) return [];
+      const role =
+        listedRole(this.equipment, row.role, this.capabilities) ?? this.#unlisted(row.role);
       return role === undefined ? [] : [this.#field(row, role)];
     });
   }
 
+  /** A row with nothing listed stays while it holds a refusal, which would otherwise vanish, or a
+   * practice payment's fixed reader. */
+  #unlisted(role: SheetRole): RoleEquipment | undefined {
+    const kept =
+      (this.errors[role] ?? "") !== "" || (role === "card_terminal" && this.fixedReader !== null);
+    if (!kept) return undefined;
+    return {
+      role,
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+      default: null,
+      choices: [],
+    };
+  }
+
   #hint(): TemplateResult {
     const notice = this.notice;
-    // Two templates, so a change of tone puts in a new live region rather than retyping one.
-    if (notice !== null)
-      return notice.tone === "error"
-        ? html`<p class="notice error" role="alert" data-device-sheet-notice>${notice.message}</p>`
-        : html`<p class="notice" role="status" data-device-sheet-notice>
-            <wt-icon name="check" aria-hidden="true"></wt-icon>${notice.message}
-          </p>`;
     const nfc = this.nfcPermission !== null && !this.nfcUnavailable;
-    return html`<p class="hint" data-device-sheet-hint>
-        ${t("device_sheet.hint")}${nfc ? ` ${t("device_sheet.hint_nfc")}` : ""}
-      </p>
-      ${
-        nfc && this.nfcPermission === "prompt"
-          ? html`<wt-button
-              class="allow"
-              variant="ghost"
-              data-pay-nfc
-              ?disabled=${this.disabled}
-              @click=${() => this.#emit("device-sheet-nfc", {})}
-              >${t("equipment.nfc_allow")}</wt-button
-            >`
-          : nothing
-      }`;
+    // Two templates, so a change of tone puts in a new live region rather than retyping one.
+    const line =
+      notice === null
+        ? html`<p class="hint" data-device-sheet-hint>
+            ${t("device_sheet.hint")}${nfc ? ` ${t("device_sheet.hint_nfc")}` : ""}
+          </p>`
+        : notice.tone === "error"
+          ? html`<p class="notice error" role="alert" data-device-sheet-notice>
+              ${notice.message}
+            </p>`
+          : html`<p class="notice" role="status" data-device-sheet-notice>
+              <wt-icon name="check" aria-hidden="true"></wt-icon>${notice.message}
+            </p>`;
+    return html`${line}
+    ${
+      nfc && this.nfcPermission === "prompt"
+        ? html`<wt-button
+            class="allow"
+            variant="ghost"
+            data-pay-nfc
+            ?disabled=${this.disabled}
+            @click=${() => this.#emit("device-sheet-nfc", {})}
+            >${t("equipment.nfc_allow")}</wt-button
+          >`
+        : nothing
+    }`;
   }
 
   #reason(): TemplateResult | typeof nothing {
