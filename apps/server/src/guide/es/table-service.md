@@ -447,7 +447,7 @@ tarjeta se devuelve por el lector de tarjetas. Si el pago elegido no admite todo
 cuánto queda en curso para los demás pagos.
 
 Elige **Devolver** con el importe. Si aparece **Hace falta la aprobación de un responsable**,
-pásale el teléfono a un responsable o encargado. El responsable elige su nombre en **Quién
+pásale el teléfono a un responsable o encargado. Esa persona elige su nombre en **Quién
 aprueba**, introduce su PIN y pulsa **Autorizar**.
 
 En una tarjeta tecleada en un datáfono aparte, la ventana te pide que la devuelvas antes en ese
