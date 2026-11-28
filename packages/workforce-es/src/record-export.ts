@@ -11,10 +11,11 @@ import type {
   RecordExportValue,
 } from "@waitron/shared";
 import {
-  WorkforceBackend,
   localWallClock,
+  readTimeRecordWithDayStatuses,
   type CorrectionStatus,
   type EntryAuthor,
+  type RecordDayStatus,
   type TimeRecord,
   type WorkSession,
 } from "@waitron/workforce";
@@ -57,6 +58,11 @@ const VALUE_WORDS: Record<string, Readonly<Record<string, Words>>> = {
     declined: ["Declined", "Rechazado"],
     disputed: ["Disputed", "En desacuerdo"],
   } satisfies Record<CorrectionStatus, Words>,
+  dayApproval: {
+    pending: ["Not approved", "No aprobado"],
+    approved: ["Approved", "Aprobado"],
+    disputed: ["Disputed", "En desacuerdo"],
+  } satisfies Record<RecordDayStatus["status"], Words>,
   authorKind: {
     worker: ["Worker", "Persona trabajadora"],
     manager: ["Manager", "Responsable"],
@@ -73,6 +79,7 @@ const LABELS: Record<string, readonly [string, string]> = {
   personId: ["Worker reference", "Referencia de la persona"],
   personName: ["Worker", "Persona trabajadora"],
   date: ["Day", "Día"],
+  dayApproval: ["Status", "Estado"],
   startedAtLocal: ["Start", "Inicio"],
   endedAtLocal: ["Finish", "Fin"],
   workedMinutes: ["Worked minutes", "Minutos trabajados"],
@@ -179,6 +186,7 @@ const TITLES: Record<string, readonly [string, string]> = {
   sessions: ["Completed work", "Trabajo completado"],
   history: ["Entry and decision history", "Historial de asientos y decisiones"],
   totals: ["Completed total", "Total completado"],
+  "day-approvals": ["Day approval", "Aprobación de la jornada"],
   closures: ["Closed periods", "Períodos cerrados"],
   "entry-closures": ["Entries linked to closed periods", "Asientos vinculados a cierres"],
   "frozen-sessions": ["Work recorded at closure", "Trabajo registrado al cierre"],
@@ -199,7 +207,7 @@ export async function prepareTimeRecordExport(
     audience: input.audience,
     locale: input.locale,
   };
-  const record = await new WorkforceBackend().timeRecord(
+  const { record, dayStatuses } = await readTimeRecordWithDayStatuses(
     tx,
     {
       personId: selected.personId,
@@ -216,6 +224,7 @@ export async function prepareTimeRecordExport(
     }
   };
   collect(record);
+  for (const day of dayStatuses) ids.add(day.personId);
   for (const closure of record.closures) {
     collect(closure.snapshot);
     for (const summary of closure.snapshot.summaries) ids.add(summary.personId);
@@ -230,7 +239,7 @@ export async function prepareTimeRecordExport(
           .where(inArray(persons.id, [...ids]));
   const people = new Map(names.map((p) => [p.id, p.name]));
   const { name: venueName } = await readVenue(tx);
-  return async () => formatTimeRecordExport(record, selected, people, venueName);
+  return async () => formatTimeRecordExport(record, selected, people, venueName, dayStatuses);
 }
 export const WORKFORCE_ES_RECORD_EXPORT = {
   prepare: prepareTimeRecordExport,
@@ -250,6 +259,7 @@ export function formatTimeRecordExport(
   input: RecordExportInput,
   people: ReadonlyMap<string, string>,
   venueName: string,
+  dayStatuses: readonly RecordDayStatus[],
 ): RecordExportDocument {
   const language = input.locale === "es" ? 1 : 0;
   const name = (id: string) =>
@@ -441,6 +451,20 @@ export function formatTimeRecordExport(
       ["workedMinutes"],
       [{ workedMinutes: exported.lineas.reduce((sum, line) => sum + line.minutosTrabajados, 0) }],
     ),
+    ...(dayStatuses.length === 0
+      ? []
+      : [
+          section(
+            "day-approvals",
+            ["personId", "personName", "date", "dayApproval"],
+            dayStatuses.map(({ personId, date, status }) => ({
+              personId,
+              personName: name(personId),
+              date,
+              dayApproval: status,
+            })),
+          ),
+        ]),
     section("sessions", SESSION_KEYS, sessions),
     section(
       "history",

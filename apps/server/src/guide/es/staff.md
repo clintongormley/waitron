@@ -274,6 +274,10 @@ Comprueba los fichajes en **Días terminados** y pulsa **Aprobar todos**. Si la 
 la revisas, comprueba las horas actualizadas antes de volver a aprobar. Abre **Horas** para ver los
 cambios pendientes de respuesta.
 
+Para consultar el estado de cada jornada en el registro exportado, busca **Aprobación de la jornada**
+en el PDF o las filas **day-approvals** en Excel. El total incluye las horas registradas mientras la
+aprobación o el desacuerdo estén pendientes.
+
 ## Cerrar las horas del mes {#monthly-hours-close}
 
 Abre **Horas** en el panel. Usa **Anterior** y **Siguiente** junto al mes para cambiar de mes.

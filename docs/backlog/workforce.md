@@ -277,6 +277,9 @@ PDF and the standard version are the defaults. Export uses the enabled provider;
 a period nor appends attendance entries. The snapshot captures complete scoped history before
 formatting outside its transaction; complete-history read cost remains open above.
 
+Both formats show each day's current approval or dispute status. The completed total includes
+recorded hours while approval or a dispute is open.
+
 The representatives' default removes free-form reasons as well as contact details and ID numbers.
 It retains names, record references, attribution and decisions. That default still needs the advisor's
 check above. Inspector remote access and payroll export remain separate work.

@@ -613,8 +613,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   review, and settle a dispute in favour of the worker's time or send another edit. On the till,
   workers send their requests to managers. Managers can open **To approve** from **More** on
   their own till to review requests and disputes, send a whole-day edit to the worker or approve
-  the displayed finished days. Still open: My hours, export markers for approval and disputes (the
-  labour adviser is asked L8), the drawer close screens, and waiter floats (A240).
+  the displayed finished days. Still open: My hours, the drawer close screens, and waiter floats
+  (A240).
 
 - **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
   of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show

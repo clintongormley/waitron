@@ -927,6 +927,132 @@ function dayEdit(
   return command({ action: "propose", personId, date: "2026-01-05", ...scope, reason, changes });
 }
 
+it("exports an overnight dispute on the shift's work date until it is settled", async () => {
+  const date = "2026-01-05";
+  const end = "2026-01-06";
+  const statuses = (period = { start: date, end }) =>
+    run(
+      async (tx) =>
+        (await api.readTimeRecordWithDayStatuses(tx, { personId, period }, null)).dayStatuses,
+    );
+  await clock("2026-01-05T22:00:00Z");
+  await clockEnd("2026-01-06T02:00:00Z");
+  const out = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "out",
+  )!;
+  expect(await statuses()).toEqual([{ personId, date, status: "pending" }]);
+  const { approval } = await workDay(date);
+  await run((tx) =>
+    api.approveAttendanceDay(tx, {
+      personId,
+      date,
+      digest: approval!.digest,
+      actorPersonId: manager,
+      nodeId,
+      now,
+      origin,
+    }),
+  );
+  expect(await statuses()).toEqual([{ personId, date, status: "approved" }]);
+  const proposal = await dayEdit(
+    [
+      retime(out.entryId, "2026-01-06T03:00:00Z"),
+      { target: { missingKind: "break_start" }, at: "2026-01-06T02:15:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "break_end" }, at: "2026-01-06T02:30:00Z", offsetMinutes: 0 },
+    ],
+    "Stayed another hour",
+  );
+  await send(proposal, manager);
+  await send(
+    await command({
+      action: "disagree",
+      itemId: proposal.commandId,
+      reason: "Clocked out correctly",
+    }),
+  );
+  expect(await statuses()).toEqual([{ personId, date, status: "disputed" }]);
+  const disputedDay = await workDay(date);
+  expect(disputedDay.approval?.status).toBe("approved");
+  expect(disputedDay.items).toContainEqual(expect.objectContaining({ status: "disputed" }));
+  expect(await statuses({ start: end, end: "2026-01-07" })).toEqual([]);
+  await send(await command({ action: "approve", itemId: proposal.commandId }), manager);
+  expect(await statuses()).toEqual([{ personId, date, status: "approved" }]);
+});
+
+it("lists a dispute without a completed shift in worker order with completed days", async () => {
+  const [disputedPerson, completedPerson] = [personId, other].sort() as [string, string];
+  const date = "2026-01-05";
+  await clock("2026-01-05T09:00:00Z", disputedPerson);
+  await clock("2026-01-05T09:00:00Z", completedPerson);
+  await run((tx) =>
+    backend.clockOut(tx, {
+      nodeId,
+      personId: completedPerson,
+      at: "2026-01-05T17:00:00Z",
+      offsetMinutes: 0,
+      origin,
+    }),
+  );
+  const proposal = await command(
+    {
+      action: "propose",
+      personId: disputedPerson,
+      date,
+      reason: "Forgot to clock out",
+      changes: [{ target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 }],
+    },
+    disputedPerson,
+  );
+  await send(proposal, manager);
+  await send(
+    await command(
+      { action: "disagree", itemId: proposal.commandId, reason: "Still working" },
+      disputedPerson,
+    ),
+    disputedPerson,
+  );
+  const { record, dayStatuses } = await run((tx) =>
+    api.readTimeRecordWithDayStatuses(
+      tx,
+      {
+        period: { start: date, end: "2026-01-06" },
+      },
+      null,
+    ),
+  );
+  expect(record.sessions.map((shift) => shift.personId)).toEqual([completedPerson]);
+  expect(dayStatuses).toEqual([
+    { personId: disputedPerson, date, status: "disputed" },
+    { personId: completedPerson, date, status: "pending" },
+  ]);
+});
+
+it("does not label the morning of an overnight dispute as a second disputed day", async () => {
+  await clock("2026-01-05T06:00:00Z");
+  await clockEnd("2026-01-06T02:00:00Z");
+  const out = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "out",
+  )!;
+  const proposal = await command({
+    action: "propose",
+    personId,
+    reason: "Stayed until three",
+    changes: [retime(out.entryId, "2026-01-06T03:00:00Z")],
+  });
+  const { entryIds } = await send(proposal, manager);
+  await send(await command({ action: "disagree", itemId: entryIds[0]!, reason: "Left at two" }));
+  const statuses = (start: string, end: string) =>
+    run(
+      async (tx) =>
+        (await api.readTimeRecordWithDayStatuses(tx, { personId, period: { start, end } }, null))
+          .dayStatuses,
+    );
+  expect(await statuses("2026-01-05", "2026-01-06")).toEqual([
+    { personId, date: "2026-01-05", status: "disputed" },
+  ]);
+  expect(await statuses("2026-01-06", "2026-01-07")).toEqual([]);
+});
+
 it.each([false, true])(
   "accepting one full-day edit uses the day the manager saw (later shift: %s)",
   async (laterShift) => {

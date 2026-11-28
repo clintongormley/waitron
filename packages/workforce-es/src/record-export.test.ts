@@ -129,9 +129,12 @@ async function request(
   );
 }
 
-it("keeps day approvals out of the current and frozen clock event exports", async () => {
+it("labels each worker's day without adding approval events to clock history", async () => {
   await day();
-  const before = await doc();
+  await day(true, other);
+  await run((tx) => backend.clockIn(tx, event("2026-01-05T18:00:00Z")));
+  await run((tx) => backend.clockOut(tx, event("2026-01-05T20:00:00Z")));
+  const before = await doc({ personId: worker });
   const scope = { personId: worker, date: "2026-01-05" };
   const { approval } = await run((tx) => readAttendanceDay(tx, scope));
   await run((tx) =>
@@ -141,11 +144,11 @@ it("keeps day approvals out of the current and frozen clock event exports", asyn
       nodeId,
       origin,
       digest: approval!.digest,
-      now: new Date("2026-01-05T18:00:00Z"),
+      now: new Date("2026-01-05T21:00:00Z"),
     }),
   );
   await close();
-  const after = await doc();
+  const after = await doc({ personId: worker });
   const history = cells(after, "history");
   expect(history.map((row) => row.entryId)).toEqual(
     cells(before, "history").map((row) => row.entryId),
@@ -153,6 +156,30 @@ it("keeps day approvals out of the current and frozen clock event exports", asyn
   expect(cells(after, "frozen-history").map((row) => row.entryId)).toEqual(
     history.map((row) => row.entryId),
   );
+  expect(before.sections.find((s) => s.key === "day-approvals")?.rows.map((r) => r.cells)).toEqual([
+    {
+      personId: worker,
+      personName: "María Worker",
+      date: "2026-01-05",
+      dayApproval: "Not approved",
+    },
+  ]);
+  expect(cells(after, "day-approvals")).toEqual([
+    { personId: worker, personName: "María Worker", date: "2026-01-05", dayApproval: "Approved" },
+  ]);
+  const everyone = await doc({ locale: "es" });
+  expect(cells(everyone, "day-approvals")).toEqual(
+    expect.arrayContaining([
+      { personId: worker, personName: "María Worker", date: "2026-01-05", dayApproval: "Aprobado" },
+      {
+        personId: other,
+        personName: "Other worker",
+        date: "2026-01-05",
+        dayApproval: "No aprobado",
+      },
+    ]),
+  );
+  expect(cells(everyone, "totals")).toEqual([{ workedMinutes: 1080 }]);
 });
 
 it("keeps automatic ends counted and worker acknowledgment separate", async () => {
@@ -223,6 +250,12 @@ it("retains disputed manager changes without counting the proposed time", async 
   );
   const exported = await doc();
   expect(cells(exported, "sessions")[0]!.workedMinutes).toBe(480);
+  expect(cells(exported, "day-approvals")).toEqual([
+    { personId: worker, personName: "María Worker", date: "2026-01-05", dayApproval: "Disputed" },
+  ]);
+  const representatives = await doc({ locale: "es", audience: "representatives" });
+  expect(cells(representatives, "day-approvals")[0]?.dayApproval).toBe("En desacuerdo");
+  expect(JSON.stringify(representatives)).not.toContain("Worker disagrees");
   expect(cells(exported, "history").find((r) => r.entryId === change)).toMatchObject({
     authorKind: "Manager",
     authorName: "José Manager",
@@ -549,6 +582,7 @@ it("selects only declared scalar keys even when live and frozen objects gain dat
     input({ audience: "representatives" }),
     new Map([[worker, "María Worker"]]),
     "Deli",
+    [],
   );
   const text = JSON.stringify(exported);
   for (const value of ["EXTRA-EMAIL-CANARY", "EXTRA-ID-CANARY", "EXTRA-PHONE-CANARY"])
@@ -576,6 +610,7 @@ it("retains unknown actor references instead of dropping their decisions", async
     input({ locale: "es" }),
     new Map([[worker, "María Worker"]]),
     "Deli",
+    [],
   );
   expect(cells(exported, "history").find((r) => r.authorPersonId === manager)).toMatchObject({
     authorName: "Persona desconocida",
