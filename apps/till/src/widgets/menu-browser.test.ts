@@ -658,7 +658,8 @@ describe("till-menu-browser", () => {
       });
       host.style.setProperty("--wt-tap-min", "60px");
       const blank = root(el).querySelector<HTMLElement>('[data-region="shortcuts"] .slot')!;
-      expect(getComputedStyle(blank).minHeight).toBe("90px");
+      // The tap target plus --wt-space-6, left at its 32 px.
+      expect(getComputedStyle(blank).minHeight).toBe(`${60 + 32}px`);
     });
 
     it("shows no shortcut block, no divider, and still the structure, for a menu with no shortcuts", async () => {
@@ -2107,19 +2108,25 @@ describe("till-menu-browser", () => {
         expect(readings.filter(({ seen }) => seen < 4.5)).toEqual([]);
       });
 
-      it("paints a coloured section's tile, folder and filter notice", async () => {
+      it("never paints a coloured section's tile, folder or filter notice in its colour", async () => {
         const el = await mountPainted(theme);
+        const surface = token(el, "background-color", "var(--wt-color-surface)");
+        const body = token(el, "color", "var(--wt-color-text)");
+        const muted = token(el, "color", "var(--wt-color-text-muted)");
         const tile = entry(el, "structure", "Red (EN)");
-        expect(background(tile)).toBe("rgb(177, 37, 37)");
-        expect(ink(tile, ".name")).toBe(WHITE);
+        expect(background(tile)).toBe(surface);
+        expect(background(tile)).toBe(background(entry(el, "structure", "Bare")));
+        expect(tile.hasAttribute("style")).toBe(false);
+        expect(ink(tile, ".name")).toBe(body);
         const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
-        expect(getComputedStyle(icon).fill).toBe(WHITE);
+        expect(getComputedStyle(icon).fill).toBe(muted);
         el.products = painted.filter((product) => product !== inside);
         el.unfilteredProducts = painted;
         await el.updateComplete;
         const filtered = entry(el, "structure", "Red (EN)");
         expect(filtered.querySelector(".kind")!.textContent).toBe("Nothing matches the filter");
-        expect(ink(filtered, ".kind")).toBe(WHITE);
+        expect(ink(filtered, ".kind")).toBe(muted);
+        expect(muted).not.toBe(body);
       });
 
       it("draws a null, a missing and a malformed colour neutral", async () => {
@@ -2699,19 +2706,30 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
     });
 
-    it("paints a folder's override colour", async () => {
+    it("never paints a folder in its override colour", async () => {
       const folder: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
         fixed: { color: "#256bb1" },
       };
       const { el } = await mount({ menu: lunch({ structure: { members: [folder] } }) });
-      const painted = entry(el, "structure", "Bar (EN)");
-      expect(painted.hasAttribute("data-painted")).toBe(true);
-      expect(getComputedStyle(painted.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
-        "rgb(37, 107, 177)",
+      const tile = entry(el, "structure", "Bar (EN)");
+      const resolved = (property: "backgroundColor" | "color", value: string) => {
+        const probe = document.createElement("span");
+        probe.style[property] = value;
+        el.parentElement!.appendChild(probe);
+        const read = getComputedStyle(probe)[property];
+        probe.remove();
+        return read;
+      };
+      expect(tile.hasAttribute("data-painted")).toBe(false);
+      expect(tile.hasAttribute("style")).toBe(false);
+      expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
+        resolved("backgroundColor", "var(--wt-color-surface)"),
       );
-      expect(getComputedStyle(painted.querySelector(".name")!).color).toBe("rgb(255, 255, 255)");
+      expect(getComputedStyle(tile.querySelector(".name")!).color).toBe(
+        resolved("color", "var(--wt-color-text)"),
+      );
     });
 
     it("the same included menu in two lists draws each copy with its own name", async () => {
@@ -2809,32 +2827,30 @@ describe("till-menu-browser", () => {
     });
 
     it("a shortcut to a menu included twice opens the top-level copy, and is drawn from it", async () => {
-      const paintedBar: DocumentMember = {
+      // The two copies differ by name: "Bar (EN)" at the top level, "Drinks (EN)" inside Food.
+      const renamedBar: DocumentMember = {
         ...(bar as SectionNode),
-        color: "#256bb1",
-        fixed: {
-          names: { en: "Bar (EN)" },
-          color: "#256bb1",
-        },
+        fixed: { names: { en: "Bar (EN)" } },
       };
       const shortcut = [sectionTile("sec-drinks")];
-      const { el } = await mount({ menu: twice(paintedBar, shortcut) });
+      const { el } = await mount({ menu: twice(renamedBar, shortcut) });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      expect(names(entries(el, "section"))).toEqual(["Jamón", "Drinks (EN)"]);
+      await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
       expect(names(entries(el, "shortcuts"))).toEqual(["Bar (EN)"]);
       const tile = entry(el, "shortcuts", "Bar (EN)");
-      expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
-        "rgb(37, 107, 177)",
-      );
       await tap(el, tile);
       expect(breadcrumb(el)).toBe("Home › Bar (EN)");
 
       // Greyed by a diet filter, it is still drawn from the copy it would open.
       const filtered = await mount({
-        menu: twice(paintedBar, shortcut),
+        menu: twice(renamedBar, shortcut),
         products: PRODUCTS.filter(
           (each) => each !== cola && each !== lemonade && each !== draughtBeer,
         ),
         unfilteredProducts: PRODUCTS,
       });
+      expect(names(entries(filtered.el, "shortcuts"))).toEqual(["Bar (EN)"]);
       const greyed = entry(filtered.el, "shortcuts", "Bar (EN)");
       expect(greyed.hasAttribute("data-filtered")).toBe(true);
 
@@ -2973,6 +2989,12 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       ...overrides,
     });
   const badge = (tile: Button) => tile.querySelector<HTMLElement>("[data-in-order-count]");
+  /** The number the badge draws, read from its own rendering once it has drawn. */
+  const shown = async (tile: Button) => {
+    const count = badge(tile) as (HTMLElement & { updateComplete: Promise<boolean> }) | null;
+    await count!.updateComplete;
+    return count!.shadowRoot!.textContent!.trim();
+  };
 
   it("a tile shows the number it is given, and none for 0 or no map", async () => {
     const { el } = await mount({
@@ -2982,7 +3004,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
     });
     const tile = entry(el, "structure", "Beer");
     expect(tile.hasAttribute("data-in-order")).toBe(true);
-    expect(badge(tile)!.textContent!.trim()).toBe("2");
+    expect(await shown(tile)).toBe("2");
     expect(badge(tile)!.getAttribute("aria-hidden")).toBe("true");
     expect(tile.querySelector(".name")!.textContent).toBe("Beer");
     const unsent = (n: number) =>
@@ -3004,7 +3026,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
 
     el.inOrder = new Map([["beer", 1]]);
     await el.updateComplete;
-    expect(badge(tile)!.textContent!.trim()).toBe("1");
+    expect(await shown(tile)).toBe("1");
     expect(named(1)).toHaveLength(2);
 
     el.inOrder = new Map([["beer", 0]]);
@@ -3025,9 +3047,9 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       products: [beerDish, cola, water],
       inOrder: new Map([["beer", 3]]),
     });
-    expect(badge(entry(el, "shortcuts", "Beer"))!.textContent!.trim()).toBe("3");
+    expect(await shown(entry(el, "shortcuts", "Beer"))).toBe("3");
     await search(el, "beer");
-    expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
+    expect(await shown(entry(el, "results", "Beer"))).toBe("3");
   });
 
   it("the order count badge sits 6 px outside the tile's top and end corner, clear of its name and inside the grid", async () => {

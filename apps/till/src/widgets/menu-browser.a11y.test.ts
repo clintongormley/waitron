@@ -61,7 +61,7 @@ const drinks: DocumentMember = {
   members: [member("cola"), member("burger"), beer],
 };
 
-// Painted in a stored colour, so the scan's contrast check reads each tile's labels on its colour.
+// A stored colour the tile is never painted in, so the scan checks a coloured section drawn plain.
 const red: DocumentMember = {
   kind: "section",
   sectionId: "sec-red",

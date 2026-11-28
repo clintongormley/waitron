@@ -348,7 +348,7 @@ describe("dashboard-device-home-preview", () => {
   });
 
   describe("fills tiles as the device does", () => {
-    it("paints the product's frozen colour and the section's colour", async () => {
+    it("paints the product's frozen colour and leaves the coloured section's tile unpainted", async () => {
       const { el } = await mount();
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
@@ -356,8 +356,12 @@ describe("dashboard-device-home-preview", () => {
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
       const section = tile(el, "structure", "Drinks para clientes");
       expect(image(section)).toBeNull();
-      expect(section.hasAttribute("data-painted")).toBe(true);
-      expect(fillOf(section)).toBe("rgb(177, 37, 37)");
+      expect(section.hasAttribute("data-painted")).toBe(false);
+      const surface = document.createElement("span");
+      surface.style.backgroundColor = "var(--wt-color-surface)";
+      section.parentElement!.appendChild(surface);
+      expect(fillOf(section)).toBe(getComputedStyle(surface).backgroundColor);
+      surface.remove();
       expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
       expect(
         section.querySelector(".section-kind")!.getBoundingClientRect().width,
@@ -752,17 +756,15 @@ describe("dashboard-device-home-preview", () => {
     });
 
     it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
-      const painted = bar({
-        color: "#256bb1",
-        fixed: {
-          names: { es: "Barra para clientes" },
-          color: "#256bb1",
-        },
-      });
+      // The two copies differ by name: "Barra para clientes" at the top level, the included
+      // menu's own "Drinks para clientes" inside Food.
       const shortcut = [sectionTile("s-drinks")];
-      const { el } = await mount({ document: twice(painted, shortcut) });
+      const { el } = await mount({ document: twice(bar(), shortcut) });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toContain("Drinks para clientes");
+      expect(names(tiles(el, "section"))).not.toContain("Barra para clientes");
+      await click(el, home(el));
       expect(names(tiles(el, "shortcuts"))).toEqual(["Barra para clientes"]);
-      expect(fillOf(tile(el, "shortcuts", "Barra para clientes"))).toBe("rgb(37, 107, 177)");
       await click(el, tile(el, "shortcuts", "Barra para clientes"));
       expect(breadcrumb(el)).toBe("Home › Barra para clientes");
 
