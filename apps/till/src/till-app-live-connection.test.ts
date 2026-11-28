@@ -16,6 +16,7 @@ import {
   table,
   till,
 } from "../test/allergy-app-fixture.js";
+import { deferred } from "../test/clock-app.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { CurrentOrders } from "./api/kitchen-api.js";
@@ -295,7 +296,7 @@ it.each(["till", "phone-portrait"] as const)(
     expect(order.orderId).toBe("wo-4");
 
     const before = order.currentOrders!;
-    const delayed = Promise.withResolvers<CurrentOrders>();
+    const delayed = deferred<CurrentOrders>();
     if (formFactor === "till") {
       api.readCurrentOrders!.mockReturnValueOnce(delayed.promise);
       emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
@@ -357,7 +358,7 @@ it.each(["lines", "groups"])(
     await flush(el);
     expect(order.lines).toEqual([tabLine]);
 
-    const switched = Promise.withResolvers<typeof before>();
+    const switched = deferred<typeof before>();
     api.readCurrentOrders!.mockResolvedValue({ ...order.currentOrders!, revision: 4 });
     api.getTabLines!.mockReturnValueOnce(switched.promise);
     emit(order, "switch-bill", { workingOrderId: "wo-check" });
