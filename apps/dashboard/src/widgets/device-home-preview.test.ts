@@ -348,33 +348,12 @@ describe("dashboard-device-home-preview", () => {
   });
 
   describe("fills tiles as the device does", () => {
-    it("paints the product's frozen colour and leaves the coloured section's tile unpainted", async () => {
+    it("paints the product's frozen colour and never a coloured section's tile, as the till draws it", async () => {
       const { el } = await mount();
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
       expect(lemonade.hasAttribute("data-painted")).toBe(true);
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
-      const section = tile(el, "structure", "Drinks para clientes");
-      expect(image(section)).toBeNull();
-      expect(section.hasAttribute("data-painted")).toBe(false);
-      const surface = document.createElement("span");
-      surface.style.backgroundColor = "var(--wt-color-surface)";
-      section.parentElement!.appendChild(surface);
-      expect(fillOf(section)).toBe(getComputedStyle(surface).backgroundColor);
-      surface.remove();
-      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
-      expect(
-        section.querySelector(".section-kind")!.getBoundingClientRect().width,
-      ).toBeLessThanOrEqual(1);
-      await expect
-        .element(page.elementLocator(section.shadowRoot!.querySelector("button")!))
-        .toHaveAccessibleName("Drinks para clientes Section");
-      const water = tile(el, "structure", "Water");
-      expect(water.hasAttribute("data-painted")).toBe(false);
-    });
-
-    it("never paints a section's tile, even when the section has a colour, as the till draws it", async () => {
-      const { el } = await mount();
       for (const region of ["shortcuts", "structure"]) {
         const section = tile(el, region, "Drinks para clientes");
         expect(section.hasAttribute("data-painted"), region).toBe(false);
@@ -388,7 +367,17 @@ describe("dashboard-device-home-preview", () => {
         expect(look.borderTopColor, region).toBe(getComputedStyle(probe).color);
         probe.remove();
       }
-      expect(fillOf(tile(el, "structure", "Lemonade"))).toBe("rgb(37, 107, 177)");
+      const section = tile(el, "structure", "Drinks para clientes");
+      expect(image(section)).toBeNull();
+      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(
+        section.querySelector(".section-kind")!.getBoundingClientRect().width,
+      ).toBeLessThanOrEqual(1);
+      await expect
+        .element(page.elementLocator(section.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleName("Drinks para clientes Section");
+      const water = tile(el, "structure", "Water");
+      expect(water.hasAttribute("data-painted")).toBe(false);
     });
 
     it("uses colour and the folder even with photos", async () => {
@@ -1118,6 +1107,13 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(add(el).querySelector("wt-icon")!).color).toBe(primary);
     expect(Math.abs(button.getBoundingClientRect().height - tile.height)).toBeLessThan(1);
+  });
+
+  it("draws the Add shortcuts tile alone as tall as a menu tile", async () => {
+    const { el } = await mount({ shortcuts: [] });
+    const menuTile = tile(el, "structure", "Water").getBoundingClientRect().height;
+    const button = add(el).shadowRoot!.querySelector("button")!;
+    expect(Math.abs(button.getBoundingClientRect().height - menuTile)).toBeLessThan(1);
   });
 
   it.each([

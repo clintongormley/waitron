@@ -33,11 +33,11 @@ the full scans and translation-gap read remain.
 Left open:
 
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
-  copies the till's tile markup and paint helper (`apps/till/src/widgets/menu-tiles.ts`) and keeps
-  its own older path above the tiles, a word "Home" and plain steps, which no longer matches the
-  till's (`menu-path.ts`); its search is not the till's outlined one either. The tiles' CSS is shared:
-  both read `menuTileStyles` (`packages/ui/src/menu-tile-styles.ts`; till redesign PR 10a, watcher
-  2026-11-28 00:13, question 5). Grid sizing, arrangement, trails and indexing already use shared
+  copies the till's tile markup (`apps/till/src/widgets/menu-tiles.ts`) and keeps its own older
+  path above the tiles, a word "Home" and plain steps, which no longer matches the till's
+  (`menu-path.ts`); its search is not the till's outlined one either. The tiles' CSS and colouring
+  are shared: both read `menuTileStyles` and `menuTilePaint` (`packages/ui/src/menu-tile-styles.ts`;
+  till redesign PR 10a, watcher 2026-11-28 00:13, question 5). Grid sizing, arrangement, trails and indexing already use shared
   rules. A shared presentation boundary would need adapters for the till's ordering state and the
   dashboard's shortcut controls.
 

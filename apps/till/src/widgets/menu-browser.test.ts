@@ -430,7 +430,7 @@ describe("set-menu folders", () => {
     });
     await tap(el, entry(el, "structure", "Set menus"));
     await tap(el, entry(el, "section", daily.name));
-    const back = () => tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+    const back = () => tap(el, root(el).querySelector<HTMLElement>("nav.set-menu-back wt-button")!);
     await back();
     expect(root(el).querySelector("till-set-menu-folder")).toBeNull();
     expect(names(entries(el, "section"))).toEqual([daily.name]);

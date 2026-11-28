@@ -9,7 +9,6 @@ import {
   ContentLanguageController,
   baseStyles,
   menuTileStyles,
-  registerIcons,
   visuallyHiddenStyles,
   Gestures,
 } from "@waitron/ui";
@@ -46,11 +45,6 @@ import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../stat
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
 import { dishTile, sectionTile, setMenuTile, type DishTileHandlers } from "./menu-tiles.js";
 import { menuPath, menuPathStyles } from "./menu-path.js";
-
-registerIcons({
-  "menu-section":
-    "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
-});
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
@@ -660,7 +654,7 @@ export class TillMenuBrowser extends LitElement {
   #dishTile(product: TillProduct): TemplateResult {
     return dishTile(
       product,
-      this.inOrder === undefined ? undefined : (this.inOrder.get(product.id) ?? 0),
+      this.inOrder?.get(product.id),
       (tile) => {
         this.#pick(product);
         if (this.weighs && !soldByTheUnit(product)) this.#keepTileAboveAmount(tile);
@@ -810,7 +804,7 @@ export class TillMenuBrowser extends LitElement {
 
   #setMenuView(row: OrderingCopy | undefined): TemplateResult {
     return html`<section data-region="section">
-      <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
+      <nav class="set-menu-back" aria-label=${t("menu.breadcrumb")}>
         <wt-button
           variant="ghost"
           @click=${() => {
@@ -880,16 +874,16 @@ export class TillMenuBrowser extends LitElement {
     const { menu, firstRead: stage } = this;
     const folder = this.setMenuCopies.find(({ copy }) => copy.menuId === this.setMenuFolder?.id);
     let view: TemplateResult | typeof nothing = nothing;
+    let path: TemplateResult | typeof nothing = nothing;
     if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder);
     else if (menu !== undefined) {
       const index = this.#index(menu);
       const trail = this.#trailShown;
-      view =
-        this.query.trim() !== ""
-          ? this.#results(menu, index)
-          : trail.length > 0
-            ? this.#sectionView(trail, index)
-            : this.#home(menu, index);
+      if (this.query.trim() !== "") view = this.#results(menu, index);
+      else if (trail.length > 0) {
+        view = this.#sectionView(trail, index);
+        path = this.#path(trail);
+      } else view = this.#home(menu, index);
     } else if (this.#heldMenuFolders().length > 0) {
       view = html`<section data-region="structure">
         ${this.#grid([this.#setMenuTile(undefined, true)])}
@@ -900,11 +894,6 @@ export class TillMenuBrowser extends LitElement {
       return firstMenuRead(stage, this.handheld, this.retryFirstRead);
     }
     if (!showContent && !this.hasMenuPicker) return nothing;
-    const pathShown =
-      menu !== undefined &&
-      this.setMenuFolder === undefined &&
-      this.query.trim() === "" &&
-      this.#trailShown.length > 0;
     return html`
       ${
         menu === undefined && !this.hasMenuPicker
@@ -934,7 +923,7 @@ export class TillMenuBrowser extends LitElement {
                       </div>`
                 }
               </div>
-              ${pathShown ? this.#path(this.#trailShown) : nothing}
+              ${path}
             </div>`
       }
       ${

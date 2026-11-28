@@ -7,8 +7,8 @@ import {
   ContentLanguageController,
   currentContentLanguages,
   baseStyles,
+  menuTilePaint,
   menuTileStyles,
-  readableTextColor,
   reorder,
   visuallyHiddenStyles,
 } from "@waitron/ui";
@@ -29,7 +29,6 @@ import {
   openedSection,
   sectionTrail,
   shownMembers,
-  tileFill,
   tilePrice,
   tilePaths,
   type HomeIndex,
@@ -77,17 +76,6 @@ const KEY_STEPS: Record<string, number> = {
   ArrowRight: 1,
   ArrowDown: 1,
 };
-
-const paints = new Map<string, string>();
-
-/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
- * for contrast. Worked out once per colour, not on every render of every tile. */
-function tilePaint(color: string): string {
-  let paint = paints.get(color);
-  if (paint === undefined)
-    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
-  return paint;
-}
 
 /**
  * A menu's Device Home Page from a published-menu document:
@@ -281,12 +269,12 @@ export class DeviceHomePreview extends LitElement {
 
       wt-button.add {
         width: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
+        min-height: var(--menu-tile-height);
       }
 
       wt-button.add::part(button) {
         height: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
+        min-height: var(--menu-tile-height);
         padding: var(--wt-space-2);
         border-style: dashed;
         border-color: var(--wt-color-primary);
@@ -601,11 +589,11 @@ export class DeviceHomePreview extends LitElement {
       };
     const section = ref.kind === "section" ? openedSection(ref.sectionId, index) : undefined;
     const product = ref.kind === "product" ? index.products.get(ref.productId) : undefined;
-    const tileColour = tileFill(product?.color ?? null);
+    const paint = menuTilePaint(product?.color);
     return {
       name: section ? this.#sectionName(section) : product!.name,
       face,
-      ...(tileColour.kind === "color" ? { paint: tilePaint(tileColour.color) } : {}),
+      ...(paint === undefined ? {} : { paint }),
     };
   }
 
@@ -682,8 +670,7 @@ export class DeviceHomePreview extends LitElement {
         ? ""
         : unitPresentation(offer.unit, locale, currentContentLanguages()).abbreviation;
     const price = tilePrice(offer.unitPrice, offer.variants, unit, locale);
-    const fill = tileFill(offer.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
+    const paint = menuTilePaint(offer.color);
     return html`<div
       class="tile"
       data-kind="product"

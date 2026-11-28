@@ -1,22 +1,15 @@
 import { html, nothing, type TemplateResult } from "lit";
-import { currentContentLanguages, readableTextColor } from "@waitron/ui";
+import { currentContentLanguages, menuTilePaint, registerIcons } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-count-badge.js";
-import { tileFill } from "@waitron/shared";
 import type { TillProduct } from "../api/menu-api.js";
 import { countText, t } from "../i18n/t.js";
 import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
 
-const paints = new Map<string, string>();
-
-/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
- * for contrast. Worked out once per colour, not on every render of every tile. */
-function tilePaint(color: string): string {
-  let paint = paints.get(color);
-  if (paint === undefined)
-    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
-  return paint;
-}
+registerIcons({
+  "menu-section":
+    "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
+});
 
 export interface DishTileHandlers {
   /** Opens the dish's information window. */
@@ -37,8 +30,7 @@ export function dishTile(
   handlers: DishTileHandlers,
 ): TemplateResult {
   const sellable = hasSomethingToSell(product);
-  const fill = tileFill(product.color);
-  const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
+  const paint = menuTilePaint(product.color);
   const counted = count ?? 0;
   return html`<wt-button
     class="tile"

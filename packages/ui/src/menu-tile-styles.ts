@@ -1,6 +1,24 @@
 import { css, unsafeCSS, type CSSResult } from "lit";
-import { HOME_GRID_COLUMNS } from "@waitron/shared";
+import { HOME_GRID_COLUMNS, tileFill } from "@waitron/shared";
 import { visuallyHiddenStyles } from "./base-styles.js";
+import { readableTextColor } from "./category-color.js";
+
+const paints = new Map<string, string>();
+
+/** A painted tile's `style`, `--tile-fill` and a black or white `--tile-ink` for contrast, or
+ * undefined for a colour `tileFill` leaves neutral. Worked out once per colour, not on every render
+ * of every tile. */
+export function menuTilePaint(color: string | null | undefined): string | undefined {
+  const fill = tileFill(color);
+  if (fill.kind !== "color") return undefined;
+  let paint = paints.get(fill.color);
+  if (paint === undefined)
+    paints.set(
+      fill.color,
+      (paint = `--tile-fill:${fill.color};--tile-ink:${readableTextColor(fill.color)}`),
+    );
+  return paint;
+}
 
 /**
  * The menu's tiles as the till draws them, shared with the dashboard's Device home preview. A tile is a `.tile` (a `wt-button`, or a `div` where it is not a
