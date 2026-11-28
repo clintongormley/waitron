@@ -480,6 +480,11 @@ it("takes the keyboard from the keypad to cash left after Enter saves the count"
   const left = el.shadowRoot!.querySelector("wt-price-input")!;
   const input = left.shadowRoot!.querySelector("input")!;
   await vi.waitFor(() => expect(left.shadowRoot!.activeElement).toBe(input));
+  const descriptions = input.getAttribute("aria-describedby")!.split(" ");
+  const announced = descriptions
+    .map((id) => left.shadowRoot!.getElementById(id)?.textContent)
+    .join(" ");
+  expect(announced).toContain("You counted €42.00. Waitron expected €40.00. Over by €2.00.");
   expect(left.value).toBe("5.00");
   input.select();
   await userEvent.keyboard("7");

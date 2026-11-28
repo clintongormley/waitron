@@ -49,8 +49,8 @@ drawer. If it stays shut, use the key.
 
 On a till assigned to the drawer, open **More** and choose **Close drawer**. Open it with the key
 if it stays shut. Enter the count on the keypad and choose **Save the count**. Waitron then shows
-any difference. Choose **Count again** once if you want to check it. If you leave after saving a count,
-choose **Close drawer** again from any till assigned to it to pick up where you left off.
+any difference. Choose **Count again** once if you want to check it. If you leave after saving a
+count, choose **Close drawer** again from any till assigned to it to pick up where you left off.
 
 If Close drawer says **Can't reach the box**, check the till's connection and choose **Try again**.
 

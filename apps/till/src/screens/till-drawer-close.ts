@@ -44,6 +44,17 @@ function money(value: string) {
   return formatMoney(value, currentLocale());
 }
 
+function describeDifference(value: string) {
+  const short = value.startsWith("-");
+  const label =
+    value === "0.00" ? "drawer_close.even" : short ? "drawer_close.short" : "drawer_close.over";
+  return {
+    short,
+    label: t(label),
+    amount: value === "0.00" ? "" : money(short ? value.slice(1) : value),
+  };
+}
+
 @customElement("till-drawer-close")
 export class TillDrawerClose extends LitElement {
   static override styles = [
@@ -455,14 +466,12 @@ export class TillDrawerClose extends LitElement {
   }
 
   #difference(value: string, recountHint = false) {
-    const short = value.startsWith("-");
-    const label =
-      value === "0.00" ? "drawer_close.even" : short ? "drawer_close.short" : "drawer_close.over";
+    const { short, label, amount } = describeDifference(value);
     return html`<div class=${short ? "short" : nothing}>
       <dt>
-        ${t(label)}${short && recountHint ? html`<small>${t("drawer_close.recount_hint")}</small>` : nothing}
+        ${label}${short && recountHint ? html`<small>${t("drawer_close.recount_hint")}</small>` : nothing}
       </dt>
-      <dd>${value === "0.00" ? nothing : money(short ? value.slice(1) : value)}</dd>
+      <dd>${amount}</dd>
     </div>`;
   }
 
@@ -478,6 +487,13 @@ export class TillDrawerClose extends LitElement {
       amount === saved.openingCash && saved.openingCash !== "0.00"
         ? t("drawer_close.same_as_last")
         : "";
+    let description = leftHint;
+    if (this.#focusAmountLeft) {
+      const difference = describeDifference(count.difference);
+      const result = [difference.label, difference.amount].filter(Boolean).join(" ");
+      description =
+        `${t("drawer_close.you_counted")} ${money(count.counted)}. ${t("drawer_close.expected")} ${money(count.expected)}. ${result}. ${leftHint}`.trim();
+    }
     return html`
       <wt-card data-stage-focus tabindex="-1">
         <dl class="figures">
@@ -505,7 +521,7 @@ export class TillDrawerClose extends LitElement {
               <div
                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-drawer-action="finish"]'))}
               >
-                ${this.#field(error, leftHint)}
+                ${this.#field(error, description)}
                 ${leftHint ? html`<p class="left-hint" aria-hidden="true">${leftHint}</p>` : nothing}
               </div>
               ${
