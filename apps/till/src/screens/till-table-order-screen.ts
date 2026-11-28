@@ -114,6 +114,7 @@ import {
   splitDraftLine,
 } from "../widgets/draft-portions.js";
 import { OpenDraftRow, draftSlotStyles } from "../widgets/draft-row-open.js";
+import { scrollAreaOf } from "../widgets/row-text.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -475,12 +476,6 @@ function fallbackPortionKeys({
 }: Pick<DishSources, "lines" | "allergy">): (dish: TabLine) => string | null {
   return (dish) =>
     tabLinePortionKey(dish, lines, allergyGuestId(allergy, { kind: "working", id: dish.id }));
-}
-
-/** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
-function composedParent(node: Element): Element | null {
-  const root = node.getRootNode();
-  return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -2027,6 +2022,7 @@ export class TillTableOrderScreen extends LitElement {
     const dock = this.#sizedDock;
     if (dock?.isConnected) dockSize(dock, dock.getBoundingClientRect().height);
     await this.#openRow.reveal();
+    await this.renderRoot.querySelector("till-sent-orders")?.revealOpen();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -2036,7 +2032,7 @@ export class TillTableOrderScreen extends LitElement {
     this,
     () => this.groupCommandBusy,
     () => this.#draftStore,
-    () => this.#scroller(),
+    () => scrollAreaOf(this),
   );
   #draftEpoch = 0;
   @state() private draftDragging = false;
@@ -4338,7 +4334,7 @@ export class TillTableOrderScreen extends LitElement {
 
   async #showOrder(): Promise<void> {
     if (this.view === "order") return;
-    const scroller = this.#scroller();
+    const scroller = scrollAreaOf(this);
     this.#browsingScroll = { scroller, top: scroller.scrollTop };
     const focused = (this.renderRoot as ShadowRoot).activeElement;
     this.view = "order";
@@ -4369,7 +4365,7 @@ export class TillTableOrderScreen extends LitElement {
     const toggle = this.renderRoot.querySelector("[data-view-switch]");
     if (dock === null || first == null || toggle === null) return;
     if (first.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top) return;
-    const scroller = this.#scroller();
+    const scroller = scrollAreaOf(this);
     const areaTop =
       scroller === document.scrollingElement
         ? 0
@@ -4384,16 +4380,6 @@ export class TillTableOrderScreen extends LitElement {
     this.view = "menu";
     await this.updateComplete;
     if (saved !== undefined) saved.scroller.scrollTop = saved.top;
-  }
-
-  /** The nearest ancestor that scrolls, across shadow roots, else the page. */
-  #scroller(): Element {
-    for (let node = composedParent(this); node !== null; node = composedParent(node)) {
-      const { overflowY } = getComputedStyle(node);
-      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight)
-        return node;
-    }
-    return document.scrollingElement ?? document.documentElement;
   }
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {

@@ -15,6 +15,7 @@ import {
   menuOf,
   mount,
   resized,
+  scrollSettled,
   showView,
   shownView,
 } from "./till-table-order-screen.test-helpers.js";
@@ -691,14 +692,3 @@ describe("opening a row near the window's foot", () => {
     expect(host.scrollTop).toBe(0);
   });
 });
-
-/** Waits until the scroll area has stopped moving, so a smooth reveal has finished. */
-async function scrollSettled(host: HTMLElement): Promise<void> {
-  let still = 0;
-  let last = host.scrollTop;
-  for (let frame = 0; frame < 300 && still < 10; frame++) {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-    still = host.scrollTop === last ? still + 1 : 0;
-    last = host.scrollTop;
-  }
-}

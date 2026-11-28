@@ -16,7 +16,7 @@ import {
   sentCurrent as current,
   sentDish as row,
   sentGroup as group,
-} from "../../test/sent-rows.js";
+} from "../../test/sent-row-fixtures.js";
 
 type Panel = LitElement & {
   scope: string;

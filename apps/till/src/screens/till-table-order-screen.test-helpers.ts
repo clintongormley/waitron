@@ -164,6 +164,17 @@ export async function resized(el: TillTableOrderScreen): Promise<void> {
   await el.updateComplete;
 }
 
+/** Waits until the scroll area has stopped moving, so a smooth reveal has finished. */
+export async function scrollSettled(host: HTMLElement): Promise<void> {
+  let still = 0;
+  let last = host.scrollTop;
+  for (let frame = 0; frame < 300 && still < 10; frame++) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    still = host.scrollTop === last ? still + 1 : 0;
+    last = host.scrollTop;
+  }
+}
+
 export const shown = (element: Element | null) => element !== null && element.checkVisibility();
 
 /** Every new dish's row button under `root`, in the order the baskets draw them. */

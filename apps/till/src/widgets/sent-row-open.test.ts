@@ -13,7 +13,7 @@ import {
   sentCurrent,
   sentDish,
   sentGroup,
-} from "../../test/sent-rows.js";
+} from "../../test/sent-row-fixtures.js";
 import "./sent-orders.js";
 
 type Panel = LitElement & {
@@ -175,6 +175,131 @@ it("after Serve 1 the same row stays open and reads the new count", async () => 
   };
   await el.updateComplete;
   expect(opened(el)).toEqual([["bravas", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+});
+
+const focused = (el: Panel) => root(el).activeElement as HTMLElement | null;
+async function keyboardServe(el: Panel) {
+  await userEvent.keyboard("{Enter}");
+  el.busy = true;
+  await el.updateComplete;
+  // Chromium drops focus from a disabled button some time after it is drawn disabled.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  // The request runs with the box's buttons disabled: focus waits on the row itself.
+  expect(focused(el)).not.toBeNull();
+  expect(find(el, "li[data-open]")!.contains(focused(el))).toBe(true);
+  expect((focused(el) as HTMLButtonElement).disabled).toBe(false);
+}
+async function served(el: Panel, current: CurrentOrders, lines?: TabLine[]) {
+  el.snapshot = { ...el.snapshot!, current };
+  if (lines !== undefined) el.lines = lines;
+  el.busy = false;
+  await el.updateComplete;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+it("keeps keyboard focus on Serve 1 while a portion is sent and after it lands", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]));
+  const serves = collect(el, "serve-lines");
+  find(el, toggle("bravas"))!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await userEvent.tab();
+  expect(focused(el)?.dataset.sentServe).toBe("one");
+  await keyboardServe(el);
+  await served(
+    el,
+    sentCurrent([
+      sentDish("bravas", { quantity: "3.000", servedQuantity: "1.000", servedAt: at(59) }),
+    ]),
+  );
+  expect(opened(el)).toEqual([["bravas", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-serve=one]"));
+  await userEvent.keyboard("{Enter}");
+  expect(serves).toEqual([
+    { items: [{ lineId: "bravas", quantity: "1" }] },
+    { items: [{ lineId: "bravas", quantity: "1" }] },
+  ]);
+});
+
+it("follows the open row with keyboard focus when a serve regroups it, then falls to Dish details", async () => {
+  const ready = { readyAt: at(55) };
+  const el = await mount(
+    sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2),
+      burgerDish("burger-3", 3),
+    ]),
+    { lines: burgers },
+  );
+  const serves = collect(el, "serve-lines");
+  find(el, toggle("burger-2"))!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await userEvent.tab();
+  await keyboardServe(el);
+  const done = { servedQuantity: "1.000", servedAt: at(59) };
+  await served(
+    el,
+    sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2, done),
+      burgerDish("burger-3", 3),
+    ]),
+    [burgers[0]!, { ...burgers[1]!, servedAt: at(59) }, burgers[2]!],
+  );
+  expect(opened(el)).toEqual([["burger-3", "0 of 1 served", ["Serve 1"]]]);
+  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-serve=one]"));
+  await keyboardServe(el);
+  await served(
+    el,
+    sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2, done),
+      burgerDish("burger-3", 3, done),
+    ]),
+    [burgers[0]!, ...burgers.slice(1).map((line) => ({ ...line, servedAt: at(59) }))],
+  );
+  expect(opened(el)).toEqual([["burger-1", "2 of 3 served", ["Serve 1"]]]);
+  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-serve=one]"));
+  expect(serves).toEqual([
+    { items: [{ lineId: "burger-2", quantity: "1" }] },
+    { items: [{ lineId: "burger-3", quantity: "1" }] },
+  ]);
+});
+
+it("moves keyboard focus to Dish details once nothing is left to serve", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "2.000" })]));
+  find(el, toggle("bravas"))!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await userEvent.tab();
+  await userEvent.tab();
+  expect(focused(el)?.dataset.sentServe).toBe("rest");
+  await keyboardServe(el);
+  await served(
+    el,
+    sentCurrent([
+      sentDish("bravas", { quantity: "2.000", servedQuantity: "2.000", servedAt: at(59) }),
+    ]),
+  );
+  expect(find(el, "li[data-open] [data-sent-serve]")).toBeNull();
+  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-details]"));
+});
+
+it("leaves keyboard focus where the person moves it after a serve that did not land", async () => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]));
+  find(el, toggle("bravas"))!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await userEvent.tab();
+  await keyboardServe(el);
+  await served(el, el.snapshot!.current);
+  expect(focused(el)).toBe(find(el, "li[data-open] [data-sent-serve=one]"));
+  await userEvent.tab({ shift: true });
+  expect(focused(el)).toBe(find(el, toggle("bravas")));
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(focused(el)).toBe(find(el, toggle("bravas")));
 });
 
 it("a wholly served row, a held row and a row not yet released open with no Serve", async () => {
@@ -449,7 +574,7 @@ it("closes when the bill changes or no row holds its line any more", async () =>
   expect(opened(el)).toEqual([]);
 });
 
-it("Dish details opens the dish window as the ⓘ did, without serving", async () => {
+it("Dish details opens the dish window, without serving", async () => {
   const el = await mount(
     sentCurrent([
       burgerDish("burger-3", 3),
@@ -475,8 +600,11 @@ it("Dish details opens the dish window as the ⓘ did, without serving", async (
   expect(serves).toEqual([]);
 });
 
-it("holding a row still opens the dish window, and does not open the row", async () => {
-  const el = await mount(sentCurrent([sentDish("bravas", { readyAt: at(59) })]));
+it.each<[string, Partial<CurrentOrderRow>]>([
+  ["a released row", { readyAt: at(59) }],
+  ["a row not yet released", { released: false, firedAt: null }],
+])("holding %s opens the dish window, and does not open the row", async (_row, over) => {
+  const el = await mount(sentCurrent([sentDish("bravas", over)]));
   const serves = collect(el, "serve-lines");
   const details = collect(el, "sent-line-info");
   const dish = find(el, toggle("bravas"))!;

@@ -1,3 +1,5 @@
+/** What an order row draws, new or sent: its text cells, its opened box's and buttons' rules, and
+ * how an opened box is brought into view above the bar at the foot of the area it scrolls in. */
 import { type TemplateResult, css, html, nothing } from "lit";
 
 /** A row's second line: its parts joined by " · ", or nothing when it has none. */
@@ -66,6 +68,21 @@ export const openRowAction = css`
   font-weight: var(--wt-font-weight-bold);
   cursor: pointer;
 `;
+
+/** The nearest ancestor of `element` that scrolls, across shadow roots, else the page. */
+export function scrollAreaOf(element: Element): Element {
+  for (let node = composedParent(element); node !== null; node = composedParent(node)) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight)
+      return node;
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
+function composedParent(node: Element): Element | null {
+  const root = node.getRootNode();
+  return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+}
 
 /** Brings an opened row's box's foot above the bar at the foot of `scroller`, the area the order
  * scrolls in, by the clearance the box's `scroll-margin-block-end` holds. Where the box is taller

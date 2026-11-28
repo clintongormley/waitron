@@ -32,7 +32,7 @@ import {
   sentOpenStyles,
   sentRowDrawn,
 } from "./sent-row-open.js";
-import { revealOpenBox } from "./row-text.js";
+import { revealOpenBox, scrollAreaOf } from "./row-text.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -170,9 +170,19 @@ export class TillSentOrders extends LitElement {
     target: EventTarget;
   };
   #suppressClick = false;
+  /** A serve sent from the open row's focused button: focus stays in that row, on a Serve of the
+   * same kind where there is one, until the row draws other than as it was pressed. */
+  #focusAfterServe?: { opening: string; kind: SentServe["kind"]; drawn: string };
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
-  readonly #startPointer = () => this.#releaseHeading();
+  readonly #startPointer = () => {
+    this.#focusAfterServe = undefined;
+    this.#releaseHeading();
+  };
+  #focusing = false;
+  readonly #focusMoved = () => {
+    if (!this.#focusing) this.#focusAfterServe = undefined;
+  };
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #ageTimer?: ReturnType<typeof setTimeout>;
   #built?: { inputs: readonly unknown[]; model: SentModel | null };
@@ -185,6 +195,8 @@ export class TillSentOrders extends LitElement {
     this.#opening = "";
     super.connectedCallback();
     this.addEventListener("pointerdown", this.#startPointer, true);
+    // On the shadow root: a move between two of its controls does not reach the host.
+    this.renderRoot.addEventListener("focusin", this.#focusMoved);
     this.#gestures = new Gestures(this, {
       holdStart: ({ target }) => {
         if (target === this.#pressed?.target) this.#suppressClick = true;
@@ -223,6 +235,8 @@ export class TillSentOrders extends LitElement {
   }
   override disconnectedCallback(): void {
     this.removeEventListener("pointerdown", this.#startPointer, true);
+    this.renderRoot.removeEventListener("focusin", this.#focusMoved);
+    this.#focusAfterServe = undefined;
     this.#gestures?.disconnect();
     this.#gestures = undefined;
     this.#pressed = undefined;
@@ -249,6 +263,7 @@ export class TillSentOrders extends LitElement {
     );
   }
   protected override updated(): void {
+    this.#holdFocus();
     clearTimeout(this.#reminderTimer);
     clearTimeout(this.#ageTimer);
     if (this.now !== undefined) return;
@@ -415,7 +430,41 @@ export class TillSentOrders extends LitElement {
       .find((each) => each.id === row.id);
     if (live === undefined || sentRowDrawn(live, this.lines) !== drawn) return;
     this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
+    if ((this.renderRoot as ShadowRoot).activeElement === event.currentTarget)
+      this.#focusAfterServe = { opening, kind: serve.kind, drawn };
     this.#releasePointer();
+  }
+  /** While the box's buttons are disabled, focus waits on the row's own button; Chromium would
+   * otherwise drop it to the page. */
+  #holdFocus(): void {
+    const hold = this.#focusAfterServe;
+    if (hold === undefined) return;
+    const box = this.renderRoot.querySelector("li[data-open]");
+    const at = (this.renderRoot as ShadowRoot).activeElement;
+    const page = document.activeElement;
+    const lost = at === null && (page === null || page === document.body);
+    if (box === null || hold.opening !== this.#opening || (!lost && !box.contains(at))) {
+      this.#focusAfterServe = undefined;
+      return;
+    }
+    const usable = (selector: string) =>
+      [...box.querySelectorAll<HTMLButtonElement>(selector)].filter((button) => !button.disabled);
+    const serves = usable("[data-sent-serve]");
+    const target =
+      serves.find((button) => button.dataset.sentServe === hold.kind) ??
+      serves[0] ??
+      usable("[data-sent-details]")[0] ??
+      box.querySelector<HTMLElement>("[data-sent-row]");
+    if (at === null || (at as HTMLButtonElement).disabled || at.matches("[data-sent-row]")) {
+      this.#focusing = true;
+      target?.focus();
+      this.#focusing = false;
+    }
+    const live = this.#model()
+      ?.sections.flatMap((section) => section.rows)
+      .find((row) => this.#open.is(this.#opening, row.id));
+    if (!this.busy && (live === undefined || sentRowDrawn(live, this.lines) !== hold.drawn))
+      this.#focusAfterServe = undefined;
   }
   #info(row: SentRow): void {
     if (!this.isConnected || this.busy) return;
@@ -452,7 +501,7 @@ export class TillSentOrders extends LitElement {
     const slice = row.lead;
     this.#releaseHeading();
     this.#suppressClick = false;
-    if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
+    if (this.busy) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
     this.#pressed = { row, scope: this.scope, billId: this.billId, target };
@@ -464,21 +513,16 @@ export class TillSentOrders extends LitElement {
   #clickRow(row: SentRow, event: MouseEvent): void {
     if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row);
     this.#releasePointer();
-    if (this.#open.is(this.#opening, row.id)) void this.#reveal();
+    if (this.#open.is(this.#opening, row.id)) void this.revealOpen();
   }
   /** The opened row's box, once drawn, above the bar at the foot of the area the list scrolls in;
-   * the screen sets the clearance on its `opened-row` part. */
-  async #reveal(): Promise<void> {
+   * the screen sets the clearance on its `opened-row` part, and calls this again once it has
+   * measured a new bar. */
+  async revealOpen(): Promise<void> {
     await this.updateComplete;
     const box = this.renderRoot.querySelector("li[data-open]");
     if (box === null) return;
-    const scroller = scrollAncestors(this).find(
-      (node): node is Element =>
-        node instanceof Element &&
-        /auto|scroll/.test(getComputedStyle(node).overflowY) &&
-        node.scrollHeight > node.clientHeight,
-    );
-    revealOpenBox(box, scroller ?? document.scrollingElement ?? document.documentElement);
+    revealOpenBox(box, scrollAreaOf(this));
   }
   #displayNow(): number {
     return this.#heldNow() ?? Date.now();
