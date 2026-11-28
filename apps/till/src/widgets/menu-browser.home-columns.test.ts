@@ -171,7 +171,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
               const range = document.createRange();
               range.setStart(node, match.index);
               range.setEnd(node, match.index + match[0].length);
-              expect(range.getClientRects().length, match[0]).toBe(1);
+              // Lines, not boxes: the line a cut name ends on carries a second, shortened box.
+              const lines = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+              expect(lines.size, match[0]).toBe(1);
             }
           }
         }

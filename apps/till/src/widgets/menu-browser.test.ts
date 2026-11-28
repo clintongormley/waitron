@@ -3199,7 +3199,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       await page.viewport(viewport.width, viewport.height);
     }
   });
-  it("a colour tile's name is as wide, on as many lines and as centred as with no numbers drawn, before and after its dish is added", async () => {
+  it("a colour tile's name keeps clear of its number: narrowed on both sides only while counted, still centred, at most two lines, its tile no taller", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -3207,8 +3207,14 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         product("croq", "Croquettes", { image: null, color: "#256bb1" }),
         product("toast", "Tomato toast", { image: null, color: "#256bb1" }),
         product("bravas", "Bravas", { image: null, color: "#256bb1" }),
+        // Two full lines, so the words reach the corner the number sits in.
+        product("octopus", "Grilled octopus with smoked paprika", {
+          image: null,
+          color: "#256bb1",
+        }),
       ];
-      // The words' own box, not the name's, which carries any room kept beside them.
+      const overlaps = (a: DOMRect, b: DOMRect) =>
+        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       const layout = async (inOrder?: Map<string, number>) => {
         const { el } = await mount({
           menu: lunch({
@@ -3221,25 +3227,65 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         const read = () =>
           painted.map((dish) => {
             const tile = entry(el, "structure", dish.name);
+            const name = tile.querySelector<HTMLElement>(".name")!;
+            const style = getComputedStyle(name);
+            const own = name.getBoundingClientRect();
+            // The words' own box, not the name's, which carries any room kept beside them.
             const words = document.createRange();
-            words.selectNodeContents(tile.querySelector(".name")!);
+            words.selectNodeContents(name);
             const box = words.getBoundingClientRect();
             const outer = tile.getBoundingClientRect();
+            // Lines past the second are laid out but hidden; the cut line has a second box.
+            const shown = [...words.getClientRects()].filter((line) => line.top < own.bottom);
             return {
               name: dish.name,
               width: Math.round(box.width),
-              lines: new Set([...words.getClientRects()].map((line) => Math.round(line.top))).size,
+              lines: new Set(shown.map((line) => Math.round(line.top))).size,
               fromCentre: Math.round((box.left + box.right - outer.left - outer.right) / 2) + 0,
+              height: outer.height,
+              padStart: parseFloat(style.paddingInlineStart),
+              padEnd: parseFloat(style.paddingInlineEnd),
+              inside:
+                box.left >= own.left + parseFloat(style.paddingInlineStart) - 0.5 &&
+                box.right <= own.right - parseFloat(style.paddingInlineEnd) + 0.5,
+              clearOfNumber: badge(tile)
+                ? shown.every((line) => !overlaps(badge(tile)!.getBoundingClientRect(), line))
+                : null,
             };
           });
         return { el, read };
       };
       const uncounted = (await layout()).read();
       cleanupWidgets();
+      for (const dish of uncounted) {
+        expect(dish.padStart, dish.name).toBe(0);
+        expect(dish.padEnd, dish.name).toBe(0);
+        expect(dish.lines, dish.name).toBe(dish.name.startsWith("Grilled") ? 2 : 1);
+        expect(dish.clearOfNumber, dish.name).toBeNull();
+      }
 
       const { el, read } = await layout(new Map());
       expect(read()).toEqual(uncounted);
       el.inOrder = new Map(painted.map((dish) => [dish.id, 1]));
+      await el.updateComplete;
+      const counted = read();
+      const room = counted[0]!.padStart;
+      expect(room).toBeGreaterThan(0);
+      for (const [index, dish] of counted.entries()) {
+        const before = uncounted[index]!;
+        expect(dish.padStart, dish.name).toBe(room);
+        expect(dish.padEnd, dish.name).toBe(room);
+        expect(dish.inside, `${dish.name} inside its room`).toBe(true);
+        expect(dish.width, dish.name).toBeLessThanOrEqual(before.width);
+        expect(dish.lines, dish.name).toBeLessThanOrEqual(2);
+        expect(dish.fromCentre, dish.name).toBe(0);
+        expect(dish.height, dish.name).toBe(before.height);
+        expect(dish.clearOfNumber, `${dish.name} clear of its number`).toBe(true);
+      }
+      // The narrowing is real: a name that fitted one line wraps once it is counted.
+      expect(counted.find((dish) => dish.name === "Tomato toast")!.lines).toBe(2);
+
+      el.inOrder = new Map();
       await el.updateComplete;
       expect(read()).toEqual(uncounted);
       cleanupWidgets();
