@@ -12,6 +12,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
+import { groupFiledRows } from "./filed-rows.js";
 import {
   percentReduction,
   spreadBillDiscount,
@@ -378,11 +379,8 @@ function byQuantityWithin(
 }
 
 /**
- * The rows a bill files `members` as, each listing the members it stands for in filing order.
- * `projectPortionSale` (`apps/server/src/portion-sale-projection.ts`) files bound dishes as one row
- * while they share a cohort, every filed field but quantity, and the same extras per dish (each
- * extra's fields and quantity); an extra of the first dish then files as one row with the first
- * unclaimed matching extra of each other dish. Here a portion group stands for everything but the
+ * The rows a bill files `members` as, each listing the members it stands for in filing order, by
+ * the invoice's rule ({@link groupFiledRows}). Here a portion group stands for everything but the
  * price and the quantity, with the list price a discount would stamp (see {@link BillDiscountLine}),
  * so the price is compared beside it.
  */
@@ -400,58 +398,17 @@ function filedRows<M extends { row: Part; quantity: number }>(members: readonly 
     else extras.push(member);
   }
   const priced = ({ row }: M) => [row.unit, row.priceQuantity, row.unitPrecision];
-  const extraKeys = new Map<M, string>();
-  const extraKey = (member: M) => {
-    let key = extraKeys.get(member);
-    if (key === undefined) {
-      key = JSON.stringify([
-        member.row.portion?.group ?? `line:${member.row.id}`,
-        ...priced(member),
-        member.quantity,
-      ]);
-      extraKeys.set(member, key);
-    }
-    return key;
-  };
-  const extrasOfDish = ({ row }: M) =>
-    (row.id === row.lineId ? extrasOf.get(row.id) : undefined) ?? [];
-
-  const dishRows: M[][] = [];
-  const bound = new Map<string, M[]>();
-  for (const dish of dishes) {
-    const { portion } = dish.row;
-    const key =
-      portion === null
-        ? null
-        : JSON.stringify([portion.group, ...priced(dish), extrasOfDish(dish).map(extraKey).sort()]);
-    const row = key === null ? undefined : bound.get(key);
-    if (row !== undefined) {
-      row.push(dish);
-      continue;
-    }
-    const created = [dish];
-    dishRows.push(created);
-    if (key !== null) bound.set(key, created);
-  }
-
-  return dishRows.flatMap((group) => {
-    const [first, ...others] = group as [M, ...M[]];
-    const unclaimed = others.map((other) => [...extrasOfDish(other)]);
-    const extraRows = extrasOfDish(first).map((extra) => {
-      const key = extraKey(extra);
-      return [
-        extra,
-        ...unclaimed.map(
-          (extras) =>
-            extras.splice(
-              extras.findIndex((candidate) => extraKey(candidate) === key),
-              1,
-            )[0]!,
-        ),
-      ];
-    });
-    return [group, ...extraRows];
-  });
+  return groupFiledRows(dishes, {
+    extrasOf: ({ row }) => (row.id === row.lineId ? extrasOf.get(row.id) : undefined) ?? [],
+    dishKey: (dish) =>
+      dish.row.portion === null ? null : JSON.stringify([dish.row.portion.group, ...priced(dish)]),
+    extraKey: (extra) =>
+      JSON.stringify([
+        extra.row.portion?.group ?? `line:${extra.row.id}`,
+        ...priced(extra),
+        extra.quantity,
+      ]),
+  }).flatMap((row) => [row.dishes, ...row.extras]);
 }
 
 /** What a filed row of `members` costs: their quantities at the first one's price. */
