@@ -186,7 +186,9 @@ import {
   clockActionAfterDeferringQuestions,
   clockActionUnavailable,
   clockMessage,
+  matchesClockIntent,
   signInClockAction,
+  type ClockIntent,
   type SignInClockAction,
 } from "./state/clock-sign-in.js";
 import type { AttendanceChange, HoursSelection } from "./api/client.js";
@@ -3144,13 +3146,7 @@ export class TillApp extends LitElement {
   @state() private clockPage: SignInClockAction | false = false;
   @state() private clockedOut = false;
   @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
-  #clockIntent?: {
-    action: TillClockAction;
-    signIn: number;
-    session: number;
-    api: TillApi;
-    continueFromPage: boolean;
-  };
+  #clockIntent?: ClockIntent;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
   /** The way staff chose for {@link #partylessDraft}; null while none was chosen. */
@@ -5806,14 +5802,7 @@ export class TillApp extends LitElement {
 
   #settleClockAction(action: TillClockAction, state: TillClockState | null): void {
     const intent = this.#clockIntent;
-    if (
-      intent === undefined ||
-      intent.action !== action ||
-      intent.signIn !== this.#signIns ||
-      intent.session !== this.#operatorSession ||
-      intent.api !== this.api
-    )
-      return;
+    if (!matchesClockIntent(intent, action, this.#signIns, this.#operatorSession, this.api)) return;
     this.#clockIntent = undefined;
     if (state === null) return;
     if (action === "in" && intent.continueFromPage) void this.#resumeAfterClockPrompt();

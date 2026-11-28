@@ -1,10 +1,35 @@
 import type { TillClockState } from "../api/attendance-api.js";
+import type { TillApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { AttendanceSnapshot } from "./attendance.js";
-import type { ClockingSnapshot } from "./clocking.js";
+import type { ClockingSnapshot, TillClockAction } from "./clocking.js";
 
 export type SignInClockAction = "in" | "break-end";
+
+export interface ClockIntent {
+  action: TillClockAction;
+  signIn: number;
+  session: number;
+  api: TillApi;
+  continueFromPage: boolean;
+}
+
+export function matchesClockIntent(
+  intent: ClockIntent | undefined,
+  action: TillClockAction,
+  signIn: number,
+  session: number,
+  api: TillApi,
+): intent is ClockIntent {
+  return (
+    intent !== undefined &&
+    intent.action === action &&
+    intent.signIn === signIn &&
+    intent.session === session &&
+    intent.api === api
+  );
+}
 
 export function signInClockAction(state: TillClockState): SignInClockAction | false {
   if (state.state === "on_break") return "break-end";
