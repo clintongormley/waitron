@@ -379,8 +379,66 @@ it.each([false, true])(
         ),
       ].map((field) => field.value),
     ).toEqual(["10:00", fromRequest ? "01:15" : "17:00"]);
+    if (fromRequest) {
+      const date = form.shadowRoot!.querySelector('wt-input[type="date"]')!;
+      date.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "2026-10-14" }, bubbles: true }),
+      );
+      await vi.waitFor(() =>
+        expect(form.shadowRoot!.querySelector(".time-note")?.textContent?.trim()).toBe(
+          "Waitron: 10:00",
+        ),
+      );
+    }
   },
 );
+
+it("keeps an unfinished clock-in with the requested clock-out and explains a stale proposal", async () => {
+  const item = {
+    ...requested,
+    changes: [
+      {
+        target: { missingKind: "out" as const },
+        at: "2026-10-13T16:00:00.000Z",
+        offsetMinutes: 120,
+      },
+    ],
+  };
+  const f = await manager({ items: [item], finishedDays: [] });
+  f.getAttendanceManagerDay.mockResolvedValue({
+    ...view,
+    items: [item],
+    record: { ...view.record, sessions: [], entries: [clockEntries[0]!] },
+  });
+  f.sendAttendanceManagerCommand.mockRejectedValueOnce({
+    code: "correction.invalid",
+    params: { reason: "target_scope" },
+  });
+  await open(f.el);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!.querySelector(
+    "till-attendance-correction-dialog",
+  )!.shadowRoot!;
+  const fields = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]'),
+  ];
+  expect(fields.map(({ value }) => value)).toEqual(["10:00", "18:00"]);
+  const reason = root.querySelector("wt-textarea")!;
+  await userEvent.fill(
+    page.elementLocator(reason.shadowRoot!.querySelector("textarea")!),
+    "Manual clock-out",
+  );
+  const send = page.getByRole("button", { name: "Save and send to Javier" });
+  await send.click();
+  await vi.waitFor(() =>
+    expect(root.textContent).toContain(
+      "Go back to To approve and reopen the day before trying again.",
+    ),
+  );
+  expect(reason.value).toBe("Manual clock-out");
+  await expect.element(send).toBeEnabled();
+});
 
 it("shows an invalid date in the manager’s time row", async () => {
   const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });

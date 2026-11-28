@@ -276,7 +276,8 @@ export class TillHoursApprovalScreen extends LitElement {
   }
 
   #message(error: unknown, read: boolean): string {
-    const code = (error as { code?: string } | null)?.code;
+    const refusal = error as { code?: string; params?: { reason?: string } } | null;
+    const code = refusal?.code;
     if (
       code === "session.required" ||
       code === "session.not_open" ||
@@ -291,7 +292,10 @@ export class TillHoursApprovalScreen extends LitElement {
       code === "attendance.not_permitted"
     )
       return t("hours.approvals_not_permitted");
-    if (!read && this.editor && code === "correction.invalid") return t("hours.shift_refused");
+    if (!read && this.editor && code === "correction.invalid")
+      return t(
+        refusal?.params?.reason === "invalid_group" ? "hours.shift_refused" : "hours.shift_reopen",
+      );
     if (code && code !== "attendance.write_failed") return codeMessage(code);
     return t(read ? "hours.approvals_read_failed" : "hours.approvals_write_failed");
   }

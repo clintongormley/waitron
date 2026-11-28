@@ -358,6 +358,8 @@ export const en = {
   "hours.shift_overlap": "This shift overlaps another shift.",
   "hours.shift_refused":
     "The hours could not be saved. Check the dates and the order of shifts and breaks.",
+  "hours.shift_reopen":
+    "The hours could not be saved. Go back to To approve and reopen the day before trying again.",
   "hours.save_to_worker": "Save and send to {name}",
   "hours.why": "Why",
   "hours.shift_number": "Shift {number}",
@@ -2943,6 +2945,8 @@ export const es: Record<StringKey, string> = {
   "hours.shift_overlap": "Este turno se solapa con otro.",
   "hours.shift_refused":
     "No se pudieron guardar las horas. Comprueba las fechas y el orden de los turnos y descansos.",
+  "hours.shift_reopen":
+    "No se pudieron guardar las horas. Vuelve a Por aprobar y abre la jornada de nuevo antes de intentarlo otra vez.",
   "hours.save_to_worker": "Guardar y enviar a {name}",
   "hours.why": "Motivo",
   "hours.shift_number": "Turno {number}",

@@ -13,7 +13,10 @@ import {
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { formatDuration } from "@waitron/shared";
-import { previewDayMinutes } from "@waitron/workforce/attendance-day-edit";
+import {
+  attendanceEditDateInRange,
+  previewDayMinutes,
+} from "@waitron/workforce/attendance-day-edit";
 import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hours-occurrences";
 import type { AttendanceChange } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -326,7 +329,9 @@ export class AttendanceCorrectionDialog extends LitElement {
     if (!changed.has("open") || !this.open || !this.managerDay?.item) return;
     void this.renderRoot.querySelector("wt-dialog")?.updateComplete.then(() => {
       if (this.open)
-        this.renderRoot.querySelector(".requested-time")?.scrollIntoView({ block: "nearest" });
+        this.renderRoot
+          .querySelector("[data-requested-time]")
+          ?.scrollIntoView({ block: "nearest" });
     });
   }
 
@@ -381,10 +386,12 @@ export class AttendanceCorrectionDialog extends LitElement {
     const tomorrow = nextDate(date);
     const { rows } = this.draft;
     rows.forEach((row, index) => {
-      if (errors[index]!.date || row.date === date) return;
-      if (row.kind === "in" && "missingKind" in row.target) {
+      const newClockIn = row.kind === "in" && "missingKind" in row.target;
+      if (errors[index]!.date || attendanceEditDateInRange(row.date, date, tomorrow, newClockIn))
+        return;
+      if (newClockIn) {
         errors[index]!.date = t("hours.new_shift_date");
-      } else if (row.date !== tomorrow && row.date !== recordedDate(day, row.target)) {
+      } else if (row.date !== recordedDate(day, row.target)) {
         errors[index]!.date = t("hours.time_date_range");
       }
     });
@@ -627,33 +634,40 @@ export class AttendanceCorrectionDialog extends LitElement {
       this.draft.rows.find(({ shift, kind }) => shift === row.shift && kind === "in")?.date ||
       manager?.view.date ||
       "";
+    const referenceDate = (row: TimeDraft) =>
+      row.kind === "in" ? (manager?.view.date ?? "") : shiftDate(row);
     const dayFields =
       manager &&
       this.draft.rows.map((row) =>
-        managerDayField(manager, row.original, row.kind, row.date, row.time, shiftDate(row)),
+        managerDayField(manager, row.original, row.kind, row.date, row.time, referenceDate(row)),
       );
     const lastNote =
       dayFields?.reduce((last, { notes }, index) => (notes ? index : last), -1) ?? -1;
     const timesInvalid = errors.rows.some(({ date, time, offset }) => date || time || offset);
     const minutes =
       manager && all && !timesInvalid ? previewDayMinutes(manager.view, all) : undefined;
-    const pendingTotal = t(all ? "hours.worked_total_invalid" : "hours.worked_total_pending");
-    const worked = manager
-      ? html` <span aria-hidden="true"
-          >${
-            minutes === undefined
-              ? pendingTotal
-              : fill(t("hours.worked_would_be"), {
-                  time: `${Math.floor(minutes / 60)}\u00a0h\u00a0${String(minutes % 60).padStart(2, "0")}\u00a0min`,
-                })
-          }</span
-        >`
-      : nothing;
+    const pendingTotal = all
+      ? this.#feedback.attempted
+        ? t("hours.worked_total_invalid")
+        : ""
+      : errors.rows.some(({ offset }) => offset)
+        ? ""
+        : t("hours.worked_total_pending");
+    const worked =
+      manager && (minutes !== undefined || pendingTotal)
+        ? html` <span aria-hidden="true"
+            >${
+              minutes === undefined
+                ? pendingTotal
+                : fill(t("hours.worked_would_be"), {
+                    time: `${Math.floor(minutes / 60)}\u00a0h\u00a0${String(minutes % 60).padStart(2, "0")}\u00a0min`,
+                  })
+            }</span
+          >`
+        : nothing;
     const timeRows = this.draft.rows.map((row, index) => {
       const field = dayFields?.[index];
-      const dateSuffix = manager
-        ? dayOffsetSuffix(row.date, row.kind === "in" ? manager.view.date : shiftDate(row))
-        : "";
+      const dateSuffix = manager ? dayOffsetSuffix(row.date, referenceDate(row)) : "";
       const label = field?.label ?? t("attendance.time");
       const time = html`
         ${manager ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
@@ -699,7 +713,10 @@ export class AttendanceCorrectionDialog extends LitElement {
       const previous = this.draft.rows[index - 1];
       const first = previous?.shift !== row.shift;
       const pair = !first && previous?.kind === "break_end" && row.kind === "break_start";
-      return html`<div class=${field?.requested ? "requested-time" : pair ? "break-pair" : nothing}>
+      return html`<div
+        class=${pair ? "break-pair" : nothing}
+        ?data-requested-time=${field?.requested}
+      >
         <div class="time-row">
           <div>${time}</div>
           <div>

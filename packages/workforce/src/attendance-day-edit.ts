@@ -4,6 +4,15 @@ import { projectWorkSessions } from "./projection.js";
 
 export { effectiveClockEntries, originalEntry, projectWorkSessions };
 
+export function attendanceEditDateInRange(
+  editedDate: string,
+  workDate: string | undefined,
+  nextDate: string | undefined,
+  newClockIn = false,
+): boolean {
+  return editedDate === workDate || (!newClockIn && editedDate === nextDate);
+}
+
 export function dayEditorRows(view: AttendanceDayView, requested: AttendanceChange[]) {
   const retimes = new Map(
     requested.flatMap((change) =>
