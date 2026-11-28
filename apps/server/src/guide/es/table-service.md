@@ -53,7 +53,6 @@ En una caja asignada al cajón, abre **Más** y elige **Cerrar cajón**. Si no s
 llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la diferencia, si la hay,
 y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
 **Cerrar cajón** en cualquier caja asignada al mismo cajón para continuar.
-
 Si al cerrar el cajón ves **No se puede conectar con el servidor**, comprueba la conexión de la
 caja y pulsa **Reintentar**.
 
@@ -616,9 +615,8 @@ junto a **Fichar salida**. En un móvil o una tableta con la sala en pantalla an
 
 ## Abrir el plano o la carta cuando el servidor tarda {#floor-first-read}
 
-Si ves **Esperando al servidor…** en el plano o la carta, espera un momento a que se cargue.
-Si ves **No se puede conectar con el servidor**, comprueba la conexión de la caja o que el móvil
-esté en el WiFi del local. Pulsa **Reintentar** cuando aparezca.
+Si ves **Esperando al servidor…** en el plano o la carta, espera un momento. Si no se conecta,
+comprueba la red del local y pulsa **Reintentar** cuando aparezca.
 
 ## Tomar un pedido en un móvil {#phone-order}
 

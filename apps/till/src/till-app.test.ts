@@ -15363,7 +15363,7 @@ describe("till-app", () => {
         ),
       });
       await toCounter(el);
-      expect(shell(el)).toBeNull();
+      expect(shell(el)?.activeScreen).toBe("counter");
       const back = new Promise<void>((done) =>
         window.addEventListener("popstate", () => done(), { once: true }),
       );
@@ -17924,7 +17924,7 @@ describe("the device profile decides which screens a device offers", () => {
         });
         await flush(el);
         await startCounterBasket(el);
-        emit(lock(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
+        emit(shell(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
         await flush(el);
         await startCounterBasket(el);
         release(outcome);
