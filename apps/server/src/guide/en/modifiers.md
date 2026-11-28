@@ -108,8 +108,8 @@ parked counter order with its charge. To remove it, open the dish and save a cha
 is off the menu and asks for a new choice, answer it and save first. Reopen the dish and save a
 change to remove the extra.
 
-To change a dish already sent at a table, open its details from the sent dishes at the top of the
-order, change it and press
+To change a dish already sent at a table, tap it among the sent dishes at the top of the
+order, choose **Dish details**, change it and press
 **Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes
 changes together. To take one or more sent dishes off the bill, use **Void…**, which opens
 **Cancel item**. Once the station has started a dish, or any of it has been served, it can no longer be changed.

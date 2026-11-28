@@ -566,7 +566,7 @@ allergens before you add it. An unreviewed extra shows none, which does not
 establish that it is suitable. There is no separate Allergens screen or printed allergen sheet in
 the till.
 
-Open a sent dish's details to check **Recorded when sent**. These declarations describe the dish
+Tap a sent dish and choose **Dish details** to check **Recorded when sent**. These declarations describe the dish
 when you sent it, even if a correction is published later. Dishes on hold show what is published now
 until you release them. Use the station's current information when preparing food.
 To review an earlier bill, open its details in **Orders**. The saved declarations appear beneath

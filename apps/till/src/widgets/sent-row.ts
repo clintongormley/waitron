@@ -6,7 +6,6 @@ import type { StringKey } from "../i18n/strings.js";
 import type { SentRow, SentRowState, SentSectionTitle } from "../state/sent-sections.js";
 import { quantityText } from "./dish-format.js";
 import { rowMore, rowTextStyles } from "./row-text.js";
-import "@waitron/ui/src/components/wt-button.js";
 import "./fired-ago.js";
 
 export interface SentRowView {
@@ -19,10 +18,11 @@ export interface SentRowView {
   price: string;
   /** Beside the name: nutrition icons, the set-menu tag and the guest allergy mark. */
   marks: TemplateResult;
-  busy: boolean;
   press: (event: PointerEvent) => void;
-  serve: (event: MouseEvent) => void;
-  info: () => void;
+  /** A tap on the row, which opens or closes it. */
+  open: (event: MouseEvent) => void;
+  /** The opened row's line under it, or nothing while it is closed. */
+  opened: TemplateResult | typeof nothing;
 }
 
 const STATE_WORDS: Partial<Record<SentRowState, StringKey>> = {
@@ -91,8 +91,9 @@ export function sentRow(view: SentRowView): TemplateResult {
   const dish = first.row;
   const fired = first.kind === "fired";
   const state = stateText(view);
+  const open = view.opened !== nothing;
   const served =
-    row.left.length > 0 && row.served !== "0"
+    !open && row.left.length > 0 && row.served !== "0"
       ? t("table.row_served_of")
           .replace("{served}", quantityText(row.served))
           .replace("{quantity}", quantityText(row.quantity))
@@ -107,38 +108,21 @@ export function sentRow(view: SentRowView): TemplateResult {
     data-fired-line=${fired ? dish.lineId : nothing}
     data-held-line=${first.kind === "held" ? dish.lineId : nothing}
     data-served-line=${row.left.length === 0 ? dish.lineId : nothing}
+    ?data-open=${open}
+    part=${open ? "opened-row" : nothing}
   >
-    ${
-      fired
-        ? html`<button
-            type="button"
-            class="sent-row-open"
-            data-serve-line=${dish.lineId}
-            ?disabled=${view.busy || !dish.released}
-            aria-description=${t("table.serve")}
-            @pointerdown=${view.press}
-            @contextmenu=${preventTouchContextMenu}
-            @click=${view.serve}
-          >
-            ${contents}
-          </button>`
-        : html`<div
-            class="sent-row-open"
-            @pointerdown=${view.press}
-            @contextmenu=${preventTouchContextMenu}
-          >
-            ${contents}
-          </div>`
-    }
-    <wt-button
-      class="sent-row-end"
-      variant="ghost"
-      data-sent-info=${dish.lineId}
-      aria-label=${`${t("table.sent_info")} · ${dish.name}`}
-      ?disabled=${view.busy}
-      @click=${view.info}
-      >ⓘ</wt-button
+    <button
+      type="button"
+      class="sent-row-open"
+      data-sent-row=${dish.lineId}
+      aria-expanded=${open}
+      @pointerdown=${view.press}
+      @contextmenu=${preventTouchContextMenu}
+      @click=${view.open}
     >
+      ${contents}
+    </button>
+    ${view.opened}
   </li>`;
 }
 
@@ -187,9 +171,6 @@ export const sentRowStyles = [
     button.sent-row-open {
       cursor: pointer;
     }
-    button.sent-row-open:disabled {
-      cursor: default;
-    }
     .sent-row-open:focus-visible {
       outline: var(--wt-focus-ring);
       outline-offset: calc(-1 * var(--wt-focus-offset));
@@ -201,10 +182,6 @@ export const sentRowStyles = [
     .sent-row .row-ready {
       color: var(--wt-color-warning);
       font-weight: var(--wt-font-weight-bold);
-    }
-    .sent-row-end {
-      grid-column: 3;
-      justify-self: center;
     }
   `,
 ];

@@ -19,6 +19,7 @@ import {
   closePartyMenu,
   openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { sentDetailsButton } from "../../test/open-sent-row.js";
 
 const dish = {
   ...storedDish,
@@ -115,9 +116,7 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         if (q("[data-draft-pane]").hidden) await showView(el, "order");
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
-        const info = panel.shadowRoot!.querySelector<HTMLElement>(
-          '[data-sent-info="stored-dish"]',
-        )!;
+        const info = await sentDetailsButton(panel, "stored-dish");
         expect(info.checkVisibility()).toBe(true);
         await userEvent.click(info);
         await el.updateComplete;

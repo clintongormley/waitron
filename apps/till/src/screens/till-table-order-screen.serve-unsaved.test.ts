@@ -16,6 +16,7 @@ import {
   groups,
   now,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { sentDetailsButton } from "../../test/open-sent-row.js";
 
 class ServeLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -63,9 +64,7 @@ async function openServing(screen: TillTableOrderScreen, undo = false) {
   const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
   // A part-served dish is one row, marked fired, and its window holds Serve and Not served.
-  const info = panel.shadowRoot!.querySelector<HTMLElement>(
-    '[data-fired-line="dish"] [data-sent-info]',
-  )!;
+  const info = await sentDetailsButton(panel, "dish", "fired");
   expect(info.checkVisibility(), "Sent dish information is visible").toBe(true);
   await userEvent.click(info);
   await screen.updateComplete;

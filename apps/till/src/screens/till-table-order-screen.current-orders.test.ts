@@ -35,6 +35,12 @@ import {
   cake,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  openSentRow,
+  sentRowButton,
+  sentServeButton,
+  serveSentRow,
+} from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -242,14 +248,15 @@ describe("Current orders and Sent service", () => {
         groups: [currentGroup("g3", 3, "held", [{ ...flan, note: "no sugar" }])],
       }),
     });
-    await sentPanelFor(el);
+    const flanPanel = await sentPanelFor(el);
     const flanRow = sq(el, '[data-held-line="l-flan"]')!;
     expect(text(flanRow.querySelector(".row-qty")!)).toBe("2");
     expect(text(flanRow.querySelector(".row-name")!)).toBe("Flan");
     expect(text(flanRow)).toContain("Cream ×2");
     expect(text(flanRow)).toContain("no sugar");
-    expect(flanRow.querySelector("[data-serve-line]")).toBeNull();
-    expect(sq(el, '[data-serve-line="l-cream"]')).toBeNull();
+    expect(await openSentRow(flanPanel, "l-flan", "held")).toBe(flanRow);
+    expect(flanRow.querySelector("[data-sent-serve]")).toBeNull();
+    expect(sq(el, '[data-sent-row="l-cream"]')).toBeNull();
     await openSentDish(el, "l-flan", "held");
     expect(q(el, "[data-sent-line-serve]")).toBeNull();
     await openSentMore(el);
@@ -277,14 +284,14 @@ describe("Current orders and Sent service", () => {
     });
     const panel = await sentPanelFor(el);
     expect(
-      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-serve-line]")].map(
-        (button) => button.dataset.serveLine,
+      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-row]")].map(
+        (button) => button.dataset.sentRow,
       ),
     ).toEqual(["l-burger"]);
     expect(sq(el, '[data-fired-line="l-bacon"]')).toBeNull();
     expect(text(sq(el, '[data-fired-line="l-burger"]')!)).toContain("Bacon ×2");
     const serves = capture(el, "serve-lines");
-    await userEvent.click(sq(el, '[data-serve-line="l-burger"]')!);
+    await serveSentRow(panel, "l-burger", "one");
     expect(serves.map((event) => event.detail)).toEqual([
       { items: [{ lineId: "l-burger", quantity: "1" }] },
     ]);
@@ -406,7 +413,11 @@ describe("Current orders and Sent service", () => {
     expect(undos.map((event) => event.detail)).toEqual([
       { items: [{ lineId: "l-salad", quantity: "1" }] },
     ]);
-    expect(sq(el, '[data-serve-line="l-salad"]')).toBeNull();
+    expect(
+      (await openSentRow(await sentPanelFor(el), "l-salad", "served")).querySelector(
+        "[data-sent-serve]",
+      ),
+    ).toBeNull();
 
     await chooseSentServing(el, "l-croq", true);
     await el.updateComplete;
@@ -458,7 +469,9 @@ describe("Current orders and Sent service", () => {
     await openSentDish(el, "l-salad", "served");
     expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.row_served"));
     await closeSentDish(el);
-    expect(sq(el, '[data-serve-line="l-fish"]')!.disabled).toBe(true);
+    expect(
+      (await openSentRow(await sentPanelFor(el), "l-fish")).querySelector("[data-sent-serve]"),
+    ).toBeNull();
     await openSentDish(el, "l-fish");
     expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.group_held"));
     expect(q(el, "[data-sent-line-serve]")).toBeNull();
@@ -580,8 +593,7 @@ describe("Current orders and Sent service", () => {
 
   it("includes rows in no group in Fired, with Mark served and no invented group", async () => {
     const { el } = await mountSent({ groups: [], currentOrders: current({ groups: [] }) });
-    await sentPanelFor(el);
-    expect(sq(el, '[data-serve-line="l-coffee"]')).not.toBeNull();
+    expect(await sentServeButton(await sentPanelFor(el), "l-coffee", "one")).not.toBeNull();
     expect(sq(el, "[data-held-group]")).toBeNull();
     await openSentDish(el, "l-coffee");
     expect(q(el, "[data-sent-line-origin]")).toBeNull();
@@ -604,16 +616,20 @@ describe("Current orders and Sent service", () => {
     const undoes = capture(el, "unserve-lines");
     el.groupCommandBusy = true;
     await el.updateComplete;
-    await sentPanelFor(el);
-    for (const selector of [
-      '[data-serve-line="l-croq"]',
-      "[data-serve-all]",
-      "[data-reminder-snooze]",
-      "[data-reminder-fire]",
-    ])
+    const panel = await sentPanelFor(el);
+    const croq = sentRowButton(panel, "l-croq");
+    croq.click();
+    await panel.updateComplete;
+    expect(croq.getAttribute("aria-expanded")).toBe("true");
+    const croqServes = [
+      ...croq.closest("li")!.querySelectorAll<HTMLButtonElement>("[data-sent-serve]"),
+    ];
+    expect(croqServes.length).toBeGreaterThan(0);
+    for (const serve of croqServes) expect(serve.disabled).toBe(true);
+    for (const selector of ["[data-serve-all]", "[data-reminder-snooze]", "[data-reminder-fire]"])
       expect(sq(el, selector)!.disabled, selector).toBe(true);
     expect(q(el, "[data-sent-line-unserve]")!.disabled).toBe(true);
-    sq(el, '[data-serve-line="l-croq"]')!.click();
+    for (const serve of croqServes) serve.click();
     sq(el, "[data-serve-all]")!.click();
     q(el, "[data-sent-line-unserve]")!.click();
     expect(serves).toEqual([]);

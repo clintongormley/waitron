@@ -118,8 +118,8 @@ lista eliminada sigue en un pedido aparcado de caja con su cargo. Para quitarlo,
 guarda un cambio. Si el plato ya no está en la carta y pide una nueva elección, elígela y guarda.
 Vuelve a abrir el plato y guarda un cambio para quitar el extra.
 
-Para cambiar un plato ya enviado en una mesa, abre sus detalles desde los platos enviados, arriba
-del pedido, cámbialo y pulsa
+Para cambiar un plato ya enviado en una mesa, tócalo entre los platos enviados, arriba
+del pedido, elige **Detalles del plato**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la estación recibe el cambio. Una fila de platos iguales
 cambia entera. Para quitar uno o varios platos enviados de la cuenta, usa **Cancelar…**.
 Cuando la estación ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar.

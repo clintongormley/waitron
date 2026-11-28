@@ -57,6 +57,7 @@ import {
   openPartyMenu,
   openTableMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentRow, sentServeButton } from "../../test/open-sent-row.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -599,10 +600,12 @@ describe("till-table-order-screen", () => {
       currentOrders: sentRows([onePortionUnserved, servedLine]),
     });
     const panel = await sentPanelFor(el);
-    const serve = panel.shadowRoot!.querySelector<HTMLButtonElement>("[data-serve-line]")!;
-    expect(serve.dataset.serveLine).toBe("line-1");
+    expect(panel.shadowRoot!.querySelectorAll("[data-sent-row]")).toHaveLength(2);
+    const served = await openSentRow(panel, "line-2", "served");
+    expect(served.querySelector("[data-sent-serve]")).toBeNull();
+    const serve = await sentServeButton(panel, "line-1", "one");
     expect(serve.disabled).toBe(false);
-    expect(panel.shadowRoot!.querySelectorAll("[data-serve-line]")).toHaveLength(1);
+    expect(panel.shadowRoot!.querySelectorAll("[data-sent-serve]")).toHaveLength(1);
     const serves: unknown[] = [];
     el.addEventListener("serve-lines", (event) => serves.push((event as CustomEvent).detail));
     await userEvent.click(serve);

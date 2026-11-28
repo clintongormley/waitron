@@ -17,7 +17,12 @@ import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { type SentSlice, byFiringOrder } from "../state/sent-panel.js";
 import { sentPortionsApart, sentRowPortionKey } from "../state/portion-groups.js";
-import { type SentRow, type SentSection, sentSections } from "../state/sent-sections.js";
+import {
+  type SentRow,
+  type SentSection,
+  sentPortionId,
+  sentSections,
+} from "../state/sent-sections.js";
 import { sentMenuDishes } from "../state/set-menus.js";
 import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
@@ -25,6 +30,14 @@ import { groupName } from "./group-name.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import { nutritionDietLabels } from "../diet-labels.js";
 import { sentCompanion, sentRow, sentRowStyles, sentStateWords } from "./sent-row.js";
+import {
+  OpenSentRow,
+  type SentServe,
+  sentOpenControls,
+  sentOpenStyles,
+  sentRowDrawn,
+} from "./sent-row-open.js";
+import { revealOpenBox, scrollAreaOf } from "./row-text.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -88,6 +101,7 @@ export class TillSentOrders extends LitElement {
     setMenuTagStyles,
     allergyMarkStyles,
     sentRowStyles,
+    sentOpenStyles,
     css`
       :host {
         display: block;
@@ -150,6 +164,7 @@ export class TillSentOrders extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) now?: number;
   #opening = "";
+  readonly #open = new OpenSentRow();
   #pressedModel: SentModel | null = null;
   #pressedNow?: number;
   #gestures?: Gestures;
@@ -160,9 +175,34 @@ export class TillSentOrders extends LitElement {
     target: EventTarget;
   };
   #suppressClick = false;
+  /** A serve sent from the keyboard on the open row's focused button: focus stays in that row, on
+   * a Serve of the same kind where there is one, until the row draws other than as it was pressed,
+   * a pointer presses anywhere, or the person moves focus. If the box closes on the same bill and
+   * party with focus fallen to the page, focus goes to the first row now holding one of the row's
+   * `portions`. */
+  #focusAfterServe?: {
+    opening: string;
+    kind: SentServe["kind"];
+    drawn: string;
+    portions: string[];
+  };
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
   readonly #startPointer = () => this.#releaseHeading();
+  readonly #endFocusHold = () => {
+    this.#focusAfterServe = undefined;
+  };
+  #focusing = false;
+  readonly #focusMoved = () => {
+    if (!this.#focusing) this.#focusAfterServe = undefined;
+  };
+  /** A move to an element outside the open row ends the hold; focus dropped to the page, with no
+   * element to go to, is what the hold mends. */
+  readonly #focusLeft = (event: Event) => {
+    const to = (event as FocusEvent).relatedTarget;
+    if (to instanceof Node && this.renderRoot.querySelector("li[data-open]")?.contains(to) !== true)
+      this.#focusAfterServe = undefined;
+  };
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #ageTimer?: ReturnType<typeof setTimeout>;
   #built?: { inputs: readonly unknown[]; model: SentModel | null };
@@ -175,6 +215,10 @@ export class TillSentOrders extends LitElement {
     this.#opening = "";
     super.connectedCallback();
     this.addEventListener("pointerdown", this.#startPointer, true);
+    document.addEventListener("pointerdown", this.#endFocusHold, true);
+    // On the shadow root: a move between two of its controls does not reach the host.
+    this.renderRoot.addEventListener("focusin", this.#focusMoved);
+    this.renderRoot.addEventListener("focusout", this.#focusLeft);
     this.#gestures = new Gestures(this, {
       holdStart: ({ target }) => {
         if (target === this.#pressed?.target) this.#suppressClick = true;
@@ -213,6 +257,10 @@ export class TillSentOrders extends LitElement {
   }
   override disconnectedCallback(): void {
     this.removeEventListener("pointerdown", this.#startPointer, true);
+    document.removeEventListener("pointerdown", this.#endFocusHold, true);
+    this.renderRoot.removeEventListener("focusin", this.#focusMoved);
+    this.renderRoot.removeEventListener("focusout", this.#focusLeft);
+    this.#focusAfterServe = undefined;
     this.#gestures?.disconnect();
     this.#gestures = undefined;
     this.#pressed = undefined;
@@ -233,8 +281,13 @@ export class TillSentOrders extends LitElement {
       this.#pressed = undefined;
       this.#releaseHeading();
     }
+    this.#open.keep(
+      opening,
+      (this.#model()?.sections ?? []).flatMap((section) => section.rows),
+    );
   }
   protected override updated(): void {
+    this.#holdFocus();
     clearTimeout(this.#reminderTimer);
     clearTimeout(this.#ageTimer);
     if (this.now !== undefined) return;
@@ -365,14 +418,11 @@ export class TillSentOrders extends LitElement {
     this.#releaseHeading();
   }
   /** `groupId` names the section a heading's Serve all belongs to (null: the ungrouped one), whose
-   * live rows must still hold everything it showed; a row's Serve checks the whole bill. */
-  #serve(
-    displayed: readonly { lineId: string; quantity: string }[],
-    groupId?: string | null,
-  ): void {
+   * live rows must still hold everything it showed. */
+  #serve(displayed: readonly { lineId: string; quantity: string }[], groupId: string | null): void {
     if (!this.isConnected || this.busy || displayed.length === 0) return;
     const sections = (this.#model()?.sections ?? []).filter(
-      (section) => groupId === undefined || (section.group?.id ?? null) === groupId,
+      (section) => (section.group?.id ?? null) === groupId,
     );
     const current = new Map(
       servable(sections.flatMap((section) => section.rows)).map((slice) => [
@@ -383,6 +433,85 @@ export class TillSentOrders extends LitElement {
     if (displayed.some((item) => current.get(item.lineId) !== item.quantity)) return;
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
+  }
+  /** Whether `event` came from the open row's box as it stands, for the bill and party now shown,
+   * `row` having been drawn open under `opening`. */
+  #fromOpenRow(row: SentRow, opening: string, event: Event): boolean {
+    const now = JSON.stringify([this.scope, this.billId]);
+    const button = event.currentTarget;
+    return (
+      opening === now &&
+      this.#open.is(now, row.id) &&
+      button instanceof Element &&
+      this.renderRoot.querySelector("li[data-open]")?.contains(button) === true
+    );
+  }
+  /** Sends `serve` only while every portion of `row` stands in the live list as `drawn`. */
+  #serveRow(row: SentRow, serve: SentServe, drawn: string, opening: string, event: Event): void {
+    if (!this.isConnected || this.busy || !this.#fromOpenRow(row, opening, event)) return;
+    const live = this.#model()
+      ?.sections.flatMap((section) => section.rows)
+      .find((each) => each.id === row.id);
+    if (live === undefined || sentRowDrawn(live, this.lines) !== drawn) return;
+    this.#open.serving(opening, live);
+    this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
+    const fromKeys = (event as MouseEvent).detail === 0;
+    if (fromKeys && (this.renderRoot as ShadowRoot).activeElement === event.currentTarget)
+      this.#focusAfterServe = {
+        opening,
+        kind: serve.kind,
+        drawn,
+        portions: row.slices.map(sentPortionId),
+      };
+    this.#releasePointer();
+  }
+  /** While the box's buttons are disabled, focus waits on the row's own button; Chromium would
+   * otherwise drop it to the page. */
+  #holdFocus(): void {
+    const hold = this.#focusAfterServe;
+    if (hold === undefined) return;
+    const box = this.renderRoot.querySelector("li[data-open]");
+    const at = (this.renderRoot as ShadowRoot).activeElement;
+    const page = document.activeElement;
+    const lost = at === null && (page === null || page === document.body);
+    if (box === null || hold.opening !== this.#opening || (!lost && !box.contains(at))) {
+      if (box === null && hold.opening === this.#opening && lost)
+        this.#focusRowHolding(hold.portions);
+      this.#focusAfterServe = undefined;
+      return;
+    }
+    const usable = (selector: string) =>
+      [...box.querySelectorAll<HTMLButtonElement>(selector)].filter((button) => !button.disabled);
+    const serves = usable("[data-sent-serve]");
+    const target =
+      serves.find((button) => button.dataset.sentServe === hold.kind) ??
+      serves[0] ??
+      usable("[data-sent-details]")[0] ??
+      box.querySelector<HTMLElement>("[data-sent-row]");
+    if (at === null || (at as HTMLButtonElement).disabled || at.matches("[data-sent-row]")) {
+      this.#focusing = true;
+      target?.focus();
+      this.#focusing = false;
+    }
+    const live = this.#model()
+      ?.sections.flatMap((section) => section.rows)
+      .find((row) => this.#open.is(this.#opening, row.id));
+    if (!this.busy && (live === undefined || sentRowDrawn(live, this.lines) !== hold.drawn))
+      this.#focusAfterServe = undefined;
+  }
+  /** Each `[data-sent-row]` button is one drawn row, in the order the drawn sections list them. */
+  #focusRowHolding(portions: readonly string[]): void {
+    const live = this.#model();
+    const rows = (live === null ? null : (this.#pressedModel ?? live))?.sections.flatMap(
+      (section) => section.rows,
+    );
+    const index = (rows ?? []).findIndex((row) =>
+      row.slices.some((slice) => portions.includes(sentPortionId(slice))),
+    );
+    const button = this.renderRoot.querySelectorAll<HTMLElement>("[data-sent-row]")[index];
+    this.#focusing = true;
+    button?.focus();
+    this.#focusing = false;
   }
   #info(row: SentRow): void {
     if (!this.isConnected || this.busy) return;
@@ -418,7 +547,8 @@ export class TillSentOrders extends LitElement {
   #pressLine(row: SentRow, event: PointerEvent): void {
     const slice = row.lead;
     this.#releaseHeading();
-    if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
+    this.#suppressClick = false;
+    if (this.busy) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
     this.#pressed = { row, scope: this.scope, billId: this.billId, target };
@@ -426,14 +556,21 @@ export class TillSentOrders extends LitElement {
       this.#pressedModel = this.#model();
       this.#pressedNow = this.now ?? Date.now();
     }
-    this.#suppressClick = false;
   }
-  #clickServe(row: SentRow, event: MouseEvent): void {
-    if (event.detail === 0 || !this.#suppressClick)
-      this.#serve(
-        firedLeft([row]).map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })),
-      );
+  #clickRow(row: SentRow, event: MouseEvent): void {
+    if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row);
     this.#releasePointer();
+    if (this.#open.is(this.#opening, row.id)) void this.revealOpen();
+  }
+  /** The opened row's last Serve button, else its box, once drawn, above the bar at the foot of the area the list scrolls in;
+   * the screen sets the clearance on its `opened-row` part, and calls this again once it has
+   * measured a new bar. */
+  async revealOpen(): Promise<void> {
+    await this.updateComplete;
+    const box = this.renderRoot.querySelector("li[data-open]");
+    if (box === null) return;
+    const serves = box.querySelectorAll("[data-sent-serve]");
+    revealOpenBox(box, scrollAreaOf(this), serves[serves.length - 1]);
   }
   #displayNow(): number {
     return this.#heldNow() ?? Date.now();
@@ -528,6 +665,7 @@ export class TillSentOrders extends LitElement {
     const held = isHeld(section);
     const released = servable(section.rows);
     const now = this.#displayNow();
+    const opening = this.#opening;
     return html`<section
       class="group"
       data-sent-section=${id}
@@ -565,10 +703,11 @@ export class TillSentOrders extends LitElement {
               heldNow: this.#heldNow(),
               price: this.#money(row.amount),
               marks: this.#marks(row.lead.row),
-              busy: this.busy,
               press: (event) => this.#pressLine(row, event),
-              serve: (event) => this.#clickServe(row, event),
-              info: () => this.#info(row),
+              open: (event) => this.#clickRow(row, event),
+              opened: this.#open.is(this.#opening, row.id)
+                ? this.#openControls(row, opening)
+                : nothing,
             }),
         )}
         ${section.companions.map((row) =>
@@ -580,6 +719,17 @@ export class TillSentOrders extends LitElement {
         )}
       </ul>
     </section>`;
+  }
+  #openControls(row: SentRow, opening: string): TemplateResult {
+    const drawn = sentRowDrawn(row, this.lines);
+    return sentOpenControls({
+      row,
+      busy: this.busy,
+      serve: (serve, event) => this.#serveRow(row, serve, drawn, opening, event),
+      details: (event) => {
+        if (this.#fromOpenRow(row, opening, event)) this.#info(row);
+      },
+    });
   }
   #reminder(model: SentModel): TemplateResult | typeof nothing {
     const reminder = model.reminder;

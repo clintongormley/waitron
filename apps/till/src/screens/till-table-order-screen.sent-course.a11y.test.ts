@@ -18,6 +18,7 @@ import {
   closePartyMenu,
   openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -79,9 +80,7 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
       await closePartyMenu(el);
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      await userEvent.click(
-        panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${storedDish.id}"]`)!,
-      );
+      await openSentDetails(panel, storedDish.id);
       await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
       await dialog.updateComplete;

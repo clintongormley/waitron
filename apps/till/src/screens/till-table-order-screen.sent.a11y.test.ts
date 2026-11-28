@@ -9,6 +9,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { beer, flan, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { openSentDetails, sentDetailsButton } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -61,9 +62,7 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
       await showView(el, "order", { ifShown: true });
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      await userEvent.click(
-        panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!,
-      );
+      await openSentDetails(panel, "l-flan");
       await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
       await dialog.updateComplete;
@@ -150,7 +149,7 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
         const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
         expect(innerWidth).toBe(width);
         expect(panel.checkVisibility()).toBe(true);
-        for (const selector of ["[data-serve-all]", "[data-group-fire]", "[data-sent-info]"]) {
+        for (const selector of ["[data-serve-all]", "[data-group-fire]", "[data-sent-row]"]) {
           const controls = [...panel.shadowRoot!.querySelectorAll<HTMLElement>(selector)];
           expect(controls.length).toBeGreaterThan(0);
           for (const control of controls) {
@@ -165,9 +164,17 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
           element: pane,
           path: `__screenshots__/a773-sent-integrated-${locale}-${theme}-${width}-panel.png`,
         });
-        await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-croq"]')!,
+        const details = await sentDetailsButton(panel, "l-croq");
+        const opened = [...details.closest("li")!.querySelectorAll<HTMLElement>("button")].filter(
+          (button) => button !== details.closest("li")!.querySelector("[data-sent-row]"),
         );
+        expect(opened.length).toBeGreaterThan(1);
+        for (const button of opened) {
+          expect(button.checkVisibility()).toBe(true);
+          expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        }
+        await userEvent.click(details);
+        await panel.updateComplete;
         await el.updateComplete;
         const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
         await dialog.updateComplete;

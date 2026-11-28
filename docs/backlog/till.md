@@ -732,13 +732,9 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
 
 - **A1211. The Served toast covers the Order screen's Fire / Send all buttons.** On hold for the
   review of the device screens (owner, 2026-11-24: "leave this one on hold - i will review the device
-  screens in the near future").
+  screens in the near future"). On phone screens it also covers the totals (2026-11-25).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
-- **Serving part of a row (A773's physical trial, owner, 2026-11-25).** It works, in four taps: the
-  row's details, **Mark served**, −, **Mark 1 served**; nothing says it will ask how many. Owner: "i think being able to
-  expand/collapse the rows will be more useful but i'm going to have a big design session on this
-  with impeccable. currently it is pretty bad". Seen on the same phone screens: a
-  **Quantity** box beside **Change dish** in Dish details, and the Served toast over the totals.
+- **A Quantity box beside Change dish in Dish details** (seen on phone screens, 2026-11-25).
 - **A893. Review every table state and its look (owner, 2026-10-18)**, with A936 (Waiting's minutes
   on the map), A856 and A859 below.
   [Detail](till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
@@ -1261,12 +1257,14 @@ The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` ch
 fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
 replay after serving. The unpaid served-food case retains its separate cancellation behavior.
 
-The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open Sent's dish
-window and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
+The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open a sent dish's
+window through Dish details and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
 one request despite repeated confirmation, unchanged service facts until acceptance, and Undo of
 the accepted two portions. They cover English and Spanish, both themes, at 390 and 1280 px.
-These app checks use a controlled API boundary; server persistence and the physical-till trial
-remain separate. The quantity buttons use the standard size; their previous small setting measured
+These app checks use a controlled API boundary; server persistence remains separate. Serve 1 on the
+opened sent row is checked by the "serving from the opened row" cases in the same file: two of three
+served by pressing Serve 1 twice, one request a press, 44 px targets and Undo of the last press, in
+English at one width and theme, plus one Spanish count check. The quantity buttons use the standard size; their previous small setting measured
 32 px high in those cases on 2026-10-19.
 
 **2026-11-11:** [R3-owner](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
@@ -2124,8 +2122,8 @@ Minor 3, option (c)).
 
 A773-1 ([plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-16-a773-1-unsent-list.md)) built the Sent/New order and, under
 the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md), per-bill
-ownership; that design governs the landed ownership behavior. Physical dragging and partial-serving trials remain
-separate backlog entries. A803 owns its pass/station presentation tail.
+ownership; that design governs the landed ownership behavior. The physical dragging trial remains a
+separate backlog entry; partial serving is now on the open sent row (Serve 1 / Serve {N}). A803 owns its pass/station presentation tail.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not

@@ -37,6 +37,19 @@ describe.each(["light", "dark"] as const)("Sent accessibility (%s)", (theme) => 
     expect(el.shadowRoot!.querySelector("[data-fired-line]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+  it.each([
+    ["fired", "l-croq", 2],
+    ["served", "l-salad", 0],
+  ] as const)("has no violations with an open %s row", async (kind, line, serves) => {
+    const { el, host } = await mount();
+    const li = el.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line}"]`)!;
+    li.querySelector<HTMLElement>("[data-sent-row]")!.click();
+    await el.updateComplete;
+    expect(li.hasAttribute("data-open")).toBe(true);
+    expect(li.querySelectorAll("[data-sent-serve]")).toHaveLength(serves);
+    expect(li.querySelector("[data-sent-details]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
   it("has no violations for busy service, unknown reads and an empty bill", async () => {
     const { el, host } = await mount({ busy: true });
     await expectNoA11yViolations(host);
@@ -83,7 +96,13 @@ describe.each(["light", "dark"] as const)("Sent accessibility (%s)", (theme) => 
     const row = el.shadowRoot!.querySelector<HTMLElement>(".sent-row")!;
     expect(getComputedStyle(row).color).toBe("rgb(12, 34, 56)");
     expect(getComputedStyle(row.querySelector(".row-price")!).marginInlineStart).toBe("9px");
-    for (const button of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-info]")) {
+    el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-fired-line="l-croq"] [data-sent-row]',
+    )!.click();
+    await el.updateComplete;
+    const buttons = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-open] button")];
+    expect(buttons.length).toBe(3);
+    for (const button of buttons) {
       expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     }

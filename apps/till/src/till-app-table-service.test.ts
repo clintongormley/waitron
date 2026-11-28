@@ -46,6 +46,7 @@ import type { FloorZone, PartyBill, TableState } from "./api/floor-api.js";
 import type { TillSaleResult } from "./api/payments-api.js";
 import type { Station, TabLine } from "./api/kitchen-api.js";
 import type { TillMenu, TillProduct, ZoneOffers } from "./api/menu-api.js";
+import { openSentDetails } from "../test/open-sent-row.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -1874,7 +1875,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   async function openSentWindow(el: TillApp, screen: TillTableOrderScreen, lineId: string) {
     const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
-    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!.click();
+    await openSentDetails(panel, lineId);
     await flush(el);
     const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
     await expect.poll(() => dialog.open).toBe(true);

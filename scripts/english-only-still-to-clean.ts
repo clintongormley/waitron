@@ -692,7 +692,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/till/src/widgets/pressed-pickers.a11y.test.ts",
   "apps/till/src/widgets/product-name.test.ts",
   "apps/till/src/widgets/reprint-language-dialog.test.ts",
-  "apps/till/src/widgets/sent-orders.test.ts",
   "apps/till/src/widgets/split-joined-dialog.a11y.test.ts",
   "apps/till/src/widgets/split-joined-dialog.test.ts",
   "apps/till/src/widgets/split-picker.test.ts",

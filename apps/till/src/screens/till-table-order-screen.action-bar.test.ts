@@ -18,6 +18,7 @@ import {
   menuOf,
   mount,
   resized,
+  scrollSettled,
   showView,
   shownView,
   tap,
@@ -272,17 +273,6 @@ describe("till-table-order-screen: the unsent order's action bar under the shell
     });
   }
 });
-
-/** Waits until the scroll area has stopped moving, so a smooth reveal has finished. */
-async function scrollSettled(host: HTMLElement): Promise<void> {
-  let still = 0;
-  let last = host.scrollTop;
-  for (let frame = 0; frame < 300 && still < 10; frame++) {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-    still = host.scrollTop === last ? still + 1 : 0;
-    last = host.scrollTop;
-  }
-}
 
 /** The basket row of the line added last. */
 function newestEntry(el: TillTableOrderScreen): HTMLElement {

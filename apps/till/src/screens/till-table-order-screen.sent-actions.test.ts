@@ -12,6 +12,7 @@ import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails, sentRowButton } from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -51,13 +52,9 @@ async function openLine(kind: "held" | "served", over: Partial<TillTableOrderScr
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  const root = panel.shadowRoot!;
-  await userEvent.click(
-    kind === "held"
-      ? root.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!
-      : (root.querySelector<HTMLElement>('[data-served-line="l-croq"] [data-sent-info="l-croq"]') ??
-          root.querySelector<HTMLElement>('[data-fired-line="l-croq"] [data-sent-info="l-croq"]')!),
-  );
+  await (kind === "held"
+    ? openSentDetails(panel, "l-flan")
+    : openSentDetails(panel, "l-croq", "served"));
   await el.updateComplete;
   return el;
 }
@@ -357,7 +354,7 @@ it("offers Void… on a paid bill's unserved slice only", async () => {
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-croq"]')!);
+  await openSentDetails(panel, "l-croq");
   await el.updateComplete;
   const cancellations = capture(el, "cancel-item");
   await openMore(el);
@@ -499,7 +496,7 @@ it("a previous Void cannot consume a reopened dish window", async () => {
   await userEvent.click(q(el, "[data-sent-line-close]"));
   await el.updateComplete;
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  await openSentDetails(panel, "l-flan");
   await el.updateComplete;
   previous.click();
   await el.updateComplete;
@@ -729,13 +726,11 @@ it("Comp from the live portions of a part-cancelled dish starts at the whole dis
   await userEvent.click(q(el, "[data-sent-line-close]"));
   await el.updateComplete;
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-  const infos = panel.shadowRoot!.querySelectorAll<HTMLElement>('[data-sent-info="l-croq"]');
-  expect(infos).toHaveLength(2);
-  const live = panel.shadowRoot!.querySelector<HTMLElement>(
-    '[data-fired-line="l-croq"] [data-sent-info="l-croq"]',
-  )!;
-  expect([...infos]).toContain(live);
-  await userEvent.click(live);
+  const rows = panel.shadowRoot!.querySelectorAll<HTMLElement>('[data-sent-row="l-croq"]');
+  expect(rows).toHaveLength(2);
+  const live = sentRowButton(panel, "l-croq", "fired");
+  expect([...rows]).toContain(live);
+  await openSentDetails(panel, "l-croq", "fired");
   await el.updateComplete;
   expect(q(el, "[data-sent-line-dialog]").textContent).not.toContain("Cancelled, charged");
   const events = capture(el, "adjust");

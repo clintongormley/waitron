@@ -1253,7 +1253,7 @@ colour behind it. While the bar's own place is below the foot of the till's scro
 at that foot and what is above it scrolls under it; otherwise it sits in its own place below the
 New order's lines. A line the till scrolls into view (a dish just added while the order is in view) stops just
 above the bar rather than under it: the screen measures
-the bar's height into `--draft-bar-size`, which the basket's lines keep clear below them
+the bar's height into `--draft-bar-size`, kept on the order pane (`[data-draft-pane]`), which the basket's lines and an opened sent row keep clear below them
 (`scroll-margin-block-end`). Its wrappers, `[data-round-controls]` and `.round-bar`, are
 `display: contents`, so the bar can rise anywhere in the order pane, over the sent rows too.
 While a round is being sent the outer wrapper stays `inert`, and the fade is drawn on each of its
@@ -6623,7 +6623,8 @@ screen shows for the line, such as an allergy. Only a whole portion groups, a li
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.
 
-On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
+On the till, a sent row opened in place serves with Serve 1 (its first member left) and Serve {N}
+(every member left); Mark served and Undo served in its details window ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it. On a sent row that joins served portion lines to lines with dishes left, Void and
@@ -6652,7 +6653,9 @@ border but its text reads `--wt-color-text`, since the green text measures 4.13:
 the light theme. A tap opens the row in place, and a second tap closes it; one row is open at a time
 (`OpenDraftRow`, `apps/till/src/widgets/draft-row-open.ts`). The opened row is boxed: a 2px
 `--wt-color-primary` edge, `--wt-radius-md`, on `--wt-color-surface`, inset `--wt-space-1` above and
-below and `--wt-space-2` at the sides; on a row whose period ended, the amber `--wt-space-1` stripe is drawn inside that edge and the line keeps every opened row's inset. Its line keeps a closed row's height. On a row of more than
+below and `--wt-space-2` at the sides, its lead column narrowed by that side inset so the quantity
+and name move only by the edge's width, while the selection box reaches over the inset to keep its
+full `--wt-tap-min` width; on a row whose period ended, the amber `--wt-space-1` stripe is drawn inside that edge and the line keeps every opened row's inset. Its line keeps a closed row's height. On a row of more than
 one, the split control keeps its full `--wt-tap-min` width and, with the price, the closed rows'
 column, reaching over the box's side margin and border while its arrow stays inside; on a row of one, the price ends `--wt-space-2` in from the box's edge, as frame `g` 3
 draws it. Opening a row whose box would end under the draft bar scrolls the list until the box's
@@ -6694,7 +6697,7 @@ and their headings sit on the page colour, with `--wt-space-3` below the last ro
 the order layout (`apps/till/src/screens/table-order-layout.ts`) paints `till-sent-orders`
 `--wt-color-bg` out to the order column's edge, and the draft bar reaches the same edge, while the
 new dishes keep the column's `--wt-color-surface`. A row is quiet (`apps/till/src/widgets/sent-row.ts`): normal-weight muted text, the quantity
-in its own column, the name, and the price at the right, then ⓘ. Its muted second line holds the
+in its own column, the name, and the price at the right. Its muted second line holds the
 dish's extras and note, and the row's state only when that differs from its heading's ("Held",
 "At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
 portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
@@ -6705,6 +6708,26 @@ they were made ready; then the other released rows with something left, by when 
 those not yet fired after them; then rows still held, in the order the bill's read lists them,
 whether the section is held or fired; and last the rows with nothing left, served or cancelled but
 charged, in line order. Rows with the same time go by line id.
+
+A tap opens a sent row in place in the opened new row's box, its text in `--wt-color-text` with a
+bold quantity, and a second tap closes it; one row is open at a time. After a serve the box stays
+on the row that now holds what was left of it, or, once nothing is left, on a row holding its
+served portions with nothing of its own to serve, and otherwise closes (`OpenSentRow`,
+`apps/till/src/widgets/sent-row-open.ts`). Its quantity and name keep a closed row's place, moved
+only by the box's border, and its price keeps the closed rows' right edge. `--wt-space-2` under its
+line sit the count ("1 of 3 served"), which the row's second line then leaves out, in muted `md`
+text starting where the name starts when the quantity fits its column, and the outlined Serve
+buttons at the right, the last ending `--wt-space-2` in from the box's edge: Serve 1, and Serve {N}
+when more than one is left, or one Serve for a weighed dish or one not counted in whole portions.
+A row with no Serve buttons, because a dish left is held or not released, or because it is wholly
+served or cancelled but charged, has no count line either. Under them, Dish details, outlined like
+them, opens the dish's details window, which a held press on any of the bill's sent rows also
+opens; the box ends `--wt-space-2` and half a `--wt-space-1` under it, as frame `e` 3 draws it.
+Opening a row whose last Serve button would end under the draft bar scrolls the list until that
+button's lower edge sits `--wt-space-2` above the bar, so the dish's line and its Serve buttons
+show together on a handheld turned sideways, with Dish details possibly under the bar; a row with
+no Serve buttons brings its box's lower edge there instead, as an opened new row's does. A change
+of the screen's width while it is open brings it back the same way.
 
 ### The dish picker
 
