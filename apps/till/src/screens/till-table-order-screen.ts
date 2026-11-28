@@ -142,6 +142,7 @@ import {
 } from "../widgets/table-targets.js";
 import {
   billLabel,
+  billLabelInText,
   billName,
   billNumberLabel,
   canCloseRefundedZeroBill,
@@ -7162,8 +7163,10 @@ export class TillTableOrderScreen extends LitElement {
         label:
           kept === undefined
             ? t("table.actions_title")
-            : fill(t("table.merge_into"), { bill: kept }),
-        showLabel: true,
+            : fill(t("table.merge_into"), {
+                bill: currentLocale() === "es-ES" ? billLabelInText(kept) : kept,
+              }),
+        showLabel: targets.length > 0,
       },
       body,
       this.busy,
@@ -7227,7 +7230,9 @@ export class TillTableOrderScreen extends LitElement {
       this.busy,
       this.relocationRefusal === ""
         ? nothing
-        : html`<div class="table-action-message">${formMessage(this.relocationRefusal)}</div>`,
+        : html`<div class="table-action-message" ?data-move-bill-refusal=${moveBill}>
+            ${formMessage(this.relocationRefusal)}
+          </div>`,
     );
   }
 
@@ -7238,7 +7243,7 @@ export class TillTableOrderScreen extends LitElement {
       const bill = this.#shownBillLabel();
       return bill === undefined
         ? t("table.actions_title")
-        : t("table.move_bill_heading").replace("{bill}", () => bill);
+        : fill(t("table.move_bill_heading").replace(/:$/, ""), { bill });
     }
     const key = this.actionVerb === "move" ? "table.move_guests_heading" : "table.join_heading";
     return t(key).replace("{party}", () => this.#partyScope(party));

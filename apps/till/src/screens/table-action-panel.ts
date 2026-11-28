@@ -26,6 +26,10 @@ export const tableActionPanelStyles = css`
   .table-action-message {
     padding-inline: var(--wt-space-4);
   }
+
+  .table-action-message[data-move-bill-refusal] {
+    padding-block-end: var(--wt-space-2);
+  }
 `;
 
 export function tableActionPanel(

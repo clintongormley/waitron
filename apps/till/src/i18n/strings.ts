@@ -4044,7 +4044,7 @@ export const es: Record<StringKey, string> = {
   "table.action_move_guests": "Mover clientes",
   "table.action_join": "Unir mesas",
   "table.action_merge_bills": "Juntar cuentas",
-  "table.merge_into": "Juntar una cuenta con {bill}",
+  "table.merge_into": "Juntar una cuenta en la {bill}",
   "table.no_other_tables": "No hay otras mesas",
   "table.action_split_table": "Separar la mesa",
   "table.action_name": "Poner nombre a los clientes",

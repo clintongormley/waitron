@@ -3975,7 +3975,7 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
-        const heading = t("table.move_bill_heading").replace("{bill}", "Bill 2");
+        const heading = "Move Bill 2 to";
         expect(targetHeading(el)).toBe(heading);
         expect(el.shadowRoot!.querySelector("[data-target-picker]")?.textContent).toContain(
           heading,
@@ -4047,9 +4047,7 @@ describe("till-table-order-screen", () => {
         });
         await toMoveBill(el);
 
-        expect(targetHeading(el)).toBe(
-          t("table.move_bill_heading").replace("{bill}", () => "Bill 2 · {into}"),
-        );
+        expect(targetHeading(el)).toBe("Move Bill 2 · {into} to");
       });
 
       it("sends the party the picker showed, though the floor read since seats another there", async () => {
@@ -5232,15 +5230,23 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el)).toEqual(["wo-check"]);
     });
 
-    it("says which bill the chosen one merges into before anything is chosen", async () => {
-      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
-      await toMenu(el);
-      click(el, '[data-action="merge"]');
-      await el.updateComplete;
+    it.each([
+      ["en-GB", "Merge a bill into Bill 2"],
+      ["es-ES", "Juntar una cuenta en la cuenta 2"],
+    ])("names the bill that stays open after merging in %s", async (locale, heading) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+        await toMenu(el);
+        click(el, '[data-action="merge"]');
+        await el.updateComplete;
 
-      expect(targetHeading(el)).toBe(
-        t("table.merge_into").replace("{bill}", t("floor.unsent_bill").replace("{n}", "2")),
-      );
+        expect(targetHeading(el)).toBe(heading);
+        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")?.textContent).toBe(heading);
+      } finally {
+        setLocale(previous);
+      }
     });
 
     it("offers no Move dishes, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
@@ -5305,6 +5311,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
         t("table.no_other_bills"),
       );
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")).toBeNull();
     });
 
     it("Back from a picker closes it", async () => {

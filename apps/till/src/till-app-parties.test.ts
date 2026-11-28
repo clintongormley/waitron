@@ -11823,6 +11823,9 @@ describe("till-app: table relocation editing observations", () => {
       .toHaveTextContent(
         "Could not read the destination's bills. Choose a destination to try again.",
       );
+    const message = panel.querySelector('[role="alert"]')!;
+    const frame = message.closest("wt-full-screen-panel")!;
+    expect(frame.getBoundingClientRect().bottom - message.getBoundingClientRect().bottom).toBe(16);
     expect(api.moveBill).not.toHaveBeenCalled();
   });
 
