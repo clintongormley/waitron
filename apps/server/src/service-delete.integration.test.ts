@@ -52,6 +52,7 @@ import {
   commandFor,
   counterOrder,
   pricedInZone,
+  orderForParty,
   join,
   seat,
   setupPartyVenue,
@@ -979,6 +980,14 @@ it.each(["zone", "department"] as const)(
     const earlier = await run(completeSnapshot);
     await expect(remove()).rejects.toMatchObject({ code: "zone.table_in_use" });
     expect(await run(completeSnapshot)).toEqual(earlier);
+    const tableOffer = await pricedInZone(venue, f.zoneId, "Water", "2.00");
+    await orderForParty(
+      { ...venue, item: () => tableOffer },
+      seated.partyId,
+      ["Water"],
+      seated.tabId,
+    );
+    await cashContribution(venue, seated.tabId, "2.00");
     const finishCommand = await commandFor(venue, seated.partyId);
     await run((tx) => finishTable(tx, { partyId: seated.partyId, ...finishCommand }));
     const pickup = await run((tx) =>
@@ -1121,9 +1130,13 @@ it.each(["zone", "department"] as const)(
     await cashContribution(venue, unaffected, "2.00");
     const history = await run(retainedHistory);
     const rows = (name: string) => history[name] as Record<string, unknown>[];
-    for (const orderId of [delivery, contributed]) {
+    for (const [orderId, zoneId] of [
+      [seated.tabId, f.zoneId],
+      [delivery, pickup.id],
+      [contributed, pickup.id],
+    ]) {
       expect(rows("orderContexts").find((row) => row.working_order_id === orderId)).toMatchObject({
-        zone_id: pickup.id,
+        zone_id: zoneId,
         department_id: f.departmentId,
       });
       const sale = rows("sales").find((row) => row.working_order_id === orderId)!;

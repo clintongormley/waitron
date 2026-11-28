@@ -185,7 +185,9 @@ it("puts the counter service refusal beside Order start so it can be corrected",
   const fields = await zoneFields(el);
   await expect
     .poll(() => fields.errors.orderStart)
-    .toBe("Terrace has tables. Move its tables to a table zone first.");
+    .toBe(
+      "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+    );
   expect(modal.open).toBe(true);
   expect(zoneSave(el).disabled).toBe(false);
 });

@@ -1,4 +1,4 @@
-import { effectiveOrderStart } from "./zone-order-start.js";
+import { effectiveOrderStart, type OrderStart } from "./zone-order-start.js";
 import { sql } from "drizzle-orm";
 import { serviceStepOrder } from "./service-steps.js";
 import { getCountryPack } from "@waitron/country-packs";
@@ -585,19 +585,24 @@ function validateOrderStarts(tables: Tables): void {
 }
 
 function validateCounterTables(tables: Tables): void {
-  const departmentOrders = new Map(tables.departments?.map((row) => [row.id, row.order_start]));
+  type ValidatedOrderStart = OrderStart | null | undefined;
+  const departmentOrders = new Map(
+    tables.departments?.map((row) => [row.id, row.order_start as ValidatedOrderStart]),
+  );
   const counterIds = new Set(
     (tables.floor_zones ?? [])
       .filter(
         (row) =>
-          effectiveOrderStart(row.order_start, departmentOrders.get(row.department_id)) ===
-          "counter",
+          effectiveOrderStart(
+            row.order_start as ValidatedOrderStart,
+            departmentOrders.get(row.department_id),
+          ) === "counter",
       )
       .map((row) => row.id),
   );
-  for (const table of ["floor_plan_tables", "dining_tables"] as const) {
-    if (tables[table]?.some((row) => counterIds.has(row.zone_id))) refuse(`${table}.zone_id`);
-  }
+  // Imports omit on_floor, so a retained dining row cannot supply today's layout.
+  if (tables.floor_plan_tables?.some((row) => counterIds.has(row.zone_id)))
+    refuse("floor_plan_tables.zone_id");
 }
 
 function validateDepartmentDining(tables: Tables): void {

@@ -17,6 +17,7 @@ import {
   CORE_MIGRATIONS,
   diningTables,
   floorZones,
+  floorPlanTables,
   kitchenCourses,
   kitchenStations,
   routingCells,
@@ -462,6 +463,39 @@ describe("whole service settings saves", () => {
       error: { code: "department.name_taken" },
     });
     expect(await settingsSnapshot(fx)).toEqual(before);
+  });
+
+  it("both department settings routes refuse counter service while an inheriting zone has tables", async () => {
+    const fx = await settingsFixture();
+    const zoneName = await withTransaction(db, async (tx) => {
+      await configureZone(tx, {
+        zoneId: fx.zoneId,
+        departmentId: fx.departmentId,
+        orderStart: null,
+      });
+      await tx.insert(floorPlanTables).values({ zoneId: fx.zoneId, label: "Spare" });
+      const [zone] = await tx
+        .select({ name: floorZones.name })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
+      return zone!.name;
+    });
+    const before = await settingsSnapshot(fx);
+    for (const [method, resource, body] of [
+      ["PUT", fx.departmentPath, { ...departmentSettings, orderStart: "counter" }],
+      [
+        "PATCH",
+        `/management-api/venue-service/departments/${fx.departmentId}/sale-policy/orderStart`,
+        { value: "counter" },
+      ],
+    ] as const) {
+      const answer = await send(fx.app, method, resource, fx.managerCookie, body);
+      expect(answer.status).toBe(409);
+      expect(await answer.json()).toEqual({
+        error: { code: "zone.counter_has_tables", params: { field: "orderStart", zoneName } },
+      });
+      expect(await settingsSnapshot(fx)).toEqual(before);
+    }
   });
 
   it("rolls back the department and sale policy when a transfer names itself", async () => {

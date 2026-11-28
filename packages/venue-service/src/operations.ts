@@ -657,17 +657,13 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
   field: K,
   value: DepartmentPolicyField[K],
 ): Promise<void> {
-  const [department] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
-  if (department === undefined) throw new AppError("department.not_found", { departmentId });
+  if (field === "orderStart")
+    return updateDepartment(tx, departmentId, { orderStart: value as OrderStart });
+  await assertDepartment(tx, departmentId);
   await tx
     .update(departments)
     .set({ [field]: value })
     .where(eq(departments.id, departmentId));
-  if (field === "orderStart" && value === "counter")
-    await assertNoCounterTables(tx, eq(floorZones.departmentId, departmentId), "orderStart");
 }
 
 export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>(
@@ -709,6 +705,7 @@ export async function saveDepartmentEditSettings(
   await updateDepartment(tx, departmentId, {
     name: input.name,
     tradingName: input.tradingName,
+    orderStart: input.orderStart,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
     ...(input.lateSendNeedsManager === undefined
       ? {}
@@ -718,15 +715,12 @@ export async function saveDepartmentEditSettings(
       : { estimatedMarginBp: input.estimatedMarginBp }),
   });
   const settings = {
-    orderStart: input.orderStart,
     paidWhen: input.paidWhen,
     collectionNumber: input.collectionNumber,
     ...(input.dining === undefined ? {} : { dining: input.dining }),
     ...(input.diningStartsAs === undefined ? {} : { diningStartsAs: input.diningStartsAs }),
   };
   await tx.update(departments).set(settings).where(eq(departments.id, departmentId));
-  if (input.orderStart === "counter")
-    await assertNoCounterTables(tx, eq(floorZones.departmentId, departmentId), "orderStart");
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, departmentId, input.transfers);
   if (input.courseSettings !== undefined)

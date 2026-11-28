@@ -1256,6 +1256,47 @@ describe("configuration transfer database path", () => {
     expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
 
+  it("reimports a counter zone whose export retains an old table identity off the floor", async () => {
+    const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, { name: "Pickup", orderStart: "table" });
+      const zone = await createServiceZone(tx, { name: "Pickup", departmentId: department.id });
+      await tx.insert(diningTables).values({ zoneId: zone.id, label: "Former table" });
+      await configureZone(tx, {
+        zoneId: zone.id,
+        departmentId: department.id,
+        orderStart: "counter",
+      });
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    expect(transferred.tables.dining_tables).toEqual([
+      expect.objectContaining({ label: "Former table", plan_table_id: null }),
+    ]);
+    await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+    });
+    expect(
+      await targetSuite.db
+        .select({ label: diningTables.label, onFloor: diningTables.onFloor })
+        .from(diningTables),
+    ).toEqual([{ label: "Former table", onFloor: false }]);
+  });
+
   it("carries the venue's authored new-product VAT default through export and import", async () => {
     const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
       db: suite.db,

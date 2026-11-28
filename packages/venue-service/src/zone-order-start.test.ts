@@ -7,6 +7,6 @@ it.each([
   [null, "table", "table"],
   [null, "counter", "counter"],
   [undefined, undefined, "counter"],
-])("resolves zone %s over department %s to %s", (zone, department, expected) => {
+] as const)("resolves zone %s over department %s to %s", (zone, department, expected) => {
   expect(effectiveOrderStart(zone, department)).toBe(expected);
 });

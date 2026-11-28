@@ -296,7 +296,10 @@ it.each(["department", "zone"] as const)(
 it.each([
   ["management.request_invalid", "This value was not accepted. Change it and save again."],
   ["department.not_found", "This value was not accepted. Change it and save again."],
-  ["zone.counter_has_tables", "Terrace has tables. Move its tables to a table zone first."],
+  [
+    "zone.counter_has_tables",
+    "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+  ],
 ])("puts a refused move destination beside its field: %s", async (code, message) => {
   const { el } = await mount(
     ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,

@@ -1,5 +1,8 @@
 export type OrderStart = "table" | "counter";
 
-export function effectiveOrderStart(zone: unknown, department: unknown): OrderStart {
-  return (zone ?? department) === "table" ? "table" : "counter";
+export function effectiveOrderStart(
+  zone: OrderStart | null | undefined,
+  department: OrderStart | null | undefined,
+): OrderStart {
+  return zone ?? department ?? "counter";
 }
