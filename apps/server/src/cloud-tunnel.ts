@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { lstat, open, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 

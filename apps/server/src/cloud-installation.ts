@@ -2,7 +2,7 @@ import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request
 import { encodeMachine } from "@waitron/contract";
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { CloudRegistration, CloudInstallationCredentials } from "./cloud-client.js";
+import type { CloudRegistration, CloudInstallationCredentials } from "./cloud-client-types.js";
 import "./errors.js";
 type Action = "renew" | "configuration" | "report" | "revoke";
 interface Envelope {

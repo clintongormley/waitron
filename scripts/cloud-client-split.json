@@ -1,0 +1,34 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/cloud-client.ts",
+      "targets": {
+        "apps/server/src/cloud-client-types.ts": [
+          "CloudRegistration",
+          "CloudPairingView",
+          "CloudConnectionOptions",
+          "SavedEmergencyHints",
+          "CloudInstallationCredentials",
+          "SavedCloudState"
+        ]
+      },
+      "keep": [
+        "CloudConnectionStatus",
+        "CloudChoice",
+        "uuid",
+        "name",
+        "record",
+        "loadCloudOrigin",
+        "loadCloudSignInCallback",
+        "readView",
+        "readPrivateCloudState",
+        "discardHeldSetupAdmin",
+        "connectionTurns",
+        "createCloudConnection",
+        "StaffReportDelivery",
+        "CloudConnection"
+      ]
+    }
+  ]
+}

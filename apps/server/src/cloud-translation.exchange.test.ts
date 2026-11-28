@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
-import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
+import { createCloudConnection } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import { COLLECT_REPLY_BYTES, refusalOf, translationStatus } from "./cloud-translation.js";
 
 type Fake = Awaited<ReturnType<typeof translationCloudFixture>>;

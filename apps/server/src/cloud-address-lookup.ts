@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { CloudAddressOperation, CloudAddressReply } from "@waitron/country-packs";
-import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client-types.js";
 import { cloudSignInId } from "./cloud-sign-in.js";
 import { refusalOf, serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";

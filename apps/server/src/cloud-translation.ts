@@ -6,7 +6,7 @@ import type {
 } from "@waitron/menu/src/content-suggestion-types.js";
 import "@waitron/menu/src/errors.js";
 import { AppError } from "@waitron/shared";
-import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client-types.js";
 import { machinePayload } from "./cloud-installation.js";
 import "./errors.js";
 

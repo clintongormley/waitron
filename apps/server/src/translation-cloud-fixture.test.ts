@@ -8,7 +8,7 @@ import {
   translationCloudFixture,
   verifySubmitVector,
 } from "../test/translation-cloud-fixture.js";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import { machinePayload } from "./cloud-installation.js";
 import { jobFingerprint, submitSignedBody } from "./cloud-translation.js";
 

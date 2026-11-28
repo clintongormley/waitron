@@ -7,7 +7,7 @@ import {
   unavailable,
   type BillingPrices,
 } from "./cloud-billing.js";
-import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client-types.js";
 import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import type { OnRefusal } from "./cloud-translation.js";
 

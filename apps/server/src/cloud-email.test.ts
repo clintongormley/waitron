@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { requestSetupCloudEmailGrant, sendCloudEmail } from "./cloud-email.js";
-import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
+import { createCloudConnection } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 
 const grant = () => ({
   id: randomUUID(),
