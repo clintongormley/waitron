@@ -3520,12 +3520,7 @@ A737 Part 1's CI run 38826750015 failed its row-opening assertion. In a local Ch
 reproduction at 390 px, the row started at x=17 and measured 762.16 px wide, putting its
 centre at x=398.08. Clicking the row produced no document click event and no opening event.
 Clicking its first cell passed the same exact bill/transaction event assertions at 390, 800,
-1280 and 2560 px. The public row-opening behavior did not change. Run those cases with:
-
-```sh
-pnpm --filter @waitron/till exec vitest run src/screens/till-find-bill-screen.test.ts \
-  -t 'row activation at'
-```
+1280 and 2560 px.
 
 ## Observe an old refund while its resolver still owns it
 

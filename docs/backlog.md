@@ -929,7 +929,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — remaining PIN-slot saturation, form focus and reset timing.
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
-- **Shared database-backed table paging.** Find a bill no longer uses a table (R2b-2).
+- **Shared database-backed table paging.** Products stays on its current read until its own plan.
   [Detail](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting).
   [Print Queue measurement and decision](backlog/dashboard.md#print-queue-keeps-its-current-read).
 
