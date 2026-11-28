@@ -91,7 +91,6 @@ it.each([
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "till",
         activeScreen: "counter",
-        phone: width === 390,
         operatorName: "Administrator",
         transferAvailable: true,
         showFloor: true,
