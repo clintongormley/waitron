@@ -33,11 +33,15 @@ the full scans and translation-gap read remain.
 Left open:
 
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
-  copies the till's tile and breadcrumb markup, paint helper and CSS
-  (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already
-  use shared rules. A shared presentation boundary would need adapters for the till's ordering state and
-  the dashboard's shortcut controls. Even a partial extraction (sharing only the CSS and paint helper) was deferred: it would add a cross-package interface while leaving both renderers
-  (watcher, 2026-11-14 08:56, MENU-HOME-TAB).
+  copies the till's tile markup (`apps/till/src/widgets/menu-tiles.ts`) and keeps its own older
+  path above the tiles, a word "Home" and plain steps, which no longer matches the till's
+  (`menu-path.ts`); its search is not the till's outlined one either. The tiles' CSS and colouring
+  are shared: both read `menuTileStyles` and `menuTilePaint` (`packages/ui/src/menu-tile-styles.ts`;
+  till redesign PR 10a, watcher 2026-11-28 00:13, question 5), except the count on a dish tile
+  and the room its name keeps for it, which only the till draws (`countedNameStyles` in
+  `apps/till/src/widgets/counted-name.ts`). Grid sizing, arrangement, trails and indexing already use shared
+  rules. A shared presentation boundary would need adapters for the till's ordering state and the
+  dashboard's shortcut controls.
 
 ## An included menu can show its sections directly (A322, #1372): left open
 
@@ -267,8 +271,9 @@ The remaining storage, input-validation and shared-form limits.
 ## Menu home preview rendering
 
 - **The dashboard's Home page preview still copies the till's presentation.** Tile and breadcrumb
-  markup, paint helpers, CSS and the table layout values remain separate; grid sizing,
-  arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
+  markup and the table layout values remain separate, and the preview's path and search no longer
+  look like the till's; tile CSS, the tile paint helper,
+  grid sizing, arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
   ordering and dashboard shortcut editing.
   [Detail](menu.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 

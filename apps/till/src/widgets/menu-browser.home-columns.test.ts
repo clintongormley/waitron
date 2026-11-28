@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { applyTokens } from "@waitron/ui";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
@@ -7,13 +7,25 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
+  loadPhoneFont,
   mountWidget,
   pageAt,
+  PHONE_FONT,
+  placeGlyphsFractionally,
   resetPage,
+  shownLines,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 
 afterEach(cleanupWidgets);
+
+let phoneFont: FontFace;
+beforeAll(async () => {
+  phoneFont = await loadPhoneFont();
+});
+afterAll(() => {
+  document.fonts.delete(phoneFont);
+});
 
 const cases = [
   { width: 360, columns: 3, theme: "light" },
@@ -59,8 +71,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
       const products: TillProduct[] = [
         "Pollo asado con patatas y verduras",
         "Extraordinariamenteextralargapalabra",
-        // Measure centring on words that wrap without a browser-inserted hyphen.
-        "Zumo de naranja recién hecho",
+        // Measure centring on words that wrap without a browser-inserted hyphen, in two lines no
+        // tested width cuts: Chromium leaves a shortened cut line off centre.
+        "Zumo de naranja",
       ].map((name, index) => ({
         id: `p${index}`,
         productId: `p${index}`,
@@ -144,7 +157,10 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
         theme,
       );
       if (width === 792) host.style.width = "792px";
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
+      placeGlyphsFractionally(el.shadowRoot!);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(getComputedStyle(el).fontFamily).toBe(PHONE_FONT);
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
       if (width <= 390) expect(grid.getBoundingClientRect().width).toBeCloseTo(width - 16);
       expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(columns);
@@ -157,7 +173,8 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
           const bounds = content.getBoundingClientRect();
           expect(bounds.left).toBeGreaterThanOrEqual(box.left);
           expect(bounds.right).toBeLessThanOrEqual(box.right);
-          expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+          if (content.classList.contains("name")) expectNameDrawnInside(content);
+          else expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
         }
         if (tile.dataset.kind === "product") {
           expect(tile.querySelector(".price")!.textContent).toContain("12,50");
@@ -171,7 +188,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
               const range = document.createRange();
               range.setStart(node, match.index);
               range.setEnd(node, match.index + match[0].length);
-              expect(range.getClientRects().length, match[0]).toBe(1);
+              // Lines, not boxes: the line a cut name ends on carries a second, shortened box.
+              const lines = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+              expect(lines.size, match[0]).toBe(1);
             }
           }
         }
@@ -201,3 +220,26 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
     }
   },
 );
+
+/** Whatever `name` draws stays inside it: an end padding is the room it keeps for a "…", which
+ * Chromium counts as overflow, and a word too wide for any line ends in a "…" drawn after the
+ * shortened box Chromium gives the cut text. */
+function expectNameDrawnInside(name: HTMLElement): void {
+  const look = getComputedStyle(name);
+  const room = name.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+  const pen = document.createElement("canvas").getContext("2d")!;
+  pen.font = look.font;
+  const words = name.textContent!.match(/\S+/g)!;
+  if (words.every((word) => pen.measureText(word).width <= room)) {
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth + parseFloat(look.paddingRight));
+    return;
+  }
+  const own = name.getBoundingClientRect();
+  expect(look.textOverflow).toBe("ellipsis");
+  const lines = shownLines(name);
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    expect(line.text.left).toBeGreaterThanOrEqual(own.left);
+    expect(line.right).toBeLessThanOrEqual(own.right);
+  }
+}

@@ -23,13 +23,15 @@ describe("till-diet-filter", () => {
     expect(customElements.get("till-diet-filter")).toBe(TillDietFilter);
   });
 
-  it("shows the funnel and names the filter with its active count", async () => {
+  it("shows three lines that get shorter and names the filter with its active count", async () => {
     const { el } = await mountWidget<TillDietFilter>("till-diet-filter", {});
     const button = page.getByRole("button", { name: "Filter", exact: true });
     await expect.element(button).toBeVisible();
     const icon = el.shadowRoot!.querySelector("[data-filter-open] wt-icon");
-    expect(icon?.getAttribute("name")).toBe("table-filter");
+    expect(icon?.getAttribute("name")).toBe("menu-filter");
     expect(icon?.shadowRoot?.querySelector("path")?.getAttribute("d")).toBeTruthy();
+    // Frame m draws it in a 20 px box; 18 px is the nearest icon size.
+    expect(icon!.getBoundingClientRect().width).toBe(18);
     el.selected = { diets: ["vegan"], exclude: { milk: "all" } };
     await el.updateComplete;
     await expect.element(page.getByRole("button", { name: "Filter 2", exact: true })).toBeVisible();

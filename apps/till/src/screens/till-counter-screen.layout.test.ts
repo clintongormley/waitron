@@ -11,6 +11,7 @@ import {
   pageAt,
   resetPage,
   servedMenus,
+  shownLines,
   textRects,
   expectNoA11yViolations,
 } from "../widgets/test-helpers.js";
@@ -192,8 +193,9 @@ it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang)
   }
 });
 
-/** A product name's computed size on Waitron's look at each text size. */
+/** A product name's computed size on Waitron's look at each text size, on a phone and from 720 px. */
 const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
+const PHONE_NAME_SIZE: Record<number, string> = { 100: "15px", 130: "19.25px" };
 
 /** Fails unless the counter's product names are drawn at `scale`%, so a sheet that stopped reaching
  * the widgets cannot let a 130% case pass as its 100% twin. */
@@ -202,7 +204,8 @@ function expectDrawnAt(el: HTMLElement, scale: number): void {
     el.shadowRoot!.querySelector("till-menu-browser"),
     '[data-kind="product"] .name',
   );
-  expect(getComputedStyle(name).fontSize, `product name at ${scale}%`).toBe(NAME_SIZE[scale]);
+  const sizes = window.innerWidth < 720 ? PHONE_NAME_SIZE : NAME_SIZE;
+  expect(getComputedStyle(name).fontSize, `product name at ${scale}%`).toBe(sizes[scale]);
 }
 
 it.each([100, 130])(
@@ -300,6 +303,8 @@ interface DrawnName {
   /** The name's own box, which its text must stay inside. */
   box: HTMLElement;
   text: HTMLElement;
+  /** A tile's name, which ends a line it cannot fit in "…" rather than breaking a word. */
+  tile: boolean;
 }
 
 function drawnNames(el: HTMLElement): DrawnName[] {
@@ -312,22 +317,28 @@ function drawnNames(el: HTMLElement): DrawnName[] {
       name: `tile ${text.textContent!.trim()}`,
       box: text,
       text,
+      tile: true,
     })),
     ...lines.map((text) => ({
       name: `bill ${text.textContent!.trim()}`,
       box: text.closest<HTMLElement>(".name")!,
       text,
+      tile: false,
     })),
   ];
 }
 
-/** Each name whose text runs outside its own box, with that box's width. */
+/** Each name whose drawn text runs outside its own box, with that box's width. */
 function overflows(names: DrawnName[]): string[] {
-  return names.flatMap(({ name, box: own, text }) => {
+  return names.flatMap(({ name, box: own, text, tile }) => {
     const edge = own.getBoundingClientRect();
-    const out = textRects(text).some(
-      (rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5,
-    );
+    const out = tile
+      ? shownLines(text).some(
+          (line) => line.text.left < edge.left - 0.5 || line.right > edge.right + 0.5,
+        )
+      : textRects(text).some(
+          (rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5,
+        );
     return out ? [`${name} (box ${Math.round(edge.width)}px)`] : [];
   });
 }
@@ -356,7 +367,7 @@ it.each([
   [1280, 800],
   [1024, 768],
 ])(
-  "at %ix%i and 130%, long names under Spanish break only with a hyphen",
+  "at %ix%i and 130%, long names under Spanish stay inside their boxes, a bill line breaking a word only with a hyphen and a tile never",
   async (width, height) => {
     const el = await mountLongNames(width, height, "es");
     const names = drawnNames(el);
@@ -369,15 +380,19 @@ it.each([
       `words on two lines: ${broken.join(", ") || "none"}`,
     ].join("; ");
     expect(over.length, seen).toBe(0);
-    expect(broken.length, seen).toBeGreaterThan(0);
+    expect(
+      broken.filter((word) => word.startsWith("tile ")),
+      seen,
+    ).toEqual([]);
   },
 );
 
-it("the same names under English overflow their boxes", async () => {
+it("the same names under English stay inside their boxes too, no tile breaking a word", async () => {
   const el = await mountLongNames(1280, 800, "en");
   const names = drawnNames(el);
   expect(names.length, "tiles and bill lines drawn").toBe(LONG_NAMES.length + 3);
-  expect(overflows(names).length, navigator.userAgent).toBeGreaterThan(0);
+  expect(overflows(names), navigator.userAgent).toEqual([]);
+  expect(brokenWords(names).filter((word) => word.startsWith("tile "))).toEqual([]);
 });
 
 it("on a 390 px phone, puts the basket under the menu at its width, with each line's price and remove button, the total and the pay buttons whole", async () => {

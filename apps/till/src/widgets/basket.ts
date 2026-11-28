@@ -156,8 +156,7 @@ export class TillBasket extends LitElement {
 
       .product-name {
         hyphens: auto;
-        /* As on the product buttons: no hyphen in a word under 8 letters (conventions-ui.md,
-           "A name's language"). */
+        /* No hyphen in a word under 8 letters (conventions-ui.md, "A name's language"). */
         hyphenate-limit-chars: 8 auto auto;
       }
 

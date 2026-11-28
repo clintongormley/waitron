@@ -60,14 +60,15 @@ async function search(el: DeviceHomePreview, text: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) => {
-  it("painted section tiles keep visible, accessible hover feedback", async () => {
+  it("section tiles, unpainted even with a section colour, keep visible, accessible hover feedback", async () => {
     const { el, host } = await mountWidget<DeviceHomePreview>(
       "dashboard-device-home-preview",
       { document: lunch() },
       theme,
     );
-    const tiles = el.shadowRoot!.querySelectorAll("wt-button.tile[data-painted]");
+    const tiles = el.shadowRoot!.querySelectorAll('wt-button.tile[data-kind="section"]');
     expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) expect(tile.hasAttribute("data-painted")).toBe(false);
     for (const tile of tiles) {
       const inner = tile.shadowRoot!.querySelector("button")!;
       const border = getComputedStyle(inner).borderTopColor;

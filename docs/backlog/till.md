@@ -993,8 +993,8 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   optional key missing from a stored or copied theme document reads as its empty value (`logo`
   `null`, `textScale` 100 and `text` `{}`), with no configuration format change.
 
-- **Product and bill names in a language Chromium does not hyphenate break inside a long word with
-  no hyphen (A841 slice 10b).** English is among those languages. The measurement is under "A
+- **Bill line names in a language Chromium does not hyphenate break inside a long word with no
+  hyphen (A841 slice 10b).** English is among those languages. The measurement is under "A
   name's language" in
   [conventions-ui.md](../developers/conventions-ui.md#what-an-open-till-keeps-current).
 

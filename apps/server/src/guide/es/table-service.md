@@ -651,18 +651,29 @@ En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pul
 hasta que aparezca el contorno. Sin levantar el dedo, arrástralo al título del grupo que quieras y
 suéltalo.
 
-Usa el campo **Carta** junto a **Buscar** para cambiar entre las cartas disponibles. Desplázate
+Usa el campo **Carta** encima de **Buscar en la carta** para cambiar entre las cartas disponibles. Desplázate
 más allá del primer bloque para encontrar **Accesos directos** o **Carta completa**, según cuál
 venga después. La misma carta empieza en el mismo orden en la caja y el dispositivo de mano.
 Toca un botón con una carpeta para abrir esa sección. Un intervalo de precios indica cuánto
 cuestan las variantes. Toca el producto para elegir una y ver su precio.
+
+## Buscar platos en la carta {#till-menu}
+
+Escribe el nombre de un plato en **Buscar en la carta** para encontrarlo en la carta en pantalla y
+en las demás cartas disponibles ahora. Borra la búsqueda para volver a donde estabas.
+
+Toca una sección para abrirla. Encima de sus platos, la ruta muestra dónde estás: toca la casa para
+volver al principio de la carta, o el nombre de una sección para volver a ella.
+
+Un número en la esquina de un plato indica cuántos hay de él en tu **Nuevo pedido** en una mesa, o
+en la cesta en el **Mostrador**.
 
 ## Menús {#set-menus}
 
 Añade los platos que piden los clientes, desde cualquier carpeta. Cuando envías los platos de una mesa,
 la cuenta los agrupa en los menús más baratos que encuentra. Cobra a la carta los platos que quedan
 fuera. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
-desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
+desde la cuadrícula o escribe su nombre en **Buscar en la carta** y pulsa el resultado.
 
 En una mesa, un plato sin agrupar muestra su propio precio con los extras de pago hasta que lo
 envías. El total del pedido puede bajar si el plato pasa a formar parte de un menú.

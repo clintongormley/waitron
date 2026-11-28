@@ -78,7 +78,7 @@ async function mount(width: number, name: string, lang: string) {
   await Promise.all([picker.updateComplete, filter.updateComplete]);
   await new Promise((resolve) => requestAnimationFrame(resolve));
   const search = el.shadowRoot!.querySelector<HTMLElement>('[data-region="search"]')!;
-  return { picker, search };
+  return { picker, search, filter };
 }
 
 describe("the menu toolbar", () => {
@@ -94,13 +94,24 @@ describe("the menu toolbar", () => {
   });
 
   it.each([390, 768])(
-    "keeps the menu picker and the search on one line at %i px",
+    "puts the menu picker on its own line above the search, with the filter beside the search, at %i px",
     async (width) => {
-      const { picker, search } = await mount(width, "Evening Special", "en-GB");
+      const { picker, search, filter } = await mount(width, "Evening Special", "en-GB");
       const pickerBox = picker.getBoundingClientRect();
       const searchBox = search.getBoundingClientRect();
-      expect(Math.abs(pickerBox.bottom - searchBox.bottom)).toBeLessThanOrEqual(1);
-      expect(pickerBox.right).toBeLessThanOrEqual(searchBox.left);
+      expect(pickerBox.bottom).toBeLessThanOrEqual(searchBox.top);
+      expect(Math.abs(pickerBox.left - searchBox.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(pickerBox.right - searchBox.right)).toBeLessThanOrEqual(1);
+      const input = search.querySelector("wt-input")!.getBoundingClientRect();
+      const button = filter
+        .shadowRoot!.querySelector("[data-filter-open]")!
+        .getBoundingClientRect();
+      expect(button.width).toBe(44);
+      expect(button.height).toBe(44);
+      expect(Math.abs(button.top - input.top)).toBeLessThanOrEqual(1);
+      expect(Math.abs(button.bottom - input.bottom)).toBeLessThanOrEqual(1);
+      expect(button.left).toBeGreaterThanOrEqual(input.right);
+      expect(button.right).toBeLessThanOrEqual(searchBox.right + 1);
     },
   );
 });

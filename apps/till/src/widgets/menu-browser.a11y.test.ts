@@ -61,7 +61,7 @@ const drinks: DocumentMember = {
   members: [member("cola"), member("burger"), beer],
 };
 
-// Painted in a stored colour, so the scan's contrast check reads each tile's labels on its colour.
+// A stored colour the tile is never painted in, so the scan checks a coloured section drawn plain.
 const red: DocumentMember = {
   kind: "section",
   sectionId: "sec-red",
@@ -246,7 +246,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("home with a plain and a painted section the diet filter empties, greyed between products, has no violations", async () => {
+  it("home with two sections the diet filter empties, one with a stored colour, greyed between products, has no violations", async () => {
     const hidden = ["p-cola", "p-cana", "p-burger", "p-cafe"];
     const { el, host } = await mount(theme, {
       products: products.filter((each) => !hidden.includes(each.id)),

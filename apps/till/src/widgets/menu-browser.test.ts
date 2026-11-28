@@ -1,14 +1,30 @@
 import { bill as setMenuBill, daily, special } from "../../test/set-menu-widgets.js";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import {
+  CATEGORY_PALETTE,
+  currentContentLanguages,
+  setContentLanguages,
+  type WtInput,
+} from "@waitron/ui";
 import { formatMoney, DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
+import {
+  blurAll,
+  clearOf,
+  cleanupWidgets,
+  loadPhoneFont,
+  measured,
+  mountWidget,
+  PHONE_FONT,
+  shownLines,
+  textRects,
+  type Theme,
+} from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import type { OwnSetMenuOffers } from "../state/set-menus.js";
 import { burger as tableBurger } from "../screens/till-table-order-screen.test-helpers.js";
@@ -223,9 +239,13 @@ async function tap(el: TillMenuBrowser, button: HTMLElement): Promise<void> {
   await el.updateComplete;
 }
 
+/** Each step by its name: Home's is its label, since it shows only an icon. */
 function breadcrumb(el: TillMenuBrowser): string {
   return [...root(el).querySelectorAll("nav.breadcrumb li")]
-    .map((item) => item.querySelector("wt-button, [aria-current]")!.textContent!.trim())
+    .map((item) => {
+      const step = item.querySelector("wt-button, [aria-current]")!;
+      return step.getAttribute("aria-label") ?? step.textContent!.trim();
+    })
     .join(" › ");
 }
 
@@ -421,7 +441,7 @@ describe("set-menu folders", () => {
     });
     await tap(el, entry(el, "structure", "Set menus"));
     await tap(el, entry(el, "section", daily.name));
-    const back = () => tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+    const back = () => tap(el, root(el).querySelector<HTMLElement>("nav.set-menu-back wt-button")!);
     await back();
     expect(root(el).querySelector("till-set-menu-folder")).toBeNull();
     expect(names(entries(el, "section"))).toEqual([daily.name]);
@@ -581,6 +601,69 @@ describe("till-menu-browser", () => {
       expect(root(el).querySelector('[data-region="search"] wt-input')).not.toBeNull();
     });
 
+    describe("the head: search, then the path", () => {
+      /** Opens Drinks in a short scroller, so its path is in the head, then scrolls the tiles. */
+      async function scrolled(pinned: boolean) {
+        const { el, host } = await mount();
+        el.toggleAttribute("pinned-head", pinned);
+        Object.assign(host.style, { width: "390px", height: "100px", overflow: "auto" });
+        await tap(el, entry(el, "structure", "Drinks (EN)"));
+        await measured();
+        const head = root(el).querySelector<HTMLElement>("[data-menu-head]")!;
+        expect(head.querySelector('[data-region="search"]')).not.toBeNull();
+        expect(head.querySelector("nav.breadcrumb")).not.toBeNull();
+        host.scrollTop = 0;
+        expect(host.scrollHeight - host.clientHeight).toBeGreaterThan(60);
+        host.scrollTop = 60;
+        await measured();
+        return { el, host, head };
+      }
+
+      it.each([
+        ["en-GB", "Search the menu"],
+        ["es-ES", "Buscar en la carta"],
+      ])("searches from an outlined field with a magnifier, saying %s's %s", async (lang, text) => {
+        setLocale(lang);
+        const { el } = await mount();
+        const field = root(el).querySelector<WtInput>(
+          '[data-menu-head] [data-region="search"] wt-input',
+        )!;
+        await field.updateComplete;
+        expect(field.variant).toBe("outlined");
+        const icon = field.querySelector('wt-icon[slot="start"]')!;
+        expect(icon.getAttribute("name")).toBe("search");
+        expect(icon.getBoundingClientRect().width).toBeGreaterThan(0);
+        const input = field.shadowRoot!.querySelector("input")!;
+        expect(input.placeholder).toBe(text);
+        expect(field.shadowRoot!.querySelector(".field")!.getBoundingClientRect().height).toBe(44);
+      });
+
+      it("stays at the top of the scroller with the page colour behind it while the tiles scroll, when pinned", async () => {
+        const { el, host, head } = await scrolled(true);
+        expect(el.pinnedHead).toBe(true);
+        expect(host.scrollTop).toBe(60);
+        expect(
+          Math.abs(head.getBoundingClientRect().top - host.getBoundingClientRect().top),
+        ).toBeLessThanOrEqual(1);
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--wt-color-bg)";
+        host.append(probe);
+        expect(getComputedStyle(head).backgroundColor).toBe(
+          getComputedStyle(probe).backgroundColor,
+        );
+        probe.remove();
+      });
+
+      it("scrolls away with the tiles when not pinned", async () => {
+        const { el, host, head } = await scrolled(false);
+        expect(el.pinnedHead).toBe(false);
+        expect(host.scrollTop).toBe(60);
+        expect(head.getBoundingClientRect().top).toBeLessThan(
+          host.getBoundingClientRect().top - 50,
+        );
+      });
+    });
+
     it("shows the menu's shortcuts, in their order", async () => {
       const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       expect(names(entries(el, "shortcuts"))).toEqual(["Beer (EN)", "Jamón"]);
@@ -658,7 +741,8 @@ describe("till-menu-browser", () => {
       });
       host.style.setProperty("--wt-tap-min", "60px");
       const blank = root(el).querySelector<HTMLElement>('[data-region="shortcuts"] .slot')!;
-      expect(getComputedStyle(blank).minHeight).toBe("90px");
+      // The tap target plus --wt-space-6, left at its 32 px.
+      expect(getComputedStyle(blank).minHeight).toBe(`${60 + 32}px`);
     });
 
     it("shows no shortcut block, no divider, and still the structure, for a menu with no shortcuts", async () => {
@@ -721,7 +805,7 @@ describe("till-menu-browser", () => {
       );
     });
 
-    it("breaks a word longer than the tile inside the tile, rather than letting it spill out", async () => {
+    it("ends a word longer than the tile in a whole “…” inside the tile, on one line, rather than breaking it or letting it spill out", async () => {
       const long = product("long", "Supercalifragilisticexpialidocious");
       const { el, host } = await mount({
         menu: lunch({ structure: { members: [member("long")] } }),
@@ -733,11 +817,17 @@ describe("till-menu-browser", () => {
         "structure",
         "Supercalifragilisticexpialidocious",
       ).getBoundingClientRect();
-      const text = document.createRange();
-      text.selectNodeContents(entries(el, "structure")[0]!.querySelector(".name")!);
-      const name = text.getBoundingClientRect();
-      expect(name.left).toBeGreaterThanOrEqual(tile.left);
-      expect(name.right).toBeLessThanOrEqual(tile.right);
+      const name = entries(el, "structure")[0]!.querySelector<HTMLElement>(".name")!;
+      const own = name.getBoundingClientRect();
+      expect(textRects(name)).toHaveLength(2);
+      const lines = shownLines(name);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]!.cut).toBe(true);
+      expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+      expect(lines[0]!.text.left).toBeGreaterThanOrEqual(own.left);
+      expect(lines[0]!.right).toBeLessThanOrEqual(own.right);
+      expect(own.left).toBeGreaterThanOrEqual(tile.left);
+      expect(own.right).toBeLessThanOrEqual(tile.right);
     });
 
     it("shows fewer columns where a tile would be too narrow, in the same order", async () => {
@@ -988,16 +1078,16 @@ describe("till-menu-browser", () => {
     const original = currentContentLanguages();
     afterEach(() => setContentLanguages(original));
 
-    it("a product button's name carries the venue's default content language and hyphenates", async () => {
+    it("a product button's name carries the venue's default content language and is never hyphenated", async () => {
       setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
       const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       const productName = root(el).querySelector<HTMLElement>(
         '[data-region="shortcuts"] wt-button[data-kind="product"] .name',
       )!;
       expect(productName.getAttribute("lang")).toBe("es");
-      expect(getComputedStyle(productName).hyphens).toBe("auto");
-      // A word under 8 letters is never hyphenated, so it stays whole where it fits.
-      expect(getComputedStyle(productName).getPropertyValue("hyphenate-limit-chars")).toBe("8");
+      expect(getComputedStyle(productName).hyphens).toBe("manual");
+      expect(getComputedStyle(productName).overflowWrap).toBe("normal");
+      expect(getComputedStyle(productName).wordBreak).toBe("normal");
       const sectionName = root(el).querySelector<HTMLElement>(
         '[data-region="shortcuts"] wt-button[data-kind="section"] .name',
       )!;
@@ -2107,19 +2197,25 @@ describe("till-menu-browser", () => {
         expect(readings.filter(({ seen }) => seen < 4.5)).toEqual([]);
       });
 
-      it("paints a coloured section's tile, folder and filter notice", async () => {
+      it("never paints a coloured section's tile, folder or filter notice in its colour", async () => {
         const el = await mountPainted(theme);
+        const surface = token(el, "background-color", "var(--wt-color-surface)");
+        const body = token(el, "color", "var(--wt-color-text)");
+        const muted = token(el, "color", "var(--wt-color-text-muted)");
         const tile = entry(el, "structure", "Red (EN)");
-        expect(background(tile)).toBe("rgb(177, 37, 37)");
-        expect(ink(tile, ".name")).toBe(WHITE);
+        expect(background(tile)).toBe(surface);
+        expect(background(tile)).toBe(background(entry(el, "structure", "Bare")));
+        expect(tile.hasAttribute("style")).toBe(false);
+        expect(ink(tile, ".name")).toBe(body);
         const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
-        expect(getComputedStyle(icon).fill).toBe(WHITE);
+        expect(getComputedStyle(icon).fill).toBe(muted);
         el.products = painted.filter((product) => product !== inside);
         el.unfilteredProducts = painted;
         await el.updateComplete;
         const filtered = entry(el, "structure", "Red (EN)");
         expect(filtered.querySelector(".kind")!.textContent).toBe("Nothing matches the filter");
-        expect(ink(filtered, ".kind")).toBe(WHITE);
+        expect(ink(filtered, ".kind")).toBe(muted);
+        expect(muted).not.toBe(body);
       });
 
       it("draws a null, a missing and a malformed colour neutral", async () => {
@@ -2699,19 +2795,30 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
     });
 
-    it("paints a folder's override colour", async () => {
+    it("never paints a folder in its override colour", async () => {
       const folder: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
         fixed: { color: "#256bb1" },
       };
       const { el } = await mount({ menu: lunch({ structure: { members: [folder] } }) });
-      const painted = entry(el, "structure", "Bar (EN)");
-      expect(painted.hasAttribute("data-painted")).toBe(true);
-      expect(getComputedStyle(painted.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
-        "rgb(37, 107, 177)",
+      const tile = entry(el, "structure", "Bar (EN)");
+      const resolved = (property: "backgroundColor" | "color", value: string) => {
+        const probe = document.createElement("span");
+        probe.style[property] = value;
+        el.parentElement!.appendChild(probe);
+        const read = getComputedStyle(probe)[property];
+        probe.remove();
+        return read;
+      };
+      expect(tile.hasAttribute("data-painted")).toBe(false);
+      expect(tile.hasAttribute("style")).toBe(false);
+      expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
+        resolved("backgroundColor", "var(--wt-color-surface)"),
       );
-      expect(getComputedStyle(painted.querySelector(".name")!).color).toBe("rgb(255, 255, 255)");
+      expect(getComputedStyle(tile.querySelector(".name")!).color).toBe(
+        resolved("color", "var(--wt-color-text)"),
+      );
     });
 
     it("the same included menu in two lists draws each copy with its own name", async () => {
@@ -2809,32 +2916,30 @@ describe("till-menu-browser", () => {
     });
 
     it("a shortcut to a menu included twice opens the top-level copy, and is drawn from it", async () => {
-      const paintedBar: DocumentMember = {
+      // The two copies differ by name: "Bar (EN)" at the top level, "Drinks (EN)" inside Food.
+      const renamedBar: DocumentMember = {
         ...(bar as SectionNode),
-        color: "#256bb1",
-        fixed: {
-          names: { en: "Bar (EN)" },
-          color: "#256bb1",
-        },
+        fixed: { names: { en: "Bar (EN)" } },
       };
       const shortcut = [sectionTile("sec-drinks")];
-      const { el } = await mount({ menu: twice(paintedBar, shortcut) });
+      const { el } = await mount({ menu: twice(renamedBar, shortcut) });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      expect(names(entries(el, "section"))).toEqual(["Jamón", "Drinks (EN)"]);
+      await tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
       expect(names(entries(el, "shortcuts"))).toEqual(["Bar (EN)"]);
       const tile = entry(el, "shortcuts", "Bar (EN)");
-      expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
-        "rgb(37, 107, 177)",
-      );
       await tap(el, tile);
       expect(breadcrumb(el)).toBe("Home › Bar (EN)");
 
       // Greyed by a diet filter, it is still drawn from the copy it would open.
       const filtered = await mount({
-        menu: twice(paintedBar, shortcut),
+        menu: twice(renamedBar, shortcut),
         products: PRODUCTS.filter(
           (each) => each !== cola && each !== lemonade && each !== draughtBeer,
         ),
         unfilteredProducts: PRODUCTS,
       });
+      expect(names(entries(filtered.el, "shortcuts"))).toEqual(["Bar (EN)"]);
       const greyed = entry(filtered.el, "shortcuts", "Bar (EN)");
       expect(greyed.hasAttribute("data-filtered")).toBe(true);
 
@@ -2965,6 +3070,13 @@ describe("till-menu-browser", () => {
 });
 
 describe("a tile's number in the New order (A797-10 D7)", () => {
+  let phoneFont: FontFace;
+  beforeAll(async () => {
+    phoneFont = await loadPhoneFont();
+  });
+  afterAll(() => {
+    document.fonts.delete(phoneFont);
+  });
   const beerDish = product("beer", "Beer", { id: "beer", productId: "p-beer" });
   const inOrderMenu = (overrides: Partial<TillZoneMenu> = {}) =>
     lunch({
@@ -2973,6 +3085,15 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       ...overrides,
     });
   const badge = (tile: Button) => tile.querySelector<HTMLElement>("[data-in-order-count]");
+  /** After the next paint, by when a counted name has the room its badge's drawn width asks for. */
+  const nextPaint = () =>
+    new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+  /** The number the badge draws, read from its own rendering once it has drawn. */
+  const shown = async (tile: Button) => {
+    const count = badge(tile) as (HTMLElement & { updateComplete: Promise<boolean> }) | null;
+    await count!.updateComplete;
+    return count!.shadowRoot!.textContent!.trim();
+  };
 
   it("a tile shows the number it is given, and none for 0 or no map", async () => {
     const { el } = await mount({
@@ -2982,7 +3103,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
     });
     const tile = entry(el, "structure", "Beer");
     expect(tile.hasAttribute("data-in-order")).toBe(true);
-    expect(badge(tile)!.textContent!.trim()).toBe("2");
+    expect(await shown(tile)).toBe("2");
     expect(badge(tile)!.getAttribute("aria-hidden")).toBe("true");
     expect(tile.querySelector(".name")!.textContent).toBe("Beer");
     const unsent = (n: number) =>
@@ -3004,7 +3125,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
 
     el.inOrder = new Map([["beer", 1]]);
     await el.updateComplete;
-    expect(badge(tile)!.textContent!.trim()).toBe("1");
+    expect(await shown(tile)).toBe("1");
     expect(named(1)).toHaveLength(2);
 
     el.inOrder = new Map([["beer", 0]]);
@@ -3025,12 +3146,12 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       products: [beerDish, cola, water],
       inOrder: new Map([["beer", 3]]),
     });
-    expect(badge(entry(el, "shortcuts", "Beer"))!.textContent!.trim()).toBe("3");
+    expect(await shown(entry(el, "shortcuts", "Beer"))).toBe("3");
     await search(el, "beer");
-    expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
+    expect(await shown(entry(el, "results", "Beer"))).toBe("3");
   });
 
-  it("the order count badge stays inside the tile and clear of its name", async () => {
+  it("the order count badge sits 6 px outside the tile's top and end corner, clear of its name and inside the grid", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -3040,8 +3161,6 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         allergens,
       });
       const plainDish = product("plain", "Mediterranean vegetables", { allergens });
-      const overlaps = (a: DOMRect, b: DOMRect) =>
-        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       // Each dish in a grid of its own, so no taller neighbour stretches its tile and centres the
       // name away from the corner.
       for (const dish of [painted, plainDish]) {
@@ -3050,18 +3169,18 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           products: [dish],
           inOrder: new Map([[dish.id, 12]]),
         });
+        await nextPaint();
         const tile = entry(el, "structure", dish.name);
         const box = badge(tile)!.getBoundingClientRect();
         const outer = tile.getBoundingClientRect();
+        const grid = tile.closest(".grid")!.getBoundingClientRect();
         expect(box.width).toBeGreaterThan(0);
-        expect(box.left).toBeGreaterThanOrEqual(outer.left);
-        expect(box.top).toBeGreaterThanOrEqual(outer.top);
-        expect(box.right).toBeLessThanOrEqual(outer.right);
-        expect(box.bottom).toBeLessThanOrEqual(outer.bottom);
-        const text = document.createRange();
-        text.selectNodeContents(tile.querySelector(".name")!);
-        for (const line of text.getClientRects())
-          expect(overlaps(box, line), dish.name).toBe(false);
+        expect(box.top).toBeCloseTo(outer.top - 6, 1);
+        expect(box.right).toBeCloseTo(outer.right + 6, 1);
+        expect(box.top).toBeGreaterThanOrEqual(grid.top);
+        expect(box.right).toBeLessThanOrEqual(grid.right);
+        for (const line of shownLines(tile.querySelector(".name")!))
+          expect(clearOf(line, box), dish.name).toBe(true);
         cleanupWidgets();
       }
     } finally {
@@ -3104,7 +3223,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       await page.viewport(viewport.width, viewport.height);
     }
   });
-  it("a colour tile's name is as wide, on as many lines and as centred as with no numbers drawn, before and after its dish is added", async () => {
+  it("a colour tile's name keeps clear of its number: its first line narrowed only while counted and centred in what is left, later lines centred, at most two lines, its tile no taller", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -3112,10 +3231,14 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         product("croq", "Croquettes", { image: null, color: "#256bb1" }),
         product("toast", "Tomato toast", { image: null, color: "#256bb1" }),
         product("bravas", "Bravas", { image: null, color: "#256bb1" }),
+        // Two full lines, so the words reach the corner the number sits in.
+        product("octopus", "Grilled octopus with smoked paprika", {
+          image: null,
+          color: "#256bb1",
+        }),
       ];
-      // The words' own box, not the name's, which carries any room kept beside them.
       const layout = async (inOrder?: Map<string, number>) => {
-        const { el } = await mount({
+        const { el, host } = await mount({
           menu: lunch({
             structure: { members: painted.map((dish) => member(dish.id.slice(2))) },
             ...withShortcuts([]),
@@ -3123,28 +3246,105 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           products: painted,
           inOrder,
         });
+        host.style.setProperty("--wt-font-family", PHONE_FONT);
+        await nextPaint();
+        expect(getComputedStyle(el).fontFamily).toBe(PHONE_FONT);
         const read = () =>
           painted.map((dish) => {
             const tile = entry(el, "structure", dish.name);
+            const name = tile.querySelector<HTMLElement>(".name")!;
+            const own = name.getBoundingClientRect();
+            // The words' own box, not the name's, which carries any room kept beside them.
             const words = document.createRange();
-            words.selectNodeContents(tile.querySelector(".name")!);
+            words.selectNodeContents(name);
             const box = words.getBoundingClientRect();
             const outer = tile.getBoundingClientRect();
+            // Lines past the second are laid out but hidden; the cut line has a second box.
+            const shown = [...words.getClientRects()].filter(
+              (line) => line.width > 0 && line.top < own.bottom,
+            );
+            const top = Math.min(...shown.map((line) => line.top));
+            const first = shown.filter((line) => Math.abs(line.top - top) < 1);
+            const later = shown.filter((line) => Math.abs(line.top - top) >= 1);
+            const look = getComputedStyle(name);
+            // The room the first line is centred in: the name's, less the count's room beside it.
+            const firstRoomCentre =
+              (own.left +
+                parseFloat(look.paddingLeft) +
+                own.right -
+                parseFloat(look.paddingRight) -
+                (parseFloat(getComputedStyle(name, "::before").width) || 0)) /
+              2;
             return {
               name: dish.name,
               width: Math.round(box.width),
-              lines: new Set([...words.getClientRects()].map((line) => Math.round(line.top))).size,
+              lines: new Set(shown.map((line) => Math.round(line.top))).size,
               fromCentre: Math.round((box.left + box.right - outer.left - outer.right) / 2) + 0,
+              height: outer.height,
+              // How far the words keep from the tile's two sides.
+              clearStart: box.left - outer.left,
+              clearEnd: outer.right - box.right,
+              inside: box.left >= own.left && box.right <= own.right,
+              firstClearEnd: outer.right - Math.max(...first.map((line) => line.right)),
+              firstOffCentre:
+                (Math.min(...first.map((line) => line.left)) +
+                  Math.max(...first.map((line) => line.right))) /
+                  2 -
+                firstRoomCentre,
+              laterFromCentre: later.map(
+                (line) => (line.left + line.right - outer.left - outer.right) / 2,
+              ),
+              cut: name.scrollHeight > name.clientHeight,
+              clearOfNumber: badge(tile)
+                ? shownLines(name).every((line) =>
+                    clearOf(line, badge(tile)!.getBoundingClientRect()),
+                  )
+                : null,
             };
           });
         return { el, read };
       };
       const uncounted = (await layout()).read();
       cleanupWidgets();
+      for (const dish of uncounted) {
+        expect(dish.inside, `${dish.name} inside its tile`).toBe(true);
+        expect(Math.abs(dish.clearStart - dish.clearEnd), dish.name).toBeLessThan(1);
+        expect(dish.lines, dish.name).toBe(dish.name.startsWith("Grilled") ? 2 : 1);
+        expect(dish.clearOfNumber, dish.name).toBeNull();
+      }
 
       const { el, read } = await layout(new Map());
       expect(read()).toEqual(uncounted);
       el.inOrder = new Map(painted.map((dish) => [dish.id, 1]));
+      await el.updateComplete;
+      await nextPaint();
+      const counted = read();
+      const shownTile = entry(el, "structure", painted[0]!.name).getBoundingClientRect();
+      const reach =
+        shownTile.right -
+        badge(entry(el, "structure", painted[0]!.name))!.getBoundingClientRect().left;
+      expect(reach).toBeGreaterThan(0);
+      for (const [index, dish] of counted.entries()) {
+        const before = uncounted[index]!;
+        expect(
+          dish.firstClearEnd,
+          `${dish.name}'s first line clear of the number's reach`,
+        ).toBeGreaterThanOrEqual(reach);
+        // Off the tile's centre by half the count's room: centred in the room the count leaves.
+        expect(Math.abs(dish.firstOffCentre), dish.name).toBeLessThan(1);
+        if (!dish.cut)
+          for (const offset of dish.laterFromCentre)
+            expect(Math.abs(offset), dish.name).toBeLessThan(1);
+        expect(dish.inside, `${dish.name} inside its tile`).toBe(true);
+        expect(dish.width, dish.name).toBeLessThanOrEqual(before.width);
+        expect(dish.lines, dish.name).toBeLessThanOrEqual(2);
+        expect(dish.height, dish.name).toBe(before.height);
+        expect(dish.clearOfNumber, `${dish.name} clear of its number`).toBe(true);
+      }
+      // The narrowing is real: a name that fitted one line wraps once it is counted.
+      expect(counted.find((dish) => dish.name === "Tomato toast")!.lines).toBe(2);
+
+      el.inOrder = new Map();
       await el.updateComplete;
       expect(read()).toEqual(uncounted);
       cleanupWidgets();

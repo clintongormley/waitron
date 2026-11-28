@@ -560,7 +560,7 @@ product sold on its own.
 
 ## Read a dish’s nutrition at the till {#nutrition-at-the-till}
 
-Tap the **Filter** icon beside **Search** to narrow the dishes by diet or allergen. The number
+Tap the **Filter** icon beside **Search the menu** to narrow the dishes by diet or allergen. The number
 shows how many filters are active.
 
 Hold a product button down to open its information window. You see the dish’s allergens, including

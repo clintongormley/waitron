@@ -32,6 +32,7 @@ import {
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { lineGross } from "../state/order-line.js";
+import { memoNewOrderByProduct } from "../state/new-order-count.js";
 import { draftSetMenuUnitPrice } from "../state/draft-layout.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { notCheapestText } from "../widgets/set-menu-presentation.js";
@@ -290,6 +291,8 @@ export class TillCounterScreen extends LitElement {
   readonly #unfilteredProducts = memoVisibleProducts();
   readonly #unfilteredSearchProducts = memoVisibleProducts();
 
+  readonly #inOrder = memoNewOrderByProduct();
+
   #pickFilters(filters: MenuFilters): void {
     this.selectedFilters = filters;
   }
@@ -324,6 +327,8 @@ export class TillCounterScreen extends LitElement {
       .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
+      .inOrder=${this.#inOrder(this.store.lines)}
+      countWords="items"
     >
       ${
         hasMenuPicker

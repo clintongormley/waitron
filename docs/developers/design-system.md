@@ -33,9 +33,10 @@ in any component or view. Every such value reads a token instead. `transparent`,
 and `inherit` are legitimate escape hatches, not chrome, and so are the system colours inside
 `@media (forced-colors: active)` (see "Forced colours", below); no guard checks where a system
 colour is used.
-`packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
-`import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
-styles`, and fails on violations. It covers a new primitive automatically.
+`packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives and style modules via
+`import.meta.glob(["./components/*.ts", "./*.ts", ...])` (excluding `*.test.ts` and `index.ts`),
+scans each primitive's `static styles` and each exported stylesheet, and fails on violations. It
+covers a new primitive automatically.
 `scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
 template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
 `packages/<name>/src/dashboard` (skipping the folders `sourceFilesIn` in
@@ -547,8 +548,8 @@ category swatches in the Products tree, the product and section swatches in a me
 the brand colour, fix shade and hand-set button colour chips on System → Appearance's Look
 card (`apps/dashboard/src/screens/look-card.ts`), the colour pickers in that card's Advanced
 section (`apps/dashboard/src/widgets/theme-advanced.ts`), the colour chips in the Themes card's rows
-(`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
-tile takes black or white for its labels and its icon, whichever `readableTextColor`
+(`apps/dashboard/src/screens/themes-card.ts`), and the till's product tiles (`apps/till/src/widgets/menu-tiles.ts`). A painted till
+tile takes black or white for its labels, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
@@ -579,7 +580,14 @@ columns. Empty tracks preserve the width of each tile when the last row is short
 preview use painted or neutral tiles with centred names. The owner removed tile photos and the nutrition mark
 on 24 November (“i think we drop the photos, and the icon”). You can still use the till's filter or
 long-press a product for its information. A folder identifies a section and the accessible name
-includes "Section". A section emptied by a diet filter keeps its notice. A product tile shows its
+includes "Section": the outlined `menu-section` icon, `--wt-font-size-xl` (22 px) square in
+`--wt-color-text-muted`, `--wt-space-1` above the name. A section emptied by a diet filter keeps its
+notice, and draws its folder at `--wt-font-size-md` with no gap so the notice fits the tile. A
+product tile's name is bold, 15 px below a 720 px viewport and `--wt-font-size-md` from it, where
+the till's tiles are narrower than the drawings; its price is 13 px at `--wt-font-weight-medium`,
+in `--wt-color-text-muted`, or in a painted tile's own ink at full strength (the drawings' 85% falls
+under 4.5:1 on some colours). No font-size token holds 15 or 13 px, so both are drawn from the
+`--wt-font-size-*` tokens. A product tile shows its
 menu price or the range of its variant prices, including sold-out variants, with one amount when
 the prices are equal. It appends the unit once for units other than Each.
 
@@ -623,6 +631,25 @@ the till's catalogue, its help text and the tables in `codes.ts` (the refund mes
 refuses the dropped words there; it does not read the guide pages, nor Spanish written inline in `codes.ts`'s message
 functions or in components.
 
+**The till's menu head.** Above the tiles the browser draws one block (`[data-menu-head]`): the
+menu picker (`till-menu-switcher`) on its own line when the screen gives it one, then the search
+with the diet and allergen filter's 44 px outlined icon button beside it, drawing the `menu-filter`
+icon (three lines, each shorter than the one above), then, inside a section
+only, the path (`apps/till/src/widgets/menu-path.ts`). The search is `wt-input variant="outlined"`
+with the `search` icon in its `start` slot and "Search the menu" / "Buscar en la carta" as its
+placeholder. The path starts with a ghost button showing only the `home` icon and named "Home" /
+"Inicio", then a button for each section on the way, then the section shown, which is not a button
+and carries `aria-current="location"`; `›` separators in `--wt-color-text-muted` are hidden from
+screen readers. Its buttons are in `--wt-color-primary-text` and the section shown in
+`--wt-color-text`, all bold, 15 px below a 720 px viewport and 16 px from it (no font-size token
+holds either, so both are drawn from `--wt-font-size-md` and `--wt-font-size-lg`), and each step is
+at least `--wt-tap-min` tall. Under the path the head pulls the tiles up by
+`--wt-space-3` plus half `--wt-space-1`, so the first row's top sits 32 px below the middle of the
+path's words, the grid's own room for a count included. Opening a section scrolls the path into view. The head scrolls with the
+tiles unless the browser carries `pinned-head`, which makes it `position: sticky; top: 0` on
+`--wt-color-bg`. Guards: `menu-path.test.ts`, `menu-browser.toolbar.test.ts` and the "head" cases in
+`menu-browser.test.ts`.
+
 **The till's menu search.** The till and dashboard Home preview label the field "Search" / "Buscar".
 The search field sits above both blocks, on home and inside a
 section; typing replaces the view with results, and clearing returns to where it was. Its results
@@ -658,6 +685,7 @@ section action adds anything to your basket. The dashboard Home preview keeps it
 it and its label's line height), `--wt-google-button-font-size` and
 `--wt-google-button-font-weight` (Google's sign-in button's label size and weight, 14px and 500,
 which no theme writes), `--wt-shadow-1|2`, `--wt-focus-ring`, `--wt-focus-offset`,
+`--wt-menu-count-ring-width` (2px, the ring the till's menu tiles draw round a count),
 `--wt-dialog-max-width`, `--wt-modal-compact-width`,
 `--wt-modal-standard-width`, `--wt-modal-max-width`, `--wt-modal-medium-height`, `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-keyboard-inset` and
 `--wt-keyboard-top` (0px; only the till sets them), `--wt-form-max-width`,
@@ -1307,15 +1335,26 @@ counted dishes as **2 × Croquettes** and measured lines as their dish and amoun
 the draft bar's Send all sends and shows Order as the send starts. Both Send all buttons are quiet
 and disabled together. The Menu button keeps its width, so the words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
-number at the tile's corner with the words for screen readers; side by side the map is not passed.
-A tile reserves space above the name whenever the map is passed. Adding a dish keeps the tile's
-size and the name's centred wrapping.
+number with the words for screen readers. The screen passes the map at every width, side by side
+too, and the Counter screen passes its basket's counts the same way; there the words say items,
+not unsent, as a placed order's basket holds dishes already sent. The number is a
+`wt-count-badge tone="notice"` set 6 px outside the tile's top and end corner, ringed
+`--wt-menu-count-ring-width` in `--wt-color-bg`; no space is kept above the name for it, and the
+grid keeps room at its top and end for the number and its ring. A tile's name shows at most two
+lines, cut with "…". On a counted tile the name's first line keeps the number's reach into the
+tile clear on both sides, measured from the number as drawn, so a wider number ("99+") or larger
+text keeps more room. Where that leaves the first line empty or puts a line under the number,
+`apps/till/src/widgets/counted-name.ts` sets the tile's `data-name-room` to `none`, `end` or
+`both`, whichever first keeps the name on its first line and clear of the number. The name can
+wrap differently once the first one is added, and the tile keeps its height: 76 px below a 720 px
+viewport and 84 px from it, at the default text size.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, grouped by name for counted dishes, with one entry per
 measured line, in first-appearance order) and `newOrderByProduct` (the tiles). A counted line
 contributes its quantity, and a measured line contributes one item. Guards: `till-table-order-screen.view-switch.test.ts`,
 `till-table-order-screen.new-order-bar.test.ts`, the "a tile's number in the New order" cases in
-`widgets/menu-browser.test.ts` and `state/new-order-count.test.ts`; weaker than the paragraph:
+`widgets/menu-browser.test.ts`, `apps/till/src/widgets/menu-tiles.test.ts` and
+`state/new-order-count.test.ts`; weaker than the paragraph:
 the screen cases mount the screen without `till-app`; `till-app-open-table.test.ts`'s handheld
 case opens a real table.
 
@@ -2546,8 +2585,8 @@ Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`
 `:host([variant="..."])`-style styling possible — see "Adding a primitive" below.
 
 The `inherit` arrow is built in. Importing `@waitron/ui` also registers the shared icons in
-`packages/ui/src/components/wt-icon.ts`: `MENU_ICONS`, `check`, `chevron-left`, `chevron-right`,
-`search`, `card`, `cash` and `undo`. Register other icons in the consuming app using
+`packages/ui/src/components/wt-icon.ts`: `MENU_ICONS`, `check`, `home`, `chevron-left`,
+`chevron-right`, `search`, `card`, `cash`, `undo`, `choice-check`, `menu-section` and `menu-filter`. Register other icons in the consuming app using
 `registerIcons`; a name an app registers again replaces the shared drawing there, as the
 dashboard's `search` and `undo` do.
 

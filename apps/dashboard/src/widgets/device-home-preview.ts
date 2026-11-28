@@ -1,21 +1,14 @@
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
-import {
-  LitElement,
-  css,
-  html,
-  nothing,
-  unsafeCSS,
-  type PropertyValues,
-  type TemplateResult,
-} from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   ContentLanguageController,
   currentContentLanguages,
   baseStyles,
-  readableTextColor,
+  menuTilePaint,
+  menuTileStyles,
   reorder,
   visuallyHiddenStyles,
 } from "@waitron/ui";
@@ -31,13 +24,11 @@ import "@waitron/ui/src/components/wt-input.js";
 import {
   foldForSearch,
   searchFor,
-  HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,
   openedSection,
   sectionTrail,
   shownMembers,
-  tileFill,
   tilePrice,
   tilePaths,
   type HomeIndex,
@@ -86,17 +77,6 @@ const KEY_STEPS: Record<string, number> = {
   ArrowDown: 1,
 };
 
-const paints = new Map<string, string>();
-
-/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
- * for contrast. Worked out once per colour, not on every render of every tile. */
-function tilePaint(color: string): string {
-  let paint = paints.get(color);
-  if (paint === undefined)
-    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
-  return paint;
-}
-
 /**
  * A menu's Device Home Page from a published-menu document:
  * search, then the shortcuts and the menu's own structure in the order the menu sets,
@@ -118,6 +98,7 @@ export class DeviceHomePreview extends LitElement {
 
   static override styles = [
     baseStyles,
+    menuTileStyles,
     css`
       :host {
         display: block;
@@ -153,9 +134,7 @@ export class DeviceHomePreview extends LitElement {
         margin: 0;
       }
 
-      .empty,
-      .price,
-      .kind {
+      .empty {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -179,74 +158,6 @@ export class DeviceHomePreview extends LitElement {
         content: "";
         flex: 1;
         border-block-start: 1px solid var(--wt-color-border);
-      }
-
-      .grid {
-        display: grid;
-        gap: var(--wt-space-3);
-        grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
-      }
-
-      .section-kind {
-        ${visuallyHiddenStyles}
-      }
-
-      .tile,
-      .slot {
-        width: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
-      }
-
-      /* A product tile is not a control here, so it is drawn to look like the device's button. */
-      div.tile {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-
-      wt-button.tile::part(button) {
-        position: relative;
-        height: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
-        padding: var(--wt-space-2);
-      }
-
-      .label {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-width: 0;
-        text-align: center;
-        overflow-wrap: anywhere;
-      }
-
-      .label > * {
-        max-width: 100%;
-      }
-
-      .name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      div.tile[data-painted],
-      wt-button.tile[data-painted]::part(button) {
-        background: var(--tile-fill);
-        border-color: var(--tile-fill);
-        color: var(--tile-ink);
-      }
-
-      wt-button.tile[data-painted]::part(button):hover:not(:disabled) {
-        border-color: var(--tile-ink);
-      }
-
-      .tile[data-painted] .price,
-      .tile[data-painted] wt-icon {
-        color: inherit;
       }
 
       .breadcrumb ol {
@@ -358,12 +269,12 @@ export class DeviceHomePreview extends LitElement {
 
       wt-button.add {
         width: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
+        min-height: var(--menu-tile-height);
       }
 
       wt-button.add::part(button) {
         height: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
+        min-height: var(--menu-tile-height);
         padding: var(--wt-space-2);
         border-style: dashed;
         border-color: var(--wt-color-primary);
@@ -678,11 +589,11 @@ export class DeviceHomePreview extends LitElement {
       };
     const section = ref.kind === "section" ? openedSection(ref.sectionId, index) : undefined;
     const product = ref.kind === "product" ? index.products.get(ref.productId) : undefined;
-    const tileColour = tileFill(section?.color ?? product?.color ?? null);
+    const paint = menuTilePaint(product?.color);
     return {
       name: section ? this.#sectionName(section) : product!.name,
       face,
-      ...(tileColour.kind === "color" ? { paint: tilePaint(tileColour.color) } : {}),
+      ...(paint === undefined ? {} : { paint }),
     };
   }
 
@@ -759,8 +670,7 @@ export class DeviceHomePreview extends LitElement {
         ? ""
         : unitPresentation(offer.unit, locale, currentContentLanguages()).abbreviation;
     const price = tilePrice(offer.unitPrice, offer.variants, unit, locale);
-    const fill = tileFill(offer.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
+    const paint = menuTilePaint(offer.color);
     return html`<div
       class="tile"
       data-kind="product"
@@ -775,19 +685,15 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #sectionTile(section: SectionNode, opens: SectionStep[]): TemplateResult {
-    const fill = tileFill(section.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
       class="tile"
       data-kind="section"
-      style=${paint ?? nothing}
-      ?data-painted=${paint !== undefined}
       @click=${() => {
         this.path = opens;
       }}
     >
       <span class="label">
-        <wt-icon name="folder" aria-hidden="true"></wt-icon>
+        <wt-icon name="menu-section" aria-hidden="true"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
         <span class="section-kind">${t("home.tile_section")}</span>
       </span>

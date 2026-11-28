@@ -1091,7 +1091,8 @@ On a till's PIN sign-in, a person the device's profile does not admit also answe
 [design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
 several of them more broadly — the token rule there binds any component or view, not only
 `packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower:
-`packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts` only, and
+`packages/ui/src/no-hardcoded-chrome.test.ts` scans what `packages/ui/src/components/*.ts` and
+`packages/ui/src/*.ts` (not `index.ts`) export only, and
 `scripts/no-hardcoded-chrome-views.test.ts` the dashboard's, the till's, the customer menu's and modules' dashboard
 views (below).
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
@@ -1100,17 +1101,22 @@ The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` 
 ## No hardcoded chrome
 
 Every colour, spacing, radius, and font value in a `packages/ui/src/components/*.ts` component's
-`static styles` must read a `--wt-*` custom property: no hex, no
+`static styles` (and any other single stylesheet it keeps as a static), and in a stylesheet a
+`packages/ui/src/*.ts` module exports, such as `menuTileStyles`, must read a `--wt-*` custom
+property: no hex, no
 `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()`/`color()`/`color-mix()`, no named colours,
-no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp()`). `transparent`,
+no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp()`).
+`menuTileStyles` alone may keep `@media (width >= 720px)` conditions, since a media
+condition cannot read a custom property, and the shared `HOME_GRID_COLUMNS` formula. `transparent`,
 `currentColor`, and `inherit` are legitimate escape hatches, not chrome, and so are the system
 colours inside `@media (forced-colors: active)` (see
 [design-system.md](design-system.md#forced-colours-windows-contrast-themes)); no guard checks where
 a system colour is used.
 
 This is enforced automatically by `packages/ui/src/no-hardcoded-chrome.test.ts`, which discovers
-every component via `import.meta.glob("./components/*.ts", ...)` — a new component is covered the
-moment the file exists, with nothing to register. If a needed token doesn't exist, it belongs in
+every component and style module via `import.meta.glob(["./components/*.ts", "./*.ts", ...])` — a
+new component or exported stylesheet is covered the moment the file exists, with nothing to
+register. If a needed token doesn't exist, it belongs in
 `packages/ui-core/src/tokens/`, not inlined.
 
 `scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
@@ -2264,10 +2270,10 @@ only once someone adds it to `#applyVenueSetup`.
 language, which is not part of the start read: the till reads the content languages at start and
 again 60 s after each read ends, answered or not (`#refreshContentLanguages`, `apps/till/src/till-app.ts`), and the
 menu browser and the basket redraw on a change (`ContentLanguageController`), so the `lang` follows
-within about a minute. A word of 8 letters or more can be hyphenated by that language's rules
+within about a minute. On a bill line's name, a word of 8 letters or more can be hyphenated by that language's rules
 (`hyphens: auto` with `hyphenate-limit-chars: 8 auto auto`); a shorter one never is, so a short word
-that fits a line stays whole, as `apps/till/src/widgets/menu-browser.home-columns.test.ts`
-requires (it fails at 7). That keeps its rule only for words under 8 letters: Chromium can still
+that fits a line stays whole. A menu tile's name is never hyphenated or broken inside a word; a word
+too long for its line ends in "…". On a bill line, the limit keeps its rule only for words under 8 letters: Chromium can still
 hyphenate a longer word at a line's end even when it would fit whole on the next line, which is how
 "asado" broke before the limit. Chromium does not hyphenate English (measured in the tests' HeadlessChrome 156 on macOS: `en` and `en-GB` left a
 long word overflowing a narrow box, where `es`, `de` and `fr` broke it with a hyphen). A table

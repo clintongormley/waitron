@@ -199,6 +199,19 @@ export async function loadPhoneFont(): Promise<FontFace> {
   return face;
 }
 
+const fractionalGlyphs = new CSSStyleSheet();
+fractionalGlyphs.replaceSync("* { text-rendering: geometricPrecision; }");
+
+/**
+ * Places the glyphs of the text in `root` at fractions of a pixel, as macOS's Chromium does: Linux's
+ * puts each at a whole pixel unless the text asks for geometric precision, so a word can need a
+ * pixel more there. Set on every element of `root`, because a native button resets the request for
+ * what it holds.
+ */
+export function placeGlyphsFractionally(root: ShadowRoot): void {
+  root.adoptedStyleSheets = [...root.adoptedStyleSheets, fractionalGlyphs];
+}
+
 /** The client rects of `node`'s text, measured where they are drawn: a break inside a word splits
  * them, and an `overflow: hidden` ancestor does not cut them down. */
 export function textRects(node: Node): DOMRect[] {
@@ -1060,4 +1073,33 @@ export function panelBackButton(back: HTMLElement): HTMLElement {
   return back.matches("wt-top-bar")
     ? back.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!
     : back;
+}
+
+/** A name's text, without the room a counted name starts with. */
+export const nameText = (name: Element) =>
+  [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+
+/** The lines a name shows, top first. Chromium draws a cut line's text as a second, shortened box
+ * at the line's start with the "…" after it: `text` is that box, `right` the end of its "…". */
+export function shownLines(name: HTMLElement): { text: DOMRect; right: number; cut: boolean }[] {
+  const bottom = name.getBoundingClientRect().bottom;
+  const boxes = textRects(nameText(name)).filter((box) => box.top < bottom);
+  const pen = document.createElement("canvas").getContext("2d")!;
+  pen.font = getComputedStyle(name).font;
+  return [...new Set(boxes.map((box) => box.top))].map((top) => {
+    const line = boxes.filter((box) => box.top === top);
+    const text = line.reduce((narrowest, box) => (box.width < narrowest.width ? box : narrowest));
+    const cut = line.length > 1;
+    return { text, right: text.right + (cut ? pen.measureText("…").width : 0), cut };
+  });
+}
+
+/** Whether a shown line keeps clear of `count`, grown by `ring` on every side. */
+export function clearOf(line: { text: DOMRect; right: number }, count: DOMRect, ring = 0): boolean {
+  return (
+    count.right + ring <= line.text.left ||
+    line.right <= count.left - ring ||
+    count.bottom + ring <= line.text.top ||
+    line.text.bottom <= count.top - ring
+  );
 }

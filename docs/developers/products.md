@@ -548,15 +548,16 @@ product's own colour goes into the next version's offer in the same way
 (`packages/menu/src/menu-document.test.ts`), though no test reads a menu's status after one. A live version in an
 earlier document format is not sold from: [product-categories.md](product-categories.md).
 
-A menu section has a colour of its own, set in the section form. It paints the section's own tile
-and nothing else: the products inside the section keep their own colours. The section form for a new
+A menu section has a colour of its own, set in the section form. Only its swatch in a menu's
+Structure tree shows it: the till and the Device home preview draw every section tile plain
+(`apps/till/src/widgets/menu-tiles.ts`), and the products inside the section keep their own colours. The section form for a new
 section at a menu's top level opens on the next pale swatch, picked by how many top-level sections
 of its own the menu has (red first, back to red after magenta); a new section inside another opens
 with none (`paleSwatch`, `packages/ui/src/category-color.ts`, called from
 `apps/dashboard/src/screens/menus-screen.ts`).
 
-On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a section tile with a
-colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
+On the till (`apps/till/src/widgets/menu-tiles.ts`), a product tile with a colour fills with it,
+and its labels switch to black or white,
 whichever reads better on that colour (`readableTextColor`, `packages/ui/src/category-color.ts`). A
 tile with no colour, or with a value that is not a lowercase `#rrggbb` colour, keeps the plain look.
 The dashboard does the same with such a value: the swatches in the Products
@@ -736,7 +737,7 @@ variant never has a button: it is listed only nested under its parent's offer
 Under search, every device follows the menu's **Shown first** choice for the shortcuts and the
 full menu. A divider identifies the second block when both have tiles. The grid chooses the
 number of columns from the available width and preserves the order inside each block.
-Each tile uses its colour (_Colour_, above) or the plain fill. A shortcut whose target the till
+Each product tile uses its colour (_Colour_, above) or the plain fill; a section tile is always plain. A shortcut whose target the till
 does not show keeps its place as an empty slot, so the shortcuts after it do not move. A
 shortcut to a section a diet filter emptied shows that section's faded tile in the slot instead. The
 display and the shortcuts come from the menu's published version, so a change reaches the till

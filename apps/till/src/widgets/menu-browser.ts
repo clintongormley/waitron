@@ -3,22 +3,12 @@ import { firstMenuRead, firstReadNoticeStyles } from "./first-read-notice.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import {
-  LitElement,
-  css,
-  html,
-  nothing,
-  unsafeCSS,
-  type PropertyValues,
-  type TemplateResult,
-} from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
   baseStyles,
-  currentContentLanguages,
-  readableTextColor,
-  registerIcons,
+  menuTileStyles,
   visuallyHiddenStyles,
   Gestures,
 } from "@waitron/ui";
@@ -29,16 +19,12 @@ import {
   formatMoney,
   searchFor,
   type NameSearch,
-  HOME_GRID_COLUMNS,
   arrangeHome,
-  indexDocument,
   openedSection,
   sectionTrail,
   shownMembers,
-  tileFill,
   tilePaths,
   type BillSetMenuState,
-  type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
@@ -48,67 +34,29 @@ import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { menuOfferToTillProduct, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
-import { productName, productTilePrice, soldByTheUnit } from "./product-name.js";
+import { productName, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../state/set-menus.js";
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
-
-registerIcons({
-  "menu-section":
-    "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
-});
-
-type SectionNode = Extract<DocumentMember, { kind: "section" }>;
-
-type MenuIndex = HomeIndex<TillProduct>;
-function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
-  return members.some((member) =>
-    member.kind === "set_menu"
-      ? member.menuId === id
-      : member.kind === "section" && listsSetMenu(member.members, id),
-  );
-}
-
-type SearchResult =
-  | { kind: "product"; product: TillProduct }
-  | { kind: "set_menu"; row: OrderingCopy }
-  | { kind: "section"; section: SectionNode; path: SectionStep[]; disabled: boolean };
-
-/**
- * A product member whose offer is not among `products` is left out, and so is one not sold
- * separately, which is ordered only as an extra on another dish, and a section left with nothing
- * to order. Staff only is shown: every till screen is staff's.
- */
-function indexMenu(
-  menu: TillZoneMenu,
-  products: TillProduct[],
-  copies: readonly OrderingCopy[] = [],
-): MenuIndex {
-  const offers = new Map(
-    products
-      .filter((product) => product.ordering !== "not_sold_separately")
-      .map((product) => [product.menuItemId, product]),
-  );
-  return indexDocument(
-    menu.structure.members,
-    (id) => offers.get(id),
-    (id) => copies.some(({ copy }) => copy.menuId === id),
-  );
-}
-
-const paints = new Map<string, string>();
-
-/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
- * for contrast. Worked out once per colour, not on every render of every tile. */
-function tilePaint(color: string): string {
-  let paint = paints.get(color);
-  if (paint === undefined)
-    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
-  return paint;
-}
+import {
+  dishTile,
+  sectionTile,
+  setMenuTile,
+  type CountWords,
+  type DishTileHandlers,
+} from "./menu-tiles.js";
+import { countedNameStyles } from "./counted-name.js";
+import { menuPath, menuPathStyles } from "./menu-path.js";
+import {
+  indexMenu,
+  listsSetMenu,
+  type MenuIndex,
+  type SearchResult,
+  type SectionNode,
+} from "./menu-index.js";
 
 /**
  * The till's menu home: search, then the menu's Device Home Page shortcuts and the menu's own
@@ -158,6 +106,9 @@ export class TillMenuBrowser extends LitElement {
   static override styles = [
     baseStyles,
     firstReadNoticeStyles,
+    menuTileStyles,
+    countedNameStyles,
+    menuPathStyles,
     css`
       :host {
         display: grid;
@@ -166,55 +117,42 @@ export class TillMenuBrowser extends LitElement {
         align-content: start;
       }
 
-      .menu-toolbar,
+      [data-menu-head] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-2);
+      }
+
+      /* The path's own tap height already spaces it from the tiles below. */
+      [data-menu-head]:has(> .breadcrumb) {
+        margin-block-end: calc(-1 * (var(--wt-space-3) + var(--wt-space-1) / 2));
+      }
+
+      :host([pinned-head]) [data-menu-head] {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: var(--wt-color-bg);
+      }
+
+      /* The picker takes a line of its own, but a wrapping row still sums the two for its natural
+         width, so a screen sizing the menu from that width gives it room for both side by side. */
+      .menu-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      ::slotted([slot="menu-picker"]) {
+        flex: 1 0 100%;
+      }
+
       [data-region="search"] {
         display: flex;
+        flex: 1 1 auto;
         gap: var(--wt-space-2);
-        align-items: end;
-      }
-      ::slotted([slot="menu-picker"]) {
-        flex: 1;
-      }
-
-      [data-region="search"] {
-        flex: 2;
+        align-items: center;
         min-inline-size: 0;
-      }
-
-      @supports (grid-template-columns: subgrid) {
-        .menu-toolbar[data-menu-picker] {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-        }
-
-        .menu-toolbar[data-menu-picker] [data-region="search"] {
-          display: grid;
-          grid-column: 2 / -1;
-          grid-template-columns: subgrid;
-        }
-      }
-
-      /* A viewport query, not a size container: containment would stop the browser's content
-         counting toward the width a screen's layout gives it. */
-      @media (width < 360px) {
-        .menu-toolbar[data-menu-picker] {
-          flex-wrap: wrap;
-        }
-
-        .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]) {
-          flex-basis: 100%;
-        }
-
-        @supports (grid-template-columns: subgrid) {
-          .menu-toolbar[data-menu-picker] {
-            grid-template-columns: minmax(0, 1fr) auto;
-          }
-
-          .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]),
-          .menu-toolbar[data-menu-picker] [data-region="search"] {
-            grid-column: 1 / -1;
-          }
-        }
       }
 
       [data-menu-content] {
@@ -231,6 +169,7 @@ export class TillMenuBrowser extends LitElement {
       [data-region="search"] wt-input {
         flex: 1;
         min-width: 0;
+        max-width: none;
       }
 
       section {
@@ -271,128 +210,9 @@ export class TillMenuBrowser extends LitElement {
         border-block-start: 1px solid var(--wt-color-border);
       }
 
-      .grid {
-        display: grid;
-        gap: var(--wt-space-3);
-        grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
-      }
-
-      .section-kind {
-        ${visuallyHiddenStyles}
-      }
-
-      .tile,
-      .slot {
-        width: 100%;
-      }
-
-      .slot {
-        min-height: calc(var(--wt-tap-min) * 1.5);
-      }
-
-      .tile::part(button) {
-        position: relative;
-        height: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
-        padding: var(--wt-space-2);
-      }
-
-      .in-order {
-        position: absolute;
-        inset-block-start: var(--wt-space-1);
-        inset-inline-start: var(--wt-space-1);
-        min-inline-size: var(--wt-space-5);
-        block-size: var(--wt-space-5);
-        padding-inline: var(--wt-space-1);
-        border-radius: var(--wt-radius-full);
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        line-height: var(--wt-space-5);
-        text-align: center;
-      }
-      /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
-       never changes size when its first dish is added and its name stays centred. */
-      .tile[data-counted]::part(button) {
-        padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
-      }
-      .in-order-words {
-        ${visuallyHiddenStyles}
-      }
-
-      .label {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-width: 0;
-        text-align: center;
-        overflow-wrap: break-word;
-      }
-
-      /* A centred column item is as wide as its longest word, so without this a word wider than
-       the tile would spill out of it instead of breaking. */
-      .label > * {
-        max-width: 100%;
-      }
-
-      .name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .name[lang] {
-        hyphens: auto;
-        /* No hyphen in a word under 8 letters, so a short word that fits a line stays whole
-         (menu-browser.home-columns.test.ts); a longer one can still be hyphenated where it would
-         fit on the next line. */
-        hyphenate-limit-chars: 8 auto auto;
-      }
-
-      .price,
-      .kind,
-      .sold-out,
       .empty {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .tile[data-painted]::part(button) {
-        background: var(--tile-fill);
-        border-color: var(--tile-fill);
-        color: var(--tile-ink);
-      }
-
-      .tile[data-painted]:not([data-sold-out])::part(button):hover:not(:disabled) {
-        border-color: var(--tile-ink);
-      }
-
-      /* wt-icon sets its own text colour on its host, so it is named here as the labels are. */
-      .tile[data-painted] .price,
-      .tile[data-painted] .kind,
-      .tile[data-painted] .sold-out,
-      .tile[data-painted] wt-icon {
-        color: inherit;
-      }
-
-      /* Sold-out dishes still open information. */
-      .tile[data-sold-out]::part(button) {
-        opacity: 1;
-        background: var(--wt-color-surface-sunken);
-        border-color: var(--wt-color-border);
-        color: var(--wt-color-text);
-      }
-
-      /* Inset shadows take no layout width, so the labels stay centred. The text-coloured line
-       under the stripe keeps a stripe close to the tile's own fill visible. */
-      .tile[data-sold-out][data-painted]::part(button) {
-        box-shadow:
-          inset var(--wt-space-1) 0 0 var(--tile-fill),
-          inset calc(var(--wt-space-1) + 1px) 0 0 var(--wt-color-text);
-      }
-
-      .tile[data-sold-out] .price,
-      .tile[data-sold-out] .sold-out {
-        color: inherit;
       }
 
       .empty {
@@ -407,32 +227,6 @@ export class TillMenuBrowser extends LitElement {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
-      }
-
-      .breadcrumb ol {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .breadcrumb li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        overflow-wrap: anywhere;
-      }
-
-      .breadcrumb [aria-current] {
-        font-weight: var(--wt-font-weight-bold);
-        padding-inline: var(--wt-space-2);
-      }
-
-      .sep {
-        color: var(--wt-color-text-muted);
       }
 
       .weigh {
@@ -451,6 +245,8 @@ export class TillMenuBrowser extends LitElement {
   @property({ attribute: false }) retryFirstRead?: () => void;
   @property({ type: Boolean }) handheld = false;
   @property({ type: Boolean }) hasMenuPicker = false;
+  /** Keeps the head in view while the tiles scroll under it. */
+  @property({ type: Boolean, reflect: true, attribute: "pinned-head" }) pinnedHead = false;
   @property({ type: Boolean }) locked = false;
 
   /** This menu's offers as till products. */
@@ -471,8 +267,10 @@ export class TillMenuBrowser extends LitElement {
 
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
+  /** Product id → items of that dish in the order being taken (a table's New order or the
+   * Counter's basket); a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
+  @property() countWords: CountWords = "unsent";
 
   /** Uses the shared amount keypad when this screen takes payment elsewhere. */
   @property({ type: Boolean }) weighs = false;
@@ -798,10 +596,9 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #resultTile(result: SearchResult, menuId: string): TemplateResult {
-    if (result.kind === "product")
-      return this.#productButton(result.product, () => this.#pick(result.product));
+    if (result.kind === "product") return this.#dishTile(result.product);
     if (result.kind === "set_menu") return this.#setMenuTile(result.row);
-    return this.#sectionButton(
+    return this.#sectionTile(
       result.section,
       result.disabled
         ? undefined
@@ -836,86 +633,33 @@ export class TillMenuBrowser extends LitElement {
     });
   }
 
-  #productButton(product: TillProduct, onTap: () => void): TemplateResult {
-    const price = productTilePrice(product);
-    const sellable = hasSomethingToSell(product);
-    const fill = tileFill(product.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
-    const inOrder = this.inOrder?.get(product.id) ?? 0;
-    return html`<wt-button
-      class="tile"
-      data-kind="product"
-      style=${paint ?? nothing}
-      ?data-painted=${paint !== undefined}
-      ?data-sold-out=${!sellable}
-      ?data-counted=${this.inOrder !== undefined}
-      ?data-in-order=${inOrder > 0}
-      @contextmenu=${(event: Event) => event.preventDefault()}
-      @keydown=${(event: KeyboardEvent) => {
-        if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
-          event.preventDefault();
-          this.infoProduct = product;
-        }
-      }}
-      @pointerdown=${(event: PointerEvent) => {
-        this.#pressedProduct = product;
-        this.#pressedTarget = event.composedPath()[0];
-        this.#suppressClick = false;
-      }}
-      @click=${(event: MouseEvent) => {
-        if (event.detail === 0 || !this.#suppressClick) {
-          if (!sellable) this.infoProduct = product;
-          else {
-            onTap();
-            if (this.weighs && !soldByTheUnit(product))
-              this.#keepTileAboveAmount(event.currentTarget as HTMLElement);
-          }
-        }
-      }}
-    >
-      ${
-        inOrder > 0
-          ? html`<span class="in-order" data-in-order-count aria-hidden="true">${inOrder}</span>`
-          : nothing
-      }
-      <span class="label">
-        <span class="name" lang=${currentContentLanguages().defaultLanguage}
-          >${productName(product)}</span
-        >
-        <span class="price">${price}</span>
-        ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
-        ${
-          inOrder > 0
-            ? html`<span class="in-order-words"
-                >, ${countText(inOrder, "order_counts.unsent", "order_counts.unsent_one")}</span
-              >`
-            : nothing
-        }
-      </span>
-    </wt-button>`;
+  #dishTile(product: TillProduct): TemplateResult {
+    return dishTile(
+      product,
+      this.inOrder?.get(product.id),
+      (tile) => {
+        this.#pick(product);
+        if (this.weighs && !soldByTheUnit(product)) this.#keepTileAboveAmount(tile);
+      },
+      this.#dishHandlers,
+      this.countWords,
+    );
   }
 
-  /** Without `onTap`, the section is one the diet filter emptied: greyed and not openable. */
-  #sectionButton(section: SectionNode, onTap?: () => void): TemplateResult {
-    const fill = tileFill(section.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
-    const filtered = onTap === undefined;
-    return html`<wt-button
-      class="tile"
-      data-kind="section"
-      style=${paint ?? nothing}
-      ?data-painted=${paint !== undefined}
-      ?data-filtered=${filtered}
-      ?disabled=${filtered}
-      @click=${onTap ?? nothing}
-    >
-      <span class="label">
-        <wt-icon name="menu-section" aria-hidden="true"></wt-icon>
-        <span class="name">${this.#sectionName(section)}</span>
-        <span class="section-kind">${t("menu.section")}</span>
-        ${filtered ? html`<span class="kind">${t("menu.filtered_out")}</span>` : nothing}
-      </span>
-    </wt-button>`;
+  #dishHandlers: DishTileHandlers = {
+    info: (product) => {
+      this.infoProduct = product;
+    },
+    press: (product, event) => {
+      this.#pressedProduct = product;
+      this.#pressedTarget = event.composedPath()[0];
+      this.#suppressClick = false;
+    },
+    held: () => this.#suppressClick,
+  };
+
+  #sectionTile(section: SectionNode, onTap?: () => void): TemplateResult {
+    return sectionTile(this.#sectionName(section), onTap);
   }
 
   /** The button for a section or product the index holds, a greyed one for a section only the
@@ -935,16 +679,14 @@ export class TillMenuBrowser extends LitElement {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
       if (index.sections.has(id))
-        return this.#sectionButton(own ?? openedSection(id, index)!, () => this.#open(opens));
+        return this.#sectionTile(own ?? openedSection(id, index)!, () => this.#open(opens));
       const unfiltered = this.#unfilteredIndex(this.menu!);
       return unfiltered.sections.has(id)
-        ? this.#sectionButton(own ?? openedSection(id, unfiltered)!)
+        ? this.#sectionTile(own ?? openedSection(id, unfiltered)!)
         : nothing;
     }
     const product = index.products.get(ref.productId);
-    return product === undefined
-      ? nothing
-      : this.#productButton(product, () => this.#pick(product));
+    return product === undefined ? nothing : this.#dishTile(product);
   }
 
   #listTiles(
@@ -994,36 +736,27 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #sectionView(trail: SectionNode[], index: MenuIndex): TemplateResult {
-    const current = trail.at(-1)!;
     return html`<section data-region="section">
-      <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
-        <ol>
-          <li>
-            <wt-button variant="ghost" @click=${() => this.#open([])}>${t("menu.home")}</wt-button>
-            <span class="sep" aria-hidden="true">›</span>
-          </li>
-          ${trail.slice(0, -1).map(
-            (section, position) =>
-              html`<li>
-                <wt-button
-                  variant="ghost"
-                  @click=${() => this.#open(this.path.slice(0, position + 1))}
-                  >${this.#sectionName(section)}</wt-button
-                >
-                <span class="sep" aria-hidden="true">›</span>
-              </li>`,
-          )}
-          <li><span aria-current="location">${this.#sectionName(current)}</span></li>
-        </ol>
-      </nav>
       ${this.#grid(
         this.#listTiles(
-          shownMembers(current.members, this.setMenuCopies.length > 0),
+          shownMembers(trail.at(-1)!.members, this.setMenuCopies.length > 0),
           this.path,
           index,
         ),
       )}
     </section>`;
+  }
+
+  #path(trail: SectionNode[]): TemplateResult {
+    return menuPath(
+      () => this.#open([]),
+      trail.slice(0, -1).map((section, position) => ({
+        name: this.#sectionName(section),
+        open: () => this.#open(this.path.slice(0, position + 1)),
+      })),
+      this.#sectionName(trail.at(-1)!),
+      this.locked,
+    );
   }
 
   #heldMenuFolders(): OrderingCopy[] {
@@ -1043,23 +776,18 @@ export class TillMenuBrowser extends LitElement {
 
   #setMenuTile(row: OrderingCopy | undefined, held = false): TemplateResult {
     const copy = row?.copy;
-    return html`<wt-button
-      class="tile"
-      data-kind=${copy === undefined ? "section" : "set_menu"}
-      @click=${() => {
+    return setMenuTile(
+      copy?.name ?? t("set_menu.folders"),
+      copy === undefined ? undefined : formatMoney(copy.terms.price, currentLocale()),
+      () => {
         this.setMenuFolder = { id: copy?.menuId, held };
-      }}
-      ><span class="label">
-        <wt-icon name="menu-section"></wt-icon>
-        <span class="name">${copy?.name ?? t("set_menu.folders")}</span>
-        ${copy === undefined ? nothing : html`<span class="price">${formatMoney(copy.terms.price, currentLocale())}</span>`}
-      </span></wt-button
-    >`;
+      },
+    );
   }
 
   #setMenuView(row: OrderingCopy | undefined): TemplateResult {
     return html`<section data-region="section">
-      <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
+      <nav class="set-menu-back" aria-label=${t("menu.breadcrumb")}>
         <wt-button
           variant="ghost"
           @click=${() => {
@@ -1129,16 +857,16 @@ export class TillMenuBrowser extends LitElement {
     const { menu, firstRead: stage } = this;
     const folder = this.setMenuCopies.find(({ copy }) => copy.menuId === this.setMenuFolder?.id);
     let view: TemplateResult | typeof nothing = nothing;
+    let path: TemplateResult | typeof nothing = nothing;
     if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder);
     else if (menu !== undefined) {
       const index = this.#index(menu);
       const trail = this.#trailShown;
-      view =
-        this.query.trim() !== ""
-          ? this.#results(menu, index)
-          : trail.length > 0
-            ? this.#sectionView(trail, index)
-            : this.#home(menu, index);
+      if (this.query.trim() !== "") view = this.#results(menu, index);
+      else if (trail.length > 0) {
+        view = this.#sectionView(trail, index);
+        path = this.#path(trail);
+      } else view = this.#home(menu, index);
     } else if (this.#heldMenuFolders().length > 0) {
       view = html`<section data-region="structure">
         ${this.#grid([this.#setMenuTile(undefined, true)])}
@@ -1153,26 +881,32 @@ export class TillMenuBrowser extends LitElement {
       ${
         menu === undefined && !this.hasMenuPicker
           ? nothing
-          : html`<div class="menu-toolbar" ?data-menu-picker=${this.hasMenuPicker}>
-              <slot name="menu-picker"></slot>
-              ${
-                menu === undefined
-                  ? nothing
-                  : html`<div data-region="search" ?inert=${this.locked}>
-                      <wt-input
-                        type="search"
-                        name="menu-search"
-                        label=${t("menu.search")}
-                        .value=${this.query}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-                        >${helpBadge("help.menu.dishes", t("menu.search"), {
-                          guide: "products.nutrition-at-the-till",
-                          slot: "help",
-                        })}</wt-input
-                      >
-                      <slot name="filters"></slot>
-                    </div>`
-              }
+          : html`<div data-menu-head>
+              <div class="menu-tools">
+                <slot name="menu-picker"></slot>
+                ${
+                  menu === undefined
+                    ? nothing
+                    : html`<div data-region="search" ?inert=${this.locked}>
+                        <wt-input
+                          type="search"
+                          name="menu-search"
+                          variant="outlined"
+                          label=${t("menu.search")}
+                          placeholder=${t("menu.search_placeholder")}
+                          .value=${this.query}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
+                          ><wt-icon slot="start" name="search"></wt-icon>${helpBadge(
+                            "help.menu.dishes",
+                            t("menu.search"),
+                            { guide: "products.nutrition-at-the-till", slot: "help" },
+                          )}</wt-input
+                        >
+                        <slot name="filters"></slot>
+                      </div>`
+                }
+              </div>
+              ${path}
             </div>`
       }
       ${

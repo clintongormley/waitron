@@ -55,6 +55,10 @@ it.each(
       const frame = root(el).querySelector(".frame")!.getBoundingClientRect();
       expect(grid.getBoundingClientRect().left - frame.left).toBeCloseTo(9);
     }
+    // A word too wide for its tile ends in "…" and never widens the grid past its region.
+    expect(grid.getBoundingClientRect().width).toBeLessThanOrEqual(
+      grid.parentElement!.getBoundingClientRect().width,
+    );
     expect(tracks(grid)).toBe(columns);
     expect(tiles(el, "structure")).toHaveLength(3);
     for (const cell of tiles(el, "structure")) {
@@ -65,7 +69,8 @@ it.each(
         const bounds = content.getBoundingClientRect();
         expect(bounds.left).toBeGreaterThanOrEqual(box.left);
         expect(bounds.right).toBeLessThanOrEqual(box.right);
-        expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+        if (content.classList.contains("name")) expectNameDrawnInside(content);
+        else expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
       }
     }
   },
@@ -348,17 +353,28 @@ describe("dashboard-device-home-preview", () => {
   });
 
   describe("fills tiles as the device does", () => {
-    it("paints the product's frozen colour and the section's colour", async () => {
+    it("paints the product's frozen colour and never a coloured section's tile, as the till draws it", async () => {
       const { el } = await mount();
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
       expect(lemonade.hasAttribute("data-painted")).toBe(true);
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
+      for (const region of ["shortcuts", "structure"]) {
+        const section = tile(el, region, "Drinks para clientes");
+        expect(section.hasAttribute("data-painted"), region).toBe(false);
+        expect(section.hasAttribute("style"), region).toBe(false);
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--wt-color-surface)";
+        probe.style.color = "var(--wt-color-border)";
+        section.parentElement!.appendChild(probe);
+        const look = getComputedStyle(section.shadowRoot!.querySelector("button")!);
+        expect(look.backgroundColor, region).toBe(getComputedStyle(probe).backgroundColor);
+        expect(look.borderTopColor, region).toBe(getComputedStyle(probe).color);
+        probe.remove();
+      }
       const section = tile(el, "structure", "Drinks para clientes");
       expect(image(section)).toBeNull();
-      expect(section.hasAttribute("data-painted")).toBe(true);
-      expect(fillOf(section)).toBe("rgb(177, 37, 37)");
-      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
       expect(
         section.querySelector(".section-kind")!.getBoundingClientRect().width,
       ).toBeLessThanOrEqual(1);
@@ -376,7 +392,7 @@ describe("dashboard-device-home-preview", () => {
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
       const section = tile(el, "structure", "Drinks para clientes");
       expect(image(section)).toBeNull();
-      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
     });
 
     it("draws an uncoloured product with its name and price", async () => {
@@ -734,17 +750,15 @@ describe("dashboard-device-home-preview", () => {
     });
 
     it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
-      const painted = bar({
-        color: "#256bb1",
-        fixed: {
-          names: { es: "Barra para clientes" },
-          color: "#256bb1",
-        },
-      });
+      // The two copies differ by name: "Barra para clientes" at the top level, the included
+      // menu's own "Drinks para clientes" inside Food.
       const shortcut = [sectionTile("s-drinks")];
-      const { el } = await mount({ document: twice(painted, shortcut) });
+      const { el } = await mount({ document: twice(bar(), shortcut) });
+      await click(el, tile(el, "structure", "Food para clientes"));
+      expect(names(tiles(el, "section"))).toContain("Drinks para clientes");
+      expect(names(tiles(el, "section"))).not.toContain("Barra para clientes");
+      await click(el, home(el));
       expect(names(tiles(el, "shortcuts"))).toEqual(["Barra para clientes"]);
-      expect(fillOf(tile(el, "shortcuts", "Barra para clientes"))).toBe("rgb(37, 107, 177)");
       await click(el, tile(el, "shortcuts", "Barra para clientes"));
       expect(breadcrumb(el)).toBe("Home › Barra para clientes");
 
@@ -1098,6 +1112,13 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(add(el).querySelector("wt-icon")!).color).toBe(primary);
     expect(Math.abs(button.getBoundingClientRect().height - tile.height)).toBeLessThan(1);
+  });
+
+  it("draws the Add shortcuts tile alone as tall as a menu tile", async () => {
+    const { el } = await mount({ shortcuts: [] });
+    const menuTile = tile(el, "structure", "Water").getBoundingClientRect().height;
+    const button = add(el).shadowRoot!.querySelector("button")!;
+    expect(Math.abs(button.getBoundingClientRect().height - menuTile)).toBeLessThan(1);
   });
 
   it.each([
@@ -1542,3 +1563,26 @@ it("keeps the staff unit abbreviation on a menu preview tile with empty customer
     `${formatMoney("3.00", currentLocale())}/ss`,
   );
 });
+
+/** Whatever `name` draws stays inside it: an end padding is the room it keeps for a "…", which
+ * Chromium counts as overflow, and a word too wide for any line ends in a "…" drawn after the
+ * shortened box Chromium gives the cut text. */
+function expectNameDrawnInside(name: HTMLElement): void {
+  const look = getComputedStyle(name);
+  const room = name.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+  const pen = document.createElement("canvas").getContext("2d")!;
+  pen.font = look.font;
+  const words = name.textContent!.match(/\S+/g)!;
+  if (words.every((word) => pen.measureText(word).width <= room)) {
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth + parseFloat(look.paddingRight));
+    return;
+  }
+  const own = name.getBoundingClientRect();
+  const text = document.createRange();
+  text.selectNodeContents(name);
+  const shown = [...text.getClientRects()].filter((box) => box.width > 0 && box.top < own.bottom);
+  const drawn = shown.reduce((a, b) => (a.width < b.width ? a : b));
+  expect(look.textOverflow).toBe("ellipsis");
+  expect(drawn.left).toBeGreaterThanOrEqual(own.left);
+  expect(drawn.right + pen.measureText("…").width).toBeLessThanOrEqual(own.right);
+}

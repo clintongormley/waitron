@@ -88,7 +88,7 @@ The dashboard, till and setup web apps, served from `/app/web/` in the image, ca
 adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons>), Copyright
 Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
 `apps/dashboard/src/icons.ts`, the shared `check` path in `packages/ui/src/components/wt-icon.ts`
-used by choice tiles and dropdowns, and the `allergies`
+used by choice tiles and dropdowns, the shared `home` path there used by the till menu's path, and the `allergies`
 mark in `packages/ui-core/src/nutrition-icons.ts`, registered by the dashboard and till.
 The shared action menus and Help switch use outlined paths in `packages/ui/src/components/wt-icon.ts`
 and `packages/ui/src/components/wt-help-switch.ts`, adapted from Google material-design-icons
