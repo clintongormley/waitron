@@ -1,4 +1,5 @@
 import { liveReadFixture } from "../test/live-connection.js";
+import { attendanceInbox, attendancePrompt } from "../test/attendance-fixtures.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { SessionActivity } from "./session-activity.js";
@@ -25,6 +26,42 @@ afterEach(() => {
 });
 
 describe("till clocking integration", () => {
+  it.each(["clock-in", "attendance-questions"] as const)(
+    "%s keeps a compact foot bar flush with the phone edges",
+    async (screen) => {
+      const f = await clockApp();
+      Object.assign(f.host.style, {
+        boxSizing: "border-box",
+        width: "390px",
+        height: "844px",
+        padding: "8px",
+      });
+      f.host.style.setProperty("--wt-page-padding", "8px");
+      if (screen === "attendance-questions")
+        f.api.getAttendanceInbox.mockResolvedValue({
+          ...attendanceInbox([attendancePrompt({ personId: "p1" })]),
+          personId: "p1",
+        });
+      await signIn(f.el);
+      const shown = () =>
+        f.el.shadowRoot!.querySelector(`till-${screen}${screen === "clock-in" ? "-screen" : ""}`);
+      const footer = await vi.waitFor(() => {
+        const bar = shown()?.shadowRoot?.querySelector("wt-foot-button-bar");
+        expect(bar).toBeTruthy();
+        return bar!;
+      });
+      const phone = f.host.getBoundingClientRect();
+      const bar = footer.getBoundingClientRect();
+      expect([bar.left, bar.right, bar.bottom]).toEqual([phone.left, phone.right, phone.bottom]);
+      expect(bar.height).toBeLessThan(screen === "clock-in" ? 125 : 74);
+      if (screen === "attendance-questions") {
+        const card = shown()!.shadowRoot!.querySelector("article")!.getBoundingClientRect();
+        expect(card.left - phone.left).toBe(16);
+        expect(phone.right - card.right).toBe(16);
+      }
+    },
+  );
+
   it("keeps the clock-in page open under the WiFi notice", async () => {
     const router = new ServerRouter({
       origin: "https://box.example.test",

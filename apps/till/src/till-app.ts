@@ -2026,6 +2026,12 @@ export class TillApp extends LitElement {
         height: 100%;
       }
 
+      .app:has(> :is(till-clock-in-screen, till-attendance-questions)) {
+        --wt-foot-padding-bottom: calc(var(--wt-space-1) + env(safe-area-inset-bottom, 0px));
+        height: calc(100% + 2 * var(--wt-page-padding, 0px));
+        margin: calc(-1 * var(--wt-page-padding, 0px));
+      }
+
       .app > wt-banner {
         flex: none;
       }

@@ -86,7 +86,7 @@ function workerDeclineLabel(entry: AttendanceEntry): StringKey | undefined {
 }
 
 export function questionAttendanceHistory(
-  { history, businessDay, timeZone }: AttendancePrompt,
+  { history, businessDay, timeZone, automaticEntryId }: AttendancePrompt,
   items: readonly CorrectionItem[],
 ) {
   const mixed = new Set(history.map((entry) => entry.offsetMinutes)).size > 1;
@@ -146,6 +146,14 @@ export function questionAttendanceHistory(
       return html`<li>${attendanceStatus(status)} ${show(entry)}</li>`;
     if (entry.entryKind === "confirmation" && author === "worker")
       return html`<li>${t("attendance.you_answered")} ${show(entry)}</li>`;
+    if (entry.entryKind === "out" && entry.entryId === automaticEntryId) {
+      const [before, after] = withHourArticle(
+        "attendance.automatic_out_question",
+        entry.eventAt,
+        entry.offsetMinutes,
+      ).split("{time}");
+      return html`<li>${before}${show(entry)}${after}</li>`;
+    }
     if (entry.entryKind === "in" || entry.entryKind === "out") {
       const note =
         author === "manager" ? "attendance.added_by_manager" : "attendance.added_automatically";

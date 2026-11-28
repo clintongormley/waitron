@@ -9,7 +9,7 @@ import type { TillApi } from "../api/client.js";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import type { SignInClockAction } from "../state/clock-sign-in.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { storedAttendanceTime } from "../widgets/attendance-history.js";
+import { storedAttendanceTime, withHourArticle } from "../widgets/attendance-history.js";
 import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
 
 function shiftFor(shifts: readonly MyShift[], now: number): MyShift | undefined {
@@ -50,7 +50,7 @@ export class TillClockInScreen extends LitElement {
         align-content: safe center;
         justify-items: center;
         gap: var(--wt-space-2);
-        padding: var(--wt-space-5) var(--wt-space-4);
+        padding: var(--wt-space-5);
         overflow: auto;
         text-align: center;
         overflow-wrap: break-word;
@@ -82,6 +82,9 @@ export class TillClockInScreen extends LitElement {
       wt-foot-button-bar {
         inline-size: min(100%, var(--wt-form-max-width));
         margin-inline: auto;
+      }
+      wt-foot-button-bar > wt-button:not([slot]) {
+        --wt-action-font-size: var(--wt-menu-row-label-size);
       }
       [slot="link"] {
         --wt-action-font-size: calc(var(--wt-font-size-md) + var(--wt-space-1) / 4);
@@ -135,7 +138,7 @@ export class TillClockInScreen extends LitElement {
         n: new Intl.NumberFormat(currentLocale()).format(elapsed),
       });
       return html`<div class="details">
-        <p>${t("clock.break_since")}</p>
+        <p>${withHourArticle("clock.break_since", start.eventAt, start.offsetMinutes)}</p>
         <strong
           ><time datetime=${start.eventAt}
             >${storedAttendanceTime(start.eventAt, start.offsetMinutes).slice(11, 16)}</time

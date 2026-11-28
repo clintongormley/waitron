@@ -31,7 +31,7 @@ export class TillAttendanceQuestions extends LitElement {
       main {
         flex: 1;
         overflow: auto;
-        padding: var(--wt-space-5) var(--wt-space-4);
+        padding: calc(var(--wt-space-4) + var(--wt-space-1) / 2) var(--wt-space-4) var(--wt-space-5);
       }
       .content {
         max-inline-size: var(--wt-form-max-width);
@@ -80,6 +80,7 @@ export class TillAttendanceQuestions extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
       li {
+        font-size: var(--wt-menu-row-label-size);
         overflow-wrap: anywhere;
       }
       time {
@@ -135,7 +136,6 @@ export class TillAttendanceQuestions extends LitElement {
         : questionAttendanceHistory({ ...prompt, history }, this.inbox?.items ?? []);
     return html`<article data-prompt=${prompt.id}>
       ${prompt.businessDay ? html`<h2>${attendanceDateInWords(prompt.businessDay)}</h2>` : nothing}
-      ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}
       ${proposal && !item ? html`<p>${t("attendance.proposal")}</p>` : nothing}
       ${prompt.kind === "missing-times" ? html`<p class="muted">${t(history.length ? "attendance.some_times_missing" : "attendance.no_times_recorded")}</p>` : nothing}
       ${

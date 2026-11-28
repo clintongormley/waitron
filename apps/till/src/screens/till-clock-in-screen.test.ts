@@ -37,6 +37,9 @@ describe("first-sign-in clock page", () => {
       expect(buttons[0]!.shadowRoot!.querySelector("button")!.getBoundingClientRect().height).toBe(
         52,
       );
+      expect(getComputedStyle(buttons[0]!.shadowRoot!.querySelector("button")!).fontSize).toBe(
+        "16px",
+      );
       expect(buttons[0]!.getAttribute("variant")).toBe("primary");
       const seen: Event[] = [];
       for (const type of ["clock-in", "cancel-clock-in"])
@@ -85,6 +88,20 @@ describe("first-sign-in clock page", () => {
       "21:30 · 25 min",
     );
     expect(listMyShifts).not.toHaveBeenCalled();
+  });
+
+  it("uses the Spanish hour article for a break that began at one", async () => {
+    const locale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount({
+        action: "break-end",
+        breakStart: { eventAt: "2026-11-27T00:05:00Z", offsetMinutes: 60 },
+      });
+      expect(el.shadowRoot!.querySelector(".details p")?.textContent).toMatch(/\bla$/u);
+    } finally {
+      setLocale(locale);
+    }
   });
 
   it("read failure has Retry and usable Not now, while an unknown state cannot submit", async () => {

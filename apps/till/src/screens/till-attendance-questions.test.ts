@@ -35,10 +35,7 @@ describe("attendance questions before work", () => {
     expect(time).not.toBeNull();
     expect(time.getAttribute("datetime")).toBe("2026-10-13T23:30:00.000Z");
     expect(words(time.closest("li")!)).toBe(
-      "Clocked out 01:30, Wednesday 14 October · added automatically",
-    );
-    expect(el.shadowRoot!.textContent).toContain(
-      "This automatic finish already counts towards your hours.",
+      "You did not clock out, so Waitron clocked you out at 01:30, Wednesday 14 October.",
     );
     expect(el.shadowRoot!.textContent).not.toMatch(/unconfirmed/i);
   });
@@ -55,7 +52,7 @@ describe("attendance questions before work", () => {
     expect([...card("question").querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
       "Tuesday 13 October",
     ]);
-    expect(card("question").querySelectorAll("p")[0]!.textContent).not.toContain("2026-10-13");
+    expect(card("question").textContent).not.toContain("2026-10-13");
     expect(card("proposal").querySelector("h2")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("The deli");
   });
@@ -67,6 +64,9 @@ describe("attendance questions before work", () => {
     const edit = button(el, "[data-edit]").getBoundingClientRect();
     expect(edit.top).toBeGreaterThanOrEqual(confirm.bottom);
     expect(edit.width).toBe(confirm.width);
+    const nativeConfirm = button(el, "[data-confirm]").shadowRoot!.querySelector("button")!;
+    expect(nativeConfirm.getBoundingClientRect().height).toBe(52);
+    expect(getComputedStyle(nativeConfirm).fontSize).toBe("16px");
     expect(words(button(el, "wt-foot-button-bar [data-cancel]"))).toBe("Answer later");
   });
 
