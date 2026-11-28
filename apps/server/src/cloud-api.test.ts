@@ -43,6 +43,57 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it("shows only the public menu origin to a signed-in menu manager without touching their session", async () => {
+  const f = await installationFixture(undefined, {
+    remoteAccess: () => ({
+      state: "ready",
+      configuration: { publicHostname: "cafe.example.test", staffHostname: "staff.example.test" },
+    }),
+  });
+  try {
+    expect((await f.client.refresh()).installation?.state).toBe("active");
+    const manager = await person("manager");
+    const staff = await person("staff");
+    const app = new Hono();
+    const isPrimary = vi.fn(() => true);
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection: f.client,
+        managementOrigin: "https://venue.test",
+        isPrimary,
+      },
+      () => {},
+    );
+    const read = (cookie = manager.cookie) =>
+      app.request("/management-api/cloud/customer-menu", { headers: { cookie } });
+    expect((await read("")).status).toBe(401);
+    const refused = await read(staff.cookie);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
+    });
+    const oldActivity = new Date(Date.now() - 60000).toISOString();
+    const session = eq(dashboardSessions.tokenHash, hashSessionToken(manager.session));
+    await suite.db.update(dashboardSessions).set({ lastSeenAt: oldActivity }).where(session);
+    const answer = await read();
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get("Cache-Control")).toBe("no-store");
+    expect(await answer.json()).toEqual({ status: "ready", origin: "https://cafe.example.test" });
+    expect(
+      await suite.db
+        .select({ seen: dashboardSessions.lastSeenAt })
+        .from(dashboardSessions)
+        .where(session),
+    ).toEqual([{ seen: oldActivity }]);
+    isPrimary.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    expect(await (await read()).json()).toEqual({ status: "unavailable" });
+  } finally {
+    await f.close();
+  }
+});
+
 it("changes error reporting offline and reports the local choice", async () => {
   const manager = await person("manager");
   const app = new Hono();

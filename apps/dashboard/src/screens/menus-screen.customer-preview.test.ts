@@ -4,7 +4,7 @@ import {
   published,
   publishedSections,
 } from "@waitron/customer-menu/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { MenuStatus } from "@waitron/shared";
 import { DashboardApi } from "../api/client.js";
@@ -82,6 +82,7 @@ async function open(
     };
     const routes: Record<string, unknown> = {
       "/api/content-languages": languages,
+      "/management-api/cloud/customer-menu": { status: "unavailable" },
       "/management-api/menus": [
         { id: "lunch", name: "Staff lunch", active: true, kind: "menu", setPrice: null },
       ],
@@ -181,6 +182,7 @@ describe("the customer menu Online preview", () => {
       await vi.waitFor(() => expect(readPreview).toHaveBeenCalled());
       await readPreview.mock.results[0]?.value;
       await expect.element(page.getByText("Loading Online settings…")).toBeVisible();
+      await expect.element(page.getByText("Customers cannot open this page yet.")).toBeVisible();
       await new Promise(requestAnimationFrame);
       expect(title.query()).toBeNull();
       settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
@@ -224,7 +226,9 @@ describe("the customer menu Online preview", () => {
   });
 
   it("shows a phone list and a computer grid with dish declarations and a set-menu summary", async () => {
-    await page.viewport(1200, 800);
+    const viewport = [innerWidth, innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(1440, 800);
     await open(() => Response.json(published()));
     await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
     await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
@@ -278,15 +282,11 @@ describe("the customer menu Online preview", () => {
     expect(price.getBoundingClientRect().top).toBeGreaterThan(
       dish.querySelector(".description")!.getBoundingClientRect().bottom,
     );
-    try {
-      await page.viewport(360, 800);
-      const priceBox = setPrice.getBoundingClientRect();
-      const summaryBox = summary.getBoundingClientRect();
-      expect(priceBox.left).toBeGreaterThanOrEqual(summaryBox.right);
-      expect(priceBox.top).toBeLessThan(summaryBox.bottom);
-    } finally {
-      await page.viewport(1200, 800);
-    }
+    await page.viewport(360, 800);
+    const priceBox = setPrice.getBoundingClientRect();
+    const summaryBox = summary.getBoundingClientRect();
+    expect(priceBox.left).toBeGreaterThanOrEqual(summaryBox.right);
+    expect(priceBox.top).toBeLessThan(summaryBox.bottom);
   });
 
   it.each([
@@ -670,7 +670,11 @@ describe("the customer menu Online preview", () => {
       ),
     );
     const { el } = await open(readPreview, "light", () => edition);
-    await expect.element(page.getByText("This menu has never been published.")).toBeVisible();
+    const publishLink = page.getByRole("link", { name: "Go to Preview", exact: true });
+    await expect.element(publishLink).toBeVisible();
+    expect(publishLink.element().closest(".online-card")).toHaveTextContent(
+      "This menu has never been published.",
+    );
     await expect.element(page.getByText("Unpublished", { exact: true })).toBeVisible();
     for (const version of [1, 2]) {
       edition = { ...status, state: "current", version };

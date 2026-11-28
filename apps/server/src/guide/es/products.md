@@ -477,8 +477,16 @@ extras de varias raciones.
 Abre un menú para ver los órdenes de plato, las opciones y los suplementos. Consulta
 **Alérgenos** para ver los alérgenos junto al nombre de cada opción. Si una opción declara
 alérgenos o dietas, consulta los iconos de alérgenos junto a su nombre y las declaraciones dietéticas debajo.
-Elige **Carta** para seguir donde estabas. Los clientes aún no pueden abrir esta
-página. Para revisar o publicar tus cambios, abre **Vista previa**.
+Elige **Carta** para seguir donde estabas. Para revisar o publicar tus cambios, abre **Vista previa**.
+
+Si la columna **En línea** de **Cartas** muestra una dirección pública, ábrela desde ahí. En **Carta para clientes**,
+pulsa **Copiar enlace** para compartir la dirección completa. Pulsa **Descargar** para guardar el
+código QR como imagen o **Imprimir** para ponerlo en un cartel. Para mostrar la carta en tu sitio web,
+abre **Código para insertar**, pulsa **Copiar código** y pégalo donde quieras que aparezca la carta.
+Si **En línea** muestra un enlace a **Servicios Cloud**, síguelo para revisar el ajuste que indica el mensaje.
+
+Si desactivas una carta en línea o cambias su dirección, sustituye los enlaces y los códigos QR
+impresos que usaban la dirección anterior.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 

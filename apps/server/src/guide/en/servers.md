@@ -431,7 +431,8 @@ If Cloud access has ended, because someone chose **Stop Cloud access** on the bo
 To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **System**
 on the main box and choose **Turn off remote access**. If you are using the staff address,
 confirm **Turn off remote access** to disconnect yourself too, or choose **Stop** to keep it on. Keep the box's local address available. Your Cloud pairing and other
-Cloud services stay in place. Choose **Turn on remote access** to let the box reconnect.
+Cloud services stay in place. Keep remote access on if you share public customer menus.
+Choose **Turn on remote access** to let the box reconnect.
 
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate stop for all Cloud services.

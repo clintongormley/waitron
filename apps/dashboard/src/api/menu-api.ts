@@ -106,6 +106,7 @@ export interface MenuSummary {
   active: boolean;
   kind: MenuKind;
   setPrice: string | null;
+  onlineAddress?: string;
 }
 
 export class MenuApi {

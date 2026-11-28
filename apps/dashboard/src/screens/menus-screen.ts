@@ -1,4 +1,6 @@
 import type { ContentLanguages, MenuStructureSaveResult } from "@waitron/shared";
+import type { CustomerMenuCloudStatus } from "../api/cloud-api.js";
+import { customerMenuLink, customerMenuPublicUrl } from "../widgets/customer-menu-link.js";
 import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import {
   MenuStructureProductEditor,
@@ -128,6 +130,7 @@ const NO_NAMES: ReadonlyMap<string, string> = new Map();
 /** A menu on the list with its publication state, or where that state's read stands. */
 interface MenuRow extends MenuSummary {
   status: MenuStatus | "loading" | "failed";
+  onlineUrl: string | undefined;
 }
 
 type PeriodUse = "starts" | "staff";
@@ -384,6 +387,14 @@ export class MenusScreen extends LitElement {
       dashboard-menu-structure-table {
         container-type: inline-size;
       }
+      @media (width <= 480px) {
+        wt-tabs:has(.online-workspace)::part(tab) {
+          padding-inline: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
+        }
+        wt-tabs[data-overflow="start"]:has(.online-workspace)::part(tablist) {
+          mask-image: none;
+        }
+      }
       .structure-actions {
         position: sticky;
         inset-block-end: 0;
@@ -400,6 +411,10 @@ export class MenusScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);
+      }
+      wt-data-table::part(online-link) {
+        color: var(--wt-color-primary-text);
+        overflow-wrap: anywhere;
       }
       wt-data-table::part(periods) {
         list-style: none;
@@ -424,7 +439,8 @@ export class MenusScreen extends LitElement {
          tall with their text centred, so the state's first line is centred on that height too. */
       wt-data-table:not(.narrow)::part(status),
       wt-data-table:not(.narrow)::part(periods),
-      wt-data-table:not(.narrow)::part(period-status) {
+      wt-data-table:not(.narrow)::part(period-status),
+      wt-data-table:not(.narrow)::part(online-link) {
         display: block;
         padding-block-start: calc((var(--wt-tap-min) - 1lh) / 2);
       }
@@ -469,6 +485,7 @@ export class MenusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) canEditProducts = false;
+  @property({ attribute: false }) canOpenCloudServices = false;
   @state() private menuSettings: MenuSettingsAnswer | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
@@ -696,7 +713,31 @@ export class MenusScreen extends LitElement {
     () => this.api,
   );
   readonly #homeSave = new MenuHomeSave(this, () => this.api);
-  readonly #onlineSave = new MenuOnlineSave(this, () => this.api);
+  readonly #onlineSave = new MenuOnlineSave(
+    this,
+    () => this.api,
+    () => this.canOpenCloudServices,
+  );
+  @state() private menuCloud: CustomerMenuCloudStatus | null = null;
+  readonly #menuCloudQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.menuCloud = null;
+    },
+  );
+  #watchMenuCloud(): void {
+    void this.#menuCloudQuery
+      .watch(
+        "getCustomerMenuCloudStatus",
+        [],
+        (value) => {
+          this.menuCloud = value;
+        },
+        { passive: true },
+      )
+      .catch(() => {});
+  }
   get pendingMenuSave(): Promise<void> | undefined {
     return (
       this.#structureSave.pendingWrite ??
@@ -708,6 +749,7 @@ export class MenusScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    this.#watchMenuCloud();
     this.#followUsage();
   }
 
@@ -758,16 +800,21 @@ export class MenusScreen extends LitElement {
       this.layout = this.#listLayout.measure();
     if (
       changed.has("menus") ||
+      changed.has("menuCloud") ||
       changed.has("statuses") ||
       changed.has("statusesError") ||
       changed.has("statusFilter")
     )
       this.#rows = this.menus
         .filter(({ kind, active }) => kind !== "set_menu" && active)
-        .map((menu): MenuRow => ({
-          ...menu,
-          status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
-        }))
+        .map((menu): MenuRow => {
+          const status = this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading");
+          const onlineUrl =
+            typeof status !== "string" && status.state !== "unpublished"
+              ? customerMenuPublicUrl(this.menuCloud, menu.onlineAddress)
+              : undefined;
+          return { ...menu, status, onlineUrl };
+        })
         .filter((menu) => matchesMenuStatus(menu, this.statusFilter));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
@@ -1836,9 +1883,13 @@ export class MenusScreen extends LitElement {
   }
 
   #listColumns(): DataTableColumn<MenuRow>[] {
-    return this.menuPeriodUsage && this.layout === "wide"
-      ? this.#usageColumns
-      : this.#columns[this.layout];
+    const columns =
+      this.menuPeriodUsage && this.layout === "wide"
+        ? this.#usageColumns
+        : this.#columns[this.layout];
+    return this.menuCloud?.status === "ready"
+      ? columns
+      : columns.filter(({ key }) => key !== "online");
   }
 
   /** On a narrow list the status moves under the name and its column goes, as the variants table
@@ -1866,7 +1917,7 @@ export class MenusScreen extends LitElement {
               html`${name(menu)}
                 <div part="stacked">
                   ${this.#statusCell(menu)} ${this.#periodCell(menu, "starts", true)}
-                  ${this.#periodCell(menu, "staff", true)}
+                  ${this.#periodCell(menu, "staff", true)} ${customerMenuLink(menu.onlineUrl, true)}
                 </div>`
           : name,
       },
@@ -1882,6 +1933,13 @@ export class MenusScreen extends LitElement {
                   typeof menu.status === "string" ? menu.status : menu.status.state,
                 ),
               cell: (menu: MenuRow) => this.#statusCell(menu),
+            },
+            {
+              key: "online",
+              label: t("customer_menu.online"),
+              activatesRow: false as const,
+              choosable: "shown" as const,
+              cell: (menu: MenuRow) => customerMenuLink(menu.onlineUrl, true),
             },
           ]),
       ...(withUsage
@@ -2111,7 +2169,10 @@ export class MenusScreen extends LitElement {
                 sortKey="name"
                 sortDirection="ascending"
                 .rows=${this.#rows}
-                .columns=${this.#listColumns()}
+                .columns=${guard(
+                  [this.layout, this.menuPeriodUsage, this.menuCloud?.status === "ready"],
+                  () => this.#listColumns(),
+                )}
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}
@@ -3331,12 +3392,16 @@ export class MenusScreen extends LitElement {
               ? renderCustomerOnlineEditor({
                   api: this.api,
                   menuId,
+                  menuName: name,
                   status: this.status,
                   defaultLanguage: this.contentLanguages?.defaultLanguage ?? "en",
                   previewHref,
                   openPreview,
                   online: this.#onlineSave,
                   busy: this.busy,
+                  cloud: this.menuCloud,
+                  cloudFailed: this.#menuCloudQuery.failing("getCustomerMenuCloudStatus"),
+                  retryCloud: () => this.#watchMenuCloud(),
                 })
               : nothing
           }

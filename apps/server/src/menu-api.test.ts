@@ -4862,6 +4862,39 @@ describe("publishing a menu", () => {
     });
   });
 
+  it("lists the saved online address only for an enabled regular menu", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const offline = await createMenuVia(app, "Offline menu");
+    const { id: set } = await withTransaction(suite.db, (tx) =>
+      createMenu(tx, { name: "Set without an address", kind: "set_menu", setPrice: "14.00" }),
+    );
+    const { hash } = await preview(app, menuId);
+    const path = `/management-api/menus/${menuId}`;
+    expect(
+      (await send(app, "POST", `${path}/publish`, { body: { expectedHash: hash } })).status,
+    ).toBe(200);
+    for (const [id, address, enabled] of [
+      [menuId, "lunch", true],
+      [offline, "dinner", false],
+    ] as const) {
+      expect(
+        (
+          await send(app, "PUT", `/management-api/menus/${id}/customer-online-settings`, {
+            body: { address, enabled, photos: "none", styleId: null },
+          })
+        ).status,
+      ).toBe(200);
+    }
+    const rows = (await (await send(app, "GET", "/management-api/menus")).json()) as {
+      id: string;
+      onlineAddress?: string;
+    }[];
+    expect(rows.find(({ id }) => id === menuId)?.onlineAddress).toBe("lunch");
+    expect(rows.find(({ id }) => id === offline)).not.toHaveProperty("onlineAddress");
+    expect(rows.find(({ id }) => id === set)).not.toHaveProperty("onlineAddress");
+  });
+
   it("serves the published customer page while a different price is being edited", async () => {
     const app = mountApp();
     const { menuId, itemId, name } = await menuWithProduct(app);

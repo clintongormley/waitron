@@ -38,6 +38,9 @@ export class MenuOnlinePreview extends LitElement {
       p {
         margin: 0 0 var(--wt-space-3);
       }
+      .unpublished {
+        display: var(--menu-preview-unpublished-display, block);
+      }
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -175,10 +178,12 @@ export class MenuOnlinePreview extends LitElement {
         >`;
     if (this.answer === null) return html`<p role="status">${t("customer_menu.loading")}</p>`;
     if (this.answer.state === "unpublished")
-      return html`<p>${t("customer_menu.unpublished")}</p>
+      return html`<div class="unpublished">
+        <p>${t("customer_menu.unpublished")}</p>
         <a href=${this.previewHref} @click=${this.openPreview}
           >${t("customer_menu.go_to_preview")}</a
-        >`;
+        >
+      </div>`;
     return html`<div
       class="canvas"
       role="region"

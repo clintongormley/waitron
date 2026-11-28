@@ -65,6 +65,11 @@ for (const [locale, on, off, theme] of [
       expect(
         el.shadowRoot!.querySelector("[data-test=remote-access-status]")?.textContent,
       ).toContain(on);
+      expect(el.shadowRoot!.textContent).toContain(
+        locale === "en"
+          ? "Keep remote access on if you share public customer menus."
+          : "Mantén el acceso remoto activado si compartes cartas públicas.",
+      );
       button()!.click();
       await expect
         .poll(() => el.shadowRoot!.querySelector("[data-test=cloud-error]")?.textContent)

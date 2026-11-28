@@ -72,7 +72,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   const authorize = async (
     c: Context,
     passive = false,
-    permission: "system.manage" | "node.manage" = "system.manage",
+    permission: "system.manage" | "node.manage" | "menu.manage" = "system.manage",
   ) => {
     const sessionId = requireManagementSession(c);
     const check = () =>
@@ -177,6 +177,16 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         return c.json(result);
       }),
     );
+  app.get("/management-api/cloud/customer-menu", (c) =>
+    run(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      await authorize(c, true, "menu.manage");
+      if (!deps.isPrimary() || !deps.connection) return c.json({ status: "unavailable" });
+      const status = await deps.connection.customerMenuStatus();
+      await authorize(c, true, "menu.manage");
+      return c.json(deps.isPrimary() ? status : { status: "unavailable" });
+    }),
+  );
   app.get("/management-api/cloud/status", (c) =>
     run(c, log, async () => {
       await authorize(c, true);

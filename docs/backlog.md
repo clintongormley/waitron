@@ -456,9 +456,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Print brings the Online/Print selector to the Customer menu tab.
   Add style renaming, default selection and deletion, then logos, capitals, lines between dishes and uploaded fonts.
-  Delivery 6 still needs Cloud's live test gateway pairing and qualification, shareable dish links,
-  the Menus list Online column, Copy link, QR code and Embed, and a warning before address changes or
-  turning a live menu off. [Box pairing contract](developers/cloud-connection.md#pair-a-test-gateway-with-the-customer-menu)
+  Delivery 6 still needs Cloud's live test gateway pairing and qualification, shareable dish links
+  and production sharing. [Box pairing contract](developers/cloud-connection.md#pair-a-test-gateway-with-the-customer-menu)
   The box-side **Translate all** for course names follows Cloud D645.
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
   piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)

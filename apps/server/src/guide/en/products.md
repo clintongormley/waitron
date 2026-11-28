@@ -438,8 +438,16 @@ Open a set menu to see the courses, choices and any supplements. Check **Allerge
 allergens listed beside each choice’s name. When a choice declares
 allergens or diets, check the icons beside its name and the dietary declarations below it.
 Choose **Menu** to pick up where you left off.
-Customers cannot open this page yet. To review or publish your changes, switch to
-**Preview**.
+To review or publish your changes, switch to **Preview**.
+
+When the **Online** column in **Menus** shows a public address, open it there. In **Customer menu**,
+use **Copy link** to share the full address. Choose **Download** to save the QR code as an image,
+or **Print** to put the code on a sign. To show the menu on your website, open **Embed code**, choose
+**Copy code** and paste it where you want the menu to appear. If **Online** shows a **Cloud services**
+link, follow it to check the setting named in the message.
+
+When you switch a live menu off or change its address, replace the links and printed QR codes that
+used the old address.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 
