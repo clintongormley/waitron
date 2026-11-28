@@ -173,16 +173,16 @@ export function draftRow(view: DraftRowView): TemplateResult {
         @click=${view.open}
         @contextmenu=${preventTouchContextMenu}
       >
-        <span class="draft-row-qty row-qty">${quantity}</span>
-        <span class="draft-row-text row-text"
-          ><span class="draft-row-name row-name"
+        <span class="row-qty">${quantity}</span>
+        <span class="row-text"
+          ><span class="row-name"
             ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
               >${name}</span
             >${setMenuTag(view.setMenuPrice)}${view.nutrition}<slot name=${`mark-${index}`}></slot
             >${lineMarks(line)}</span
-          >${rowMore(more, "draft-row-more row-more")}</span
+          >${rowMore(more)}</span
         >
-        <span class="draft-row-price row-price">${price}</span>
+        <span class="row-price">${price}</span>
       </button>
       <slot class="draft-row-end" name=${`end-${index}`}></slot>
       <slot class="draft-row-opened" name=${`opened-${index}`}></slot>

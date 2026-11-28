@@ -291,7 +291,7 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
         inner: entry.getBoundingClientRect().right - Number.parseFloat(style.borderRightWidth),
         space: Number.parseFloat(style.getPropertyValue("--wt-space-2")),
         lead: entry.querySelector(".draft-row-lead")!.getBoundingClientRect(),
-        price: row.querySelector(".draft-row-price")!.getBoundingClientRect(),
+        price: row.querySelector(".row-price")!.getBoundingClientRect(),
         split: el
           .shadowRoot!.querySelector(`[data-split-draft-line="${index}"]`)
           ?.getBoundingClientRect(),

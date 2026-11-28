@@ -6247,7 +6247,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
   const flagText = (el: TillApp) =>
     [...screen(el).querySelectorAll("till-basket")]
       .flatMap((basket) => [
-        ...basket.shadowRoot!.querySelectorAll("[data-draft-row] .draft-row-name .not-offered"),
+        ...basket.shadowRoot!.querySelectorAll("[data-draft-row] .row-name .not-offered"),
       ])
       .map((marker) => marker.textContent!.trim());
   const sentNames = (call = 0) =>
@@ -9215,7 +9215,7 @@ describe("native app phone order view with mixed dish families", () => {
                 (group) => group.dataset.draftGroup,
               ),
             ).toEqual(["fire", "new:1"]);
-            expect(draftRow(order, 2)!.querySelector(".draft-row-qty")!.textContent).toContain(
+            expect(draftRow(order, 2)!.querySelector(".row-qty")!.textContent).toContain(
               locale === "es" ? "0,375" : "0.375",
             );
             expect(draft(el).lines[1]!.extras).toEqual([

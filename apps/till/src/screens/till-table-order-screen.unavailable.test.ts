@@ -67,7 +67,7 @@ async function settled(el: TillTableOrderScreen): Promise<void> {
 /** The text of each shown draft row, as its basket renders it. */
 const rowTexts = (el: TillTableOrderScreen) =>
   draftRows(el.shadowRoot!).map((row) => {
-    const markers = [...row.querySelectorAll(".draft-row-name .not-offered")].map(
+    const markers = [...row.querySelectorAll(".row-name .not-offered")].map(
       (each) => each.textContent,
     );
     return [draftRowLabel(row), ...markers].join(" | ");
@@ -313,9 +313,10 @@ describe("till-table-order-screen: a dish no longer offered at all", () => {
       `${t("table.view_order")} · 3`,
     );
     const shownRows = draftRows(el.shadowRoot!);
-    expect(
-      shownRows.map((row) => row.querySelector(".draft-row-qty")!.textContent!.trim()),
-    ).toEqual(["2", "1"]);
+    expect(shownRows.map((row) => row.querySelector(".row-qty")!.textContent!.trim())).toEqual([
+      "2",
+      "1",
+    ]);
     expect(draftRowLabel(shownRows[0]!).trim()).toBe("×2");
   });
 });

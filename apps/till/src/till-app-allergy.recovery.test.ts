@@ -209,7 +209,7 @@ it.each(["product.unavailable", "product.variant_unavailable"])(
     await vi.waitFor(() => expect(draft(el).lines[0]!.blocked).toBe("unavailable"));
     const markers = [...tableOrder(el)!.shadowRoot!.querySelectorAll("till-basket")].flatMap(
       (basket) => [
-        ...basket.shadowRoot!.querySelectorAll("[data-draft-row] .draft-row-name .not-offered"),
+        ...basket.shadowRoot!.querySelectorAll("[data-draft-row] .row-name .not-offered"),
       ],
     );
     expect(markers.map((marker) => marker.textContent!.trim())).toEqual([

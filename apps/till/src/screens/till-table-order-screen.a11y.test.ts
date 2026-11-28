@@ -1148,14 +1148,14 @@ describe("saved extra layout on the table screen", () => {
               await basket.updateComplete;
               await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
               const row = basket.shadowRoot!.querySelector<HTMLElement>('[data-draft-row="0"]')!;
-              const more = row.querySelector<HTMLElement>(".draft-row-more")!;
+              const more = row.querySelector<HTMLElement>(".row-more")!;
               const extra = [...more.querySelectorAll<HTMLElement>("[data-draft-extra]")].find(
                 (part) =>
                   part.textContent?.includes(
                     "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
                   ),
               )!;
-              const money = row.querySelector<HTMLElement>(".draft-row-price")!;
+              const money = row.querySelector<HTMLElement>(".row-price")!;
               const warning = extra.querySelector<HTMLElement>(".not-offered")!;
               expect(extra.checkVisibility()).toBe(true);
               expect(warning.checkVisibility()).toBe(true);

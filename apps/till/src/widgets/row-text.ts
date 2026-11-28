@@ -3,11 +3,10 @@ import { type TemplateResult, css, html, nothing } from "lit";
 /** A row's second line: its parts joined by " · ", or nothing when it has none. */
 export function rowMore(
   parts: readonly (TemplateResult | string)[],
-  className = "row-more",
 ): TemplateResult | typeof nothing {
   return parts.length === 0
     ? nothing
-    : html`<span class=${className}
+    : html`<span class="row-more"
         >${parts.map((part, i) => (i === 0 ? part : html` · ${part}`))}</span
       >`;
 }

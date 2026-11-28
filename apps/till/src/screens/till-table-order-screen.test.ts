@@ -5813,12 +5813,12 @@ describe("A668 nutrition after table-order names", () => {
     await showView(el, "order", { scripted: true });
     expect(
       draftRows(el.shadowRoot!).filter(
-        (row) => row.querySelector('.draft-row-name wt-icon[name="allergen-milk"]') !== null,
+        (row) => row.querySelector('.row-name wt-icon[name="allergen-milk"]') !== null,
       ),
     ).toHaveLength(1);
     expect(
       draftRows(el.shadowRoot!).filter(
-        (row) => row.querySelector('.draft-row-name wt-icon[name="diet-no_meat"]') !== null,
+        (row) => row.querySelector('.row-name wt-icon[name="diet-no_meat"]') !== null,
       ),
     ).toHaveLength(1);
   });

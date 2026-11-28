@@ -116,7 +116,7 @@ it("+ and − change the dish's count, its row's price and the order total at on
   const { el, draft } = await open();
   const total = () =>
     el.shadowRoot!.querySelector("[data-order-total]")!.textContent!.replace(/\s/g, "");
-  const price = () => row(el, 0).querySelector(".draft-row-price")!.textContent!.trim();
+  const price = () => row(el, 0).querySelector(".row-price")!.textContent!.trim();
   expect(price()).toBe("€6.00");
   expect(total()).toBe("€9.00");
   await tapRow(el, 0);

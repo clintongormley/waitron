@@ -178,8 +178,8 @@ export const draftRow = (el: TillTableOrderScreen, index: number) =>
 
 /** A row's dish name and quantity, as "<name> ×<quantity>". */
 export function draftRowLabel(row: Element): string {
-  const name = row.querySelector(".draft-row-name .product-name")?.textContent ?? "";
-  const quantity = row.querySelector(".draft-row-qty")?.textContent ?? "";
+  const name = row.querySelector(".row-name .product-name")?.textContent ?? "";
+  const quantity = row.querySelector(".row-qty")?.textContent ?? "";
   return `${name.trim()} ×${quantity.trim()}`;
 }
 
