@@ -605,6 +605,12 @@ otra zona para cambiar, o usa las flechas arriba y abajo y pulsa Enter. Abre **M
 buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. La hora de entrada aparece debajo de tu nombre,
 junto a **Fichar salida**. En un móvil o una tableta con la sala en pantalla ancha, abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
+## Abrir el plano cuando el servidor tarda {#floor-first-read}
+
+Si ves **Esperando al servidor…** en el plano, espera un momento a que se carguen las mesas.
+Si ves **No se puede conectar con el servidor**, comprueba la conexión de la caja o que el móvil
+esté en el WiFi del local. Después, pulsa **Reintentar**.
+
 ## Tomar un pedido en un móvil {#phone-order}
 
 En un móvil, o en cualquier pantalla de mesa de menos de 720 px de ancho, **Carta** y **Pedido**,

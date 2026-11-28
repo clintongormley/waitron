@@ -15379,7 +15379,8 @@ describe("till-app", () => {
         ),
       });
       await toCounter(el);
-      expect(shell(el)).toBeNull();
+      expect(shell(el)?.activeScreen).toBe("floor");
+      expect(floor(el)?.firstRead).toBeDefined();
       const back = new Promise<void>((done) =>
         window.addEventListener("popstate", () => done(), { once: true }),
       );
@@ -17858,7 +17859,7 @@ describe("the device profile decides which screens a device offers", () => {
     expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
   });
 
-  it("holds a handheld on the lock screen until Floor loads", async () => {
+  it("opens a handheld's Floor while its first read waits", async () => {
     let resolve!: (value: TableState[]) => void;
     const el = await signIn("till", switches, phoneFormFactor, {
       getTablesState: vi.fn(
@@ -17868,7 +17869,8 @@ describe("the device profile decides which screens a device offers", () => {
           }),
       ),
     });
-    expect(shell(el)).toBeNull();
+    expect(shell(el)?.activeScreen).toBe("floor");
+    expect(floor(el)?.firstRead).toBeDefined();
     resolve([freeTable]);
     await flush(el);
     expect(shell(el)!.activeScreen).toBe("floor");

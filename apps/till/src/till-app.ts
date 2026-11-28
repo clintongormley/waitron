@@ -48,6 +48,7 @@ import {
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import { menusMoved, ZoneOfferIndex } from "./state/zone-offer-index.js";
 import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
+import { startFirstRead, type FirstReadView } from "./state/first-read.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
@@ -2910,6 +2911,8 @@ export class TillApp extends LitElement {
    */
   #floorLoaded = false;
   #floorZonesRead = 0;
+  @state() private firstFloorView?: FirstReadView;
+  #firstFloorRead?: { result: Promise<boolean>; cancel: () => void };
 
   constructor() {
     super();
@@ -4236,6 +4239,7 @@ export class TillApp extends LitElement {
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
     const from = this.activeTabKey;
     this.activeTabKey = this.#resolveScreen(key ?? null);
+    if (from === "floor" && this.activeTabKey !== "floor") this.#stopFirstFloorRead();
     // Only a move onto the Floor from another tab: on the Floor, the address holds the zone shown.
     const returnZone =
       this.activeTabKey === "floor" && from !== "floor" ? this.#floorReturnZone() : undefined;
@@ -5937,6 +5941,7 @@ export class TillApp extends LitElement {
     this.#tableMenuPending = false;
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
+    this.#stopFirstFloorRead();
     this.#floorLoaded = false;
     this.deviceZoneSelection = null;
     this.deviceZonesUnread = false;
@@ -6054,8 +6059,6 @@ export class TillApp extends LitElement {
     });
     const firstTab = this.#homeScreen();
     const landsOnFloor = firstTab === "floor";
-    if (landsOnFloor) await this.#loadFloorData(replaced);
-    if (replaced()) return;
     const requestedTab = this.#requestedTab();
     // Nothing in the address says which table was open (after a reload, say), so an order tab
     // there would open empty.
@@ -6075,9 +6078,18 @@ export class TillApp extends LitElement {
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
+    const initialTab = this.activeTabKey;
+    const initialDrill = this.drill;
+    if (tableToResume === undefined && this.drill === undefined) this.#openStartingScreen();
+    const needsFloor = landsOnFloor || (this.#inShell() && this.#activeTab() === "floor");
+    const floorRead = needsFloor ? this.#loadFloorData(replaced) : undefined;
     if (tableToResume !== undefined) {
-      const left = () => replaced() || this.#orderVisit !== landingVisit;
-      if (!this.#floorLoaded) await this.#loadFloorData(left);
+      const left = () =>
+        replaced() ||
+        this.#orderVisit !== landingVisit ||
+        this.activeTabKey !== initialTab ||
+        this.drill !== initialDrill;
+      if (!this.#floorLoaded) await (floorRead ?? this.#loadFloorData(replaced));
       if (replaced()) return;
       const table = this.tables.find((candidate) => candidate.id === tableToResume.tableId);
       if (!left() && this.#floorLoaded && table?.party?.id === tableToResume.partyId) {
@@ -6096,8 +6108,8 @@ export class TillApp extends LitElement {
         );
         if (replaced()) return;
       }
+      if (!left() && this.drill === undefined) this.#openStartingScreen();
     }
-    if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.formFactor === "till";
     const reads: Promise<void>[] = [];
     if (showsCounterLists && !counterFloorReadsLists) {
@@ -6121,11 +6133,7 @@ export class TillApp extends LitElement {
         })(),
       );
     }
-    // A restored floor tab needs its data on first paint, unless the landing already loaded it.
-    if (this.#inShell() && !this.#floorLoaded) {
-      const tab = this.#activeTab();
-      if (tab === "floor") await this.#loadFloorData(replaced);
-    }
+    await floorRead;
     await Promise.all(reads);
   }
 
@@ -12490,19 +12498,58 @@ export class TillApp extends LitElement {
    * with no table to tap. A failed load leaves the last-known floor. Answers whether this read
    * answered, which `floorReadFailed` cannot say: another read may have set or cleared it.
    */
-  async #loadFloorData(replaced: () => boolean = () => false): Promise<boolean> {
+  async #loadFloorData(replaced: () => boolean = () => false, retry = false): Promise<boolean> {
+    if (this.#firstFloorRead !== undefined && !retry) return this.#firstFloorRead.result;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const left = () =>
+      !this.isConnected || session !== this.#operatorSession || api !== this.api || replaced();
     const zonesRead = ++this.#floorZonesRead;
     const tablesRead = this.#startTablesRead();
-    try {
-      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
-      if (replaced()) return true;
+    const apply = ([tables, zones]: [TableState[], FloorZone[]]) => {
       this.#applyTables(tablesRead, tables);
       if (zonesRead === this.#floorZonesRead) this.#applyZones(zones);
       this.#floorLoaded = true;
+    };
+    if (!this.#floorLoaded) {
+      this.#firstFloorRead?.cancel();
+      if (retry || this.firstFloorView !== "unreachable") this.firstFloorView = "quiet";
+      const attempt = startFirstRead(
+        (signal) => Promise.all([api.getTablesState({ signal }), api.listZones({ signal })]),
+        (stage) => {
+          if (!left() && current === this.#firstFloorRead && this.firstFloorView !== "unreachable")
+            this.firstFloorView = stage;
+        },
+        FLOOR_POLL_LIMIT_MS,
+      );
+      const current = {
+        cancel: attempt.cancel,
+        result: attempt.result
+          .then((answer) => {
+            if (!left() && current === this.#firstFloorRead) {
+              apply(answer);
+              this.firstFloorView = undefined;
+            }
+            return true;
+          })
+          .catch(() => {
+            if (!left() && current === this.#firstFloorRead) this.firstFloorView = "unreachable";
+            return false;
+          })
+          .finally(() => {
+            if (current === this.#firstFloorRead) this.#firstFloorRead = undefined;
+          }),
+      };
+      this.#firstFloorRead = current;
+      return current.result;
+    }
+    try {
+      const answer = await Promise.all([api.getTablesState(), api.listZones()]);
+      if (!left()) apply(answer);
       return true;
     } catch {
       // Non-fatal: the last-known floor stays.
-      if (!replaced()) this.floorReadFailed = true;
+      if (!left()) this.floorReadFailed = true;
       return false;
     }
   }
@@ -12574,6 +12621,11 @@ export class TillApp extends LitElement {
 
   #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
     if (!this.#inShell()) return;
+    if (this.firstFloorView !== undefined) {
+      if (poll !== true || this.#firstFloorRead === undefined)
+        void this.#loadFloorData(undefined, poll !== true);
+      return;
+    }
     if (poll === true) void this.#pollFloor();
     else void this.#refreshFloor();
     if (zones === true) void this.#refreshFloorZones();
@@ -12608,6 +12660,13 @@ export class TillApp extends LitElement {
   #stopFloorPoll(): void {
     this.#floorPoll?.abort();
     this.#floorPoll = undefined;
+    this.#stopFirstFloorRead();
+  }
+
+  #stopFirstFloorRead(): void {
+    this.#firstFloorRead?.cancel();
+    this.#firstFloorRead = undefined;
+    this.firstFloorView = undefined;
   }
 
   /** Tables only: a placement write does not change the zones. A failed read keeps
@@ -23663,6 +23722,8 @@ export class TillApp extends LitElement {
         .tablesReadAt=${this.tablesReadAt}
         .tablesAnswered=${this.tablesAnswered}
         .floorReadFailed=${this.floorReadFailed}
+        .firstRead=${this.firstFloorView}
+        .knownZones=${this.firstFloorView === undefined ? undefined : this.deviceZoneSelection?.zones.filter(({ id }) => navigation?.floorZoneIds.includes(id))}
         .offerJoinConflicts=${this.#offerFloorJoinConflicts}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}

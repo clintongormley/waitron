@@ -37,6 +37,11 @@ export const en = {
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
   "offline.title": "Can't reach the box.",
+  "first_read.waiting": "Still waiting for the box…",
+  "first_read.unreachable": "Can't reach the box",
+  "first_read.retry": "Try again",
+  "first_read.phone_wifi": "Check this phone is on the venue's WiFi.",
+  "first_read.till_network": "Check this till is connected to the venue's network.",
   "offline.wifi": "Check that this phone is on the venue's WiFi.",
   "offline.already_on_wifi":
     "Already on the venue's WiFi? Check that the box is switched on. If it is, its certificate may need installing again.",
@@ -2513,6 +2518,11 @@ export const es: Record<StringKey, string> = {
   "recovery.manual_card":
     "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",
   "offline.title": "No se puede conectar con el servidor.",
+  "first_read.waiting": "Esperando al servidor…",
+  "first_read.unreachable": "No se puede conectar con el servidor",
+  "first_read.retry": "Reintentar",
+  "first_read.phone_wifi": "Comprueba que este móvil está en el WiFi del local.",
+  "first_read.till_network": "Comprueba que esta caja esté conectada a la red del local.",
   "offline.wifi": "Comprueba que este móvil está en el WiFi del local.",
   "offline.already_on_wifi":
     "¿Ya estás en la red WiFi del local? Comprueba que el servidor esté encendido. Si lo está, puede que tengas que volver a instalar su certificado.",

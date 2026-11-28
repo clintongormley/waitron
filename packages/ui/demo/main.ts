@@ -97,6 +97,7 @@ const panel = (theme: "light" | "dark") => `
       <wt-spinner size="sm" label="Loading"></wt-spinner>
       <wt-spinner label="Loading"></wt-spinner>
       <wt-spinner size="lg" label="Loading"></wt-spinner>
+      <wt-placeholder style="width: 72px; height: 36px"></wt-placeholder>
     </div>
     <div class="row">
       <wt-count-badge count="3"></wt-count-badge>
