@@ -72,9 +72,22 @@ export const menuTileStyles: CSSResult = css`
     max-width: 100%;
   }
 
+  /* Two lines at most, so a tile never grows and its corner count never covers the name; the whole
+     name stays in the text that screen readers and the information window read. */
   .name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     font-size: var(--wt-font-size-md);
     font-weight: var(--wt-font-weight-bold);
+  }
+
+  /* The count's reach into the tile (its width less the part drawn outside), on both sides so the
+     name stays centred. */
+  .tile[data-in-order] .name {
+    padding-inline: calc(var(--wt-space-5) - var(--wt-space-3) / 2);
   }
 
   .name[lang] {

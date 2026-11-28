@@ -217,6 +217,95 @@ describe("menu tiles", () => {
     },
   );
 
+  it.each([
+    { width: 390, height: 76 },
+    { width: 1280, height: 84 },
+  ])(
+    "cuts a long name to two lines at $width px, keeping the tile $height px and its whole name for screen readers",
+    async ({ width, height }) => {
+      const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
+      const long = product("long", full);
+      const { el } = await mount(width, {
+        menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
+        products: [long, bravas],
+        inOrder: new Map([["p-long", 3]]),
+      });
+      const dish = tile(el, full);
+      const name = dish.querySelector<HTMLElement>(".name")!;
+      const oneLine = tile(el, "Bravas").querySelector<HTMLElement>(".name")!;
+      const lineHeight = oneLine.getBoundingClientRect().height;
+      expect(name.getBoundingClientRect().height).toBeLessThanOrEqual(2 * lineHeight + 0.5);
+      expect(name.getBoundingClientRect().height).toBeGreaterThan(lineHeight * 1.5);
+      expect(name.scrollHeight).toBeGreaterThan(name.clientHeight);
+      expect(name.textContent).toBe(full);
+      expect(getComputedStyle(name).webkitLineClamp).toBe("2");
+      expect(getComputedStyle(dish.querySelector(".price")!).display).not.toBe("none");
+      expect(dish.querySelector(".price")!.getBoundingClientRect().height).toBeGreaterThan(0);
+      expect(dish.getBoundingClientRect().height).toBe(height);
+      await expect
+        .element(page.elementLocator(face(dish)))
+        .toHaveAccessibleName(`${full} ${dish.querySelector(".price")!.textContent} , 3 unsent`);
+    },
+  );
+
+  it.each([
+    { width: 390, height: 76 },
+    { width: 720, height: 84 },
+  ])(
+    "keeps a counted two-line or long name clear of its count at $width px, the tile staying $height px",
+    async ({ width, height }) => {
+      const twoLine = product("two", "Mediterranean vegetables");
+      const long = product(
+        "long",
+        "Grilled octopus with smoked paprika, roasted potatoes and garlic oil",
+      );
+      for (const dish of [twoLine, long]) {
+        const { el } = await mount(width, {
+          menu: { ...menu, structure: { members: [member(dish.id.slice(2))] } },
+          products: [dish],
+          inOrder: new Map([[dish.id, 12]]),
+        });
+        const shown = tile(el, dish.name);
+        const box = badge(shown)!.getBoundingClientRect();
+        const lines = document.createRange();
+        lines.selectNodeContents(shown.querySelector(".name")!);
+        for (const line of lines.getClientRects()) {
+          const apart =
+            box.right <= line.left ||
+            line.right <= box.left ||
+            box.bottom <= line.top ||
+            line.bottom <= box.top;
+          expect(apart, dish.name).toBe(true);
+        }
+        const outer = shown.getBoundingClientRect();
+        const reach = outer.right - box.left;
+        expect(box.width, dish.name).toBe(24);
+        expect(getComputedStyle(shown.querySelector(".name")!).paddingInlineEnd).toBe(`${reach}px`);
+        expect(outer.height, dish.name).toBe(height);
+        cleanupWidgets();
+      }
+    },
+  );
+
+  it("gives an uncounted long name the tile's whole inner width", async () => {
+    const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
+    const { el } = await mount(390, {
+      menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
+      products: [product("long", full), bravas],
+      inOrder: new Map([["p-bravas", 2]]),
+    });
+    const plain = tile(el, full);
+    const name = plain.querySelector<HTMLElement>(".name")!;
+    const look = getComputedStyle(name);
+    expect(look.paddingInlineStart).toBe("0px");
+    expect(look.paddingInlineEnd).toBe("0px");
+    const inner = getComputedStyle(face(plain));
+    expect(name.getBoundingClientRect().width).toBeCloseTo(
+      face(plain).clientWidth - parseFloat(inner.paddingLeft) - parseFloat(inner.paddingRight),
+      1,
+    );
+  });
+
   it("keeps no room above an uncounted or a counted name", async () => {
     const { el } = await mount(390, { inOrder: new Map([["p-bravas", 2]]) });
     for (const name of ["Bravas", "Squid"]) {
