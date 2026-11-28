@@ -386,6 +386,77 @@ describe("till clocking integration", () => {
     expect(f.api.endBreak).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["working", "out"] as const)(
+    "offers the existing Clock out confirmation from Drawer closed only for an active shift (%s)",
+    async (clock) => {
+      const count = {
+        id: "count",
+        personId: "p1",
+        recordedAt: "2026-11-21T20:00:00.000Z",
+        counted: "50.00",
+        expected: "50.00",
+        difference: "0.00",
+        cashMovedWhileCounting: false,
+        throughSequence: 7,
+      };
+      const f = await clockApp({
+        state: clockState(clock, clock === "working" ? "shift" : null),
+        api: {
+          getDeviceEquipment: vi
+            .fn()
+            .mockResolvedValue({ roles: [], drawerPrinterId: "bar", opensDrawer: false }),
+          readDrawerClose: vi.fn().mockResolvedValue({
+            printerId: "bar",
+            state: "counted",
+            openingCash: "20.00",
+            first: count,
+            recount: null,
+            available: "50.00",
+            confirmSequence: 8,
+          }),
+          finishDrawerClose: vi.fn().mockResolvedValue({
+            printerId: "bar",
+            state: "finished",
+            id: "close",
+            firstCountId: count.id,
+            personId: count.personId,
+            recordedAt: count.recordedAt,
+            throughSequence: 8,
+            difference: "0.00",
+            amountLeft: "20.00",
+            bankWithdrawal: "30.00",
+            slip: "unavailable",
+          }),
+        },
+      });
+      await signIn(f.el);
+      if (clock === "out") await pageButton(f.el, "[data-cancel]");
+      await working(f.el);
+      await vi.waitFor(() =>
+        expect(
+          f.el.shadowRoot?.querySelector("till-shell")?.shadowRoot?.querySelector(".drawer-close"),
+        ).toBeTruthy(),
+      );
+      await shellAction(f.el, ".drawer-close");
+      const close = f.el.shadowRoot!.querySelector("till-drawer-close")!;
+      const action = (name: string) =>
+        close.shadowRoot?.querySelector<HTMLElement>(`[data-drawer-action="${name}"]`);
+      await vi.waitFor(() => expect(action("finish")).toBeTruthy());
+      await userEvent.click(page.elementLocator(action("finish")!));
+      await vi.waitFor(() => expect(close.shadowRoot?.textContent).toContain("Drawer closed"));
+      if (clock === "out") {
+        expect(action("clock-out")).toBeNull();
+        expect(action("back")).toBeTruthy();
+        return;
+      }
+      expect(action("clock-out")).toBeTruthy();
+      await userEvent.click(page.elementLocator(action("clock-out")!));
+      await clockOutButton(f.el, "[data-confirm-clock-out]");
+      expect(f.el.shadowRoot!.querySelector("till-drawer-close")).toBeNull();
+      expect(f.api.clockOut).not.toHaveBeenCalled();
+    },
+  );
+
   it("Clock out on a break records the finish and locks even when server logout fails", async () => {
     const f = await clockApp({ state: clockState("on_break", "break") });
     f.api.logout.mockRejectedValue(new TypeError("offline"));

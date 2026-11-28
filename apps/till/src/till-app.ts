@@ -3255,8 +3255,11 @@ export class TillApp extends LitElement {
       : html`<till-drawer-close
           .api=${this.api}
           .printerId=${dialog.printerId}
+          .printerName=${dialog.printerName}
           .opensDrawer=${dialog.opensDrawer}
           .opener=${dialog.opener}
+          .canClockOut=${this.#clocking !== undefined && !this.#clockAccessLost && this.clockSnapshot.state !== null && this.clockSnapshot.state.state !== "out"}
+          .clockBusy=${clockActionUnavailable(this.clockSnapshot, this.attendanceSnapshot)}
           @drawer-close-dismiss=${dismiss}
         ></till-drawer-close>`;
   }
