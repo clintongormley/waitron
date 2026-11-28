@@ -1111,11 +1111,13 @@ export class TillFloorScreen extends LitElement {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
+    const zone = this.#zone;
+    const mapIds = zone?.view === "map" ? new Set(zone.onMap.map((table) => table.id)) : undefined;
     for (const table of this.tables) {
       next = Math.min(
         next,
         nextStepChangeAt(table.signals, this.#drawnAt),
-        nextMapJobMinute(table, this.#drawnAt),
+        mapIds?.has(table.id) ? nextMapJobMinute(table, this.#drawnAt) : Number.POSITIVE_INFINITY,
       );
       const dueAt = reminderDueAt(table.party?.reminder);
       if (dueAt <= this.#drawnAt || dueAt === Number.POSITIVE_INFINITY) continue;

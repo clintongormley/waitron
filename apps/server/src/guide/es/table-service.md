@@ -1003,9 +1003,9 @@ de mesas en **Sala** cuando atiendas a clientes sentados y la zona de recogida e
 
 ## Ver una zona como mapa o lista {#floor-view}
 
-Consulta el mapa para ver tu siguiente tarea. Recoge primero los platos listos. Cada mesa muestra
-su tarea más urgente y cuánto lleva esperando si se conoce el tiempo. Si falta espacio, el mapa
-muestra el nombre corto de la mesa. Abre los detalles de la mesa para ver las demás tareas.
+Consulta el mapa para ver tu siguiente tarea. Recoge primero los platos listos. Busca la tarea y
+su tiempo debajo del nombre de la mesa, cuando haya espacio. El mapa usa el nombre corto de la mesa
+cuando cabe mejor. Abre los detalles de la mesa para ver las demás tareas.
 
 Toca **Lista** o **Mapa** para cambiar la vista. En una pantalla estrecha, el botón está abajo. El dispositivo guarda tu elección para cada zona, así
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no

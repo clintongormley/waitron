@@ -71,7 +71,7 @@ it("uses the short name only when the full name cannot fit, and keeps the name s
   ]);
   const small = button(map, "small");
   expect(small.querySelector('[part="name"]')?.textContent).toBe("R12");
-  expect(small.getAttribute("aria-label")).toBe("Riverside 12, Free");
+  expect(small.getAttribute("aria-label")).toBe("Riverside 12 (R12), Free");
   expect(button(map, "large").querySelector('[part="name"]')?.textContent).toBe("Riverside 14");
 });
 
@@ -81,12 +81,28 @@ it("keeps today's name if the saved fallback is wider", async () => {
     {
       ...table("near", 5, 7),
       name: "Window 12",
-      label: "Riverside table 12",
+      label: "Riverside table",
       shortName: "Riverside table 12",
     },
     table("far", 25, 7),
   ]);
   expect(button(map, "near").querySelector('[part="name"]')?.textContent).toBe("Window 12");
+});
+
+it("does not replace a daily name with the saved full name", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("near", 5, 7),
+      name: "Birthday at the window",
+      label: "Table 12",
+      shortName: "Table 12",
+    },
+    table("far", 25, 7),
+  ]);
+  const near = button(map, "near");
+  expect(near.querySelector('[part="name"]')?.textContent).toBe("Birthday at the window");
+  expect(near.getAttribute("aria-label")).toBe("Birthday at the window, Free");
 });
 
 it("uses the compact job when the whole action would take more than two lines", async () => {

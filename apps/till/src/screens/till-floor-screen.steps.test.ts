@@ -428,7 +428,16 @@ describe("till-floor-screen: a table's due service step", () => {
           { clock: "real", map },
         );
         const reads = record(el, "floor-refresh");
-        await vi.advanceTimersByTimeAsync(299_999);
+        if (map) {
+          const jobTime = () =>
+            el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!.tables[0]!.job?.time;
+          await vi.advanceTimersByTimeAsync(59_999);
+          expect(jobTime()).toBe("0 min");
+          await vi.advanceTimersByTimeAsync(1);
+          await el.updateComplete;
+          expect(jobTime()).toBe("1 min");
+        }
+        await vi.advanceTimersByTimeAsync(map ? 239_999 : 299_999);
         await el.updateComplete;
         if (!map) expect(cardOf(el).querySelector('[data-ring="waiting"]')).toBeNull();
         await vi.advanceTimersByTimeAsync(1);

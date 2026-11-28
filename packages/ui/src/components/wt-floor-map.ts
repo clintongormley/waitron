@@ -197,8 +197,11 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
 }
 
 function shortLabelOf(members: readonly FloorMapTable[]): string | undefined {
-  if (!members.some((member) => member.shortName !== undefined)) return undefined;
-  return mapLabel(members.map((member) => member.shortName ?? member.name ?? member.label));
+  const shortNames = members.map((member) =>
+    member.shortName === member.label ? undefined : member.shortName,
+  );
+  if (shortNames.every((name) => name === undefined)) return undefined;
+  return mapLabel(members.map((member, index) => shortNames[index] ?? member.name ?? member.label));
 }
 
 /** Names each linked party's groups once, on the first; its groups in their first labels' order. */
@@ -1082,6 +1085,21 @@ export class WtFloorMap extends LitElement {
     const job = first.job ?? null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
+    const caption = named
+      ? renderCaption({
+          label,
+          shortLabel: group.shortLabel,
+          cue,
+          job,
+          metrics,
+          width: box.width * view.scale,
+          height: box.height * view.scale,
+          outlined: members.some((member) => member.outline !== null),
+          fill: merged ? first.fill : undefined,
+        })
+      : null;
+    const spokenName =
+      caption !== null && caption.name !== label ? `${label} (${caption.name})` : label;
     return html`<button
       type="button"
       part="table"
@@ -1092,7 +1110,7 @@ export class WtFloorMap extends LitElement {
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${[
-        label,
+        spokenName,
         ...(job !== null
           ? [job.text, ...(job.time === undefined ? [] : [job.time])]
           : cue === null || cue.text === ""
@@ -1110,21 +1128,7 @@ export class WtFloorMap extends LitElement {
     >
       ${members.map((m) => this.#renderShape(m, box, view.scale, still, target))}
       ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
-      ${
-        named
-          ? renderCaption({
-              label,
-              shortLabel: group.shortLabel,
-              cue,
-              job,
-              metrics,
-              width: box.width * view.scale,
-              height: box.height * view.scale,
-              outlined: members.some((member) => member.outline !== null),
-              fill: merged ? first.fill : undefined,
-            })
-          : nothing
-      }
+      ${caption?.content ?? nothing}
     </button>`;
   }
 

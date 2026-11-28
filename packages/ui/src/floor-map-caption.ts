@@ -162,18 +162,28 @@ export function renderCaption({
     metrics.widthOf(shortLabel) < fullWidth
       ? shortLabel
       : label;
-  if (cue === null) return html`<span part="name" data-fill=${fill ?? nothing}>${name}</span>`;
+  if (cue === null) {
+    return { name, content: html`<span part="name" data-fill=${fill ?? nothing}>${name}</span>` };
+  }
   const full =
     job !== null &&
     (metrics === undefined || (height >= metrics.nameSize * 4 && metrics.fitsJob(job.text, space)));
   const compact = job?.compact ?? cue.text;
   const compactTime = job?.compactTime;
-  return html`<span
-    part="caption"
-    data-fill=${fill ?? nothing}
-    ?data-compact=${job !== null && !full}
-  >
-    <span part="name">${name}</span>
-    ${full ? html`<span part="job">${job.text}</span>${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}` : html`<span part="cue">${cue.icon === null || job !== null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${compact === "" ? nothing : html`<span class="cue-text">${compact}</span>`}${compactTime === undefined ? nothing : html` <span class="cue-time">${compactTime}</span>`}</span>`}
-  </span>`;
+  const detail = full
+    ? html`<span part="job">${job.text}</span
+        >${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}`
+    : html`<span part="cue"
+        >${cue.icon === null || job !== null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${compact === "" ? nothing : html`<span class="cue-text">${compact}</span>`}${compactTime === undefined ? nothing : html` <span class="cue-time">${compactTime}</span>`}</span
+      >`;
+  return {
+    name,
+    content: html`<span
+      part="caption"
+      data-fill=${fill ?? nothing}
+      ?data-compact=${job !== null && !full}
+    >
+      <span part="name">${name}</span> ${detail}
+    </span>`,
+  };
 }

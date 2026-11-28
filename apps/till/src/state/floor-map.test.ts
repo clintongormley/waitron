@@ -93,18 +93,20 @@ describe("zones and their tables", () => {
   });
 
   it("maps placed tables, leaving out spares and taken-off ones", () => {
-    const t1 = table({ id: "t1", label: "1", today: today() });
+    const t1 = table({ id: "t1", label: "Terrace 1", shortName: "T1", today: today() });
     const t2 = table({ id: "t2", label: "2", today: today({ placement: null }) });
     const t3 = table({ id: "t3", label: "3", today: today({ takenOff: true }) });
     expect(mapTables([t1, t2, t3], now)).toEqual([
       {
         id: "t1",
-        label: "1",
+        label: "Terrace 1",
+        shortName: "T1",
         placement,
         fill: "free",
         outline: null,
         pulse: null,
         cue: null,
+        job: null,
         joinId: null,
         fixed: false,
         linkId: null,
@@ -128,22 +130,25 @@ describe("zones and their tables", () => {
       outline: null,
       pulse: null,
       cue: { icon: "floor-ready", text: "2" },
+      job: { text: "Collect ready dishes", compact: "Collect" },
       joinId: "j1",
       fixed: false,
       linkId: null,
       description: "Seated, 2 ready",
     };
     expect(mapTables([t5, t4, t6], now)).toEqual([
-      { id: "t5", label: "5", placement, ...shared },
-      { id: "t4", label: "4", placement, ...shared },
+      { id: "t5", label: "5", shortName: "5", placement, ...shared },
+      { id: "t4", label: "4", shortName: "4", placement, ...shared },
       {
         id: "t6",
         label: "6",
+        shortName: "6",
         placement,
         fill: "calm",
         outline: null,
         pulse: null,
         cue: { icon: "floor-check", text: "" },
+        job: null,
         joinId: null,
         fixed: false,
         linkId: null,
