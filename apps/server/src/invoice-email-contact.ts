@@ -27,12 +27,13 @@ async function departmentOf(
       const sale = await correction(source.saleId);
       if (sale?.corrects == null || sale.replaces)
         return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
-      let from = sale.corrects;
-      for (let target = await correction(from); target?.replaces === true;) {
-        from = target.corrects!;
-        target = await correction(from);
-      }
-      return VENUE_SERVICE.receiptDepartmentForSale(tx, from);
+      // A replacement is never itself replaced (packages/core/src/record-replacement.ts), so one
+      // step reaches the invoice that has the department.
+      const target = await correction(sale.corrects);
+      return VENUE_SERVICE.receiptDepartmentForSale(
+        tx,
+        target?.replaces === true ? target.corrects! : sale.corrects,
+      );
     }
     case "order":
       return VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);

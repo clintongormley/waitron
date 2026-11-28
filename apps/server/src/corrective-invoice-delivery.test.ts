@@ -12,6 +12,7 @@ import {
   readLiveSeriesIdTx,
   receiptReprints,
   sales,
+  saveVenueFields,
   taxpayer,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
@@ -19,7 +20,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import { createPrinter, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { readUndeliveredInvoices } from "./alert-sources.js";
 import { readDocumentOffers, type RoutingDeps } from "./document-printer-offers.js";
@@ -28,6 +29,7 @@ import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import { reprintJobOn } from "./print-job-reprint.js";
+import { deletePrinter } from "./printer-delete.js";
 import {
   enqueueOriginalReceipt,
   enqueueReceiptCopy,
@@ -159,7 +161,7 @@ const reprintsOf = (saleId: string) =>
     .where(eq(receiptReprints.saleId, saleId));
 
 /** The till's Reprint in Find a bill, sent while the till's profile may print receipts. */
-async function tillReprint(saleId: string) {
+async function tillReprint(saleId: string, body: { language?: string } = {}) {
   const [device] = await venue.db
     .select({ profileId: devices.deviceProfileId })
     .from(devices)
@@ -174,7 +176,7 @@ async function tillReprint(saleId: string) {
     .set({ capabilities: [...capabilities, "print-receipt"] })
     .where(eq(deviceProfiles.id, device!.profileId!));
   try {
-    return await send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/reprint`, {});
+    return await send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/reprint`, body);
   } finally {
     await venue.db
       .update(deviceProfiles)
@@ -487,5 +489,88 @@ describe("a corrective full invoice (R1) is delivered as a full invoice; a repla
       expect.arrayContaining([{ medium: "receipt", designation: "duplicate", status: "queued" }]),
     );
     expect(await reprintsOf(r1)).toEqual([{ printJobId: copy!.id }]);
+  });
+
+  it("expires an R1's lapsed print claim from the till's Reprint, then prints it", async () => {
+    const r1 = await filedR1();
+    const made = await inTx(venue, async (tx) =>
+      enqueueOriginalReceipt(
+        tx,
+        venue.cfg,
+        await readTransactionReceipt(venue.backend, tx, venue.cfg, r1),
+        r1,
+        { personId: venue.adminId },
+      ),
+    );
+    if (typeof made !== "object") throw new Error(`no original queued: ${made}`);
+    const stuck = made.jobId;
+    await venue.db
+      .update(printJobs)
+      .set({ status: "printing", claimedAt: new Date(Date.now() - 24 * 3_600_000).toISOString() })
+      .where(eq(printJobs.id, stuck));
+    await venue.db
+      .update(invoiceDeliveries)
+      .set({ status: "sending" })
+      .where(eq(invoiceDeliveries.printJobId, stuck));
+    const answer = await tillReprint(r1);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await deliveriesOf(r1)).toEqual(
+      expect.arrayContaining([{ medium: "receipt", designation: "original", status: "unknown" }]),
+    );
+  });
+
+  // Last in the file: it deletes the receipt printer every till shares and changes the venue's
+  // receipt language.
+  it("prints a new original of an R1 whose printer was deleted, on the new printer and in the chosen language", async () => {
+    const r1 = await filedR1();
+    const lost = await printedOriginal(r1);
+    const [old] = await venue.db
+      .select({ printerId: printJobs.printerId })
+      .from(printJobs)
+      .where(eq(printJobs.id, lost));
+    const replacement = await inTx(venue, async (tx) => {
+      await deletePrinter(tx, old!.printerId);
+      const printer = await createPrinter(tx, {
+        name: "New receipt printer",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        hasCashDrawer: true,
+      });
+      await tx.update(devices).set({
+        receiptPrinterId: printer.id,
+        paymentSlipPrinterId: printer.id,
+        cashDrawerPrinterId: printer.id,
+      });
+      return printer.id;
+    });
+    const [ended] = await venue.db
+      .select({ status: printJobs.status, lastError: printJobs.lastError })
+      .from(printJobs)
+      .where(eq(printJobs.id, lost));
+    expect(ended).toEqual({ status: "failed", lastError: "printer.deleted" });
+    // A language other than the R1's own: the venue's receipt language, changed since it was filed.
+    const language = "en-GB";
+    await inTx(venue, (tx) => saveVenueFields(tx, { invoiceLocales: [language, "es-ES"] }, null));
+    const answer = await tillReprint(r1, { language });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const fresh = await venue.db
+      .select({
+        printerId: printJobs.printerId,
+        receiptCopy: printJobs.receiptCopy,
+        pageLanguage: printJobs.pageLanguage,
+      })
+      .from(printJobs)
+      .where(eq(printJobs.saleId, r1));
+    expect(fresh).toEqual(
+      expect.arrayContaining([
+        { printerId: replacement, receiptCopy: false, pageLanguage: language },
+      ]),
+    );
+    expect(await reprintsOf(r1)).toEqual([]);
+    const { decodeTicket } = await import("./testing/decode-ticket.js");
+    const [printed] = venue.db.all<{ payload: Uint8Array }>(
+      sql`select payload from print_jobs where sale_id = ${r1} and printer_id = ${replacement}`,
+    );
+    expect(decodeTicket(printed!.payload)).toContain("Corrective invoice");
   });
 });
