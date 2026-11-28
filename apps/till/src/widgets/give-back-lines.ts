@@ -53,9 +53,18 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
     <legend data-which>${t("give_back.which")}</legend>
     <div class="lines">
       ${view.lines
-        .filter((line) => line.partOf === null)
+        .filter(
+          (line) => line.partOf === null && (line.credited === undefined || positive(line.left)),
+        )
         .map((line) => {
           const label = lineName(line.descriptions, options.namesLocale);
+          const credited = line.credited;
+          const description =
+            credited === undefined
+              ? line.givenFree
+                ? t("give_back.given_free")
+                : cancelledLabel(line)
+              : fill(t("give_back.credited"), { amount: formatMoney(credited, currentLocale()) });
           const checked = options.ticked.includes(line.id);
           const partial = checked && options.portionCount !== null;
           const amounts = checked && options.ticked.length === 1 ? line.portionAmounts : undefined;
@@ -65,9 +74,9 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
             data-line=${line.givenFree ? nothing : line.id}
             data-free=${line.givenFree ? line.id : nothing}
             .label=${label}
-            .quantity=${quantityText(line.quantity)}
-            .amount=${formatMoney(line.gross, currentLocale())}
-            .description=${line.givenFree ? t("give_back.given_free") : cancelledLabel(line)}
+            .quantity=${credited === undefined ? quantityText(line.quantity) : ""}
+            .amount=${formatMoney(credited === undefined ? line.gross : line.left, currentLocale())}
+            .description=${description}
             .displayOnly=${line.givenFree}
             .checked=${checked}
             .indeterminate=${partial}
@@ -109,9 +118,6 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
           </wt-dish-pick-row>`;
         })}
     </div>
-    <p class="reason portion-note" role="status">
-      ${options.portionCount === null ? nothing : t("give_back.portions_lock")}
-    </p>
   </fieldset>`;
 }
 

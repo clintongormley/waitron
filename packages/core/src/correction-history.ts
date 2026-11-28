@@ -93,6 +93,8 @@ export interface CorrectableLine {
   rate: Decimal;
   gross: Decimal;
   left: Decimal;
+  /** Money recorded on earlier corrective lines. Advance deductions also reduce `left`. */
+  credited?: Decimal;
 }
 
 /** The invoice's lines with what is left to correct of each, refused as
@@ -104,16 +106,31 @@ export async function readCorrectableLines(
   issuingNodeId: NodeId,
   kind: FullInvoiceCorrection = {},
 ): Promise<CorrectableLine[]> {
-  const { history, invoiceLines } = await admittedHistory(tx, backend, saleId, issuingNodeId, kind);
+  const { history, invoiceLines, earlierLines } = await admittedHistory(
+    tx,
+    backend,
+    saleId,
+    issuingNodeId,
+    kind,
+  );
   const left = new Map(remainingLines(history).map((line) => [line.id, line.gross]));
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));
-  return history.lines.map((line) => ({
-    id: line.id,
-    descriptions: byId.get(line.id)!.descriptions,
-    rate: line.rate,
-    gross: line.gross,
-    left: left.get(line.id)!,
-  }));
+  const creditById = new Map<string, number>();
+  for (const line of earlierLines) {
+    const id = line.correctsLineId!;
+    creditById.set(id, (creditById.get(id) ?? 0) - line.lineGross!);
+  }
+  return history.lines.map((line) => {
+    const credit = creditById.get(line.id) ?? 0;
+    return {
+      id: line.id,
+      descriptions: byId.get(line.id)!.descriptions,
+      rate: line.rate,
+      gross: line.gross,
+      left: left.get(line.id)!,
+      ...(credit > 0 ? { credited: centsToDecimal(credit) } : {}),
+    };
+  });
 }
 
 async function admissionOf(
@@ -295,6 +312,7 @@ async function readHistory(
 ): Promise<{
   history: CorrectionAmountHistory;
   invoiceLines: InvoiceLine[];
+  earlierLines: Pick<InvoiceLine, "correctsLineId" | "lineGross">[];
   partsTaken: Map<string, number>;
 }> {
   const { sale, corrections } = stored ?? (await readStored(tx, saleId));
@@ -382,7 +400,7 @@ async function readHistory(
     const id = line.correctsLineId!;
     partsTaken.set(id, (partsTaken.get(id) ?? 0) - line.setMenuPart);
   }
-  return { history, invoiceLines: lines, partsTaken };
+  return { history, invoiceLines: lines, earlierLines, partsTaken };
 }
 
 /**

@@ -282,7 +282,7 @@ describe("A dish", () => {
     expect(amountField(el).value).toBe("5.34");
     expect(dish(el, "croquetas")!.shadowRoot!.querySelector("input")!.indeterminate).toBe(true);
     expect(dish(el, "paella")!.shadowRoot!.querySelector("input")!.disabled).toBe(true);
-    expect(text(root(el).querySelector("[role=status]"))).toContain("all portions");
+    expect(text(root(el))).not.toContain("Select all portions or clear this dish to pick others.");
     await type(el, "5.00");
     expect(dish(el, "croquetas")!.portionAmount).toBe("€5.00");
     await reason(el, "complaint");
@@ -355,6 +355,35 @@ describe("A dish", () => {
     expect(
       [...root(el).querySelectorAll("wt-dish-pick-row")].map((row) => row.description),
     ).not.toContain("Served");
+  });
+
+  it("shows the balance and credited money for a partly refunded dish and omits fully credited dishes", async () => {
+    const original = VIEW.lines[0]!;
+    const reduced = { ...original, left: "5.00", credited: "3.00" };
+    const fullyCredited = {
+      ...original,
+      id: "bread",
+      descriptions: { en: "Bread" },
+      left: "0.00",
+      credited: "8.00",
+      available: false,
+    };
+    const { el } = await mount(
+      withView({ lines: [reduced, fullyCredited, ...VIEW.lines.slice(1)] }),
+    );
+    await choose(el, "dishes");
+
+    const row = dish(el, "croquetas")!;
+    expect([row.label, row.quantity, row.amount, row.description]).toEqual([
+      "Croquetas",
+      "",
+      "€5.00",
+      "Already refunded: €3.00",
+    ]);
+    expect(dish(el, "bread")).toBeNull();
+    await tick(el, "croquetas");
+    expect(amountField(el).value).toBe("5.00");
+    expect(row.querySelector("wt-stepper")).toBeNull();
   });
 
   it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {

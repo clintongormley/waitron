@@ -596,9 +596,21 @@ describe("readGiveBack: the lines", () => {
     expect(dish.portionAmounts).toEqual(["4.00", "4.00", "4.00"]);
     await gaveCash(saleId, ask("dishes", "4.00", { lineIds: [dish.id] }));
     const view = await read(saleId);
-    expect(lineOf(view, "Croquetas")).toMatchObject({ available: true, left: "8.00" });
+    expect(lineOf(view, "Croquetas")).toMatchObject({
+      available: true,
+      left: "8.00",
+      credited: "4.00",
+    });
     expect(lineOf(view, "Croquetas").portionAmounts).toBeUndefined();
     expect(lineOf(view, "Bread").portionAmounts).toEqual(["2.00", "2.00"]);
+    expect(lineOf(view, "Bread")).not.toHaveProperty("credited");
+
+    await gaveCash(saleId, ask("dishes", "8.00", { lineIds: [dish.id] }));
+    expect(lineOf(await read(saleId), "Croquetas")).toMatchObject({
+      available: false,
+      left: "0.00",
+      credited: "12.00",
+    });
   });
 
   it("shows the paella cancelled with Refund ticked as owing its money, the other dishes with no cancel", async () => {

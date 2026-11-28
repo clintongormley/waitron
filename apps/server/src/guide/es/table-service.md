@@ -435,7 +435,8 @@ En un ticket anterior, elige **Devolución**. **¿Por qué se devuelve?** ofrece
   que quieras devolver en **¿Qué platos?**. Para devolver parte de una fila, marca solo esa fila
   y elige cuántas porciones con **−** o **+**. Para añadir otros platos, elige todas las porciones
   o desmarca la fila. **Dinero a devolver** se rellena con el importe elegido. Puedes cambiarlo.
-  Si una devolución anterior redujo el saldo de una fila, escribe cuánto quieres devolver del saldo restante.
+  En una fila con **Ya devuelto**, el precio muestra lo que queda. Escribe cuánto quieres
+  devolver de ese saldo.
 - **Cortesía o queja**: escribe el **Dinero a devolver** que elijas, hasta el importe que muestra
   la ventana.
 - **Lo pagado de más**: aparece cuando el cliente pagó más que la cuenta. Devuelve una parte o todo

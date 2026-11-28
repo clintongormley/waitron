@@ -410,8 +410,8 @@ On a past receipt, choose **Refund**. **What is it for?** offers:
 - **A dish**: something they ordered never came, or was not right. Tick the box beside each dish
   you want to refund under **Which dishes?**. To refund part of one row, tick that row on its own
   and use **−** or **+** to choose how many. To add other dishes, choose all portions or clear
-  the row. **Amount to refund** starts at what you picked. You can edit it. If an earlier refund
-  reduced what is left on a row, enter the amount to refund from what remains.
+  the row. **Amount to refund** starts at what you picked. You can edit it. On a row marked
+  **Already refunded**, the price shows what is left. Enter the amount to refund from that balance.
 - **Goodwill or a complaint**: enter the **Amount to refund** you choose, up to the amount the window
   shows.
 - **Extra paid on top of the bill**: shown when the guest paid more than the bill. It refunds

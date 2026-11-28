@@ -596,6 +596,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Dock Pay in the wide order column once PR 12 supplies the wide order shell. PR 14a supplies the
   shared inset. Table and Counter Pay already show the checked amount and receipt questions,
   start the reader from **Charge**, and open cash entry from **Cash**.
+  **Refund dishes** still needs mixed selection. Staff should be able to pick some portions of
+  one row alongside other dishes, with each row credited by the amount they chose.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and

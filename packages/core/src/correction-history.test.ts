@@ -941,6 +941,7 @@ it("reads each invoice line with what earlier corrections left of it, refusing a
       rate: "21.00",
       gross: "12.10",
       left: "11.05",
+      credited: "1.05",
     },
     {
       id: ids[2],
@@ -1105,6 +1106,9 @@ it("example 1: correcting the rest's invoice never takes from its deduction line
     lines: [{ id: rest.dishIds[0], gross: "120.00", base: "109.09" }],
     vatBreakdown: [{ rate: "10.00", base: "109.09", tax: "10.91" }],
   });
+  expect(
+    await withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, rest.saleId, nodeId)),
+  ).toMatchObject([{ id: rest.dishIds[0], gross: "120.00", left: "80.00", credited: "10.00" }]);
   expect((await restPreview(rest.saleId, "80.00")).vatBreakdown).toEqual([
     { rate: "10.00", base: "72.73", tax: "7.27" },
   ]);
