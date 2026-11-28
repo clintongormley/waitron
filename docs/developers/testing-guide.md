@@ -190,7 +190,7 @@ with today's date in Madrid (or with UTC, allowing at least 50 minutes; this run
 two apart, and both accept every Madrid-dated record a box writes). The owner ran the probe with
 a real certificate; its code is kept off `main`, on the branch `feat/a1270-aeat-midnight-probe` at
 [`4aa61ba4a8`](https://github.com/clintongormley/waitron/tree/4aa61ba4a8f7d39301449c75137fa902ddf7ada1/apps/server/scripts)
-(`apps/server/scripts/aeat-midnight-probe.sh` and `apps/server/src/aeat-midnight-date.preprod.test.ts`).
+(the probe script and its test are on that branch only).
 `@waitron/verifactu` 0.2.1's fake still compares with midnight UTC, so between 22:00 or 23:00
 and midnight UTC it refuses a record dated today in Madrid that AEAT accepts. The library's fix
 ([waitron-io/verifactu#157](https://github.com/waitron-io/verifactu/pull/157)) is unreleased and
