@@ -1605,6 +1605,9 @@ export class TillShell extends LitElement {
 
   override render(): TemplateResult {
     const hasDrill = this.floorKitchenOpen || this.drillNodes?.length > 0;
+    const phoneApprovalOpen =
+      this.phone &&
+      this.drillNodes?.some((node) => node.localName === "till-hours-approval-screen");
     const floor = this.querySelector<TillFloorScreen>(":scope > till-floor-screen");
     const bottomFloor = this.narrowFloor && !hasDrill && !this.#barless() ? floor : null;
     if (floor) floor.useFloorFooter = Boolean(bottomFloor);
@@ -1630,7 +1633,7 @@ export class TillShell extends LitElement {
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts() : nothing}
         ${
-          this.#barless() || bottomFloor || this.floorKitchenOpen || (this.phone && hasDrill)
+          this.#barless() || bottomFloor || this.floorKitchenOpen || phoneApprovalOpen
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
                   ${this.canChooseDevice ? html`<wt-button data-switch-device variant="secondary" @click=${() => this.#emit("switch-device")}>${t("device.switch")}</wt-button>` : nothing}
