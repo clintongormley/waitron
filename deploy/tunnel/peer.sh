@@ -30,6 +30,13 @@ stop() {
     proxy=
   fi
   if [ -n "$active" ]; then
+    # Deleting the interface first would drop the closing packets the gateway needs to end its streams.
+    drain=0
+    while [ "$drain" -lt 30 ] && [ -n "$(ss -Htn state established state syn-recv state fin-wait-1 \
+      state closing state last-ack state close-wait src "$address" 2>/dev/null)" ]; do
+      sleep 0.1
+      drain=$((drain + 1))
+    done
     ip link del wg-cloud
     iptables -F INPUT
     active=

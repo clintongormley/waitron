@@ -52,11 +52,12 @@ if(name==="wg"&&args[0]==="set") {
  const values={}; for(let i=2;i<args.length;i+=2) values[args[i]]=args[i+1];
  fs.writeFileSync(process.env.SNAPSHOT, "[Interface]\\nPrivateKey = "+fs.readFileSync(values["private-key"],"utf8").trim()+"\\n\\n[Peer]\\nPublicKey = "+values.peer+"\\nEndpoint = "+values.endpoint+"\\nAllowedIPs = "+values["allowed-ips"]+"\\nPersistentKeepalive = "+values["persistent-keepalive"]+"\\n");
 }
+if(name==="ss"&&process.env.SS_GATE&&fs.existsSync(process.env.SS_GATE)) process.stdout.write("0 0 10.77.17.2:443 10.77.17.1:40000\\n");
 if(name==="socat"&&args[0]==="-u") process.exit(process.env.PROBE_EXIT==="1" ? 1 : 0);
 if(name==="socat"&&process.env.SOCAT_EXIT==="1") process.exit(1);
 if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRACE,'["closed"]\\n');process.exit();});setInterval(()=>{},1000);}
 `;
-  for (const name of ["wg", "ip", "iptables", "socat"]) {
+  for (const name of ["wg", "ip", "iptables", "socat", "ss"]) {
     const file = join(bin, name);
     await writeFile(file, stub);
     await chmod(file, 0o755);
@@ -89,7 +90,13 @@ afterAll(async () => {
 
 async function start(
   config,
-  { unavailable = false, deadProxy = false, delayedProxy = false, failedProbe = false } = {},
+  {
+    unavailable = false,
+    deadProxy = false,
+    delayedProxy = false,
+    failedProbe = false,
+    openConnection = false,
+  } = {},
 ) {
   const dir = await mkdtemp(join(root, "run-"));
   const control = join(dir, "control"),
@@ -104,6 +111,7 @@ async function start(
   const trace = join(dir, "trace"),
     snapshot = join(dir, "snapshot");
   await writeFile(trace, "");
+  if (openConnection) await writeFile(trace + ".open", "");
   const child = spawn("sh", [script, control, keys], {
     env: {
       ...process.env,
@@ -114,6 +122,7 @@ async function start(
       SOCAT_EXIT: deadProxy ? "1" : "0",
       PROBE_EXIT: failedProbe ? "1" : "0",
       ...(delayedProxy ? { SETSID_GATE: trace + ".setsid" } : {}),
+      ...(openConnection ? { SS_GATE: trace + ".open" } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -276,6 +285,73 @@ it("closes the proxy and interface when configuration is removed, then reconnect
   await expect.poll(async () => (await events(run)).filter(isProbe).length).toBe(2);
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
 }, 60000);
+
+it("keeps the interface until the box reports the held stream closed", async () => {
+  const run = await start(configuration, { openConnection: true });
+  await expect
+    .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
+    .toBe(true);
+  await rm(join(run.control, "peer.json"));
+  await expect
+    .poll(async () => (await events(run)).filter(([command]) => command === "ss").length, {
+      timeout: 10000,
+    })
+    .toBeGreaterThanOrEqual(2);
+  expect((await events(run)).some((e) => e.join(" ") === "ip link del wg-cloud")).toBe(false);
+  await rm(run.trace + ".open");
+  await expect
+    .poll(async () => (await events(run)).some((e) => e.join(" ") === "ip link del wg-cloud"), {
+      timeout: 10000,
+    })
+    .toBe(true);
+  const calls = await events(run);
+  const closed = calls.findIndex(([command]) => command === "closed");
+  const firstCheck = calls.findIndex(([command]) => command === "ss");
+  const deleted = calls.findIndex((e) => e.join(" ") === "ip link del wg-cloud");
+  expect(closed).toBeGreaterThan(-1);
+  expect(closed).toBeLessThan(firstCheck);
+  expect(firstCheck).toBeLessThan(deleted);
+  expect(calls.findLastIndex(([command]) => command === "ss")).toBeLessThan(deleted);
+  expect(calls[firstCheck]).toEqual([
+    "ss",
+    "-Htn",
+    "state",
+    "established",
+    "state",
+    "syn-recv",
+    "state",
+    "fin-wait-1",
+    "state",
+    "closing",
+    "state",
+    "last-ack",
+    "state",
+    "close-wait",
+    "src",
+    "10.77.17.2",
+  ]);
+  await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.off");
+}, 30000);
+
+it("deletes the interface after a bounded wait when the held stream never closes", async () => {
+  const run = await start(configuration, { openConnection: true });
+  await expect
+    .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
+    .toBe(true);
+  await rm(join(run.control, "peer.json"));
+  await expect
+    .poll(async () => (await events(run)).some((e) => e.join(" ") === "ip link del wg-cloud"), {
+      timeout: 15000,
+    })
+    .toBe(true);
+  await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.off");
+  const calls = await events(run);
+  expect(calls.filter(([command]) => command === "ss")).toHaveLength(30);
+  expect(calls.findLastIndex(([command]) => command === "ss")).toBeLessThan(
+    calls.findIndex((e) => e.join(" ") === "ip link del wg-cloud"),
+  );
+  expect(run.child.exitCode).toBeNull();
+}, 40000);
 
 it("reports a failed datagram send and keeps managing the staff forwarder", async () => {
   const run = await start(configuration, { failedProbe: true });
