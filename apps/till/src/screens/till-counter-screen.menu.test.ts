@@ -114,6 +114,28 @@ describe("fixed Counter menu browser", () => {
     expect(shownNames(browser(), "shortcuts")).toEqual(["Salad", "Steak"]);
   });
 
+  it("a dish already in the basket wears its count on its tile, and a new line updates it", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(salad, "2");
+    store.addProduct(steak, "1");
+    const { el, browser } = await mountBrowser({ store });
+    const count = (name: string) => {
+      const tile = [
+        ...browser().shadowRoot!.querySelectorAll<HTMLElement>(
+          '[data-region="shortcuts"] wt-button.tile',
+        ),
+      ].find((each) => each.querySelector(".name")?.textContent?.trim() === name)!;
+      const badge = tile.querySelector<HTMLElement & { count: number }>("[data-in-order-count]");
+      return badge ? badge.count : null;
+    };
+    expect(count("Salad")).toBe(2);
+    expect(count("Steak")).toBe(1);
+    store.addProduct(steak, "1");
+    await el.updateComplete;
+    await browser().updateComplete;
+    expect(count("Steak")).toBe(2);
+  });
+
   it("switching menus shows the other menu with its own Device Home Page", async () => {
     const { el, browser } = await mountBrowser();
     el.selectedMenuId = "drinks";

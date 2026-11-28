@@ -32,6 +32,7 @@ import {
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { lineGross } from "../state/order-line.js";
+import { newOrderByProduct } from "../state/new-order-count.js";
 import { draftSetMenuUnitPrice } from "../state/draft-layout.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { notCheapestText } from "../widgets/set-menu-presentation.js";
@@ -290,6 +291,18 @@ export class TillCounterScreen extends LitElement {
   readonly #unfilteredProducts = memoVisibleProducts();
   readonly #unfilteredSearchProducts = memoVisibleProducts();
 
+  #inOrderCounts = new Map<string, number>();
+
+  /** The same map while the counts are unchanged, so the browser redraws only when they change. */
+  #inOrder(): Map<string, number> {
+    const counts = newOrderByProduct(this.store.lines);
+    const last = this.#inOrderCounts;
+    if (counts.size === last.size && [...counts].every(([id, n]) => last.get(id) === n))
+      return last;
+    this.#inOrderCounts = counts;
+    return counts;
+  }
+
   #pickFilters(filters: MenuFilters): void {
     this.selectedFilters = filters;
   }
@@ -324,6 +337,7 @@ export class TillCounterScreen extends LitElement {
       .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
+      .inOrder=${this.#inOrder()}
     >
       ${
         hasMenuPicker
