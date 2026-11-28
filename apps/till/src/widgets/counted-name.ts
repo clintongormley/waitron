@@ -82,7 +82,9 @@ function fits(name: HTMLElement, count: Element): boolean {
 /** The lines of `name`'s text the two-line cut leaves shown. Chromium draws a cut line's text as a
  * second, shortened box with the "…" after it, so a cut line is taken to reach `cutEnd`. */
 function textLines(name: HTMLElement, cutEnd: number): DOMRect[] {
-  const text = [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+  const text = [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+  // Lit draws an empty name as no text at all.
+  if (text === undefined) return [];
   const words = document.createRange();
   words.selectNodeContents(text);
   const bottom = name.getBoundingClientRect().bottom;

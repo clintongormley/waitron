@@ -558,6 +558,21 @@ describe("menu tiles", () => {
     }
   });
 
+  it("keeps no room for the count beside a counted name with no text", async () => {
+    const { el } = await mount(390, {
+      menu: { ...menu, structure: { members: [member("blank")] } },
+      products: [product("blank", "")],
+      inOrder: new Map([["p-blank", 2]]),
+    });
+    await nextPaint();
+    const dish = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-region="structure"] wt-button.tile',
+    )!;
+    expect(badge(dish)).not.toBeNull();
+    expect(dish.querySelector(".name")!.textContent).toBe("");
+    expect(dish.hasAttribute("data-name-room")).toBe(false);
+  });
+
   it.each([
     { width: 390, height: 76 },
     { width: 1280, height: 84 },
