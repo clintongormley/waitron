@@ -190,7 +190,9 @@ export async function createUpgradeHost({
     volumePaths.set(key, await volumeMountpoint(name, run));
   }
   const paths = [...volumePaths.values()];
-  const staffSocket = join(volumePaths.get("tunnel_control"), "staff.sock");
+  const tunnelSockets = ["staff.sock", "customer-menu.sock"].map((name) =>
+    join(volumePaths.get("tunnel_control"), name),
+  );
   const pins = (images, raw) => pinImages(boxDirectory, images, raw);
   const idOf = async (image) =>
     (await run("docker", ["image", "inspect", image, "--format", "{{.Id}}"])).stdout.trim();
@@ -323,10 +325,12 @@ export async function createUpgradeHost({
           requireRunning: Boolean(beforeAutomaticStop && !releaseState),
         });
         // GNU cp preserves sockets, and the snapshot flush cannot open them.
-        try {
-          if ((await fs.lstat(staffSocket)).isSocket()) await fs.unlink(staffSocket);
-        } catch (error) {
-          if (error.code !== "ENOENT") throw error;
+        for (const socket of tunnelSockets) {
+          try {
+            if ((await fs.lstat(socket)).isSocket()) await fs.unlink(socket);
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
         }
         if (!releaseState) {
           releaseState = await holdUpgradeState(paths[0]);

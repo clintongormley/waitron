@@ -8,7 +8,7 @@ stack() {
 }
 cleanup() {
   if [ -f "$scratch/override.yml" ]; then stack down --volumes --remove-orphans >/dev/null 2>&1 || :; fi
-  for part in peer gateway staff; do docker rm -f "$name-$part" >/dev/null 2>&1 || :; done
+  for part in peer gateway staff customer; do docker rm -f "$name-$part" >/dev/null 2>&1 || :; done
   for part in control keys; do docker volume rm "$name-$part" >/dev/null 2>&1 || :; done
   docker network rm "$name" >/dev/null 2>&1 || :
   if [ "$image" = "$name:local" ]; then docker image rm "$image" >/dev/null 2>&1 || :; fi
@@ -28,6 +28,7 @@ COMPOSE_PROFILES= docker compose -f deploy/compose.yml config --format json > "$
 jq -e '
   .services as $s | $s.tunnel as $t |
   $s.app.environment.WAITRON_STAFF_SOCKET == "/var/lib/waitron/tunnel/staff.sock" and
+  $s.app.environment.WAITRON_CUSTOMER_MENU_SOCKET == "/var/lib/waitron/tunnel/customer-menu.sock" and
   ($t.profiles // [] | length) == 0 and
   $t.cap_add == ["NET_ADMIN"] and $t.cap_drop == ["ALL"] and
   $t.group_add == ["10001"] and
@@ -45,7 +46,7 @@ jq -e '
   echo 'Default Compose must put the staff socket in the shared control volume and isolate the companion.' >&2
   exit 1
 }
-printf '%s\n' 'PASS default Compose shares the staff socket and isolates privileges, keys and networking'
+printf '%s\n' 'PASS default Compose shares the listener sockets and isolates privileges, keys and networking'
 if [ "$image" = "$name:local" ]; then docker build -f deploy/tunnel/Dockerfile -t "$image" .; fi
 docker network create "$name" >/dev/null
 docker run -d --name "$name-gateway" --network "$name" --cap-add NET_ADMIN --entrypoint sh "$image" -c '
@@ -160,10 +161,39 @@ elapsed=$(($(date +%s) - replaced_at))
 printf '%s\n' "PASS idle peer recovered the staff stream in ${elapsed}s with the original interface"
 docker exec "$name-gateway" ip address add 10.77.17.3/32 dev wg-cloud
 if docker exec "$name-gateway" sh -c 'printf denied | timeout 3 socat - TCP4:10.77.17.2:443,bind=10.77.17.3,connect-timeout=1'; then exit 1; fi
-docker exec -d "$name-peer" socat TCP4-LISTEN:8443,bind=10.77.17.2,reuseaddr,fork 'SYSTEM:printf forbidden-port'
-local_port() { [ "$(docker exec "$name-peer" sh -c 'printf probe | timeout 3 socat - TCP4:10.77.17.2:8443,connect-timeout=1')" = forbidden-port ]; }
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=staff.example.test \
+  -addext 'subjectAltName=DNS:staff.example.test' -keyout "$scratch/customer.key" \
+  -out "$scratch/customer.crt" >/dev/null 2>&1
+chmod 644 "$scratch/customer.key"
+docker run -d --name "$name-customer" --network none --user 10001:10001 \
+  -v "$name-control:/control" node:26-slim sleep infinity >/dev/null
+docker cp "$scratch/customer.key" "$name-customer:/tmp/customer.key" >/dev/null
+docker cp "$scratch/customer.crt" "$name-customer:/tmp/customer.crt" >/dev/null
+docker cp "$scratch/customer.crt" "$name-gateway:/tmp/customer.crt" >/dev/null
+docker exec -d "$name-customer" node -e '
+  const fs = require("node:fs"), https = require("node:https");
+  const path = "/control/customer-menu.sock";
+  https.createServer({ key: fs.readFileSync("/tmp/customer.key"), cert: fs.readFileSync("/tmp/customer.crt") },
+    (req, res) => res.end("customer-only")).listen(path, () => fs.chmodSync(path, 0o660));
+'
+customer_answer() {
+  docker exec "$name-gateway" sh -ec '
+    printf "GET /lunch/en HTTP/1.1\r\nHost: staff.example.test\r\nConnection: close\r\n\r\n" |
+      timeout 3 socat - "OPENSSL:10.77.17.2:8443,bind=$1,cafile=/tmp/customer.crt,commonname=staff.example.test,connect-timeout=2"
+  ' sh "$1"
+}
+customer_connected() { customer_answer 10.77.17.1 | grep -q customer-only; }
+wait_for customer_connected
+if customer_answer 10.77.17.3; then exit 1; fi
+docker rm -f "$name-customer" >/dev/null
+docker exec --user 10001:10001 "$name-peer" rm /control/customer-menu.sock
+if [ -n "$(customer_answer 10.77.17.1 2>/dev/null || :)" ]; then exit 1; fi
+connected
+printf '%s\n' 'PASS customer HTTPS uses port 8443 and the gateway source; staff stays reachable after customer loss'
+docker exec -d "$name-peer" socat TCP4-LISTEN:8444,bind=10.77.17.2,reuseaddr,fork 'SYSTEM:printf forbidden-port'
+local_port() { [ "$(docker exec "$name-peer" sh -c 'printf probe | timeout 3 socat - TCP4:10.77.17.2:8444,connect-timeout=1')" = forbidden-port ]; }
 wait_for local_port
-if docker exec "$name-gateway" sh -c 'printf denied | timeout 3 socat - TCP4:10.77.17.2:8443,connect-timeout=1'; then exit 1; fi
+if docker exec "$name-gateway" sh -c 'printf denied | timeout 3 socat - TCP4:10.77.17.2:8444,connect-timeout=1'; then exit 1; fi
 printf '%s\n' 'PASS another source address and another tunnel port are refused'
 docker exec -d "$name-gateway" sh -c '
   socat -d -d TCP4:10.77.17.2:443,connect-timeout=2 OPEN:/dev/null,ignoreeof > /tmp/held.log 2>&1

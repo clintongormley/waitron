@@ -1,5 +1,5 @@
 import { assertMenuWritable } from "./delete.js";
-import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lte, ne, or } from "drizzle-orm";
 import { menuReleases, menuVersions, now, recordActivity, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
@@ -222,11 +222,25 @@ export async function activateDueMenuPublications(
   nextDueAt: Date | null;
 }> {
   const activated = await settleDue(tx, at);
+  return { activated, nextDueAt: await nextQueuedMenuActivation(tx, at) };
+}
+
+export async function nextQueuedMenuActivation(
+  tx: Transaction,
+  at: Date,
+  menuIds?: readonly string[],
+): Promise<Date | null> {
   const [next] = await tx
     .select({ activatesAt: menuReleases.activatesAt })
     .from(menuReleases)
-    .where(and(eq(menuReleases.state, "queued"), gt(menuReleases.activatesAt, at)))
+    .where(
+      and(
+        eq(menuReleases.state, "queued"),
+        gt(menuReleases.activatesAt, at),
+        menuIds === undefined ? undefined : inArray(menuReleases.menuId, menuIds),
+      ),
+    )
     .orderBy(asc(menuReleases.activatesAt))
     .limit(1);
-  return { activated, nextDueAt: next?.activatesAt ?? null };
+  return next?.activatesAt ?? null;
 }

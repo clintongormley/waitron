@@ -93,6 +93,7 @@ const KEPT = [
   "state/venue/migrations.lock",
   "state/venue/venue.lock",
   "tunnel/staff.sock",
+  "tunnel/customer-menu.sock",
 ];
 
 /** Kept by the wipe, or written only by a set-aside reset; the fixture holds them separately. */
@@ -225,7 +226,7 @@ describe("finishReplacedReset without set-aside", () => {
 
     await expect(finishReplacedReset({ ...deps, tunnelDir })).resolves.toBe(true);
 
-    expect(await readdir(tunnelDir)).toEqual(["rotate-key", "staff.sock"]);
+    expect(await readdir(tunnelDir)).toEqual(["customer-menu.sock", "rotate-key", "staff.sock"]);
   });
 
   it("removes the marker last", async () => {

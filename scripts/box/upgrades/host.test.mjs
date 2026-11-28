@@ -938,23 +938,26 @@ it.each(["absent", "stopped", "running"])(
   },
 );
 
-it("removes the interrupted staff socket before copying and keeps the saved peer", async () => {
+it("removes both interrupted listener sockets before copying and keeps the saved peer", async () => {
   const { execFileSync } = await import("node:child_process");
   const { f, root, fs, join } = await imageFixture();
   const { copyStoppedTree } = await import("./copy.mjs");
   const control = join(root, "tunnel_control");
-  const socket = join(control, "staff.sock");
+  const sockets = ["staff.sock", "customer-menu.sock"].map((name) => join(control, name));
   const peer = join(control, "peer.json");
   await fs.writeFile(peer, "saved peer");
-  execFileSync(process.execPath, [
-    "-e",
-    "require('node:net').createServer().listen(process.argv[1], () => process.exit(0))",
-    socket,
-  ]);
-  expect((await fs.lstat(socket)).isSocket()).toBe(true);
+  for (const socket of sockets) {
+    execFileSync(process.execPath, [
+      "-e",
+      "require('node:net').createServer().listen(process.argv[1], () => process.exit(0))",
+      socket,
+    ]);
+    expect((await fs.lstat(socket)).isSocket()).toBe(true);
+  }
   await f.host.stop();
   try {
-    await expect(fs.lstat(socket)).rejects.toMatchObject({ code: "ENOENT" });
+    for (const socket of sockets)
+      await expect(fs.lstat(socket)).rejects.toMatchObject({ code: "ENOENT" });
     const snapshot = join(root, "snapshot");
     await copyStoppedTree(control, snapshot);
     expect(await fs.readFile(join(snapshot, "peer.json"), "utf8")).toBe("saved peer");

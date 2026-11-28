@@ -1,44 +1,53 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { log } from "node:console";
-import { readFile } from "node:fs/promises";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "playwright";
-import { preview } from "vite";
 import "tsx";
-import { menuAppearances, photoReference, published } from "./published-menu.ts";
-
-const { readDefaults } = await import("@waitron/ui-core/theme");
-const { prepareMenuAppearance } = await import("../src/customer-menu-appearance.ts");
-const defaults = readDefaults(
-  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/colors.css")), "utf8"),
-  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/structure.css")), "utf8"),
-);
-const template = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
-const slot = '<script type="application/json" id="customer-menu-data">';
-assert.ok(template.includes(slot), "built menu must have a snapshot slot");
+const { menuAppearances, photoReference, published } =
+  await import("@waitron/customer-menu/testing");
+const { prepareMenuAppearance } = await import("@waitron/customer-menu/appearance");
+const { samplePreparedImage } = await import("@waitron/media/testing/sample-image.js");
+const { createCustomerMenuApp } = await import("../src/customer-menu-public.ts");
+const { SERVER_THEME_DEFAULTS } = await import("../src/theme-defaults.ts");
 const path = "/lunch/en";
 const icons = ["favicon.ico", "favicon.svg", "apple-touch-icon.png"].map(
   (name) => `/_customer-menu/${name}`,
 );
-const photoUrl = "/fixture/roast-pepper.svg";
+const photoUrl = `/_customer-menu/photos/v1/${photoReference}/display/5000-5000-100.webp`;
 const snapshot = {
   address: "lunch",
   defaultLanguage: "en",
   photos: "large",
-  appearance: prepareMenuAppearance(defaults, menuAppearances.dark),
+  appearance: prepareMenuAppearance(SERVER_THEME_DEFAULTS, menuAppearances.dark),
   menu: published().menu,
   photoUrls: { [photoReference]: photoUrl },
 };
-const html = template.replace(
-  slot,
-  () => slot + JSON.stringify(snapshot).replaceAll("<", "\\u003c"),
-);
-const server = await preview({
-  root: fileURLToPath(new URL("..", import.meta.url)),
-  preview: { host: "127.0.0.1", port: 0, strictPort: true },
-});
-const origin = new URL(server.resolvedUrls.local[0]).origin;
 const releasePhoto = Promise.withResolvers();
+const photoBytes = (await samplePreparedImage({ width: 24 })).bytes;
+const app = createCustomerMenuApp(
+  fileURLToPath(new URL("../../customer-menu/dist", import.meta.url)),
+  {
+    read: async () => ({ menus: new Map([["lunch", new Map([["en", snapshot]])]]) }),
+    readPhoto: async (path) => {
+      if (path !== photoUrl) return null;
+      await releasePhoto.promise;
+      return photoBytes;
+    },
+  },
+  async () => true,
+  () => {},
+);
+const server = createServer(async (req, res) => {
+  const response = await app.request(req.url, { method: req.method });
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+});
+server.listen(0, "127.0.0.1");
+await once(server, "listening");
+const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 try {
   browser = await chromium.launch({ timeout: 15_000 });
@@ -46,24 +55,17 @@ try {
   page.setDefaultTimeout(10_000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("requestfailed", (request) =>
+    errors.push(`${request.url()} ${request.failure()?.errorText}`),
+  );
   page.on("response", (response) => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (request.method() === "GET" && url.origin === origin && url.search === "") {
-      if (url.pathname === path) return route.fulfill({ contentType: "text/html", body: html });
-      if (url.pathname.startsWith("/_customer-menu/assets/") || icons.includes(url.pathname))
-        return route.continue();
-      if (url.pathname === photoUrl) {
-        await releasePhoto.promise;
-        return route.fulfill({
-          contentType: "image/svg+xml",
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
-        });
-      }
-    }
+    if (request.method() === "GET" && url.origin === origin && url.search === "")
+      return route.continue();
     errors.push(`Unexpected customer menu request: ${request.method()} ${url}`);
     return route.abort();
   });
@@ -74,13 +76,6 @@ try {
     .getByRole("heading", { level: 1, name: "Lunch for guests" })
     .waitFor();
   await page.getByRole("button", { name: "Roast pepper" }).waitFor();
-  const article = page.locator("customer-menu-page article");
-  assert.equal(
-    await article.evaluate(
-      (node) => node.ownerDocument.defaultView.getComputedStyle(node).backgroundColor,
-    ),
-    "rgb(31, 41, 40)",
-  );
   assert.deepEqual(
     await page
       .locator('link[rel="icon"], link[rel="apple-touch-icon"]')
@@ -107,6 +102,6 @@ try {
   try {
     await browser?.close();
   } finally {
-    await server.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 }

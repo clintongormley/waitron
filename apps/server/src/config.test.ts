@@ -856,6 +856,38 @@ it("selects the staff socket instead of a TCP bind", () => {
   expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
 });
 
+it("configures the guest bundle and a separate customer socket only for test boxes", () => {
+  const env = {
+    WAITRON_CUSTOMER_MENU_APP_DIR: "/app/web/customer-menu",
+    WAITRON_CUSTOMER_MENU_SOCKET: "/private/control/customer-menu.sock",
+    WAITRON_STAFF_SOCKET: "/private/control/staff.sock",
+  };
+  const config = loadConfig(env, ROOT, STATE_ROOT);
+  expect(config.customerMenu).toEqual({
+    root: "/app/web/customer-menu",
+    socketPath: "/private/control/customer-menu.sock",
+  });
+  expect(
+    loadConfig({ ...env, WAITRON_CUSTOMER_MENU_APP_DIR: "" }, ROOT, STATE_ROOT).customerMenu,
+  ).toBeUndefined();
+  expect(
+    loadConfig({ ...env, WAITRON_CUSTOMER_MENU_SOCKET: env.WAITRON_STAFF_SOCKET }, ROOT, STATE_ROOT)
+      .customerMenu,
+  ).toBeUndefined();
+  expect(
+    loadConfig(
+      {
+        ...env,
+        WAITRON_ENV: "production",
+        WAITRON_MANAGEMENT_RP_ID: "box.example.test",
+        WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
+      },
+      ROOT,
+      STATE_ROOT,
+    ).customerMenu,
+  ).toBeUndefined();
+});
+
 it.each([
   ["8080", {}],
   ["80", {}],

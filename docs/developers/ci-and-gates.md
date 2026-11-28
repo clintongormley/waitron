@@ -861,8 +861,8 @@ The job opens the built setup page in headless Chromium and presses Continue to
 setup. It expects the setup choices to appear and refuses browser exceptions or
 HTTP error responses observed before that transition completes. The three setup reads use fixed browser-intercepted answers;
 this checks the built page and its event handlers, not the server's setup routes.
-The customer-menu smoke step opens the Vite output at a language-specific address
-with an embedded published menu. It waits for the menu and a dish to appear while
+The server's customer-menu smoke step opens the Vite output through the customer-menu
+handler at a language-specific address with an embedded published menu. It waits for the menu and a dish to appear while
 a photo request is held, then releases the photo and checks that it decodes. It
 allows only requests for the document, the built assets and the fixture photo.
 The dashboard and till builds have no browser step in this job.

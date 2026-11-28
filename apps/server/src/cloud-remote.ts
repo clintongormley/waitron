@@ -11,6 +11,7 @@ import {
   watchTlsFiles,
   certificateHostname,
   validateTlsIdentity,
+  type ServeOptions,
 } from "./tls.js";
 import { closeListener } from "./close-listener.js";
 import type { ServerConfig } from "./config.js";
@@ -202,63 +203,72 @@ export function startStaffListener(
   log: Logger,
   admitted: () => Promise<boolean>,
   pageGates: readonly MiddlewareHandler[] = [],
-): { close(): Promise<void>; isListening(): boolean; checkNow(): void } | undefined {
-  const staff = config.staff;
-  if (staff === undefined) return undefined;
-  const binding = "socketPath" in staff ? { socketPath: staff.socketPath } : { port: staff.port };
+) {
+  if (config.staff === undefined) return undefined;
+  return startCloudTlsListener(
+    config.stateDir,
+    config.staff,
+    "staff",
+    log,
+    (hostname) =>
+      createStaffApp(
+        app,
+        async () => ((await admitted()) ? `https://${hostname()}` : undefined),
+        config.dashboardAppDir === undefined
+          ? undefined
+          : { root: config.dashboardAppDir, gates: pageGates },
+        log,
+      ).fetch,
+    [config.httpPort, config.landingPort, config.spareStorePort, config.spareStoreLoopbackPort],
+  );
+}
+
+export function startCloudTlsListener(
+  stateDir: string,
+  listener: NonNullable<ServerConfig["staff"]>,
+  name: "staff" | "customer-menu",
+  log: Logger,
+  fetchFor: (hostname: () => string | undefined) => ServeOptions["fetch"],
+  occupiedPorts: (number | undefined)[] = [],
+) {
+  const binding =
+    "socketPath" in listener ? { socketPath: listener.socketPath } : { port: listener.port };
   const failure = (error: unknown) =>
     log("warn", "server.listen_failed", {
-      listener: "staff",
+      listener: name,
       ...binding,
       code: (error as NodeJS.ErrnoException)?.code ?? "unknown",
     });
   try {
-    if (
-      "port" in staff &&
-      [
-        config.httpPort,
-        config.landingPort,
-        config.spareStorePort,
-        config.spareStoreLoopbackPort,
-      ].includes(staff.port)
-    )
-      throw Object.assign(new Error("Staff port conflicts with another listener"), {
+    if ("port" in listener && occupiedPorts.includes(listener.port))
+      throw Object.assign(new Error("Cloud listener port conflicts with another listener"), {
         code: "EADDRINUSE",
       });
     const tls = {
-      keyFile: join(config.stateDir, CLOUD_STAFF_KEY_FILE),
-      certFile: join(config.stateDir, CLOUD_STAFF_CERT_FILE),
+      keyFile: join(stateDir, CLOUD_STAFF_KEY_FILE),
+      certFile: join(stateDir, CLOUD_STAFF_CERT_FILE),
     };
     const key = readFileSync(tls.keyFile),
       cert = readFileSync(tls.certFile);
     validateTlsIdentity(key, cert, certificateHostname(cert));
-    const options = buildServeOptions(
-      {
-        fetch: createStaffApp(
-          app,
-          async () => ((await admitted()) ? `https://${watcher.hostname()}` : undefined),
-          config.dashboardAppDir === undefined
-            ? undefined
-            : { root: config.dashboardAppDir, gates: pageGates },
-          log,
-        ).fetch,
-      },
-      tls,
-    );
+    const fetch = fetchFor(() => watcher.hostname());
+    const options = buildServeOptions({ fetch }, tls);
     const server =
-      "socketPath" in staff
+      "socketPath" in listener
         ? createAdaptorServer(options)
-        : serve({ ...options, hostname: staff.host, port: staff.port }, (info) =>
-            log("info", "server.listening", { listener: "staff", port: info.port }),
+        : serve({ ...options, hostname: listener.host, port: listener.port }, (info) =>
+            log("info", "server.listening", { listener: name, port: info.port }),
           );
-    if (!(server instanceof HttpsServer)) throw new Error("Staff listener requires HTTPS");
+    if (!(server instanceof HttpsServer)) throw new Error("Cloud listener requires HTTPS");
     server.on("error", failure);
-    if ("socketPath" in staff) {
-      const { socketPath } = staff;
+    if ("socketPath" in listener) {
+      const { socketPath } = listener;
       const existing = lstatSync(socketPath, { throwIfNoEntry: false });
       if (existing !== undefined) {
         if (!existing.isSocket())
-          throw Object.assign(new Error("Staff socket path is occupied"), { code: "EADDRINUSE" });
+          throw Object.assign(new Error("Cloud listener socket path is occupied"), {
+            code: "EADDRINUSE",
+          });
         unlinkSync(socketPath);
       }
       server.listen(socketPath);
@@ -269,7 +279,7 @@ export function startStaffListener(
         throw error;
       }
       server.once("listening", () =>
-        log("info", "server.listening", { listener: "staff", socketPath }),
+        log("info", "server.listening", { listener: name, socketPath }),
       );
     }
     const watcher = watchTlsFiles(server, tls, undefined, () =>

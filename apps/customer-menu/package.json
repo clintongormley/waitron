@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/customer-menu-page.ts",
     "./appearance": "./src/customer-menu-appearance.ts",
+    "./snapshot": {
+      "types": "./src/customer-menu-snapshot.ts"
+    },
     "./testing": "./test/published-menu.ts"
   },
   "scripts": {

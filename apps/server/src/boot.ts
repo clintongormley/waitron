@@ -50,6 +50,8 @@ import {
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
+import { startCustomerMenuListener } from "./customer-menu-public.js";
+import { createPublicMenuView } from "./customer-menu-public-view.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { cloudErrorReportsJob, createCloudErrorReports } from "./cloud-error-reports.js";
 import { cloudProblemReportsJob, createCloudProblemReports } from "./cloud-problem-reports.js";
@@ -4539,6 +4541,28 @@ async function bootServer(
     await staffListener?.close();
   });
 
+  const customerConfig = !isMirror && cloudConnection ? config.customerMenu : undefined;
+  const customerView = customerConfig && createPublicMenuView(db, venueLocale);
+  const startCustomer = () =>
+    customerConfig && customerView
+      ? startCustomerMenuListener(
+          { ...customerConfig, stateDir: config.stateDir },
+          customerView,
+          log,
+          staffAdmitted,
+          () => cloudPrimary() && !handoverGate.isClosed(),
+        )
+      : undefined;
+  let customerListener =
+    customerConfig && existsSync(join(config.stateDir, CLOUD_STAFF_CERT_FILE))
+      ? startCustomer()
+      : undefined;
+  const closeCustomer = async () => {
+    customerView?.close();
+    await customerListener?.close();
+  };
+  undoOnFailure.push(closeCustomer);
+
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -4779,19 +4803,23 @@ async function bootServer(
           ? {
               onStaffCertificate: async (signal) => {
                 if (signal.aborted || !cloudPrimary()) return;
-                if (staffListener?.isListening()) {
-                  staffListener.checkNow();
-                  return;
+                if (staffListener?.isListening()) staffListener.checkNow();
+                else {
+                  await staffListener?.close();
+                  if (!signal.aborted && cloudPrimary())
+                    staffListener = startStaffListener(
+                      config,
+                      app,
+                      log,
+                      staffAdmitted,
+                      staffPageGates,
+                    );
                 }
-                await staffListener?.close();
-                if (!signal.aborted && cloudPrimary())
-                  staffListener = startStaffListener(
-                    config,
-                    app,
-                    log,
-                    () => cloudConnection!.staffAdmitted(),
-                    staffPageGates,
-                  );
+                if (customerListener?.isListening()) customerListener.checkNow();
+                else if (customerConfig) {
+                  await customerListener?.close();
+                  if (!signal.aborted && cloudPrimary()) customerListener = startCustomer();
+                }
               },
             }
           : {}),
@@ -4835,8 +4863,8 @@ async function bootServer(
               shutdownStep = "jobRunner";
               await jobRunner.stopJobs();
             } finally {
-              shutdownStep = "staffListener";
-              await staffListener?.close();
+              shutdownStep = "cloudListeners";
+              await closeAll([() => staffListener?.close(), closeCustomer]);
             }
           },
           () => closingShutdown,

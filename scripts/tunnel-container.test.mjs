@@ -27,11 +27,14 @@ const configuration = {
 let root;
 let bin;
 let staff;
+let customer;
 const runs = [];
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "waitron-tunnel-test-"));
   staff = createServer().listen(join(root, "staff.sock"));
   await once(staff, "listening");
+  customer = createServer().listen(join(root, "customer-menu.sock"));
+  await once(customer, "listening");
   bin = join(root, "bin");
   await mkdir(bin);
   const stub = `#!${process.execPath}
@@ -54,7 +57,7 @@ if(name==="wg"&&args[0]==="set") {
 }
 if(name==="ss"&&process.env.SS_GATE&&fs.existsSync(process.env.SS_GATE)) process.stdout.write("0 0 10.77.17.2:443 10.77.17.1:40000\\n");
 if(name==="socat"&&args[0]==="-u") process.exit(process.env.PROBE_EXIT==="1" ? 1 : 0);
-if(name==="socat"&&process.env.SOCAT_EXIT==="1") process.exit(1);
+if(name==="socat"&&(process.env.SOCAT_EXIT==="1" || (process.env.CUSTOMER_EXIT==="1" && args[0].startsWith("TCP4-LISTEN:8443")))) process.exit(1);
 if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRACE,'["closed"]\\n');process.exit();});setInterval(()=>{},1000);}
 `;
   for (const name of ["wg", "ip", "iptables", "socat", "ss"]) {
@@ -84,6 +87,7 @@ afterEach(async () => {
   }
 });
 afterAll(async () => {
+  if (customer?.listening) await new Promise((resolve) => customer.close(resolve));
   if (staff?.listening) await new Promise((resolve) => staff.close(resolve));
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
@@ -96,6 +100,7 @@ async function start(
     delayedProxy = false,
     failedProbe = false,
     openConnection = false,
+    deadCustomer = false,
   } = {},
 ) {
   const dir = await mkdtemp(join(root, "run-"));
@@ -103,6 +108,8 @@ async function start(
     keys = join(dir, "keys");
   await mkdir(control);
   await symlink(join(root, "staff.sock"), join(control, "staff.sock"));
+  if (deadCustomer)
+    await symlink(join(root, "customer-menu.sock"), join(control, "customer-menu.sock"));
   if (config !== undefined)
     await writeFile(
       join(control, "peer.json"),
@@ -119,6 +126,7 @@ async function start(
       TRACE: trace,
       SNAPSHOT: snapshot,
       ...(unavailable ? { WG_GATE: trace + ".gate" } : {}),
+      CUSTOMER_EXIT: deadCustomer ? "1" : "0",
       SOCAT_EXIT: deadProxy ? "1" : "0",
       PROBE_EXIT: failedProbe ? "1" : "0",
       ...(delayedProxy ? { SETSID_GATE: trace + ".setsid" } : {}),
@@ -157,6 +165,51 @@ async function events(run) {
 const isForwarder = ([command, address]) =>
   command === "socat" && address.startsWith("TCP4-LISTEN:");
 const isProbe = ([command, option]) => command === "socat" && option === "-u";
+
+it("limits the customer forwarder and keeps the staff forwarder alive when it exits", async () => {
+  const run = await start(configuration, { deadCustomer: true });
+  const guest = [
+    "socat",
+    "TCP4-LISTEN:8443,bind=10.77.17.2,reuseaddr,fork,max-children=8",
+    `UNIX-CONNECT:${run.control}/customer-menu.sock`,
+  ];
+  await expect.poll(() => events(run), { timeout: 10000 }).toContainEqual(guest);
+  const calls = await events(run);
+  const accept = [
+    "iptables",
+    "-A",
+    "INPUT",
+    "-i",
+    "wg-cloud",
+    "-s",
+    "10.77.17.1/32",
+    "-p",
+    "tcp",
+    "--dport",
+    "8443",
+    "-j",
+    "ACCEPT",
+  ];
+  expect(calls).toContainEqual(accept);
+  expect(calls.findIndex((call) => call.join(" ") === accept.join(" "))).toBeLessThan(
+    calls.findIndex((call) => call.join(" ") === "iptables -A INPUT -i wg-cloud -j DROP"),
+  );
+  await expect
+    .poll(
+      async () =>
+        (await events(run)).filter(
+          ([cmd, arg]) => cmd === "socat" && arg.startsWith("TCP4-LISTEN:8443"),
+        ).length,
+      { timeout: 10000 },
+    )
+    .toBeGreaterThan(1);
+  expect(run.child.exitCode).toBeNull();
+  expect(
+    (await events(run)).filter(
+      ([cmd, arg]) => cmd === "socat" && arg.startsWith("TCP4-LISTEN:443"),
+    ),
+  ).toHaveLength(1);
+});
 
 it("makes and retains a private box key while staying off without configuration", async () => {
   const run = await start();
