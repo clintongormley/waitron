@@ -6705,17 +6705,20 @@ whether the section is held or fired; and last the rows with nothing left, serve
 charged, in line order. Rows with the same time go by line id.
 
 A tap opens a sent row in place in the opened new row's box, its text in `--wt-color-text` with a
-bold quantity, and a second tap closes it; one row is open at a time, and it stays open after a
-serve (`OpenSentRow`, `apps/till/src/widgets/sent-row-open.ts`). Under its line sit the count
-("1 of 3 served") in muted `md` text starting under the name, which the row's second line then
-leaves out, and the outlined Serve buttons at the right, the last ending `--wt-space-2` in from the
-box's edge, in line with the price: Serve 1, and Serve {N} when more than one is left, or one Serve
-for a weighed dish or one not counted in whole portions; none while any dish left is held or not
-released, nor on a wholly served or cancelled but charged row, which also have no count. Under
-them, Dish details, outlined like them, opens the dish's details window, which a held press on any
-sent row also opens. Opening a row whose box would end under the draft bar scrolls the list until
-the box's lower edge sits `--wt-space-2` above the bar, as an opened new row's does, and a change of
-the screen's width while it is open brings it back the same way.
+bold quantity, and a second tap closes it; one row is open at a time. After a serve the box stays
+on the row that now holds what was left of it, or, once nothing is left, on a row holding its
+served portions with nothing of its own to serve, and otherwise closes (`OpenSentRow`,
+`apps/till/src/widgets/sent-row-open.ts`). Under its line sit the count ("1 of 3 served"), which
+the row's second line then leaves out, in muted `md` text starting where the name starts when the
+quantity fits its column, and the outlined Serve buttons at the right, the last ending
+`--wt-space-2` in from the box's edge, in line with the price: Serve 1, and Serve {N} when more
+than one is left, or one Serve for a weighed dish or one not counted in whole portions; none while
+any dish left is held or not released, nor on a wholly served or cancelled but charged row, which
+also have no count. Under them, Dish details, outlined like them, opens the dish's details window,
+which a held press on any of the bill's sent rows also opens. Opening a row whose box would end
+under the draft bar scrolls the list until the box's lower edge sits `--wt-space-2` above the bar,
+as an opened new row's does, and a change of the screen's width while it is open brings it back
+the same way.
 
 ### The dish picker
 
