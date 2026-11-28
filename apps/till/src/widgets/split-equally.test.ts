@@ -91,6 +91,44 @@ describe("till-split-equally", () => {
     expect(note(el)).toBeNull();
   });
 
+  it("notes the extra cent when a paid guest's share is the cent more than those left", async () => {
+    const el = await mount({
+      left: "48.86",
+      taken: true,
+      startCount: 3,
+      paid: [{ amount: "24.44", state: "received" }],
+    });
+    expect(amounts(el)).toEqual(["€24.44", "€24.43", "€24.43"]);
+    expect(note(el)?.textContent?.trim()).toBe(
+      "Shares differ by a cent where the bill does not divide evenly.",
+    );
+  });
+
+  it("notes no cent when the shares left are equal and a paid share differs by more", async () => {
+    const el = await mount({
+      left: "0.02",
+      taken: true,
+      startCount: 4,
+      paid: [
+        { amount: "24.44", state: "received" },
+        { amount: "24.44", state: "received" },
+      ],
+    });
+    expect(amounts(el)).toEqual(["€24.44", "€24.44", "€0.01", "€0.01"]);
+    expect(note(el)).toBeNull();
+  });
+
+  it("notes the extra cent when the shares left differ, whatever a paid share holds", async () => {
+    const el = await mount({
+      left: "48.86",
+      taken: true,
+      startCount: 4,
+      paid: [{ amount: "24.44", state: "received" }],
+    });
+    expect(amounts(el)).toEqual(["€24.44", "€16.29", "€16.29", "€16.28"]);
+    expect(note(el)).not.toBeNull();
+  });
+
   it("goes no lower than 2 and no higher than the cents left", async () => {
     const el = await mount({ left: "0.03", startCount: 2 });
     expect(stepper(el).min).toBe(2);
@@ -211,6 +249,20 @@ describe("till-split-equally", () => {
     expect(startButton(el).disabled).toBe(true);
   });
 
+  it("notes no cent when no shares are left to list, whatever the paid ones hold", async () => {
+    const el = await mount({
+      left: "0.01",
+      taken: true,
+      startCount: 1000,
+      paid: [
+        { amount: "0.02", state: "received" as const },
+        ...Array.from({ length: 998 }, () => ({ amount: "0.01", state: "received" as const })),
+      ],
+    });
+    expect(rows(el).filter(([, , , state]) => state === "due")).toEqual([]);
+    expect(note(el)).toBeNull();
+  });
+
   it("keeps the count being chosen when a render brings the same record again", async () => {
     const paid = () => [{ amount: "24.44", state: "received" as const }];
     const el = await mount({ left: "48.86", taken: true, startCount: 3, paid: paid() });
@@ -324,5 +376,13 @@ describe("till-split-equally", () => {
     const share = formatMoney(decimal("24.44"), "es");
     expect(rows(el)[0]).toEqual(["Comensal 1", "por pagar", share, "due"]);
     expect(startButton(el).textContent!.trim()).toBe(`Empezar con Comensal 1 · ${share}`);
+  });
+
+  it("sets the stepper --wt-space-3 below the question", async () => {
+    const el = await mount({ startCount: 3 });
+    el.style.setProperty("--wt-space-3", "13px");
+    const question = root(el).querySelector("[data-split-question]")!.getBoundingClientRect();
+    const circles = stepper(el).getBoundingClientRect();
+    expect(circles.top - question.bottom).toBe(13);
   });
 });

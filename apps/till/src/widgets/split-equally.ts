@@ -26,6 +26,17 @@ export interface SplitEquallyStartDetail {
 
 const money = (amount: string): string => formatMoney(decimal(amount), currentLocale());
 
+const cents = (amount: string): number => Number(multiplyDecimal(decimal(amount), decimal("100")));
+
+/** The note says shares differ by a cent, so it shows when the shares left do, or when every listed
+ * share is within a cent of the others without all being equal. */
+function sharesDifferByACent(paid: readonly string[], left: readonly string[]): boolean {
+  if (left.length === 0) return false;
+  if (left[0] !== left[left.length - 1]) return true;
+  const listed = [...paid, ...left].map(cents);
+  return Math.max(...listed) - Math.min(...listed) === 1;
+}
+
 /** Split equally: the number of guests with − and +, and every guest's share of what is left. */
 @customElement("till-split-equally")
 export class TillSplitEqually extends LitElement {
@@ -43,7 +54,7 @@ export class TillSplitEqually extends LitElement {
       .count {
         display: flex;
         justify-content: center;
-        padding: var(--wt-space-2) var(--wt-space-4);
+        padding: var(--wt-space-3) var(--wt-space-4) var(--wt-space-2);
       }
 
       wt-share-list {
@@ -93,7 +104,7 @@ export class TillSplitEqually extends LitElement {
   }
 
   get #cents(): number {
-    return Number(multiplyDecimal(decimal(this.left), decimal("100")));
+    return cents(this.left);
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -192,9 +203,12 @@ export class TillSplitEqually extends LitElement {
       </div>
       <wt-share-list .label=${t("split_equally.shares")} .shares=${rows}></wt-share-list>
       ${
-        shares[0] === shares[shares.length - 1]
-          ? nothing
-          : html`<p class="note" data-split-note>${t("split_equally.note")}</p>`
+        sharesDifferByACent(
+          this.paid.map((share) => share.amount),
+          shares,
+        )
+          ? html`<p class="note" data-split-note>${t("split_equally.note")}</p>`
+          : nothing
       }
       <wt-foot-button-bar slot="footer">
         <wt-button
