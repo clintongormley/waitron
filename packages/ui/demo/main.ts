@@ -161,6 +161,16 @@ const panel = (theme: "light" | "dark") => `
           allow-add
         ></wt-combobox>
       </div>
+      <div class="row" style="margin-top:16px">
+        <wt-combobox look="boxed" label="Card reader" search="never" class="demo-boxed"></wt-combobox>
+        <wt-combobox
+          look="boxed"
+          label="Receipt printer"
+          search="never"
+          class="demo-boxed"
+          highlight
+        ></wt-combobox>
+      </div>
       <wt-address-lookup
         label="Street address"
         name="streetAddress"
@@ -564,6 +574,13 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   ];
   const single = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-combobox")!;
   single.options = DEMO_TAGS;
+  for (const boxed of el.querySelectorAll<HTMLElementTagNameMap["wt-combobox"]>(".demo-boxed")) {
+    boxed.options = [
+      { value: "bar", label: "Bar" },
+      { value: "terrace", label: "Terrace" },
+    ];
+    boxed.value = "bar";
+  }
   const address =
     el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!;
   address.provider = {

@@ -6,6 +6,8 @@ import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-row-actions.js";
 import "./wt-button.js";
+import "./wt-combobox.js";
+import type { WtCombobox } from "./wt-combobox.js";
 
 registerIcons({
   bin: "M6 1.75H10V3.25H13.5V4.75H2.5V3.25H6ZM3.75 4.75H12.25V13a1 1 0 0 1-1 1H4.75a1 1 0 0 1-1-1ZM5 4.75V12.75H11V4.75ZM6.5 6.5H7.5V11H6.5ZM8.5 6.5H9.5V11H8.5Z",
@@ -139,6 +141,39 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     );
     await expectNoA11yViolations(host);
     (el as unknown as { show(): void }).show();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a disabled menu sheet trigger", async () => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Devices" bottom-sheet sheet-variant="menu" disabled>
+        <button>Done</button></wt-row-actions>`,
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  test("a menu sheet holding a boxed dropdown, with the dropdown open", async () => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Devices" bottom-sheet sheet-variant="menu">
+        <div data-keep-open>
+          <wt-combobox look="boxed" label="Card reader" search="never"></wt-combobox>
+        </div>
+        <button>Done</button></wt-row-actions>`,
+      theme,
+    );
+    const combobox = el.querySelector<WtCombobox>("wt-combobox")!;
+    combobox.options = [
+      { value: "r2", label: "Reader 2" },
+      { value: "r3", label: "Reader 3" },
+    ];
+    combobox.value = "r2";
+    await combobox.updateComplete;
+    (el as unknown as { show(): void }).show();
+    await expectNoA11yViolations(host);
+    await userEvent.click(combobox.shadowRoot!.querySelector(".trigger")!);
+    expect(combobox.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     await expectNoA11yViolations(host);
   });
 });

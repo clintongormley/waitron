@@ -237,3 +237,51 @@ export const fieldStyles = css`
     }
   }
 `;
+
+/** The boxed field box, `.field[data-boxed]`: a bordered box on the surface rather than a filled
+ * one with a bottom line, and with `[data-highlight]` a thicker primary border on the lifted
+ * surface. Add it after a primitive's own styles. See design-system.md → Forms. */
+export const boxedFieldStyles = css`
+  .field[data-boxed] {
+    --wt-field-box-line: var(--wt-field-line-width);
+    align-items: center;
+    border: var(--wt-field-box-line) solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-color-surface);
+  }
+  .field[data-boxed],
+  .field[data-boxed]:is(:focus-within, [data-open], [data-invalid], [data-disabled]) {
+    box-shadow: none;
+  }
+  .field[data-boxed]::after {
+    content: none;
+  }
+  /* The control and the label measure from the outer edge, so a thicker border moves neither. */
+  .field[data-boxed] > .field-control {
+    width: calc(100% + 2 * var(--wt-field-box-line));
+    margin: calc(-1 * var(--wt-field-box-line));
+  }
+  .field[data-boxed] > .field-label {
+    inset-inline-start: calc(
+      var(--wt-space-3) + var(--wt-field-line-width) - var(--wt-field-box-line)
+    );
+    top: calc(var(--wt-space-2) + var(--wt-field-line-width) - var(--wt-field-box-line));
+  }
+  .field[data-boxed][data-highlight] {
+    --wt-field-box-line: var(--wt-field-line-width-active);
+    border-color: var(--wt-color-primary);
+    background: var(--wt-color-surface-lifted);
+  }
+  .field[data-boxed]:focus-within {
+    --wt-field-box-line: var(--wt-field-line-width-active);
+    border-color: var(--wt-color-primary);
+  }
+  .field[data-boxed][data-invalid] {
+    --wt-field-box-line: var(--wt-field-line-width-active);
+    border-color: var(--wt-color-danger);
+  }
+  .field[data-boxed][data-disabled] {
+    border-style: dashed;
+    background: var(--wt-color-field-fill-disabled);
+  }
+`;

@@ -3,7 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { guard } from "lit/directives/guard.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
-import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
+import { boxedFieldStyles, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles } from "../base-styles.js";
 import { createLabelComparator, foldCache, foldForSearch, searchFor } from "@waitron/shared";
 import { ChangeObserver } from "../change-observer.js";
@@ -359,6 +359,18 @@ export class WtCombobox extends LitElement {
       .add {
         font-weight: var(--wt-font-weight-bold);
       }
+
+      .field[data-boxed] .value {
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-medium);
+      }
+    `,
+    boxedFieldStyles,
+    css`
+      .field[data-boxed][data-open]:not([data-search], [data-invalid], [data-disabled]) {
+        --wt-field-box-line: var(--wt-field-line-width-active);
+        border-color: var(--wt-color-primary);
+      }
     `,
   ];
 
@@ -404,6 +416,11 @@ export class WtCombobox extends LitElement {
   @property() hint = "";
   /** Puts `label` first in the trigger's name without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  /** "boxed" draws a bordered box on the surface instead of the filled field (design-system.md →
+   * Forms). */
+  @property({ reflect: true }) look: "filled" | "boxed" = "filled";
+  /** Marks a boxed field with a thicker primary border on the lifted surface. */
+  @property({ type: Boolean, reflect: true }) highlight = false;
   @state() private expanded = false;
   @state() private searchText = "";
   @state() private activeIndex = -1;
@@ -1077,6 +1094,8 @@ export class WtCombobox extends LitElement {
         ?data-disabled=${this.disabled}
         ?data-compact=${!showLabel}
         ?data-open=${this.expanded}
+        ?data-boxed=${this.look === "boxed"}
+        ?data-highlight=${this.look === "boxed" && this.highlight}
         ?data-search=${this.hasSearchBox}
       >
         ${

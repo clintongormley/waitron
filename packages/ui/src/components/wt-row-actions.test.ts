@@ -1967,3 +1967,46 @@ it("start-aligns each line of a wrapping link label", async () => {
   expect(label.getClientRects().length).toBeGreaterThan(1);
   expect(getComputedStyle(link).textAlign).toBe("start");
 });
+
+describe("the disabled setting", () => {
+  it("stops the trigger and show() opening the menu", async () => {
+    const el = (await mount(
+      '<wt-row-actions label="Devices" bottom-sheet sheet-variant="menu" disabled><button>Done</button></wt-row-actions>',
+    )) as WtRowActions;
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(trigger.disabled).toBe(true);
+    await userEvent.click(trigger, { force: true });
+    expect(popup.matches(":popover-open")).toBe(false);
+    el.show();
+    expect(popup.matches(":popover-open")).toBe(false);
+    el.disabled = false;
+    await el.updateComplete;
+    await userEvent.click(trigger);
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+
+  it("closes an open menu when it is set", async () => {
+    const { el, popup, trigger } = await menuSheet("<button>Done</button>");
+    expect(popup.matches(":popover-open")).toBe(true);
+    const toggles: boolean[] = [];
+    el.addEventListener("wt-row-actions-toggle", (event) =>
+      toggles.push((event as CustomEvent<{ open: boolean }>).detail.open),
+    );
+    (el as WtRowActions).disabled = true;
+    await (el as WtRowActions).updateComplete;
+    expect(popup.matches(":popover-open")).toBe(false);
+    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+    expect(toggles).toEqual([false]);
+  });
+
+  it("paints a disabled trigger at the disabled opacity", async () => {
+    const el = (await mount(
+      '<wt-row-actions label="Devices" disabled></wt-row-actions>',
+    )) as WtRowActions;
+    host.style.setProperty("--wt-opacity-disabled", "0.3");
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(trigger).opacity).toBe("0.3");
+    expect(getComputedStyle(trigger).cursor).toBe("not-allowed");
+  });
+});

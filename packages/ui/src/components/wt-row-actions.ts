@@ -90,6 +90,9 @@ export class WtRowActions extends LitElement {
         cursor: pointer;
         position: relative;
       }
+      button:disabled {
+        ${disabledStyles}
+      }
       ::slotted([slot="badge"]) {
         position: absolute;
         inset-block-start: 0;
@@ -260,6 +263,8 @@ export class WtRowActions extends LitElement {
   @property({ attribute: "sheet-heading" }) sheetHeading = "";
   @property({ attribute: "sheet-label" }) sheetLabel = "";
   @property({ type: Boolean, attribute: "focus-sheet" }) focusSheet = false;
+  /** Stops the trigger and `show()` opening the popup, and closes it if it is open. */
+  @property({ type: Boolean, reflect: true }) disabled = false;
   @state() private expanded = false;
   @state() private isMenu = false;
   @state() private directDelete: HTMLElement | null = null;
@@ -319,7 +324,13 @@ export class WtRowActions extends LitElement {
    * before the first render or while the host is off the page, where a popover cannot open. */
   show(): void {
     const popup = this.popup as HTMLElement | null;
-    if (this.directDelete || popup === null || !this.isConnected || popup.matches(":popover-open"))
+    if (
+      this.directDelete ||
+      this.disabled ||
+      popup === null ||
+      !this.isConnected ||
+      popup.matches(":popover-open")
+    )
       return;
     popup.showPopover();
     // A sibling can render before the browser's queued toggle event reaches this menu.
@@ -360,6 +371,7 @@ export class WtRowActions extends LitElement {
   override updated(changed: PropertyValues<this>): void {
     // Applying the new placement in the resize callback would resize its observed box again.
     if (changed.has("bottomSheet")) this.positionPopup();
+    if (changed.has("disabled") && this.disabled) this.hide();
   }
 
   private positionPopup(): void {
@@ -571,6 +583,7 @@ export class WtRowActions extends LitElement {
         aria-expanded=${this.directDelete ? nothing : this.expanded}
         aria-haspopup=${this.directDelete ? nothing : this.menuSheet ? "dialog" : this.isMenu ? "menu" : nothing}
         popovertarget=${this.directDelete ? nothing : "actions"}
+        ?disabled=${this.disabled}
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
