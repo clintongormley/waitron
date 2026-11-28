@@ -3786,6 +3786,7 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .menuPeriodUsage=${this.#menuPeriodUsage?.provider}
           .canEditProducts=${this.#permittedScreen("products") === "products"}
+          .canOpenCloudServices=${this.#permittedScreen("cloud") === "cloud"}
           .permissionContinuation=${this.#permissionContinuation}
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
         ></dashboard-menus-screen>`;

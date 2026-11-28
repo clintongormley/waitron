@@ -70,7 +70,7 @@ export class WtSwitch extends LitElement {
 
       .track {
         margin-left: var(--wt-switch-track-offset, 0px);
-        width: var(--wt-space-6);
+        width: var(--wt-switch-track-width, var(--wt-space-6));
         height: var(--wt-space-4);
         border-radius: var(--wt-radius-lg);
         background: var(--wt-color-field-line);
@@ -99,7 +99,9 @@ export class WtSwitch extends LitElement {
       }
 
       :host([checked]) .thumb {
-        transform: translateX(var(--wt-space-4));
+        transform: translateX(
+          calc(var(--wt-switch-track-width, var(--wt-space-6)) - var(--wt-space-4))
+        );
       }
 
       :host([disabled]) {

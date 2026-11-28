@@ -462,6 +462,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
+  getCustomerMenuCloudStatus: [],
   // Read from Cloud, which no table change reports; the server lets one read a minute through.
   getCloudBilling: [],
   getCloudEmergency: [],

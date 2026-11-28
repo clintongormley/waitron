@@ -482,8 +482,8 @@ Si el acceso a Cloud ha terminado, porque alguien eligió **Detener el acceso a 
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Sistema**
 en el servidor principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
 confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del servidor. La vinculación con
-Cloud y los demás servicios de Cloud se mantienen. Elige **Activar el acceso remoto** para que el
-servidor vuelva a conectarse.
+Cloud y los demás servicios de Cloud se mantienen. Mantén el acceso remoto activado si compartes
+cartas públicas. Elige **Activar el acceso remoto** para que el servidor vuelva a conectarse.
 
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte

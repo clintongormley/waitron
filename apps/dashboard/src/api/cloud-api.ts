@@ -139,6 +139,10 @@ export interface CloudBilling {
   accountUrl: string;
 }
 
+export type CustomerMenuCloudStatus =
+  | { status: "ready"; origin: string }
+  | { status: "disconnected" | "remote_off" | "plan_required" | "waiting" | "unavailable" };
+
 export class CloudApi extends OrdersApi {
   readonly #request: DashboardRequest;
   constructor(request: DashboardRequest) {
@@ -199,6 +203,11 @@ export class CloudApi extends OrdersApi {
     request: CloudOwnerRecoveryRequest,
   ): Promise<{ requestId: string; state: "approved" | "refused" }> {
     return this.#request(`/management-api/cloud/owner-recovery/${action}`, "POST", { request });
+  }
+  getCustomerMenuCloudStatus(): Promise<CustomerMenuCloudStatus> {
+    return this.#request("/management-api/cloud/customer-menu", "GET", undefined, {
+      passive: true,
+    });
   }
   getCloudStatus(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/status", "GET");

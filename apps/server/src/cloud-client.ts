@@ -50,6 +50,8 @@ import type {
   CloudRegistration,
 } from "./cloud-client-types.js";
 
+import { projectCustomerMenuCloudStatus } from "./cloud-customer-menu.js";
+
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
   remoteAccessEnabled?: boolean;
   sameTabSignIn?: true;
@@ -734,6 +736,10 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         true,
         signal,
       );
+    },
+    async customerMenuStatus() {
+      const state = await read();
+      return projectCustomerMenuCloudStatus(options.environment, state, project(state));
     },
     async status(): Promise<CloudConnectionStatus> {
       const state = await readState();

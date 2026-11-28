@@ -450,6 +450,7 @@ function api(overrides: ApiOverrides = {}, nodes: MenuStructureNode[] = lunchNod
   let root = nodes;
   const client = {
     listMenus: vi.fn().mockResolvedValue(menus),
+    getCustomerMenuCloudStatus: vi.fn().mockResolvedValue({ status: "unavailable" }),
     listLibraryProducts: vi.fn().mockResolvedValue(products),
     listCategories: vi.fn().mockResolvedValue(categories),
     getMenuSettings: vi
@@ -658,7 +659,43 @@ async function mount(client: Api = api(), path = "/menus", theme?: "light" | "da
   return el;
 }
 
-/** Opens Lunch from its address and waits for its structure. */
+it("shows the public address only on eligible menu rows in both layouts", async () => {
+  const locale = currentLocale();
+  setLocale("en");
+  onTestFinished(() => setLocale(locale));
+  const previous = [innerWidth, innerHeight] as const;
+  const client = api({
+    getCustomerMenuCloudStatus: async () => ({
+      status: "ready",
+      origin: "https://cafe.example.test",
+    }),
+    listMenus: async () => [
+      { ...menus[0]!, onlineAddress: "lunch" },
+      menus[1]!,
+      { ...menus[0]!, id: "unpublished", name: "Draft", onlineAddress: "draft" },
+      { ...menus[0]!, id: "set", name: "Set lunch", kind: "set_menu", onlineAddress: "set" },
+    ],
+    getMenuStatuses: async () => ({
+      ...statuses(),
+      unpublished: { state: "unpublished", clashes: 0 },
+    }),
+  });
+  try {
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 800);
+      if (width === 1280) await mount(client);
+      const links = page.getByRole("link", { name: /\(opens in a new tab\)$/ });
+      await expect.element(links).toHaveLength(1);
+      await expect.element(links).toHaveAccessibleName("/lunch (opens in a new tab)");
+      await expect.element(links).toHaveAttribute("href", "https://cafe.example.test/lunch");
+      await expect.element(links).toHaveAttribute("target", "_blank");
+      await expect.element(links).toHaveTextContent("/lunch");
+    }
+  } finally {
+    await page.viewport(...previous);
+  }
+});
+
 async function mountLunch(client: Api = api()) {
   const el = await mount(client, LUNCH_PATH);
   await vi.waitFor(() => expect(structure(el)).not.toBeNull());

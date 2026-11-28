@@ -19,7 +19,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import { cardFrameStyles } from "@waitron/ui-core/components/wt-card";
 import { contrastRatio } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { LitElement, css, html, nothing } from "lit";
@@ -48,7 +47,6 @@ export class MenuCustomerStyleDialog extends LitElement {
     fixLineStyles,
     css`
       .style-card {
-        ${cardFrameStyles}
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
@@ -415,7 +413,6 @@ export class MenuCustomerStyleDialog extends LitElement {
       </div>
       <wt-button
         variant="secondary"
-        size="sm"
         ?disabled=${this.disabled || this.styles === undefined}
         @click=${() => {
           this.#reset(this.styleId);

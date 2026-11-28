@@ -375,10 +375,21 @@ function offeringMenus(graph: SectionGraph, root: string): SetMenuDetails["heldB
   });
 }
 
-export type DashboardMenuSummary = Menu & { heldBy?: SetMenuDetails["heldBy"] };
+export type DashboardMenuSummary = Menu & {
+  heldBy?: SetMenuDetails["heldBy"];
+  onlineAddress?: string;
+};
 
 export async function listDashboardMenus(tx: Transaction): Promise<DashboardMenuSummary[]> {
-  const rows = await listMenus(tx);
+  const addresses = await tx
+    .select({ id: menus.id, address: menus.onlineAddress })
+    .from(menus)
+    .where(and(eq(menus.active, true), eq(menus.onlineEnabled, true)));
+  const online = new Map(addresses.map(({ id, address }) => [id, address]));
+  const rows = (await listMenus(tx)).map((menu) => {
+    const onlineAddress = online.get(menu.id);
+    return onlineAddress ? { ...menu, onlineAddress } : menu;
+  });
   if (!rows.some(({ kind }) => kind === "set_menu")) return rows;
 
   const graph = await loadSectionGraph(tx);

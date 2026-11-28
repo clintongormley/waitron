@@ -5,9 +5,60 @@ import * as fs from "node:fs/promises";
 import { syncsAndRenames, writtenDurably } from "./testing/durable-writes.js";
 import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
+import { installationFixture, type ServiceState } from "../test/cloud-installation-fixture.js";
 import { createCloudConnection, loadCloudOrigin, loadCloudSignInCallback } from "./cloud-client.js";
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 vi.mock("node:fs/promises", { spy: true });
+
+it("withholds a public customer menu until Cloud assigns a ready public hostname", async () => {
+  let remote: { state: ServiceState; configuration: object } = {
+    state: "provisioning",
+    configuration: { publicHostname: "menu.example.test" },
+  };
+  const f = await installationFixture(undefined, { remoteAccess: () => remote });
+  try {
+    expect(await f.client.customerMenuStatus()).toEqual({ status: "waiting" });
+    await f.client.refresh();
+    expect(await f.client.customerMenuStatus()).toEqual({ status: "waiting" });
+
+    remote = {
+      state: "ready",
+      configuration: {
+        publicHostname: "https://malformed.example.test/path",
+        staffHostname: "staff.example.test",
+      },
+    };
+    await f.client.refresh();
+    expect(await f.client.customerMenuStatus()).toEqual({ status: "waiting" });
+
+    remote = { state: "ready", configuration: { publicHostname: "menu.example.test" } };
+    await f.client.refresh();
+    expect(await f.client.customerMenuStatus()).toEqual({
+      status: "ready",
+      origin: "https://menu.example.test",
+    });
+    await f.client.setRemoteAccess(false, async () => {});
+    expect(await f.client.customerMenuStatus()).toEqual({ status: "remote_off" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("withholds an assigned public hostname from production Cloud", async () => {
+  const f = await installationFixture(undefined, {
+    environment: "production",
+    remoteAccess: () => ({
+      state: "ready",
+      configuration: { publicHostname: "menu.example.test" },
+    }),
+  });
+  try {
+    expect((await f.client.refresh()).installation?.state).toBe("active");
+    expect(await f.client.customerMenuStatus()).toEqual({ status: "unavailable" });
+  } finally {
+    await f.close();
+  }
+});
 
 it("saves the connection under cloud with private permissions and both flushes", async () => {
   const f = await fixture();
