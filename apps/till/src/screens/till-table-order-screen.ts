@@ -5872,8 +5872,8 @@ export class TillTableOrderScreen extends LitElement {
         .join(", ") !== group.summary
     )
       return group.summary;
-    // The server's summary also names the group's dishes another bill already sent, which Fire
-    // does not send again.
+    // The server's summary also names the group's dishes already sent, which Fire does not send
+    // again.
     const quantities = tally(rowsOf.filter(waitsForFire));
     if (quantities.length === 0) return group.summary;
     return quantities

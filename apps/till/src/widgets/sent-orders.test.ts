@@ -603,19 +603,25 @@ it.each([
   },
 );
 
-it("centres Serve all's word on Fire's line on a held heading with a released dish", async () => {
-  const el = await mount(
-    current([], [group("g", [row("own", { released: false }), row("drink", { lineNo: 2 })])]),
-  );
-  el.style.width = "600px";
-  for (let frame = 0; frame < 2; frame++)
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-  const heading = find(el, "[data-sent-section=g] wt-course-heading");
-  expect(heading.hasAttribute("stacked")).toBe(false);
-  const fire = find(el, "[data-group-fire=g]");
-  const serve = find(el, "[data-sent-section=g] [data-serve-all]");
-  expect(Math.abs(textMiddle(serve) - textMiddle(fire))).toBeLessThanOrEqual(1);
-});
+it.each([
+  [600, false],
+  [200, true],
+] as const)(
+  "centres Serve all's word on Fire's line on a held heading with a released dish at %ipx (stacked: %s)",
+  async (width, stacked) => {
+    const el = await mount(
+      current([], [group("g", [row("own", { released: false }), row("drink", { lineNo: 2 })])]),
+    );
+    el.style.width = `${width}px`;
+    for (let frame = 0; frame < 2; frame++)
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    const heading = find(el, "[data-sent-section=g] wt-course-heading");
+    expect(heading.hasAttribute("stacked")).toBe(stacked);
+    const fire = find(el, "[data-group-fire=g]");
+    const serve = find(el, "[data-sent-section=g] [data-serve-all]");
+    expect(Math.abs(textMiddle(serve) - textMiddle(fire))).toBeLessThanOrEqual(1);
+  },
+);
 
 it.each(["en", "es"] as const)(
   "names each %s group's Serve all after its group, as Fire is named",
