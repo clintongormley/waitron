@@ -183,6 +183,7 @@ import {
 } from "./state/clocking.js";
 import {
   clockActionAfterDeferringQuestions,
+  clockMessage,
   signInClockAction,
   type SignInClockAction,
 } from "./state/clock-sign-in.js";
@@ -5494,7 +5495,7 @@ export class TillApp extends LitElement {
     const error = snapshot?.actionError ?? snapshot?.readError ?? snapshot?.dayError;
     if (inQuestions && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
       return attendanceConnectionRefusal(this.router, snapshot?.actionError != null);
-    return error ? codeMessage(error.code) : this.#clockMessage();
+    return error ? codeMessage(error.code) : clockMessage(this.clockSnapshot);
   }
   async #retryAttendance(): Promise<void> {
     if (this.#attendanceNeedsInitialRead) await this.#clocking?.refresh();
@@ -5770,20 +5771,6 @@ export class TillApp extends LitElement {
       this.#clockNeedsInitialRead = false;
       this.clockPage = action;
     } else await this.#resumeAfterClockPrompt();
-  }
-
-  #clockMessage(): string {
-    if (this.clockSnapshot.refusal !== null) return codeMessage(this.clockSnapshot.refusal.code);
-    const error = this.clockSnapshot.error;
-    return error === null
-      ? ""
-      : t(
-          error === "read"
-            ? "clock.read_error"
-            : error === "write"
-              ? "clock.write_error"
-              : "clock.uncertain",
-        );
   }
 
   async #onClockAction(event: CustomEvent<{ action: TillClockAction }>): Promise<void> {
@@ -24682,7 +24669,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
-        ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
+        ${this.#clockAccessLost && clockMessage(this.clockSnapshot) ? html`<p class="refresh-message" role="status" data-clock-refusal>${clockMessage(this.clockSnapshot)}</p>` : nothing}
         <wt-toast
           class="submitted-toast"
           data-capture-warning
@@ -25124,7 +25111,7 @@ export class TillApp extends LitElement {
                         .action=${this.clockPage}
                         .breakStart=${this.clockSnapshot.state?.breakStart ?? null}
                         .canAct=${this.clockSnapshot.state?.state === (this.clockPage === "in" ? "out" : "on_break")}
-                        .error=${this.#clockMessage()}
+                        .error=${clockMessage(this.clockSnapshot)}
                       ></till-clock-in-screen>`,
                     )
                   : shellFormFactor !== undefined
