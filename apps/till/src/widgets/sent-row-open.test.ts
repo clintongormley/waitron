@@ -589,6 +589,62 @@ it("follows the open row when Serve 1 joins its portion to another row, and clos
   expect(find(el, "[data-sent-serve]")).toBeNull();
 });
 
+it("follows what the row held when it was served from, not when it was opened", async () => {
+  const el = await mount(sentCurrent([burgerDish("burger-1", 1), burgerDish("burger-2", 2)]), {
+    lines: burgers.slice(0, 2),
+  });
+  await tap(el, toggle("burger-1"));
+  expect(opened(el)).toEqual([["burger-1", "0 of 2 served", ["Serve 1", "Serve 2"]]]);
+  const ready = { readyAt: at(55) };
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([burgerDish("burger-1", 1), burgerDish("burger-2", 2, ready)]),
+  };
+  await el.updateComplete;
+  expect(opened(el)).toEqual([["burger-1", "0 of 1 served", ["Serve 1"]]]);
+  await tap(el, "[data-sent-serve=one]");
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([
+      burgerDish("burger-1", 1, { servedQuantity: "1.000", servedAt: at(59) }),
+      burgerDish("burger-2", 2, ready),
+    ]),
+  };
+  el.lines = [{ ...burgers[0]!, servedAt: at(59) }, burgers[1]!];
+  await el.updateComplete;
+  expect(opened(el)).toEqual([]);
+});
+
+it("keeps the row open when the bill's new lines are drawn before its new current orders", async () => {
+  const el = await mount(
+    sentCurrent([
+      burgerDish("burger-1", 1, { servedQuantity: "1.000", servedAt: at(50) }),
+      burgerDish("burger-2", 2),
+      burgerDish("burger-3", 3),
+    ]),
+    { lines: [{ ...burgers[0]!, servedAt: at(50), movable: false }, ...burgers.slice(1)] },
+  );
+  await tap(el, toggle("burger-2"));
+  expect(opened(el)).toEqual([["burger-2", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+  await tap(el, "[data-sent-serve=one]");
+  el.lines = [
+    { ...burgers[0]!, servedAt: at(50), movable: false },
+    { ...burgers[1]!, servedAt: at(59), movable: false },
+    burgers[2]!,
+  ];
+  await el.updateComplete;
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([
+      burgerDish("burger-1", 1, { servedQuantity: "1.000", servedAt: at(50) }),
+      burgerDish("burger-2", 2, { servedQuantity: "1.000", servedAt: at(59) }),
+      burgerDish("burger-3", 3),
+    ]),
+  };
+  await el.updateComplete;
+  expect(opened(el)).toEqual([["burger-3", "2 of 3 served", ["Serve 1"]]]);
+});
+
 it("Serve 1 until nothing is left keeps the same row open, with no Serve", async () => {
   const el = await mount(sentCurrent([sentDish("bravas", { quantity: "2.000" })]));
   await tap(el, toggle("bravas"));

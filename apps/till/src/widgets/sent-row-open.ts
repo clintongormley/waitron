@@ -92,17 +92,24 @@ const opened = (opening: string, row: SentRow): Opened => ({
 
 /**
  * Which sent row is open in place, one at a time. A serve can join a portion to another row and
- * change which line a row starts with, so the open row is followed by its portions: to the row
- * holding the first of its unserved ones still unserved; once none is, to a row holding any of its
- * portions that has none left. It closes when the bill or party changes or no row qualifies, so
- * once nothing it held is left to serve, the box never moves onto a row with something left to
- * serve.
+ * change which line a row starts with, so the open row is followed by its portions as it stood when
+ * opened or last served from: to the row holding the first of its unserved ones still unserved;
+ * once none is, to a row holding any of its portions that has none left. It closes when the bill
+ * or party changes or no row qualifies, so once nothing it held is left to serve, the box never
+ * moves onto a row with something left to serve. Following does not narrow the portions it
+ * remembers: the bill's lines and its current orders arrive in separate draws, and a row drawn
+ * from one new and one old can hold only part of the dish.
  */
 export class OpenSentRow {
   #open?: Opened;
 
   toggle(opening: string, row: SentRow): void {
     this.#open = this.is(opening, row.id) ? undefined : opened(opening, row);
+  }
+
+  /** Remembers `row`'s portions as they stand when a serve is sent from it. */
+  serving(opening: string, row: SentRow): void {
+    if (this.is(opening, row.id)) this.#open = opened(opening, row);
   }
 
   is(opening: string, id: string): boolean {
@@ -124,7 +131,7 @@ export class OpenSentRow {
           rows.find(
             (each) => each.left.length === 0 && open.portions.some((id) => holds(each.slices, id)),
           ));
-    this.#open = row && opened(opening, row);
+    this.#open = row && { ...open, id: row.id };
   }
 }
 

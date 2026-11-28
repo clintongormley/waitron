@@ -453,6 +453,7 @@ export class TillSentOrders extends LitElement {
       ?.sections.flatMap((section) => section.rows)
       .find((each) => each.id === row.id);
     if (live === undefined || sentRowDrawn(live, this.lines) !== drawn) return;
+    this.#open.serving(opening, live);
     this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
     const fromKeys = (event as MouseEvent).detail === 0;
     if (fromKeys && (this.renderRoot as ShadowRoot).activeElement === event.currentTarget)

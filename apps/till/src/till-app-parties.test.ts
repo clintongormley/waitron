@@ -9834,6 +9834,84 @@ describe("till-app: Current orders", () => {
         await flush(el, 6);
         await expect.poll(count).toBe("1 de 3 servidos");
       });
+
+      it("keeps a row of three one-portion lines open after Serve 1 when the bill's lines are read before its current orders", async () => {
+        // As the box sends a dish of three: one line a portion, the first served. Serving a line
+        // makes it no longer movable, and the app draws the bill's lines before the current
+        // orders arrive, so for one draw the served line stands apart from the last one.
+        const state = structuredClone(orders);
+        state.reminder = null;
+        const first = state.groups[0]!.rows[0]!;
+        const lineIds = ["line-1", "line-2", "line-3"];
+        state.groups[0]!.rows = lineIds.map((lineId, index) => ({
+          ...first,
+          lineId,
+          lineNo: index + 1,
+          servedQuantity: index === 0 ? "1.000" : "0.000",
+          servedAt: index === 0 ? "2026-09-28T19:55:00.000Z" : null,
+        }));
+        const lines: TabLine[] = state.groups[0]!.rows.map((row) => ({
+          ...tabLine,
+          id: row.lineId,
+          lineNo: row.lineNo,
+          portion: true,
+          priceQuantity: "1.000",
+          unitPrecision: 0,
+          sentAt: row.firedAt,
+          firedAt: row.firedAt,
+          state: "queued",
+          servedAt: row.servedAt,
+          movable: row.servedAt === null,
+        }));
+        let ordersLate = false;
+        const markServed = vi.fn(async (_party: string, items: { lineId: string }[]) => {
+          for (const { lineId } of items) {
+            const row = state.groups[0]!.rows.find((each) => each.lineId === lineId)!;
+            row.servedQuantity = "1.000";
+            row.servedAt = "2026-09-28T20:00:00.000Z";
+            Object.assign(
+              lines.find((line) => line.id === lineId)!,
+              {
+                servedAt: row.servedAt,
+                movable: false,
+              },
+            );
+          }
+          state.revision += 1;
+          ordersLate = true;
+          return { revision: state.revision };
+        });
+        const { el } = await mountApp({
+          getTabLines: vi.fn(async () => ({ lines: structuredClone(lines), revision: 0 })),
+          readCurrentOrders: vi.fn(async () => {
+            const read = structuredClone(state);
+            if (ordersLate) await new Promise((resolve) => setTimeout(resolve, 50));
+            return read;
+          }),
+          markServed,
+        });
+        const order = await openPartyTable(el);
+        const panel = await visiblePanel(order);
+        const box = await openSentRow(panel, "line-2");
+        const openRows = () =>
+          [...panel.shadowRoot!.querySelectorAll<HTMLElement>("li[data-open]")].map((li) => [
+            li.querySelector("[data-sent-row]")!.getAttribute("data-sent-row"),
+            li.querySelector("[data-sent-open-count]")?.textContent!.trim(),
+            [...li.querySelectorAll("[data-sent-serve]")].map((b) => b.textContent!.trim()),
+          ]);
+        expect(openRows()).toEqual([["line-2", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+
+        await userEvent.click(box.querySelector<HTMLButtonElement>('[data-sent-serve="one"]')!);
+        await expect.poll(() => order.currentOrders?.revision).toBe(4);
+        await flush(el);
+        await panel.updateComplete;
+        expect(markServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-2", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 3 },
+        );
+        expect(openRows()).toEqual([["line-3", "2 of 3 served", ["Serve 1"]]]);
+      });
     });
 
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
