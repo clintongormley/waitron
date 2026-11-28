@@ -12,7 +12,15 @@ export async function issueOrderInvoice(
   operatorId: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
-    const invoice = await priceForIssuance(tx, deps.clock, deps.backend, cfg, id, deps.log);
+    const invoice = await priceForIssuance(
+      tx,
+      deps.clock,
+      deps.backend,
+      cfg,
+      id,
+      { asked: true },
+      deps.log,
+    );
     await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId, deps.admission);
   });
 }
@@ -25,7 +33,15 @@ export async function printOrderForTest(
   operatorId: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
-    const invoice = await priceForIssuance(tx, deps.clock, deps.backend, cfg, id, deps.log);
+    const invoice = await priceForIssuance(
+      tx,
+      deps.clock,
+      deps.backend,
+      cfg,
+      id,
+      { asked: true },
+      deps.log,
+    );
     await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId, deps.admission);
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
   });

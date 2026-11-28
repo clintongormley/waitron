@@ -120,6 +120,7 @@ export async function endMeal(
         deps.backend,
         cfg,
         req.billId,
+        { asked: true },
         deps.log,
       );
       const total = invoice.priced.total;

@@ -12,6 +12,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
+import { groupFiledRows } from "./filed-rows.js";
 import {
   percentReduction,
   spreadBillDiscount,
@@ -298,12 +299,18 @@ export interface BillDiscountRow {
  * from what the lines' own totals lose. `takes` is never negative: on such a bill a discount whose
  * rows would raise the invoice's total, or lower lines' totals and leave the invoice's as it is,
  * moves no line. `cut_down`: an amount larger than what its target costs, which takes the target
- * to zero; `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * to zero (the server's `workOutHeldBill` also marks a fixed amount whose rows together take less
+ * than they were given, by `spreadTakes` and by `takes`); `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * `spreadTakes`, on a fixed amount whose `takes` the filed rows made differ from it: what its
+ * shares take off the prices they are spread over (the filed rows' for a whole-bill amount, its
+ * lines' otherwise), whether or not they are written; where the invoice would lose nothing or
+ * rise, no line moves.
  */
 export interface WorkedBillDiscount {
   id: string;
   holds: "yes" | "set_menu_gone" | "cut_down";
   takes: number;
+  spreadTakes?: number;
   lines: { lineId: string; rows: BillDiscountRow[] }[];
 }
 
@@ -345,7 +352,7 @@ const targetKey = (target: BillDiscountTarget) =>
 
 /** `amount` shared over `quantities` by quantity, the cents left over one each from the first
  * (plan D10's copy on a split, unlike `shareByWeight`). */
-function byQuantity(amount: number, quantities: readonly number[]): number[] {
+export function byQuantity(amount: number, quantities: readonly number[]): number[] {
   const whole = quantities.reduce((sum, quantity) => sum + quantity, 0);
   const shares = quantities.map((quantity) => Math.floor((amount * quantity) / whole));
   let left = amount - shares.reduce((sum, share) => sum + share, 0);
@@ -355,7 +362,7 @@ function byQuantity(amount: number, quantities: readonly number[]): number[] {
 
 /** {@link byQuantity}, no share above its part's cost: what a part cannot take is shared again
  * over the parts that still can. `amount` must not exceed the costs' sum. */
-function byQuantityWithin(
+export function byQuantityWithin(
   amount: number,
   quantities: readonly number[],
   costs: readonly number[],
@@ -378,11 +385,8 @@ function byQuantityWithin(
 }
 
 /**
- * The rows a bill files `members` as, each listing the members it stands for in filing order.
- * `projectPortionSale` (`apps/server/src/portion-sale-projection.ts`) files bound dishes as one row
- * while they share a cohort, every filed field but quantity, and the same extras per dish (each
- * extra's fields and quantity); an extra of the first dish then files as one row with the first
- * unclaimed matching extra of each other dish. Here a portion group stands for everything but the
+ * The rows a bill files `members` as, each listing the members it stands for in filing order, by
+ * the invoice's rule ({@link groupFiledRows}). Here a portion group stands for everything but the
  * price and the quantity, with the list price a discount would stamp (see {@link BillDiscountLine}),
  * so the price is compared beside it.
  */
@@ -400,58 +404,17 @@ function filedRows<M extends { row: Part; quantity: number }>(members: readonly 
     else extras.push(member);
   }
   const priced = ({ row }: M) => [row.unit, row.priceQuantity, row.unitPrecision];
-  const extraKeys = new Map<M, string>();
-  const extraKey = (member: M) => {
-    let key = extraKeys.get(member);
-    if (key === undefined) {
-      key = JSON.stringify([
-        member.row.portion?.group ?? `line:${member.row.id}`,
-        ...priced(member),
-        member.quantity,
-      ]);
-      extraKeys.set(member, key);
-    }
-    return key;
-  };
-  const extrasOfDish = ({ row }: M) =>
-    (row.id === row.lineId ? extrasOf.get(row.id) : undefined) ?? [];
-
-  const dishRows: M[][] = [];
-  const bound = new Map<string, M[]>();
-  for (const dish of dishes) {
-    const { portion } = dish.row;
-    const key =
-      portion === null
-        ? null
-        : JSON.stringify([portion.group, ...priced(dish), extrasOfDish(dish).map(extraKey).sort()]);
-    const row = key === null ? undefined : bound.get(key);
-    if (row !== undefined) {
-      row.push(dish);
-      continue;
-    }
-    const created = [dish];
-    dishRows.push(created);
-    if (key !== null) bound.set(key, created);
-  }
-
-  return dishRows.flatMap((group) => {
-    const [first, ...others] = group as [M, ...M[]];
-    const unclaimed = others.map((other) => [...extrasOfDish(other)]);
-    const extraRows = extrasOfDish(first).map((extra) => {
-      const key = extraKey(extra);
-      return [
-        extra,
-        ...unclaimed.map(
-          (extras) =>
-            extras.splice(
-              extras.findIndex((candidate) => extraKey(candidate) === key),
-              1,
-            )[0]!,
-        ),
-      ];
-    });
-    return [group, ...extraRows];
-  });
+  return groupFiledRows(dishes, {
+    extrasOf: ({ row }) => (row.id === row.lineId ? extrasOf.get(row.id) : undefined) ?? [],
+    dishKey: (dish) =>
+      dish.row.portion === null ? null : JSON.stringify([dish.row.portion.group, ...priced(dish)]),
+    extraKey: (extra) =>
+      JSON.stringify([
+        extra.row.portion?.group ?? `line:${extra.row.id}`,
+        ...priced(extra),
+        extra.quantity,
+      ]),
+  }).flatMap((row) => [row.dishes, ...row.extras]);
 }
 
 /** What a filed row of `members` costs: their quantities at the first one's price. */
@@ -499,10 +462,11 @@ function written(parts: readonly Part[], shares: readonly PricedShare<Subject>[]
   return [...members, ...splits];
 }
 
-/** A piece of a discount's target, what it costs and how a share of the discount spreads over it. */
+/** A piece of a discount's target, what it costs, and how a share of the discount spreads over
+ * it, with what that takes off the piece's own prices. */
 interface Piece {
   cost: number;
-  spread: (cents: number) => PricedShare<Subject>[];
+  spread: (cents: number) => { shares: PricedShare<Subject>[]; took: number };
 }
 
 const ordinal = ({ row }: Subject) => (row.parentLineId === null ? row.portion!.ordinal : 0);
@@ -514,7 +478,11 @@ function linePiece(subjects: readonly Subject[]): Piece {
       (sum, { row, quantity }) => sum + decimalToCents(lineGross(row, quantity)),
       0,
     ),
-    spread: (cents) => spreadSubjects(subjects, centsToDecimal(cents)),
+    spread: (cents) => {
+      const shares = spreadSubjects(subjects, centsToDecimal(cents));
+      const took = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+      return { shares, took };
+    },
   };
 }
 
@@ -528,8 +496,9 @@ function linePiece(subjects: readonly Subject[]): Piece {
 function filedPiece(subjects: readonly Subject[]): Piece {
   const groups = filedRows(subjects);
   const parts = subjects.map(({ row }) => row);
+  const cost = groups.reduce((sum, members) => sum + filedCost(members), 0);
   return {
-    cost: groups.reduce((sum, members) => sum + filedCost(members), 0),
+    cost,
     spread: (cents) => {
       const held = new Set<readonly Subject[]>();
       for (;;) {
@@ -547,7 +516,9 @@ function filedPiece(subjects: readonly Subject[]): Piece {
             !held.has(members) &&
             members.some(({ row }) => row.portion !== null),
         );
-        if (filedTotal(written(parts, shares)) === planned || split.length === 0) return shares;
+        if (filedTotal(written(parts, shares)) === planned || split.length === 0) {
+          return { shares, took: cost - planned };
+        }
         split.forEach((members) => held.add(members));
       }
     },
@@ -694,9 +665,12 @@ export function workOutBillDiscounts(
     return [subjectsOf(parts, exactOnWholeBill(parts))];
   };
 
-  /** Each copy's shares of `discount`, and whether an amount was cut down to what they cost. */
+  /** Each copy's shares of `discount`, whether an amount was cut down to what they cost, and what
+   * the shares took off the prices they were spread over. */
   const sharesOf = (discount: PendingBillDiscount, copies: readonly Subject[][]) => {
-    if (discount.action === "comp") return { cut: false, shares: copies.flatMap(zeroedRows) };
+    if (discount.action === "comp") {
+      return { cut: false, shares: copies.flatMap(zeroedRows), took: 0 };
+    }
     const pieces =
       discount.target.kind === "bill" && bound ? [filedPiece(copies[0]!)] : copies.map(linePiece);
     const costs = pieces.map(({ cost }) => cost);
@@ -709,14 +683,16 @@ export function workOutBillDiscounts(
             costs,
           )
         : null;
+    const spread = pieces.map((piece, index) =>
+      piece.spread(
+        amounts?.[index] ??
+          decimalToCents(percentReduction(centsToDecimal(piece.cost), discount.percentBp!)),
+      ),
+    );
     return {
       cut: discount.action === "discount_amount" && discount.amount! > whole,
-      shares: pieces.flatMap((piece, index) =>
-        piece.spread(
-          amounts?.[index] ??
-            decimalToCents(percentReduction(centsToDecimal(piece.cost), discount.percentBp!)),
-        ),
-      ),
+      shares: spread.flatMap(({ shares }) => shares),
+      took: spread.reduce((sum, { took }) => sum + took, 0),
     };
   };
 
@@ -724,13 +700,15 @@ export function workOutBillDiscounts(
   const worked: WorkedBillDiscount[] = ordered.map(({ discount }) => {
     const copies = copiesOf(discount);
     if (copies === null) return { id: discount.id, holds: "set_menu_gone", takes: 0, lines: [] };
-    const { cut, shares } = sharesOf(discount, copies);
+    const { cut, shares, took } = sharesOf(discount, copies);
     const holds = cut ? "cut_down" : "yes";
     let takes = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+    const spreadTakes = (filed: number) =>
+      discount.action === "discount_amount" && took !== filed ? { spreadTakes: took } : {};
     if (bound) {
       const drop = filedBefore - filedTotal(written(parts, shares));
       if (drop < 0 || (drop === 0 && takes > 0)) {
-        return { id: discount.id, holds, takes: 0, lines: [] };
+        return { id: discount.id, holds, takes: 0, ...spreadTakes(0), lines: [] };
       }
       takes = drop;
       filedBefore -= drop;
@@ -740,6 +718,7 @@ export function workOutBillDiscounts(
       id: discount.id,
       holds,
       takes,
+      ...spreadTakes(takes),
       lines: lines
         .filter(({ id }) => moved.has(id))
         .map(({ id }) => ({

@@ -316,7 +316,9 @@ export async function refundBillPayment(
               ),
           });
           if (refund.state === "completed") {
-            await issueIfFullyPaid(tx, deps, cfg, workingOrderId, operator.personId);
+            await issueIfFullyPaid(tx, deps, cfg, workingOrderId, operator.personId, {
+              unattended: true,
+            });
             return { kind: "done" as const, result: await resultOf(tx, refund, workingOrderId) };
           }
 

@@ -157,7 +157,7 @@ describe("saved-zone payment transactions", () => {
           tx,
           backend,
           zoneVenue.cfg,
-          await priceForIssuance(tx, clock, backend, zoneVenue.cfg, req.id),
+          await priceForIssuance(tx, clock, backend, zoneVenue.cfg, req.id, { asked: true }),
           zoneVenue.operatorId,
           testTradingAdmission(),
         );

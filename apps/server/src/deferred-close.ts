@@ -140,7 +140,15 @@ export async function closeBillDeferredTx(
     total = centsToDecimal(issued.total);
   } else {
     if (order.partyId === null) await refuseUnavailableFullInvoice(tx, billId);
-    invoice = await priceForIssuance(tx, clock, deps.backend, cfg, billId, deps.log);
+    invoice = await priceForIssuance(
+      tx,
+      clock,
+      deps.backend,
+      cfg,
+      billId,
+      { asked: true },
+      deps.log,
+    );
     total = invoice.priced.total;
   }
   const cents = decimalToCents(total);

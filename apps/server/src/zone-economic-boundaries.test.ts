@@ -124,7 +124,7 @@ async function issued(id: string) {
       tx,
       venue.backend,
       venue.cfg,
-      await priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id),
+      await priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id, { asked: true }),
       venue.operatorId,
       ready,
     );
@@ -246,7 +246,7 @@ describe("direct economic orchestration before startup admission", () => {
         note: null,
       };
       const invoice = await withTransaction(venue.db, (tx) =>
-        priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id),
+        priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, id, { asked: true }),
       );
       const before = snapshot();
       const write = () => {
@@ -367,7 +367,9 @@ it("an admitted direct issue uses the writing venue's calendar and preserves old
   };
   const before = venue.db.all(sql`select * from verifactu_records order by rowid`);
   await withTransaction(venue.db, async (tx) => {
-    const invoice = await priceForIssuance(tx, clock, venue.backend, venue.cfg, id);
+    const invoice = await priceForIssuance(tx, clock, venue.backend, venue.cfg, id, {
+      asked: true,
+    });
     await issueUnpaidInvoice(tx, venue.backend, venue.cfg, invoice, venue.operatorId, ready);
   });
   const [sale] = venue.db.all(

@@ -20,6 +20,7 @@ import {
 import { invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -28,6 +29,8 @@ import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
+import { REASONS } from "./testing/adjustment-venue.js";
+import { holdDiscount } from "./testing/bill-discounts.js";
 import { seedGivenAwayLine } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -631,6 +634,64 @@ describe("issueBillAtClose", () => {
         kind: "left_open",
         reason: "owes_nothing",
       });
+    });
+
+    it("a bill paid its discounted total but held by an open draft, its discount still held", async () => {
+      const party = await seatedWith(venue, "Red wine bottle");
+      const complaint = await inTx(
+        venue,
+        async (tx) => (await createAdjustmentReason(tx, REASONS.complaint)).id,
+      );
+      const heldId = await inTx(venue, (tx) =>
+        holdDiscount(
+          tx,
+          {
+            reasonId: { complaint } as Record<keyof typeof REASONS, string>,
+            staffId: venue.operatorId,
+          },
+          { workingOrderId: party.tabId },
+        ),
+      );
+      await insertPayment(party.tabId, "received", 2700);
+      await inTx(venue, (tx) =>
+        saveDraft(tx, party.partyId, venue.operatorId, {
+          billId: party.tabId,
+          draftId: null,
+          revision: 0,
+          lines: [
+            {
+              menuItemId: venue.offerFor("Tarta"),
+              quantity: "1",
+              options: [],
+              extras: [],
+              note: null,
+              courseId: null,
+              makeAt: null,
+            },
+          ],
+        }),
+      );
+      const linesOf = () =>
+        venue.db.all<{ id: string; lineTotal: number }>(
+          sql`select id, line_total as lineTotal from working_order_lines
+              where working_order_id = ${party.tabId} order by line_no`,
+        );
+      const lines = linesOf();
+
+      expect(await leftAlone(party, () => close(party.tabId))).toEqual({
+        kind: "left_open",
+        reason: "owes_nothing",
+      });
+
+      expect(
+        venue.db.all(sql`select id from bill_discounts where working_order_id = ${party.tabId}`),
+      ).toEqual([{ id: heldId }]);
+      expect(
+        await inTx(venue, (tx) =>
+          tx.select().from(adjustments).where(eq(adjustments.workingOrderId, party.tabId)),
+        ),
+      ).toEqual([]);
+      expect(linesOf()).toEqual(lines);
     });
 
     it("a bill opened by another node", async () => {

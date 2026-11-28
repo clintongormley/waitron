@@ -47,6 +47,7 @@ import { createOpenOrder } from "./working-order-open.js";
 import { captureOrderEdit } from "./working-order-context.js";
 import type { TillSaleDeps } from "./working-order-context.js";
 import { refuseWhileAdvanceCorrectionOpen } from "./bill-advances.js";
+import { refuseDiscountsNotHolding } from "./bill-discounts-crystallise.js";
 import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { enqueueRequestedPaymentSlip, readerSlipWanted } from "./payment-slip-print.js";
@@ -57,7 +58,6 @@ import {
   type HeldMoney,
   readHeld,
   fundsOf,
-  billPaymentTotal,
   type PaymentRow,
   type RefundRow,
   type BillFigures,
@@ -170,13 +170,22 @@ export async function previewBillPayment(
     });
     await assertBillHasNoUnsent(tx, workingOrderId);
     const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));
-    const funds = fundsOf(
-      workingOrderId,
-      await billPaymentTotal(tx, workingOrderId, advances),
-      held,
-    );
+    const figures = await readBillFigures(tx, workingOrderId, advances);
+    const funds = fundsOf(workingOrderId, figures.meal, held);
     const { doc } = await readPaymentsSettings(tx);
-    return previewAllocation(funds, allocationRequestFor(ask), { tipsEnabled: doc.tipsEnabled });
+    const preview = previewAllocation(funds, allocationRequestFor(ask), {
+      tipsEnabled: doc.tipsEnabled,
+    });
+    // A hand-keyed card is charged before its payment is sent, so this is where it is asked.
+    if (
+      !payable.invoiced &&
+      compareDecimal(
+        sumDecimals([funds.received, funds.reserved, preview.applied]),
+        funds.total,
+      ) === 0
+    )
+      await refuseDiscountsNotHolding(tx, workingOrderId, figures.discounts);
+    return preview;
   });
 }
 
@@ -557,6 +566,7 @@ export async function beginBillPayment(
   // Refused before any card is charged: the payment would issue the bill's invoice.
   if (coversBill && advances.credits.has(workingOrderId))
     await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+  if (coversBill) await refuseDiscountsNotHolding(tx, workingOrderId, figures.discounts);
   // A reserved card may finish on recovery, so save the language once the bill is covered.
   if (req.receiptLanguage !== undefined && coversBill)
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);

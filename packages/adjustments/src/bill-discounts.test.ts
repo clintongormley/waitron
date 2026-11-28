@@ -806,6 +806,92 @@ describe("workOutBillDiscounts: bound portions", () => {
     }
   });
 
+  it("reports what an amount took off its line's price where the filed rows take less", () => {
+    // At 1.00 the second dish files with the first, and their sauces as one row of 2.51 where
+    // apart they were 1.25 each: the invoice loses nothing, though spreading it would take 0.01
+    // off the dish's price: no line moves.
+    const lines = [
+      boundDish("d1", 1, 100, 0),
+      boundDish("d2", 2, 101, 1),
+      measured("s1", 3, 1003, 125, "d1"),
+      measured("s2", 4, 1003, 125, "d2"),
+    ];
+    const result = workOutBillDiscounts(lines, [amount("share", on("d2"), 1, 1, "bill_share")]);
+    expect(worked(result, "share")).toEqual({
+      id: "share",
+      holds: "yes",
+      takes: 0,
+      spreadTakes: 1,
+      lines: [],
+    });
+    const percentage = workOutBillDiscounts(lines, [percent("one", on("d2"), 100, 1)]);
+    expect(worked(percentage, "one")).not.toHaveProperty("spreadTakes");
+  });
+
+  it("reports what an amount took off its line's price where the filed rows take some of it", () => {
+    // Filed apart, 1.00 + 1.02 + 1.25 + 1.25 = 4.52. At 1.00 the second dish files with the first,
+    // and their sauces as one row of 2.51: 4.51, one cent off where the dish's price lost two.
+    const lines = [
+      boundDish("d1", 1, 100, 0),
+      boundDish("d2", 2, 102, 1),
+      measured("s1", 3, 1003, 125, "d1"),
+      measured("s2", 4, 1003, 125, "d2"),
+    ];
+    const result = workOutBillDiscounts(lines, [amount("share", on("d2"), 2, 1, "bill_share")]);
+    expect(result).toEqual({
+      discounts: [
+        {
+          id: "share",
+          holds: "yes",
+          takes: 1,
+          spreadTakes: 2,
+          lines: [
+            {
+              lineId: "d2",
+              rows: [{ id: "d2", lineNo: 2, quantity: 1000, unit: 100, total: 100 }],
+            },
+          ],
+        },
+      ],
+      takes: 1,
+    });
+    expectHonest(lines, result);
+  });
+
+  it("reports what a whole-bill amount took off its filed rows' prices where the bill files fewer rows", () => {
+    // Filed apart, 1.00 + 1.01 + 1.25 + 1.25 = 4.51. The amount's rows take 0.01 off the second
+    // dish and each sauce: 1.00 + 1.00 + 1.24 + 1.24. At one price the dishes file as one row,
+    // and their sauces as 0.250 at 9.95, 2.49: 4.49, two cents off where the rows lost three.
+    const lines = [
+      boundDish("d1", 1, 100, 0),
+      boundDish("d2", 2, 101, 1),
+      measured("s1", 3, 1003, 125, "d1"),
+      measured("s2", 4, 1003, 125, "d2"),
+    ];
+    const result = workOutBillDiscounts(lines, [amount("three", bill, 3, 1)]);
+    const at = (id: string, lineNo: number, quantity: number, unit: number, total: number) => ({
+      lineId: id,
+      rows: [{ id, lineNo, quantity, unit, total }],
+    });
+    expect(result).toEqual({
+      discounts: [
+        {
+          id: "three",
+          holds: "yes",
+          takes: 2,
+          spreadTakes: 3,
+          lines: [
+            at("d2", 2, 1000, 100, 100),
+            at("s1", 3, 125, 995, 124),
+            at("s2", 4, 125, 995, 124),
+          ],
+        },
+      ],
+      takes: 2,
+    });
+    expectHonest(lines, result);
+  });
+
   it("files bound portions together again once a discount brings them to one price", () => {
     const lines = [
       line("p1", 1, 1000, { portion: { group: "croquettes", ordinal: 0 } }),

@@ -721,7 +721,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
     const { billId, portions } = await seed(croquettes("1"));
     const { cfg, backend, clock } = venue;
     await inTx(venue, async (tx) => {
-      const invoice = await priceForIssuance(tx, clock, backend, cfg, billId);
+      const invoice = await priceForIssuance(tx, clock, backend, cfg, billId, { asked: true });
       const selected = await selectOrderInvoice(tx, backend, cfg, billId, invoice.priced.total);
       await recordSale(tx, backend, {
         origin: cfg.origin,

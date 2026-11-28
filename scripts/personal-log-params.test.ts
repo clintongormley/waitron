@@ -85,6 +85,7 @@ const HARMLESS_LOG_FIELDS: ReadonlyMap<string, string> = new Map([
 ]);
 
 const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
+  ["adjustment.no_longer_applies.targetName", "the name of a dish, an extra or a set menu"],
   ["adjustment_reason.name_taken.name", "the name of an adjustment reason"],
   ["backup.destination_cleanup_failed.name", 'an error\'s name from a fixed list, or "other"'],
   ["backup.destination_request_failed.name", 'an error\'s name from a fixed list, or "other"'],

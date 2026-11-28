@@ -752,7 +752,7 @@ describe("department transfer till writes", () => {
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     const cfg = requestCfg(v.cfg, f.source);
     const invoice = await withTransaction(suite.db, async (tx) => {
-      const priced = await priceForIssuance(tx, v.clock, v.backend, cfg, f.tab);
+      const priced = await priceForIssuance(tx, v.clock, v.backend, cfg, f.tab, { asked: true });
       return issueUnpaidInvoice(tx, v.backend, cfg, priced, personId, testTradingAdmission());
     });
     await placeOrder(
@@ -1564,7 +1564,9 @@ describe("department transfer tab lifecycle", () => {
         await writePartyAllergy(tx, party.partyId, { answer: "none", guests: [] }, personId);
         await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
         await numberBill(tx, f.tab, party.partyId);
-        const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
+        const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab, {
+          asked: true,
+        });
         await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, f.tab));
         if (absorbed) {
@@ -1707,7 +1709,7 @@ describe("department transfer tab lifecycle", () => {
       operatorId: personId,
     });
     const invoice = await withTransaction(suite.db, async (tx) => {
-      const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
+      const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab, { asked: true });
       return issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
     });
     const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
@@ -1733,7 +1735,9 @@ describe("department transfer tab lifecycle", () => {
       const deps = { ...v, admission: testTradingAdmission() };
       if (kind.startsWith("issued")) {
         await withTransaction(suite.db, async (tx) => {
-          const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
+          const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab, {
+            asked: true,
+          });
           await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         });
         await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
@@ -1779,7 +1783,9 @@ describe("department transfer tab lifecycle", () => {
       const deps = { db: suite.db, backend: v.backend, clock: v.clock };
       if (kind === "issued")
         await withTransaction(suite.db, async (tx) => {
-          const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
+          const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab, {
+            asked: true,
+          });
           await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId, testTradingAdmission());
         });
       if (kind === "issued")

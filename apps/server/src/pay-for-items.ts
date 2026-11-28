@@ -45,7 +45,7 @@ import {
   type BillPaymentResult,
 } from "./bill-payment-types.js";
 import { getBillBalance, readBillBalance, type BillBalance } from "./bill-balance.js";
-import { refuseCoveredWhileAdvanceCorrectionOpen } from "./bill-payment-rows.js";
+import { refuseCoveredWhileInvoiceRefused } from "./bill-payment-rows.js";
 import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
@@ -293,7 +293,7 @@ export async function moveItemsToNewBill(
   if (options.holdSourceInvoice === true) {
     // Another action on the source can still issue it while the card is collected; a declined card
     // then leaves the items on their own bill (`putItemsBack`), which keeps the money consistent.
-    await refuseCoveredWhileAdvanceCorrectionOpen(tx, fromBillId);
+    await refuseCoveredWhileInvoiceRefused(tx, fromBillId);
     return { billId };
   }
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);

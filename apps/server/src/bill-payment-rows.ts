@@ -24,7 +24,9 @@ import {
   owedOf,
 } from "./bill-payment-money.js";
 import type { IssuedSale } from "./sale-due.js";
-import { storedOrderTotal } from "./stored-order-lines.js";
+import { refuseDiscountsNotHolding } from "./bill-discounts-crystallise.js";
+import type { BillDiscounts } from "./bill-discounts-read.js";
+import { storedOrderFigures } from "./stored-order-lines.js";
 import { readOutstandingSaleForOrder } from "./till-sale.js";
 import "./errors.js";
 
@@ -420,6 +422,9 @@ export interface BillFigures {
   due: Decimal;
   /** The bill's advances. */
   advances: BillAdvances;
+  /** The held discounts `meal` took off, read with it; absent when `meal` is an issued sale's,
+   * the caller's, or a lineless order's. */
+  discounts?: BillDiscounts;
 }
 /** The bill's {@link BillFigures}; `advances` are the bill's, and `pricedMeal` its priced total
  * when the caller has priced its current lines in this transaction already. */
@@ -433,21 +438,32 @@ export async function readBillFigures(
   const taken = sumDecimals((advances.credits.get(id) ?? []).map((credit) => credit.gross));
   if (issued !== undefined)
     return { issued, meal: addDecimal(issued.amountDue, taken), due: issued.amountDue, advances };
-  const meal = pricedMeal ?? (await storedOrderTotal(tx, id));
-  return { issued, meal, due: subtractDecimal(meal, taken), advances };
+  if (pricedMeal !== undefined)
+    return { issued, meal: pricedMeal, due: subtractDecimal(pricedMeal, taken), advances };
+  const { total: meal, discounts } = await storedOrderFigures(tx, id);
+  return {
+    issued,
+    meal,
+    due: subtractDecimal(meal, taken),
+    advances,
+    ...(discounts === undefined ? {} : { discounts }),
+  };
 }
 /**
- * Refuses `advance.correction_open` when the bill's money already covers it and one of its
- * advances has an open correction, as a payment that covers it is refused: for a bill whose invoice
- * is held while a card for another bill is collected, before that card is asked.
+ * When the bill's money already covers it, refuses as a payment that covers it is refused:
+ * `advance.correction_open` when one of its advances has an open correction, and
+ * `adjustment.no_longer_applies` when a discount held on it no longer holds. For a bill whose
+ * invoice is held while a card for another bill is collected, before that card is asked.
  */
-export async function refuseCoveredWhileAdvanceCorrectionOpen(
+export async function refuseCoveredWhileInvoiceRefused(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<void> {
   const { held, advances } = await readHeld(tx, [workingOrderId]);
-  if (!advances.credits.has(workingOrderId)) return;
-  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
-  if (compareDecimal(addDecimal(funds.received, funds.reserved), funds.total) >= 0)
+  const figures = await readBillFigures(tx, workingOrderId, advances);
+  const funds = fundsOf(workingOrderId, figures.meal, held);
+  if (compareDecimal(addDecimal(funds.received, funds.reserved), funds.total) < 0) return;
+  if (advances.credits.has(workingOrderId))
     await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+  await refuseDiscountsNotHolding(tx, workingOrderId, figures.discounts);
 }

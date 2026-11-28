@@ -347,7 +347,7 @@ async function issueAfterBillRefund(tx: Transaction, deps: TenderRefundDeps, ref
       { ...deps.cfg, origin: storedDeviceOrigin(refund) },
       parent!.workingOrderId,
       refund.requestedBy,
-      { datedByLatestAcceptance: true },
+      { unattended: true, datedByLatestAcceptance: true },
     );
   } catch (error) {
     // Thrown before the issuing writes anything.

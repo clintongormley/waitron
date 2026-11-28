@@ -1,6 +1,13 @@
-import { eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { eq, getTableColumns, inArray, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/sqlite-core";
 import { billDiscounts, workingOrderLines, type Transaction } from "@waitron/db";
+import {
+  byQuantity,
+  byQuantityWithin,
+  workOutBillDiscounts,
+  type BillDiscountLine,
+  type PendingBillDiscount,
+} from "./bill-discounts.js";
 
 /** A discount to hold on an open bill until its invoice (plan A1621 D3). */
 export type NewPendingDiscount = typeof billDiscounts.$inferInsert;
@@ -111,4 +118,154 @@ export async function moveShare(
       .set({ amount: held - cents })
       .where(eq(billDiscounts.id, from));
   return into;
+}
+
+type Held = typeof billDiscounts.$inferSelect;
+
+const asPending = (row: Held, lineId: string, amount: number | null, id = row.id) =>
+  ({
+    id,
+    target: { kind: "line", lineId },
+    action: row.action,
+    percentBp: row.percentBp,
+    amount,
+    origin: row.origin,
+    position: row.position,
+  }) satisfies PendingBillDiscount;
+
+/**
+ * Each part's share of each amount held on a split line, shared as `workOutBillDiscounts` shares
+ * an amount over a line's parts: by quantity, no share above what its part costs once the
+ * discounts worked out before it are taken off, and what is above the parts' whole cost by
+ * quantity on top, so a discount cut down before the split is cut down after it. Answers too the
+ * lines it read, by id: the split lines, their parts and their extras.
+ */
+async function amountShares(
+  tx: Transaction,
+  partsOf: ReadonlyMap<string, readonly string[]>,
+  held: readonly Held[],
+): Promise<{ shares: Map<string, number[]>; lineOf: Map<string, BillDiscountLine> }> {
+  const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
+  const read = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+      priceQuantity: workingOrderLines.priceQuantity,
+      unit: workingOrderLines.unitPriceGross,
+      unitPrecision: workingOrderLines.unitPrecision,
+      lineTotal: workingOrderLines.lineTotal,
+    })
+    .from(workingOrderLines)
+    .where(or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)));
+  const present = new Set(read.map(({ id }) => id));
+  const lines: BillDiscountLine[] = read.map((line) => ({
+    ...line,
+    parentLineId:
+      line.parentLineId !== null && present.has(line.parentLineId) ? line.parentLineId : null,
+    setMenuLineId: null,
+    portion: null,
+  }));
+  const lineOf = new Map(lines.map((line) => [line.id, line]));
+  const onLines = await tx
+    .select()
+    .from(billDiscounts)
+    .where(inArray(billDiscounts.lineId, [...present]));
+  const decided: PendingBillDiscount[] = onLines
+    .filter(({ lineId }) => !partsOf.has(lineId!))
+    .map((row) => asPending(row, row.lineId!, row.amount));
+  const heldOf = new Map(held.map((row) => [row.id, row]));
+  const order = workOutBillDiscounts(
+    lines,
+    held.map((row) => asPending(row, row.lineId!, row.amount)),
+  ).discounts.map(({ id }) => heldOf.get(id)!);
+  const shares = new Map<string, number[]>();
+  for (const row of order) {
+    const parts = [row.lineId!, ...partsOf.get(row.lineId!)!]
+      .map((id) => lineOf.get(id)!)
+      .sort((a, b) => a.lineNo - b.lineNo);
+    let amounts = parts.map(() => row.amount);
+    if (row.action === "discount_amount") {
+      // A probe larger than the bill takes each part's whole cost as the discounts before it leave it.
+      const probe = lines.reduce((sum, line) => sum + line.lineTotal, 1);
+      const costs = workOutBillDiscounts(lines, [
+        ...decided,
+        ...parts.map((part, at) => asPending(row, part.id, probe, `${row.id}#${at}`)),
+      ]).discounts.filter(({ id }) => id.startsWith(`${row.id}#`));
+      const quantities = parts.map(({ quantity }) => quantity);
+      const whole = costs.reduce((sum, { takes }) => sum + takes, 0);
+      const within = byQuantityWithin(
+        Math.min(row.amount!, whole),
+        quantities,
+        parts.map((_, at) => costs.find(({ id }) => id === `${row.id}#${at}`)!.takes),
+      );
+      const above = byQuantity(Math.max(0, row.amount! - whole), quantities);
+      const cents = within.map((share, at) => share + above[at]!);
+      shares.set(row.id, cents);
+      amounts = cents;
+    }
+    parts.forEach((part, at) => {
+      if (amounts[at] !== 0) decided.push(asPending(row, part.id, amounts[at]!, `${row.id}@${at}`));
+    });
+  }
+  return { shares, lineOf };
+}
+
+/** The split lines and their parts, by id, with their line numbers. */
+async function lineNumbers(
+  tx: Transaction,
+  partsOf: ReadonlyMap<string, readonly string[]>,
+): Promise<Map<string, { id: string; lineNo: number }>> {
+  const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
+  const lines = await tx
+    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, ids));
+  return new Map(lines.map((line) => [line.id, line]));
+}
+
+/**
+ * Copies each discount held on a split line to the parts `splits` cut off it (plan A1621 D10): a
+ * percentage or Free as it is, an amount shared over the line and its parts in line order, the
+ * cents left over one each from the earliest, as `workOutBillDiscounts` shares it, within what each
+ * part costs ({@link amountShares}). A part whose share is nothing holds no copy, and nor then
+ * does the line.
+ */
+export async function copyPendingDiscountsToParts(
+  tx: Transaction,
+  splits: readonly { from: string; to: string }[],
+): Promise<void> {
+  const partsOf = new Map<string, string[]>();
+  for (const { from, to } of splits) {
+    const parts = partsOf.get(from);
+    if (parts === undefined) partsOf.set(from, [to]);
+    else parts.push(to);
+  }
+  if (partsOf.size === 0) return;
+  const held = await tx
+    .select()
+    .from(billDiscounts)
+    .where(inArray(billDiscounts.lineId, [...partsOf.keys()]));
+  if (held.length === 0) return;
+  const { shares: amounts, lineOf } = held.some(({ action }) => action === "discount_amount")
+    ? await amountShares(tx, partsOf, held)
+    : { shares: new Map<string, number[]>(), lineOf: await lineNumbers(tx, partsOf) };
+  for (const { id, ...row } of held) {
+    const parts = [row.lineId!, ...partsOf.get(row.lineId!)!]
+      .map((lineId) => lineOf.get(lineId)!)
+      .sort((a, b) => a.lineNo - b.lineNo);
+    const shares = amounts.get(id) ?? parts.map(() => row.amount);
+    for (const [at, part] of parts.entries()) {
+      const amount = shares[at]!;
+      if (part.id === row.lineId) {
+        if (amount === 0) await deletePendingDiscounts(tx, [id]);
+        else if (amount !== row.amount) {
+          await tx.update(billDiscounts).set({ amount }).where(eq(billDiscounts.id, id));
+        }
+      } else if (amount !== 0) {
+        await insertPendingDiscount(tx, { ...row, lineId: part.id, amount });
+      }
+    }
+  }
 }

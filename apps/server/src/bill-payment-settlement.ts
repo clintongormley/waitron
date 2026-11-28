@@ -19,6 +19,7 @@ import {
 import { inArray, eq, and } from "drizzle-orm";
 import { issueAdvance, advanceWithOpenCorrection } from "./bill-advances.js";
 import { ZERO, money } from "./bill-allocation.js";
+import { crystalliseBillDiscounts } from "./bill-discounts-crystallise.js";
 import {
   type PaymentRow,
   type BillFigures,
@@ -154,9 +155,13 @@ export async function issueAdvanceIfOwed(
 }
 type IssueOptions = {
   moneyMoved?: boolean;
+  /** Nobody is there to answer for a discount that no longer holds, or the money has already gone
+   * back in a refund, so it is written as it stands (plan A1621 D6). `moneyMoved` implies it, and
+   * also files a product taken off sale. */
+  unattended?: true;
   closeZero?: boolean;
   /** The bill's figures from earlier in this transaction, with no sale or advance issued or
-   * corrected since. */
+   * corrected, and none of its lines or held discounts written, since. */
   figures?: BillFigures;
   /** The bill's priced total, when the caller has priced its current lines in this transaction
    * already and has no `figures`. */
@@ -282,6 +287,10 @@ async function issueOrSettleWhenFullyPaid(
     return { invoice: ticket, figures };
   }
 
+  await crystalliseBillDiscounts(tx, cfg, workingOrderId, {
+    asked: options.moneyMoved !== true && options.unattended !== true,
+    discounts: figures.discounts,
+  });
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
@@ -396,7 +405,10 @@ export async function issueIfFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
-  options: { moneyMoved?: boolean; closeZero?: boolean; datedByLatestAcceptance?: true } = {},
+  options: Pick<
+    IssueOptions,
+    "moneyMoved" | "unattended" | "closeZero" | "datedByLatestAcceptance"
+  > = {},
 ): Promise<TillSaleResult | null> {
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
 }

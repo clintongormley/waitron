@@ -619,7 +619,7 @@ async function lunchBill(
 /** The bill priced for its invoice. */
 function priced(venue: PartyVenue, billId: string) {
   return partyTx(venue, (tx) =>
-    priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, billId),
+    priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, billId, { asked: true }),
   );
 }
 

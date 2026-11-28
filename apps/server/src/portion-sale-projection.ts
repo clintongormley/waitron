@@ -1,3 +1,4 @@
+import { groupFiledRows } from "@waitron/adjustments";
 import type { LockedLine } from "@waitron/menu";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import type { OrderLineIdentity, StoredOrderLine } from "./stored-order-lines.js";
@@ -68,9 +69,8 @@ interface Dish {
 }
 
 /**
- * Groups bound dish lines back into the row their cohort was priced as (decision D7): same cohort,
- * same filed fields, and the same extras taken per dish. Quantities add; a group sits at its first
- * member's position. A line with no binding is its own row, as before portions existed.
+ * Groups bound dish lines back into the row their cohort was priced as ({@link groupFiledRows}):
+ * same cohort and filed fields. Quantities add. A line with no binding is its own row.
  */
 export function projectPortionSale(
   stored: readonly StoredOrderLine[],
@@ -94,30 +94,14 @@ export function projectPortionSale(
     dish.extras.push(line);
   }
 
-  const groups = new Map<string, Dish[]>();
-  const ordered: Dish[][] = [];
-  for (const dish of dishes) {
-    if (dish.binding === undefined) {
-      ordered.push([dish]);
-      continue;
-    }
-    const key = canonical([
-      dish.binding.cohortId,
-      rowKey(dish.line),
-      dish.extras.map(extraKey).sort(),
-    ]);
-    const group = groups.get(key);
-    if (group === undefined) {
-      const created = [dish];
-      groups.set(key, created);
-      ordered.push(created);
-    } else {
-      group.push(dish);
-    }
-  }
-
+  const rows = groupFiledRows(dishes, {
+    extrasOf: (dish) => dish.extras,
+    dishKey: (dish) =>
+      dish.binding === undefined ? null : canonical([dish.binding.cohortId, rowKey(dish.line)]),
+    extraKey,
+  });
   const out: ProjectedLine[] = [];
-  for (const members of ordered) {
+  for (const { dishes: members, extras } of rows) {
     const [first] = members as [Dish, ...Dish[]];
     const dishLineIds = members.flatMap((dish) => (dish.binding ? [dish.binding.lineId] : []));
     const dishNo = out.length + 1;
@@ -129,19 +113,8 @@ export function projectPortionSale(
       },
       locked: { ...first.line.locked, quantity: sum(members.map((dish) => dish.line)) },
     });
-    const unclaimed = members.slice(1).map((dish) => [...dish.extras]);
-    for (const extra of first.extras) {
-      const key = extraKey(extra);
-      const matches = [
-        extra,
-        ...unclaimed.map(
-          (extras) =>
-            extras.splice(
-              extras.findIndex((e) => extraKey(e) === key),
-              1,
-            )[0]!,
-        ),
-      ];
+    for (const matches of extras) {
+      const [extra] = matches as [StoredOrderLine, ...StoredOrderLine[]];
       out.push({
         identity: {
           ...extra.identity,
