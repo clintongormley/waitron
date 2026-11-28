@@ -202,7 +202,8 @@ export const sentOpenStyles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: var(--wt-space-2);
-    padding-block: var(--wt-space-1) var(--wt-space-2);
+    /* No token is 2 px: half of --wt-space-1 makes frame e 3's 10 px under the last button. */
+    padding-block: var(--wt-space-2) calc(var(--wt-space-2) + var(--wt-space-1) / 2);
     padding-inline: 0 var(--wt-space-2);
   }
   .sent-open-serve {

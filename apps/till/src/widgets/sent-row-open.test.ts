@@ -848,3 +848,24 @@ it.each([390, 844, 1280])(
     expect(Math.abs(open.right - closed.right)).toBeLessThanOrEqual(0.5);
   },
 );
+
+it("leaves frame e 3's space above the Serve buttons and under Dish details", async () => {
+  await page.viewport(390, 800);
+  const el = await mount(
+    sentCurrent([sentDish("bravas", { quantity: "3.000", servedQuantity: "1.000" })]),
+  );
+  await tap(el, toggle("bravas"));
+  const li = find(el, "li[data-open]")!;
+  const token = (name: string) => {
+    const value = Number.parseFloat(getComputedStyle(li).getPropertyValue(name));
+    expect(value, name).toBeGreaterThan(0);
+    return value;
+  };
+  const [space1, space2] = [token("--wt-space-1"), token("--wt-space-2")];
+  const line = rectOf(li, "[data-sent-row]");
+  const serve = rectOf(li, "[data-sent-serve]");
+  expect(serve.top - line.bottom).toBeCloseTo(space2, 1);
+  const inner =
+    li.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(li).borderBottomWidth);
+  expect(inner - rectOf(li, "[data-sent-details]").bottom).toBeCloseTo(space2 + space1 / 2, 1);
+});
