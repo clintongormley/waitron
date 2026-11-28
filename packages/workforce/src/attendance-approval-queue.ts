@@ -54,22 +54,26 @@ async function readManagerQueue(tx: Transaction) {
 
 export async function readAttendanceManagerQueue(
   tx: Transaction,
-  paidBreakPolicy?: PaidBreakPolicy | null,
+  totalsOptions?: { paidBreakPolicy: PaidBreakPolicy | null },
 ): Promise<AttendanceManagerQueue> {
   const { items, days, entriesByPerson } = await readManagerQueue(tx);
   const finishedDays: AttendanceManagerQueue["finishedDays"] = [];
   for (const [personId, own] of days) {
+    const pending = [...own].filter(([, day]) => day.approval.status === "pending");
+    if (pending.length === 0) continue;
     const totals = new Map<string, { workedMinutes: number; breakMinutes: number }>();
-    if (paidBreakPolicy !== undefined) {
-      for (const session of projectWorkSessions(entriesByPerson.get(personId)!, paidBreakPolicy)) {
+    if (totalsOptions) {
+      for (const session of projectWorkSessions(
+        entriesByPerson.get(personId)!,
+        totalsOptions.paidBreakPolicy,
+      )) {
         const day = totals.get(session.workDate) ?? { workedMinutes: 0, breakMinutes: 0 };
         day.workedMinutes += session.workedMinutes;
         day.breakMinutes += session.breakMinutes;
         totals.set(session.workDate, day);
       }
     }
-    for (const [date, { approval, times }] of own) {
-      if (approval.status === "approved") continue;
+    for (const [date, { approval, times }] of pending) {
       finishedDays.push({
         personId,
         date,

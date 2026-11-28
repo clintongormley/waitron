@@ -7,10 +7,10 @@ import type {
   AttendanceManagerQueue,
 } from "@waitron/workforce/attendance-contract";
 import { attendanceEntry, attendanceItem } from "../test/attendance-fixtures.js";
-import { clockApp, clockState, shellAction, signIn, working } from "../test/clock-app.js";
+import { clockApp, clockState, deferred, shellAction, signIn, working } from "../test/clock-app.js";
 import type { TillApp } from "./till-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -65,11 +65,11 @@ const view: AttendanceDayView = {
 
 async function manager(
   queue: AttendanceManagerQueue,
-  options: { permitted?: boolean; action?: boolean } = {},
+  options: { permitted?: boolean; action?: boolean; canSelfApprove?: boolean } = {},
 ) {
   const getAttendanceManagerQueue = vi.fn().mockResolvedValue(queue);
   const getAttendanceManagerLookups = vi.fn().mockResolvedValue({
-    viewer: { personId: "p1", canSelfApprove: false },
+    viewer: { personId: "p1", canSelfApprove: options.canSelfApprove ?? false },
     people: [
       { personId: "worker", displayName: "Javier Torres" },
       { personId: "p1", displayName: "Marta Ruiz" },
@@ -144,15 +144,16 @@ it("counts actionable days and approves only the displayed eligible day", async 
   const f = await manager({
     items: [],
     finishedDays: [
-      { ...other, times: [...times] },
+      { ...other, times: [...times], workedMinutes: 420, breakMinutes: 15 },
       { ...own, times: [...times] },
     ],
   });
-  await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
   await open(f.el);
+  await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
   const root = screen(f.el)!.shadowRoot!;
   expect(root.textContent).toContain("Javier Torres");
   expect(root.textContent).toContain("Marta Ruiz");
+  expect(root.querySelector("[data-worked]")?.textContent).toBe("7 hours");
   f.getAttendanceManagerQueue.mockResolvedValue({
     items: [],
     finishedDays: [{ ...own, times: [...times] }],
@@ -172,6 +173,7 @@ it.each([
 ])("uses the work date and latest revision for $label", async ({ item, label, action }) => {
   const f = await manager({ items: [item], finishedDays: [] });
   await open(f.el);
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
   const root = screen(f.el)!.shadowRoot!;
   if (item.status === "disputed") expect(root.textContent).toContain("I closed the bar.");
   await userEvent.click(
@@ -216,4 +218,67 @@ it("retries an unanswered decision with the original command and revision", asyn
     f.sendAttendanceManagerCommand.mock.calls[0]![0],
   );
   expect(f.getAttendanceManagerDay).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a single banner landmark when the Manager queue is open", async () => {
+  const f = await manager({ items: [requested, disputed], finishedDays: [] });
+  await open(f.el);
+  await expectNoA11yViolations(screen(f.el)!);
+});
+
+it("shows disputes that require a dashboard edit without counting them as till actions", async () => {
+  const unsolved = { ...disputed, workerVersion: undefined };
+  const f = await manager({ items: [unsolved], finishedDays: [] });
+  await open(f.el);
+  const root = screen(f.el)!.shadowRoot!;
+  expect(root.textContent).toContain("I closed the bar.");
+  expect(root.textContent).toContain("Open this day in the dashboard to send an edit.");
+  expect(root.querySelector("[data-approve-request]")).toBeNull();
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
+});
+
+it("reads the count when the manager opens More and refreshes it on reopening", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  expect(f.getAttendanceManagerQueue).not.toHaveBeenCalled();
+  const showMore = async () => {
+    await vi.waitFor(() => expect(menuEntry(f.el)).not.toBeNull());
+    const menu = menuEntry(f.el)!.closest("wt-row-actions")!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  };
+  await showMore();
+  await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
+  await userEvent.keyboard("{Escape}");
+  f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
+  await showMore();
+  await vi.waitFor(() => expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve"));
+});
+
+it("an administrator may approve their own request but has no button to decline it", async () => {
+  const f = await manager(
+    { items: [{ ...requested, personId: own.personId }], finishedDays: [] },
+    { canSelfApprove: true },
+  );
+  await open(f.el);
+  const root = screen(f.el)!.shadowRoot!;
+  expect(root.querySelector("[data-approve-request]")).not.toBeNull();
+  expect(
+    [...root.querySelectorAll("wt-button")].map((button) => button.textContent?.trim()),
+  ).not.toContain("Decline");
+});
+
+it("clears the previous count when a new sign-in opens More while its count is still loading", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
+  await shellAction(f.el, ".logout");
+  await vi.waitFor(() => expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
+  const held = deferred<AttendanceManagerQueue>();
+  f.getAttendanceManagerQueue.mockClear().mockReturnValue(held.promise);
+  await signIn(f.el);
+  await working(f.el);
+  const menu = menuEntry(f.el)!.closest("wt-row-actions")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await vi.waitFor(() => expect(f.getAttendanceManagerQueue).toHaveBeenCalledTimes(1));
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
+  held.resolve({ items: [], finishedDays: [] });
 });

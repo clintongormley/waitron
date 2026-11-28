@@ -157,10 +157,13 @@ export class TillHoursApprovalScreen extends LitElement {
       this.queue = this.lookups = this.pending = null;
       this.readError = this.actionError = "";
       this.reading = this.busy = false;
-      void this.refresh();
-    } else if (changed.has("active") && this.active) {
-      void this.refresh();
     }
+    if (
+      this.active &&
+      !this.queue &&
+      (changed.has("active") || changed.has("api") || changed.has("personId"))
+    )
+      void this.refresh();
   }
 
   override updated(changed: PropertyValues): void {
@@ -251,10 +254,7 @@ export class TillHoursApprovalScreen extends LitElement {
         "hours-approval-count",
         queue.finishedDays.filter((day) => this.#canApprove(day.personId)).length +
           queue.items.filter(
-            (item) =>
-              this.#canSettle(item, "approve") ||
-              ((item.status === "waiting-manager" || item.status === "disputed") &&
-                item.personId !== this.personId),
+            (item) => this.#canSettle(item, "approve") || this.#canSettle(item, "decline"),
           ).length,
       );
     } catch (error) {
@@ -395,6 +395,11 @@ export class TillHoursApprovalScreen extends LitElement {
               <p class="muted">${t("attendance.disputed")}</p>`
           : nothing
       }
+      ${
+        disputed && !this.#canSettle(item, "approve") && item.personId !== this.personId
+          ? html`<p>${t("hours.edit_in_dashboard")}</p>`
+          : nothing
+      }
       <div class="actions">
         ${this.#canSettle(item, "approve") ? html`<wt-button data-approve-request variant=${blocked || disputed ? "secondary" : "primary"} .disabled=${blocked} @click=${() => this.#settle(item, "approve")}>${disputed ? fill(t("hours.take_worker_time"), { name: name.split(" ")[0]! }) : t("hours.approve")}</wt-button>` : nothing}
         ${this.#canSettle(item, "decline") ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#settle(item, "decline")}>${t("hours.decline")}</wt-button>` : nothing}
@@ -410,14 +415,15 @@ export class TillHoursApprovalScreen extends LitElement {
     const eligible = finishedDays.filter((day) => this.#canApprove(day.personId));
     const blocked = this.busy || this.reading || !!this.pending;
     return html`<wt-full-screen-panel .bodyLabel=${t("hours.approval")}>
-      <wt-top-bar
-        slot="header"
-        .backLabel=${this.backLabel}
-        .backDisabled=${this.busy}
-        @wt-back=${() => this.#emit("hours-approval-close")}
-      >
-        <span slot="title" tabindex="-1" data-heading>${t("hours.approval")}</span>
-      </wt-top-bar>
+      <section slot="header">
+        <wt-top-bar
+          .backLabel=${this.backLabel}
+          .backDisabled=${this.busy}
+          @wt-back=${() => this.#emit("hours-approval-close")}
+        >
+          <span slot="title" tabindex="-1" data-heading>${t("hours.approval")}</span>
+        </wt-top-bar>
+      </section>
       <div class="list" aria-busy=${this.reading}>
         ${this.reading && !this.queue ? html`<p role="status">${t("hours.approvals_reading")}</p>` : nothing}
         ${

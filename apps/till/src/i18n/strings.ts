@@ -302,6 +302,7 @@ export const en = {
   "hours.take_worker_time": "Take {name}’s time",
   "hours.manager_proposed": "Manager’s change",
   "hours.worker_version": "{name}’s time",
+  "hours.edit_in_dashboard": "Open this day in the dashboard to send an edit.",
   "hours.no_approvals": "No hours are waiting for your approval.",
   "hours.approvals_reading": "Reading the hours to approve…",
   "hours.approvals_read_failed": "Could not read the hours to approve. Try again.",
@@ -2797,6 +2798,7 @@ export const es: Record<StringKey, string> = {
   "hours.take_worker_time": "Aceptar la hora de {name}",
   "hours.manager_proposed": "Cambio del responsable",
   "hours.worker_version": "Hora de {name}",
+  "hours.edit_in_dashboard": "Abre esta jornada en el panel de gestión para enviar un cambio.",
   "hours.no_approvals": "No hay horas pendientes de tu aprobación.",
   "hours.approvals_reading": "Cargando las horas por aprobar…",
   "hours.approvals_read_failed":
