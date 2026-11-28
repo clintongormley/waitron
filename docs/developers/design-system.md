@@ -6631,8 +6631,8 @@ in its own column, the name, and the price at the right, then ⓘ. Its muted sec
 dish's extras and note, and the row's state only when that differs from its heading's ("Held",
 "At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
 portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
-one line of 3 or three identical lines of 1 (`sentRowPortionKey` and `sameSentRow`,
-`apps/till/src/state/portion-groups.ts`); a cancelled but charged part stays a row of its own. Within
+one line of 3 or three identical lines of 1 (`sentRowPortionKey`,
+`apps/till/src/state/portion-groups.ts`, and `formsOneSentRow`, `apps/till/src/state/sent-sections.ts`); a served row joins the first row listed with something left of its dish; a cancelled but charged part stays a row of its own. Within
 a section (`compareRows`, `apps/till/src/state/sent-sections.ts`), ready rows come first, by when
 they were made ready; then the other released rows with something left, by when they were fired,
 those not yet fired after them; then rows still held, in the order the bill's read lists them,

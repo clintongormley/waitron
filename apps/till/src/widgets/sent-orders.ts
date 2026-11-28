@@ -507,8 +507,7 @@ export class TillSentOrders extends LitElement {
         >${t("table.group_fire")}</wt-button
       >`;
   }
-  #serveAll(section: SentSection): TemplateResult {
-    const released = servable(section.rows);
+  #serveAll(section: SentSection, released: readonly SentSlice[]): TemplateResult {
     const off = this.busy || released.length === 0;
     const groupId = section.group?.id ?? null;
     return html`<wt-button
@@ -528,6 +527,7 @@ export class TillSentOrders extends LitElement {
   #section(section: SentSection, expected: HeldOrder): TemplateResult {
     const id = section.group?.id ?? "";
     const held = isHeld(section);
+    const released = servable(section.rows);
     const now = this.#displayNow();
     return html`<section
       class="group"
@@ -549,7 +549,7 @@ export class TillSentOrders extends LitElement {
             : html`<span class="section-title" data-section-title>${this.#title(section)}</span>`
         }
         ${held ? this.#heldActions(section, expected) : nothing}
-        ${!held || servable(section.rows).length > 0 ? this.#serveAll(section) : nothing}
+        ${!held || released.length > 0 ? this.#serveAll(section, released) : nothing}
       </wt-course-heading>
       <ul
         @pointercancel=${() => this.#releasePointer()}

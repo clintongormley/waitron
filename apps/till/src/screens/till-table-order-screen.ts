@@ -216,12 +216,13 @@ import "../widgets/dead-ends-section.js";
 import { payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
+  type SentRowPortionKey,
   apartInSetMenus,
-  sameSentRow,
   sentPortionsApart,
   sentRowPortionKey,
   tabLinePortionKey,
 } from "../state/portion-groups.js";
+import { formsOneSentRow } from "../state/sent-sections.js";
 import {
   pickGroups,
   pickRows,
@@ -3470,18 +3471,15 @@ export class TillTableOrderScreen extends LitElement {
     if (served === undefined) return;
     if (members.length === 1 && served.length === 1 && members[0]!.row === served[0]!.row)
       return served;
-    const shown = this.#sentShown();
-    const dishes = [...members, ...served].map(
-      (slice) => sentRowPortionKey(slice, this.lines, shown(slice))?.dish,
-    );
-    return dishes.every((dish) => dish !== undefined && dish === dishes[0]) ? served : undefined;
+    return formsOneSentRow(members, this.#sentPortionKey(), served) ? served : undefined;
   }
 
-  /** The served portions the sheet's row joins to other lines, for Void and Comp to take alone. */
+  /** The served portions the sheet's row joins to other lines, for Void and Comp to take alone;
+   * `served` is {@link #sentTakeBack}'s answer for `members`. */
   #sentServedApart(
-    members: readonly SentSlice[] | undefined = this.#sentLineMembers(),
+    members: readonly SentSlice[] | undefined,
+    served: readonly SentSlice[] | undefined,
   ): readonly SentSlice[] | undefined {
-    const served = this.#sentTakeBack(members);
     return served?.some((slice) => members!.some((member) => member.row === slice.row))
       ? undefined
       : served;
@@ -3502,11 +3500,19 @@ export class TillTableOrderScreen extends LitElement {
     return pending.info;
   }
 
-  #sentShown(): (slice: SentSlice) => unknown[] {
-    return sentPortionsApart(
-      this.#allergy()?.snapshot ?? null,
-      sentMenuDishes(this.#dishSources().setMenus),
-    );
+  #sentMenuDishes?: {
+    setMenus: BillSetMenuState | undefined;
+    dishes: ReturnType<typeof sentMenuDishes>;
+  };
+
+  /** {@link sentRowPortionKey} as the sent rows draw it, with each portion's allergy and set menu. */
+  #sentPortionKey(): (slice: SentSlice) => SentRowPortionKey | null {
+    const setMenus = this.#setMenus;
+    let cached = this.#sentMenuDishes;
+    if (cached === undefined || cached.setMenus !== setMenus)
+      cached = this.#sentMenuDishes = { setMenus, dishes: sentMenuDishes(setMenus) };
+    const shown = sentPortionsApart(this.#allergy()?.snapshot ?? null, cached.dishes);
+    return (slice) => sentRowPortionKey(slice, this.lines, shown(slice));
   }
 
   /** The slices `info` names, or its served ones, by line number, while all are identical portions. */
@@ -3521,12 +3527,7 @@ export class TillTableOrderScreen extends LitElement {
       members.push(member);
     }
     members.sort((a, b) => a.row.lineNo - b.row.lineNo);
-    if (members.length > 1) {
-      const shown = this.#sentShown();
-      const keys = members.map((member) => sentRowPortionKey(member, this.lines, shown(member)));
-      if (keys.some((key) => key === null || !sameSentRow(key, keys[0]!))) return;
-    }
-    return members;
+    return formsOneSentRow(members, this.#sentPortionKey()) ? members : undefined;
   }
 
   #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean, asked = false): void {
@@ -3780,7 +3781,8 @@ export class TillTableOrderScreen extends LitElement {
       return;
     }
     const apart = action === "void-served" || action === "comp-served";
-    const members = apart ? this.#sentServedApart() : this.#sentLineMembers();
+    const own = this.#sentLineMembers();
+    const members = apart ? this.#sentServedApart(own, this.#sentTakeBack(own)) : own;
     const slice = members?.[0];
     if (apart) action = action === "void-served" ? "void" : "comp";
     if (
@@ -3826,7 +3828,7 @@ export class TillTableOrderScreen extends LitElement {
     const takeBack = this.#sentTakeBack(members);
     const unserve =
       takeBack !== undefined && takeBack.every((member) => this.#sentBillOpen(member.row));
-    const apart = this.#sentServedApart(members);
+    const apart = this.#sentServedApart(members, takeBack);
     const voidServed = apart !== undefined && this.#canVoidSent(apart[0]!);
     const compServed = apart !== undefined && this.#sentCompTarget(apart) !== undefined;
     if (!fire && !station && !unserve && !canVoid && !comp && !voidServed && !compServed)

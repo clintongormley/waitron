@@ -78,27 +78,34 @@ export function portionLineFacts(line: TabLine) {
   ];
 }
 
+/** The facts of a dish line, its extras and `shown` that serving it does not change. */
+function unservedFacts(dish: TabLine, lines: readonly TabLine[], shown: unknown) {
+  const extras = lines
+    .filter((line) => line.parentLineNo === dish.lineNo)
+    .map((extra) => JSON.stringify(portionLineFacts(extra)))
+    .sort();
+  return [
+    portionLineFacts(dish),
+    dish.courseId,
+    dish.groupId,
+    dish.stationId,
+    dish.firedAt,
+    extras,
+    shown,
+  ];
+}
+
 export function tabLinePortionKey(
   dish: TabLine,
   lines: readonly TabLine[],
   shown: unknown = null,
 ): string | null {
   if (!wholePortion(dish)) return null;
-  const extras = lines
-    .filter((line) => line.parentLineNo === dish.lineNo)
-    .map((extra) => JSON.stringify(portionLineFacts(extra)))
-    .sort();
   return JSON.stringify([
-    portionLineFacts(dish),
-    dish.courseId,
-    dish.groupId,
-    dish.stationId,
+    unservedFacts(dish, lines, shown),
     dish.state,
-    dish.firedAt,
     dish.servedAt !== null,
     dish.movable,
-    extras,
-    shown,
   ]);
 }
 
@@ -136,17 +143,16 @@ export function sentRowPortionKey(
 ): SentRowPortionKey | null {
   const { row } = slice;
   const dish = lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo);
-  if (dish === undefined || slice.quantity !== "1" || trimQuantity(row.quantity) !== "1")
+  if (
+    dish === undefined ||
+    !wholePortion(dish) ||
+    slice.quantity !== "1" ||
+    trimQuantity(row.quantity) !== "1"
+  )
     return null;
-  const bill = tabLinePortionKey(
-    { ...dish, servedAt: null, state: null, movable: false },
-    lines,
-    shown,
-  );
-  if (bill === null) return null;
   return {
     dish: JSON.stringify([
-      bill,
+      unservedFacts(dish, lines, shown),
       slice.kind === "cancelled_charged",
       row.workingOrderId,
       row.netAmount,
@@ -163,14 +169,9 @@ export function sentRowPortionKey(
   };
 }
 
-/** The key's two parts as one string, equal exactly when {@link sameSentRow} holds. */
-export const sentRowId = (key: SentRowPortionKey): string =>
-  JSON.stringify([key.dish, key.progress]);
-
-/** Whether two sent portions share one row as they stand; `sentSections` also joins a served
- * portion to an unserved one of its dish. */
-export const sameSentRow = (a: SentRowPortionKey, b: SentRowPortionKey): boolean =>
-  a.dish === b.dish && a.progress === b.progress;
+/** Equal exactly when two keys' parts are: `dish` is a JSON array, so where it ends is never in
+ * doubt, and `progress` is null or another. */
+export const sentRowId = (key: SentRowPortionKey): string => key.dish + (key.progress ?? "");
 
 /** What besides the dish keeps sent portions apart, as {@link sentRowPortionKey}'s `shown`: each
  * one's guest allergy and set menu. */

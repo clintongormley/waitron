@@ -1,7 +1,7 @@
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import { type SentRowPortionKey, sentRowId } from "./portion-groups.js";
+import { type SentRowPortionKey, portionGroups, sentRowId } from "./portion-groups.js";
 import { type SentSlice, byFiringOrder, sentPanel, time, waitsForFire } from "./sent-panel.js";
 
 export type SentRowState =
@@ -75,39 +75,55 @@ function toRow(slices: SentSlice[]): SentRow {
   };
 }
 
+interface PortionRow {
+  key: SentRowPortionKey | null;
+  slices: SentSlice[];
+}
+
 /** A line's served and unserved slices as one unit, its cancelled-but-charged part as another;
- * then units of identical one-portion lines joined, a served unit with the first unserved one
- * whose dish it shares. */
-function joinRows(
+ * then units of identical one-portion lines joined. */
+function portionRows(
   slices: readonly SentSlice[],
   portionKey: (slice: SentSlice) => SentRowPortionKey | null,
-): SentSlice[][] {
+): PortionRow[] {
   const units = new Map<string, SentSlice[]>();
   for (const slice of slices) push(units, unitId(slice), slice);
-  const groups: { key: SentRowPortionKey | null; slices: SentSlice[] }[] = [];
-  const byKey = new Map<string, (typeof groups)[number]>();
-  for (const unit of units.values()) {
-    const key = unit.length === 1 ? portionKey(unit[0]!) : null;
-    const id = key && sentRowId(key);
-    const same = id ? byKey.get(id) : undefined;
-    if (same) {
-      same.slices.push(...unit);
-      continue;
-    }
-    const group = { key, slices: [...unit] };
-    if (id) byKey.set(id, group);
-    groups.push(group);
-  }
-  const hosts = new Map<string, (typeof groups)[number]>();
-  for (const group of groups)
-    if (group.key?.progress != null && !hosts.has(group.key.dish)) hosts.set(group.key.dish, group);
-  const joined = groups.filter((group) => {
-    const host = group.key?.progress === null ? hosts.get(group.key.dish) : undefined;
-    if (host === undefined) return true;
-    host.slices.push(...group.slices);
+  const keyed = [...units.values()].map((unit) => ({
+    key: unit.length === 1 ? portionKey(unit[0]!) : null,
+    slices: unit,
+  }));
+  return portionGroups(
+    keyed,
+    (unit) => unit.key && sentRowId(unit.key),
+    (unit) => unit.slices[0]!.row.lineNo,
+  ).map((members) => ({
+    key: members[0]!.key,
+    slices: members.flatMap((member) => member.slices),
+  }));
+}
+
+const byLine = (a: SentSlice, b: SentSlice) => a.row.lineNo - b.row.lineNo;
+
+/**
+ * Whether `sentSections` draws these slices as one row: `slices`, portions with something left or
+ * all served, identical as they stand, and `served`, served portions it joins to them, of the same
+ * dish.
+ */
+export function formsOneSentRow(
+  slices: readonly SentSlice[],
+  portionKey: (slice: SentSlice) => SentRowPortionKey | null,
+  served: readonly SentSlice[] = [],
+): boolean {
+  const keys = slices.map(portionKey);
+  const first = keys[0];
+  if (
+    keys.length > 1 &&
+    keys.some((key) => key === null || first == null || sentRowId(key) !== sentRowId(first))
+  )
     return false;
-  });
-  return joined.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
+  if (served.length === 0) return true;
+  const dishes = [...keys, ...served.map(portionKey)].map((key) => key?.dish);
+  return dishes.every((dish) => dish !== undefined && dish === dishes[0]);
 }
 
 const byNumber = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
@@ -121,20 +137,61 @@ function rank(row: SentRow): number {
   return left.readyAt === null ? 1 : 0;
 }
 
+interface Place {
+  rank: number;
+  when: number;
+}
+
 function compareRows(
   a: SentRow,
   b: SentRow,
   readOrder: Map<CurrentOrderRow, number>,
-  when: Map<SentRow, number>,
+  places: Map<SentRow, Place>,
 ): number {
-  const order = rank(a) - rank(b);
+  const aPlace = places.get(a)!;
+  const bPlace = places.get(b)!;
+  const order = aPlace.rank - bPlace.rank;
   if (order !== 0) return order;
-  if (rank(a) === 3)
+  if (aPlace.rank === 3)
     return a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo || a.id.localeCompare(b.id);
   const aLeft = a.left[0]!.row;
   const bLeft = b.left[0]!.row;
-  if (rank(a) === 2) return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
-  return byNumber(when.get(a)!, when.get(b)!) || aLeft.lineId.localeCompare(bLeft.lineId);
+  if (aPlace.rank === 2) return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
+  return byNumber(aPlace.when, bPlace.when) || aLeft.lineId.localeCompare(bLeft.lineId);
+}
+
+/** A section's rows in order, each row of served portions joined to the first row listed with
+ * something left of the same dish. Joining moves no row: a row's place rests on what is left. */
+function orderedRows(
+  portions: readonly PortionRow[],
+  readOrder: Map<CurrentOrderRow, number>,
+): SentRow[] {
+  const keys = new Map<SentRow, SentRowPortionKey | null>();
+  const places = new Map<SentRow, Place>();
+  for (const portion of portions) {
+    const row = toRow([...portion.slices].sort(byLine));
+    const left = row.left[0]?.row;
+    keys.set(row, portion.key);
+    places.set(row, { rank: rank(row), when: time(left?.readyAt ?? left?.firedAt ?? null) });
+  }
+  const sorted = [...keys.keys()].sort((a, b) => compareRows(a, b, readOrder, places));
+  const rows: SentRow[] = [];
+  const hosts = new Map<string, number>();
+  for (const row of sorted) {
+    const key = keys.get(row);
+    if (key == null) {
+      rows.push(row);
+      continue;
+    }
+    const host = key.progress === null ? hosts.get(key.dish) : undefined;
+    if (host !== undefined) {
+      rows[host] = toRow([...rows[host]!.slices, ...row.slices].sort(byLine));
+      continue;
+    }
+    if (key.progress !== null && !hosts.has(key.dish)) hosts.set(key.dish, rows.length);
+    rows.push(row);
+  }
+  return rows;
 }
 
 /**
@@ -168,11 +225,7 @@ export function sentSections(
   for (const group of [...ordered, null]) {
     const slices = sliced.get(group);
     if (slices === undefined) continue;
-    const rows = joinRows(slices, portionKey).map(toRow);
-    const when = new Map(
-      rows.map((row) => [row, time(row.left[0]?.row.readyAt ?? row.left[0]?.row.firedAt ?? null)]),
-    );
-    rows.sort((a, b) => compareRows(a, b, readOrder, when));
+    const rows = orderedRows(portionRows(slices, portionKey), readOrder);
     const holding = group?.state === "held" && group.rows.some(waitsForFire);
     const companions = holding
       ? group.rows.filter((row) => row.workingOrderId !== billId && waitsForFire(row))
@@ -183,13 +236,11 @@ export function sentSections(
       .filter((id) => id !== null)
       .sort((a, b) => courseOrder(a) - courseOrder(b));
     const waiting = rows.filter((row) => row.left.length > 0);
-    const firedAt =
-      group === null
-        ? (slices
-            .map((slice) => slice.row.firedAt)
-            .filter((value) => value !== null)
-            .sort((a, b) => time(a) - time(b))[0] ?? null)
-        : group.firedAt;
+    let firedAt = group?.firedAt ?? null;
+    if (group === null)
+      for (const { row } of slices)
+        if (row.firedAt !== null && (firedAt === null || time(row.firedAt) < time(firedAt)))
+          firedAt = row.firedAt;
     sections.push({
       group,
       rows,

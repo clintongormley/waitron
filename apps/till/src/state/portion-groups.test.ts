@@ -3,7 +3,7 @@ import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/kitchen-api
 import type { SentSlice } from "./sent-panel.js";
 import {
   portionGroups,
-  sameSentRow,
+  sentRowId,
   sentRowPortionKey,
   tabLinePortionKey,
 } from "./portion-groups.js";
@@ -220,7 +220,7 @@ describe("A803 portion grouping: sent rows", () => {
         const key = sentRowPortionKey(entry, known);
         const same = rows.find((members) => {
           const other = sentRowPortionKey(members[0]!, known);
-          return key !== null && other !== null && sameSentRow(key, other);
+          return key !== null && other !== null && sentRowId(key) === sentRowId(other);
         });
         if (same) same.push(entry);
         else rows.push([entry]);
@@ -312,7 +312,7 @@ describe("A803 portion grouping: sent rows", () => {
     it("joins two served portions that became ready at different times", () => {
       const first = key(slice(servedRow("b1", 1), { kind: "served" }));
       const later = servedRow("b2", 2, { readyAt: "2026-10-28T12:18:00.000Z" });
-      expect(sameSentRow(first, key(slice(later, { kind: "served" })))).toBe(true);
+      expect(sentRowId(key(slice(later, { kind: "served" })))).toBe(sentRowId(first));
     });
 
     it("keeps two unserved portions' progress apart when their readiness differs", () => {
