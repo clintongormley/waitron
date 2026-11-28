@@ -208,7 +208,7 @@ disconnected.
 
 Translation calls take the connection's lock only to renew the access lease, or to record that
 Cloud refused the installation as revoked or its proof as invalid (`leaseState` and
-`recordRefusal` in `apps/server/src/cloud-client.ts`). They never hold it for the translation
+`recordRefusal` in `apps/server/src/cloud-client-services.ts`). They never hold it for the translation
 exchange itself, so a refresh or a report is not refused with `cloud.busy` while a status or
 collect call waits on Cloud. It can still be refused while a translation call holds the lock for
 one of those two things, because a refresh and a report do not wait for the lock.
@@ -230,7 +230,7 @@ The server asks Cloud with the signed `billing-display` read (`fetchBillingDispl
 `apps/server/src/cloud-billing.ts`) at most once a minute per pairing for every dashboard together,
 counted from when the read went to Cloud (from when it started, if the lease could not be renewed
 first); a 429's `Retry-After` can make the wait longer, up to an hour
-(`billing()` in `apps/server/src/cloud-client.ts`). The answer is kept in memory only, never on
+(`billing()` in `apps/server/src/cloud-client-services.ts`). The answer is kept in memory only, never on
 disk. A reply outside the contract's shape is refused as `cloud.unavailable`, and so is one
 whose `asOf` lies more than 60 seconds before the read was sent or after its reply arrived, and one whose
 published prices take effect after the reply's own calendar day.
