@@ -203,6 +203,14 @@ describe("till-equipment-dialog", () => {
     expect(row(el, "receipt")).not.toBeNull();
   });
 
+  it("lists the cash drawer only on a profile that may open one", async () => {
+    const without = await mountDialog({ capabilities: ["print-receipt"] });
+    expect(row(without, "cash_drawer")).toBeNull();
+    expect(row(without, "receipt")).not.toBeNull();
+    const allowed = await mountDialog({ capabilities: ["open-cash-drawer"] });
+    expect(row(allowed, "cash_drawer")).not.toBeNull();
+  });
+
   it("Inherit shows what it resolves to, and None where the profile has no default", async () => {
     const el = await mountDialog({
       equipment: equipment({ cash_drawer: onDefault("cash_drawer", null, [D1]) }),

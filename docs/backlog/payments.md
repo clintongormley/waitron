@@ -356,8 +356,10 @@ Remaining Stripe qualification and maintenance.
   ([till decisions](till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07)).
   The waiting SumUp checkout
   can be stopped from Pay. The original payment confirms whether the guest was charged.
-  A796 (#1921) carries the phone's last-chosen reader and receipt printer, folded away; the folded
-  row has a scan button, and background NFC pick-up updates the open form. Tap-to-Pay and the
+  A796 (#1921) carries the phone's last-chosen reader and receipt printer, folded away on a
+  presented bill and wherever Pay shows its full form or confirmation instead of its quick opening
+  view; the folded row has a scan button. On a phone's Pay, the device sheet keeps the camera scanning and lists each
+  device the payment uses. Background NFC pick-up updates the open form. Tap-to-Pay and the
   physical box-address checks above remain open.
   [A796 design](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md).
 

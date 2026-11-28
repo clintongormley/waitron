@@ -2,12 +2,61 @@ import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared"
 import { carriedText, t } from "../i18n/t.js";
 import type {
   DeviceEquipment,
+  EquipmentChange,
   EquipmentHolder,
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
   TillActiveReader,
 } from "../api/device-session-api.js";
+import type { EquipmentCode } from "./equipment-nfc.js";
+
+/** No pay-sheet pick made yet of any role. */
+export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
+  receipt: 0,
+  payment_slip: 0,
+  cash_drawer: 0,
+  invoice: 0,
+  card_terminal: 0,
+});
+
+/** The name of the sticker's item where a role of `equipment` that it may set lists it among its
+ * choices, else null; a printer's sticker may set the receipt and payment slip printer at once. */
+export function stickerName(code: EquipmentCode, equipment: DeviceEquipment | null): string | null {
+  const roles: EquipmentRole[] =
+    code.kind === "reader" ? ["card_terminal"] : ["receipt", "payment_slip"];
+  for (const each of equipment?.roles ?? []) {
+    const item = roles.includes(each.role) && each.choices.find((choice) => choice.id === code.id);
+    if (item) return item.name;
+  }
+  return null;
+}
+
+/** The printer roles `stored` holds the printer a printer change picked under; none for any other
+ * change. */
+export function printerRolesSet(change: EquipmentChange, stored: DeviceEquipment): EquipmentRole[] {
+  if (!("kind" in change) || change.kind !== "printer") return [];
+  const id = change.selection.id;
+  return stored.roles
+    .filter(
+      (each) =>
+        (each.role === "receipt" || each.role === "payment_slip") &&
+        (each.chosenId === id || each.resolved?.id === id),
+    )
+    .map((each) => each.role);
+}
+
+/** `errors` with `message` under `role`, or with `role`'s message removed when it is null. */
+export function withRoleError(
+  errors: Partial<Record<EquipmentRole, string>>,
+  role: EquipmentRole,
+  message: string | null,
+): Partial<Record<EquipmentRole, string>> {
+  const next = { ...errors };
+  if (message === null) delete next[role];
+  else next[role] = message;
+  return next;
+}
 
 /** The reader a payment from this device would be charged on. */
 export type PayReader =

@@ -1169,9 +1169,11 @@ confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver
 acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina o dejar una
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
-**Tarjeta y lector.** En un dispositivo de mano, usa el icono sin contacto para abrir
-**Lector e impresora**. Pulsa **Cambiar** o escanea la etiqueta de Waitron si tienes otro lector.
-Si el icono sin contacto de la caja abre una lista de lectores, elige el que necesitas. Revisa el
+**Tarjeta y lector.** En un dispositivo de mano, el icono sin contacto de la parte superior de
+Cobrar abre la cámara. Escanea las etiquetas de Waitron del lector y las impresoras que tienes en la
+mano, una tras otra, o elígelos en las listas, y pulsa **Listo**. En una cuenta ya presentada,
+o en la confirmación, abre **Lector e impresora** y usa **Cambiar** o **QR**. Si el icono sin contacto de la
+caja abre una lista de lectores, elige el que necesitas. Revisa el
 importe del botón **Cobrar** antes de pulsarlo. Para usar otra máquina, sigue
 [Usar otro datáfono](table-service.md#outside-card).
 

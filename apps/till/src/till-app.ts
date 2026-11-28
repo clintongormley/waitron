@@ -74,11 +74,15 @@ import {
   readerLoss,
   readerReasonOf,
   readyPayReader,
+  noEquipmentPicks,
+  printerRolesSet,
+  stickerName,
+  withRoleError,
   takenFrom,
   type FixedReader,
   type ReaderLoss,
 } from "./state/pay-equipment.js";
-import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
+import type { PayEquipmentPick } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import type { OpenInvoiceCorrection } from "./api/invoice-correction-types.js";
@@ -536,12 +540,6 @@ import type {
   TabLine,
 } from "./api/kitchen-api.js";
 import type {
-  StaffMember,
-  TillActiveReader,
-  TillCourse,
-  TillInfo,
-} from "./api/device-session-api.js";
-import type {
   ServiceZoneSummary,
   MenuStateAnswer,
   TillProduct,
@@ -605,6 +603,11 @@ import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { CaptureWarning } from "./api/payments-api.js";
 import type {
+  StaffMember,
+  TillActiveReader,
+  TillCourse,
+  TillInfo,
+  EquipmentRole,
   DevDeviceList,
   DeviceEquipment,
   RoleEquipment,
@@ -3708,25 +3711,17 @@ export class TillApp extends LitElement {
   }
 
   async #pickUpSticker(code: EquipmentCode): Promise<void> {
-    const permitted = this.deviceEquipment?.roles.find(
-      (role) =>
-        (code.kind === "reader"
-          ? role.role === "card_terminal"
-          : role.role === "receipt" || role.role === "payment_slip") &&
-        role.choices.some((item) => item.id === code.id),
-    );
-    if (!permitted) {
+    const name = stickerName(code, this.deviceEquipment);
+    if (name === null) {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
-    // The sticker is now the sheet field's latest pick, so no earlier pick's refusal shows under it.
-    const role: PayEquipmentRole = code.kind === "reader" ? "card_terminal" : "receipt";
-    this.#payEquipmentPicks[role]++;
-    this.#setPayEquipmentError(role, null);
-    const context = {
-      session: this.#operatorSession,
-      name: permitted.choices.find((item) => item.id === code.id)!.name,
-    };
+    // A reader counts now, for the opening auto-pick; a printer clears the fields its answer set.
+    if (code.kind === "reader") {
+      this.#payEquipmentPicks.card_terminal++;
+      this.#setPayEquipmentError("card_terminal", null);
+    }
+    const context = { session: this.#operatorSession, name };
     await this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { kind: code.kind, selection: { id: code.id }, via: "scan" },
@@ -3743,11 +3738,11 @@ export class TillApp extends LitElement {
   /** Either count above is not zero; the pay sheets hold charging on it. */
   @state() private equipmentBusy = false;
   /** The pay sheet's own latest pick, which its field shows as saving. */
-  @state() private payEquipmentSaving: { role: PayEquipmentRole; id: string } | null = null;
+  @state() private payEquipmentSaving: { role: EquipmentRole; id: string } | null = null;
   /** Why the pay sheet's own pick of a field was not saved, shown under that field. */
-  @state() private payEquipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  @state() private payEquipmentErrors: Partial<Record<EquipmentRole, string>> = {};
   /** Each field's latest sheet pick; only that pick's failure is shown under the field. */
-  #payEquipmentPicks: Record<PayEquipmentRole, number> = { card_terminal: 0, receipt: 0 };
+  #payEquipmentPicks = noEquipmentPicks();
   /** Whether the phone has had a reader in this page. Not stored and not reset by logout: it
    * describes the page, not the person (design default 18). */
   #hadReader = false;
@@ -11329,7 +11324,7 @@ export class TillApp extends LitElement {
   #onEquipmentChange(
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
+    sheet?: { role: EquipmentRole; sheet: string; pick: number },
   ): Promise<DeviceEquipment | { error: string } | undefined> {
     const opening = this.#equipmentOpenings;
     this.#equipmentWaiting++;
@@ -11346,7 +11341,7 @@ export class TillApp extends LitElement {
     change: EquipmentChange,
     opening: number,
     nfc?: { session: number; name: string },
-    sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
+    sheet?: { role: EquipmentRole; sheet: string; pick: number },
   ): Promise<DeviceEquipment | { error: string } | undefined> {
     const current = () =>
       nfc === undefined ||
@@ -11377,6 +11372,7 @@ export class TillApp extends LitElement {
       }
       if (nfc !== undefined) {
         this.nfcNotice = { message: pickedUpMessage(change, stored, nfc.name), tone: "info" };
+        for (const role of printerRolesSet(change, stored)) this.#setPayEquipmentError(role, null);
       }
       return stored;
     } catch (error) {
@@ -11643,7 +11639,9 @@ export class TillApp extends LitElement {
         .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guestCount ?? null) : open.surface === "table" ? defaultReceiptGuestCount(this.orderParty) : null}
         .handheld=${this.handheldMode}
         .notice=${this.nfcNotice}
-        .askNfc=${this.nfcPermission === "prompt"}
+        .nfcPermission=${this.nfcPermission}
+        .nfcUnavailable=${this.#equipmentNfc.unavailable}
+        .capabilities=${this.capabilities}
         .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
         .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
         .tableName=${this.#payingTableName(open)}
@@ -12310,11 +12308,8 @@ export class TillApp extends LitElement {
   }
 
   /** Puts `message` under the role's field in the pay sheet, or clears it when null. */
-  #setPayEquipmentError(role: PayEquipmentRole, message: string | null): void {
-    const errors = { ...this.payEquipmentErrors };
-    if (message === null) delete errors[role];
-    else errors[role] = message;
-    this.payEquipmentErrors = errors;
+  #setPayEquipmentError(role: EquipmentRole, message: string | null): void {
+    this.payEquipmentErrors = withRoleError(this.payEquipmentErrors, role, message);
   }
 
   async #onPayEquipmentPick({ role, id, takeOver }: PayEquipmentPick): Promise<void> {
@@ -24743,6 +24738,7 @@ export class TillApp extends LitElement {
           this.equipmentOpen
             ? html`<till-equipment-dialog
                 .open=${true}
+                .capabilities=${this.capabilities}
                 .equipment=${this.deviceEquipment}
                 .error=${this.equipmentError}
                 @equipment-change=${(event: CustomEvent<EquipmentChange>) => {

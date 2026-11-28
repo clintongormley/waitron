@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import "./pay-equipment.js";
+import { payNotice, payNoticeStyles } from "./pay-equipment.js";
 import type { TillPayEquipment } from "./pay-equipment.js";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
@@ -103,6 +104,22 @@ async function pick(combobox: WtCombobox, label: string): Promise<void> {
   await userEvent.click(option);
   await combobox.updateComplete;
 }
+
+it("draws a sticker's notice in the device sheet's look: body text on the ready tint, with a check", async () => {
+  class NoticeHost extends LitElement {
+    static override styles = [payNoticeStyles];
+    override render() {
+      return payNotice({ message: "Lector 2", tone: "info" });
+    }
+  }
+  customElements.define("notice-host", NoticeHost);
+  const { el } = await mountWidget<NoticeHost>("notice-host", {});
+  const line = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-notice]")!;
+  const tint = tokenColour(el.shadowRoot!, "--wt-color-tab-ready-tint");
+  expect(getComputedStyle(line).backgroundColor).toBe(tint);
+  expect(getComputedStyle(line).color).toBe(tokenColour(el.shadowRoot!, "--wt-color-text"));
+  expect(line.querySelector('wt-icon[name="check"]')).not.toBeNull();
+});
 
 describe("till-pay-equipment", () => {
   describe("closed summary", () => {

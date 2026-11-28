@@ -212,7 +212,12 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           expect(editBox.top).toBeLessThan(summary.bottom);
           expect(editBox.right).toBeLessThanOrEqual(breakdown.getBoundingClientRect().right);
           const icons = [
-            root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
+            width <= 844
+              ? root
+                  .querySelector("till-device-sheet")!
+                  .shadowRoot!.querySelector("wt-row-actions")!
+                  .shadowRoot!.querySelector('[part="trigger"] wt-icon')!
+              : root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
             choices[0]!.shadowRoot!.querySelector("[part=check] wt-icon")!,
             root.querySelector("[data-quiet-pay-card]")!.shadowRoot!.querySelector("wt-icon") ??
               root.querySelector("[data-quiet-pay-card] wt-icon")!,

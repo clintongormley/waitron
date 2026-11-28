@@ -37,7 +37,8 @@ const helpers: Record<string, string[]> = {
 };
 
 // Literal menu fragments and named helpers only; dynamic values/selectors, detached new helpers and
-// class-only CSS need review. Native choice content layout and rich panels are outside this guard.
+// class-only CSS need review. Native choice content layout and rich panels (the alerts bell and the
+// till's device sheet, told apart by their icons) are outside this guard.
 // Each rule needs a candidate marker in raw or decoded text, or a named helper above.
 const MENU_CANDIDATE = /row-actions|wt-menu-row|--wt-button-justify/;
 function violations(path: string, source: string): string[] {
@@ -51,7 +52,9 @@ function violations(path: string, source: string): string[] {
   const failures = new Set<string>();
   const menuPattern = /<(?:wt|dashboard)-row-actions\b[\s\S]*?<\/(?:wt|dashboard)-row-actions\s*>/g;
   const menus = (text: string) =>
-    [...text.matchAll(menuPattern)].filter((match) => !/icon="bell"/.test(match[0]));
+    [...text.matchAll(menuPattern)].filter(
+      (match) => !/icon="(?:bell|pay-contactless)"/.test(match[0]),
+    );
   const ranges = menus(source).map((match) => [match.index!, match.index! + match[0].length]);
   const named = (node: ts.Node): boolean => {
     for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
@@ -134,6 +137,10 @@ it.each([
   ],
   [
     'html`<wt-row-actions icon="bell"><wt-button size="sm" variant="ghost" align="start">Read</wt-button></wt-row-actions>`',
+    [],
+  ],
+  [
+    'html`<wt-row-actions icon="pay-contactless" panel><wt-button variant="primary">Done</wt-button></wt-row-actions>`',
     [],
   ],
   [

@@ -17,6 +17,7 @@ import {
   quietTipBreakdown,
   quietWays,
 } from "./quiet-pay.js";
+import { payDeviceSheet, showPayDeviceSheet } from "./pay-device-sheet.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -62,20 +63,25 @@ import {
   type BillReaderStopStatus,
   type SentCard,
 } from "./card-waiting.js";
-import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
+import type { PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { nextShareLabel } from "./next-share-label.js";
 import { SplitOpening, splitEquallyScreen } from "./split-equally-pay.js";
 import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+import type { CapabilityFlag } from "../layout.js";
 import type {
   AdvanceTicket,
   AllocationPreview,
   BillBalance,
   BillPaymentView,
 } from "../api/payments-api.js";
-import type { DeviceEquipment, TillActiveReader } from "../api/device-session-api.js";
+import type {
+  DeviceEquipment,
+  EquipmentRole,
+  TillActiveReader,
+} from "../api/device-session-api.js";
 import {
   BILL_PAY_WAYS,
   PAYMENT_STATES,
@@ -313,15 +319,17 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) openingBack = "";
   @property({ type: Boolean }) quiet = false;
   @property() billName = "";
-  /** On a handheld, the reader and printer row's inputs, passed straight to it. */
+  /** On a handheld, the inputs of the device sheet or the reader and printer row. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
-  @property({ attribute: false }) equipmentSaving: { role: PayEquipmentRole; id: string } | null =
+  @property({ attribute: false }) equipmentSaving: { role: EquipmentRole; id: string } | null =
     null;
-  @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  @property({ attribute: false }) equipmentErrors: Partial<Record<EquipmentRole, string>> = {};
   @property({ attribute: false }) readerReason: string | null = null;
   @property({ attribute: false }) readerHint: string | null = null;
   @property({ type: Boolean }) canScan = false;
-  @property({ type: Boolean }) askNfc = false;
+  @property({ attribute: false }) nfcPermission: PermissionState | null = null;
+  @property({ type: Boolean }) nfcUnavailable = false;
+  @property({ attribute: false }) capabilities: readonly CapabilityFlag[] = [];
   /** An equipment change is out: nothing is taken until it is answered. */
   @property({ type: Boolean }) equipmentBusy = false;
   @property({ attribute: false }) fixedReader: FixedReader | null = null;
@@ -613,7 +621,7 @@ export class TillBillPayDialog extends LitElement {
     if (changed.has("refunded") && this.refunded !== null) this.#endRun();
     if (changed.has("balance") && !this.#owing()) this.nextOffered = false;
     const wanted = this.#rowWantsOpen();
-    if (wanted && !this.#rowWanted) this.rowOpen = true;
+    if (wanted && !this.#rowWanted) this.openEquipmentRow();
     this.#rowWanted = wanted;
     if (changed.has("busy") && !this.busy) this.#sent = null;
     if (changed.has("busy") && this.busy) {
@@ -623,9 +631,11 @@ export class TillBillPayDialog extends LitElement {
     this.#syncDrafts();
   }
 
-  /** The app has put a refusal under one of the row's fields: the row opens so it shows. */
+  /** The app has put a refusal under one of the row's fields: the row, or on a phone's Pay the
+   * device sheet, opens so it shows. */
   openEquipmentRow(): void {
     this.rowOpen = true;
+    if (this.handheld) void this.updateComplete.then(() => showPayDeviceSheet(this.renderRoot));
   }
 
   paymentAccepted(): void {
@@ -816,8 +826,13 @@ export class TillBillPayDialog extends LitElement {
     return this.handheld && !this.confirmationLocked && heldForEquipment(method === "card", this);
   }
 
+  /** Pay's device sheet opens by itself only while Charge waits for a reader; a printer problem
+   * marks its button instead. */
   #rowWantsOpen(): boolean {
-    return this.handheld && !this.autoPicking && payRowWantsOpen(this.equipment, this.fixedReader);
+    if (!this.handheld || this.autoPicking) return false;
+    if (this.#opening)
+      return this.takesReaderCard && this.equipment !== null && this.#readyReader() === null;
+    return payRowWantsOpen(this.equipment, this.fixedReader);
   }
 
   #readerEntry(): CardEntry {
@@ -1123,11 +1138,11 @@ export class TillBillPayDialog extends LitElement {
         : this.openingBack || this.tableName || t("action.back"),
       wrapBack: !splitBack && this.openingBack !== "",
       close: () => (splitBack ? this.#openSplit() : this.#requestClose()),
-      equipment: quietEquipmentButton(
-        this.rowOpen,
-        this.busy,
-        () => (this.rowOpen = !this.rowOpen),
-      ),
+      equipment: this.handheld
+        ? payDeviceSheet(this, card, this.busy || this.confirmationLocked, (open) => {
+            this.rowOpen = open;
+          })
+        : quietEquipmentButton(this.rowOpen, this.busy, () => (this.rowOpen = !this.rowOpen)),
       amount,
       breakdown:
         this.quietEntry || !this.tipsEnabled || !card || base === null
@@ -1153,7 +1168,7 @@ export class TillBillPayDialog extends LitElement {
           ? this.#simulationFields()
           : this.rowOpen
             ? this.handheld
-              ? this.#equipmentRow(card)
+              ? nothing
               : this.#readerFields()
             : this.#notice()
       }
@@ -2089,7 +2104,7 @@ export class TillBillPayDialog extends LitElement {
         .readerReason=${this.readerReason}
         .readerHint=${this.readerHint}
         .canScan=${this.canScan}
-        .askNfc=${this.askNfc}
+        .askNfc=${this.nfcPermission === "prompt"}
         .disabled=${this.busy || this.confirmationLocked}
         .fixedReader=${this.fixedReader}
         @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>

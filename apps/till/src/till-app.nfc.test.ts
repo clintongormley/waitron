@@ -24,6 +24,8 @@ import {
   BAR_PRINTER,
   billOf,
   inDialog,
+  deviceSheet,
+  openDeviceSheet,
   money,
   paymentOf,
   equipmentItem,
@@ -916,17 +918,19 @@ describe("the pay sheet's NFC button", () => {
     el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       "till-bill-pay-dialog, till-presented-pay-dialog",
     )!;
+  /** Allow NFC: in Pay's device sheet on a bill, in the folded row on a presented bill. */
   async function nfcButton(el: TillApp): Promise<HTMLElement | null> {
     await sheet(el).updateComplete;
-    const root = sheet(el).shadowRoot!;
-    if (root.querySelector("till-pay-equipment") === null) {
-      root.querySelector<HTMLElement>("[data-quiet-pay-equipment]")?.click();
-      await flush(el);
-    }
+    if (sheet(el).localName === "till-bill-pay-dialog")
+      return (await openDeviceSheet(el)).shadowRoot!.querySelector<HTMLElement>("[data-pay-nfc]");
     const row = sheet(el).shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
     await row.updateComplete;
     return row.shadowRoot!.querySelector<HTMLElement>("[data-pay-nfc]");
   }
+  /** The sheet's notice: in Pay's device sheet while it is open, else in the pay sheet. */
+  const payNotice = (el: TillApp) =>
+    deviceSheet(el)?.shadowRoot!.querySelector("[data-pay-notice]") ??
+    sheet(el).shadowRoot!.querySelector("[data-pay-notice]");
 
   beforeEach(() => resetBillPayDrafts());
 
@@ -948,12 +952,8 @@ describe("the pay sheet's NFC button", () => {
     const live = FakeNdefReader.instances.filter((nfc) => !nfc.signal!.aborted);
     expect(live).toHaveLength(1);
     expect(await nfcButton(el)).toBeNull();
-    expect(text(sheet(el).shadowRoot!.querySelector("[data-pay-notice]"))).toBe(
-      t("equipment.nfc_hint"),
-    );
-    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")!.getAttribute("role")).toBe(
-      "status",
-    );
+    expect(text(payNotice(el))).toBe(t("equipment.nfc_hint"));
+    expect(payNotice(el)!.getAttribute("role")).toBe("status");
 
     live[0]!.read(`waitron-equipment:reader:${READER_ID}`);
     await flush(el);
@@ -1063,7 +1063,7 @@ describe("the pay sheet's NFC button", () => {
     installNfc("granted");
     const { el } = await phoneApp();
     expect(await nfcButton(el)).toBeNull();
-    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
+    expect(payNotice(el)).toBeNull();
   });
 
   it("a grant the button did not ask for shows no hint", async () => {
@@ -1075,7 +1075,7 @@ describe("the pay sheet's NFC button", () => {
     await flush(el);
     expect(await nfcButton(el)).toBeNull();
     expect(FakeNdefReader.instances.filter((nfc) => !nfc.signal!.aborted)).toHaveLength(1);
-    expect(sheet(el).shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
+    expect(payNotice(el)).toBeNull();
   });
 
   it("a denied permission never shows the button", async () => {

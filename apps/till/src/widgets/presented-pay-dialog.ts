@@ -37,13 +37,13 @@ import {
   type ReaderStopControl,
   type SentCard,
 } from "./card-waiting.js";
-import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
+import type { PayNotice } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { refusalText, type PayRefusal } from "./pay-refusal.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { DeviceEquipment } from "../api/device-session-api.js";
+import type { DeviceEquipment, EquipmentRole } from "../api/device-session-api.js";
 import { typedAmount, typedMoney } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import {
@@ -159,9 +159,9 @@ export class TillPresentedPayDialog extends LitElement {
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
-  @property({ attribute: false }) equipmentSaving: { role: PayEquipmentRole; id: string } | null =
+  @property({ attribute: false }) equipmentSaving: { role: EquipmentRole; id: string } | null =
     null;
-  @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  @property({ attribute: false }) equipmentErrors: Partial<Record<EquipmentRole, string>> = {};
   @property({ attribute: false }) readerReason: string | null = null;
   @property({ attribute: false }) readerHint: string | null = null;
   @property({ type: Boolean }) canScan = false;

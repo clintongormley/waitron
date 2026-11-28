@@ -36,7 +36,7 @@ import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillSplitEqually } from "./widgets/split-equally.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
-import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
+import { cameraFilming, cameraShowing } from "@waitron/ui/test/qr-camera.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import type { BillRow } from "./api/find-bill-types.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
@@ -64,6 +64,9 @@ import {
   flush,
   inDialog,
   paymentStart,
+  deviceSheet,
+  deviceSheetOpen,
+  openDeviceSheet,
   choosePayMethod,
   choosePayWay,
   invoiceOf as saleOf,
@@ -184,15 +187,14 @@ const presented = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillPresentedPayDialog>("till-presented-pay-dialog");
 const inPresented = (el: TillApp, selector: string) =>
   presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
-async function openEquipment(el: TillApp): Promise<void> {
-  const sheet = dialog(el);
-  const root = sheet?.shadowRoot;
-  if (root === undefined || root === null || root.querySelector("till-pay-equipment") !== null)
-    return;
-  root.querySelector<HTMLElement>("[data-quiet-pay-equipment]")?.click();
-  await flush(el);
-}
-
+/** The open pay sheet's devices: Pay's device sheet on a bill, the folded row on a presented bill.
+ * Both draw the reader and receipt dropdowns, their notes and the printer warning. */
+const devicesOf = (el: TillApp) =>
+  (dialog(el) ?? presented(el))!.shadowRoot!.querySelector<TillPayEquipment>(
+    "till-device-sheet, till-pay-equipment",
+  )!;
+const devicesOpen = (el: TillApp): boolean =>
+  dialog(el) !== null ? deviceSheetOpen(el) : devicesOf(el).open;
 const continueButton = (el: TillApp) => paymentStart(el)!;
 const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
 const documentChoice = (el: TillApp) =>
@@ -211,14 +213,14 @@ async function finishFromTable(el: TillApp): Promise<void> {
   await flush(el);
 }
 
+/** What the pay sheet names for each device: the folded row's summary, else its dropdowns. */
 async function rowSummary(el: TillApp): Promise<string> {
-  await openEquipment(el);
-  const row = inDialog(el, "till-pay-equipment") as
-    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-  await row!.updateComplete;
+  await dialog(el)!.updateComplete;
+  const devices = devicesOf(el);
+  await devices.updateComplete;
   return (
-    text(row!.shadowRoot!.querySelector("[data-pay-equipment-summary]")) ||
-    [...row!.shadowRoot!.querySelectorAll("wt-combobox")]
+    text(devices.shadowRoot!.querySelector("[data-pay-equipment-summary]")) ||
+    [...devices.shadowRoot!.querySelectorAll<WtCombobox>("wt-combobox")]
       .map((box) => text(box.shadowRoot!.querySelector(".trigger")))
       .join(" · ")
   );
@@ -1893,8 +1895,7 @@ describe("till-app: a pick from the sheet", () => {
     return { setDeviceEquipment, answers };
   }
 
-  const row = (el: TillApp) =>
-    inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
+  const row = deviceSheet;
   async function savingNote(el: TillApp): Promise<string> {
     await dialog(el)!.updateComplete;
     await row(el)!.updateComplete;
@@ -1902,11 +1903,7 @@ describe("till-app: a pick from the sheet", () => {
   }
 
   async function openRow(el: TillApp): Promise<void> {
-    await openEquipment(el);
-    await row(el)!.updateComplete;
-    const change = row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
-    if (change !== null) await userEvent.click(change);
-    await flush(el);
+    await openDeviceSheet(el);
   }
 
   async function pickReader(el: TillApp, label: string): Promise<void> {
@@ -2208,8 +2205,7 @@ describe("till-app: a pick from the sheet that fails", () => {
     };
   }
 
-  const row = (el: TillApp) =>
-    inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment | null;
+  const row = deviceSheet;
   async function field(el: TillApp, name: string): Promise<WtCombobox> {
     await dialog(el)!.updateComplete;
     await row(el)!.updateComplete;
@@ -2217,11 +2213,7 @@ describe("till-app: a pick from the sheet that fails", () => {
   }
 
   async function openRow(el: TillApp): Promise<void> {
-    await openEquipment(el);
-    await row(el)!.updateComplete;
-    const change = row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
-    if (change !== null) await userEvent.click(change);
-    await flush(el);
+    await openDeviceSheet(el);
   }
 
   async function pick(el: TillApp, name: string, label: string): Promise<void> {
@@ -2287,7 +2279,7 @@ describe("till-app: a pick from the sheet that fails", () => {
   });
 
   it("a scanned sticker for the reader replaces an earlier pick's refusal under the field", async () => {
-    const camera = cameraFilming(formatEquipmentCode("reader", READER_ID));
+    const camera = cameraShowing(null);
     try {
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
       const setDeviceEquipment = vi
@@ -2300,7 +2292,7 @@ describe("till-app: a pick from the sheet that fails", () => {
         codeMessage("reader.payment_in_progress"),
       );
 
-      row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
+      camera.show(formatEquipmentCode("reader", READER_ID));
       await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2), {
         timeout: 10_000,
       });
@@ -2631,13 +2623,11 @@ describe("till-app: a sticker scanned from the sheet", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     const before = await rowSummary(el);
-    const row = inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment;
-    row.shadowRoot!.querySelector<HTMLElement>("[data-pay-qr]")!.click();
-    await flush(el);
+    await openDeviceSheet(el);
     return { el, before };
   }
 
-  it("a reader's sticker is sent as a scan, and the row then names the reader", async () => {
+  it("a reader's sticker is sent as a scan, and the device sheet then names the reader", async () => {
     film(formatEquipmentCode("reader", READER_ID));
     const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(THIRD_READER, BAR_PRINTER));
     const { el } = await scanFromSheet(setDeviceEquipment);
@@ -2649,7 +2639,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
       via: "scan",
     });
     await flush(el);
-    expect(inDialog(el, "till-equipment-scanner")).toBeNull();
+    expect(deviceSheet(el)!.shadowRoot!.querySelector("till-equipment-scanner")).not.toBeNull();
     expect(await rowSummary(el)).toContain("Lector 3");
   });
 
@@ -2660,7 +2650,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
     await flush(el);
-    expect(text(inDialog(el, "[data-pay-notice]"))).toBe(
+    expect(text(deviceSheet(el)!.shadowRoot!.querySelector("[data-pay-notice]"))).toBe(
       t("equipment.picked_up").replace("{item}", "Lector 3"),
     );
     expect(
@@ -2735,7 +2725,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
     );
   });
 
-  it("a printer's sticker refused changes nothing in the row", async () => {
+  it("a printer's sticker refused changes nothing on the device sheet", async () => {
     film(formatEquipmentCode("printer", PRINTER_ID));
     const setDeviceEquipment = vi
       .fn()
@@ -2746,6 +2736,159 @@ describe("till-app: a sticker scanned from the sheet", () => {
     await flush(el);
     expect(before).toContain("Barra");
     expect(await rowSummary(el)).toBe(before);
+  });
+});
+
+describe("till-app: Pay's device sheet on a phone", () => {
+  const PORTABLE = equipmentItem(PRINTER_ID, "Portable printer", { portable: true });
+  const equipmentOf = (reader: EquipmentItem, printer: EquipmentItem): DeviceEquipment => ({
+    roles: [
+      roleOf("receipt", printer, [BAR_PRINTER, PORTABLE]),
+      roleOf("card_terminal", reader, [SECOND_READER, THIRD_READER]),
+    ],
+  });
+
+  let camera: ReturnType<typeof cameraShowing> | undefined;
+  afterEach(() => {
+    camera?.stop();
+    camera = undefined;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  async function phonePay(overrides: Record<string, unknown> = {}) {
+    const setDeviceEquipment = vi
+      .fn()
+      .mockResolvedValueOnce(equipmentOf(THIRD_READER, BAR_PRINTER))
+      .mockResolvedValue(equipmentOf(THIRD_READER, PORTABLE));
+    const { el } = await mountApp(
+      onPhone({
+        getDeviceEquipment: vi.fn().mockResolvedValue(equipmentOf(SECOND_READER, BAR_PRINTER)),
+        setDeviceEquipment,
+        ...overrides,
+      }),
+    );
+    await pressPaySheet(el, await openPhoneTable(el));
+    return { el, setDeviceEquipment };
+  }
+
+  it("draws the device button in place of the folded row, with the sheet closed", async () => {
+    const { el } = await phonePay();
+
+    expect(deviceSheet(el)).not.toBeNull();
+    expect(inDialog(el, "[data-quiet-pay-equipment]")).toBeNull();
+    expect(inDialog(el, "till-pay-equipment")).toBeNull();
+    expect(deviceSheetOpen(el)).toBe(false);
+  });
+
+  it.each([
+    ["working", true],
+    ["failed to start", false],
+  ] as const)("offers NFC in the sheet's hint only while NFC is %s", async (_, working) => {
+    installNfc("granted");
+    if (!working)
+      FakeNdefReader.scanResult = () =>
+        Promise.reject(new DOMException("unavailable", "NotReadableError"));
+    const { el } = await phonePay();
+    await flush(el);
+
+    const hint = text(deviceSheet(el)!.shadowRoot!.querySelector("[data-device-sheet-hint]"));
+    expect(hint.includes(t("device_sheet.hint_nfc"))).toBe(working);
+  });
+
+  it("a printer's sticker clears a refusal left under Payment slip printer", async () => {
+    camera = cameraShowing(null);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const withSlip = (printer: EquipmentItem) => {
+      const equipment = equipmentOf(SECOND_READER, printer);
+      equipment.roles.push(roleOf("payment_slip", printer, [BAR_PRINTER, PORTABLE]));
+      return equipment;
+    };
+    const { el } = await phonePay({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withSlip(BAR_PRINTER)),
+      setDeviceEquipment: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.binding_invalid", status: 400 })
+        .mockResolvedValueOnce(withSlip(PORTABLE)),
+    });
+    const sheet = await openDeviceSheet(el);
+    const slip = () =>
+      sheet.shadowRoot!.querySelector<WtCombobox>('[name="paymentSlipPrinterId"]')!;
+    await userEvent.click(slip().shadowRoot!.querySelector<HTMLElement>('[role="combobox"]')!);
+    const options = [...slip().shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    await userEvent.click(options.find((option) => text(option).includes("Portable printer"))!);
+    await vi.waitFor(() => expect(slip().error).not.toBe(""));
+
+    camera.show(formatEquipmentCode("printer", PRINTER_ID));
+    await vi.waitFor(() => expect(slip().value).toBe(PRINTER_ID), { timeout: 10_000 });
+    expect(slip().error).toBe("");
+  });
+
+  const SLIP_ONLY = equipmentItem("p3", "Slip printer");
+  it.each([
+    ["not listed under Payment slip printer", [BAR_PRINTER, SLIP_ONLY]],
+    [
+      "listed under Payment slip printer but set only as receipt printer",
+      [BAR_PRINTER, PORTABLE, SLIP_ONLY],
+    ],
+  ])("a sticker for a printer %s keeps a slip pick's refusal", async (_, slipChoices) => {
+    camera = cameraShowing(null);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const withSlip = (printer: EquipmentItem) => {
+      const equipment = equipmentOf(SECOND_READER, printer);
+      equipment.roles.push(roleOf("payment_slip", BAR_PRINTER, slipChoices));
+      return equipment;
+    };
+    let refuse!: (reason: unknown) => void;
+    const { el } = await phonePay({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withSlip(BAR_PRINTER)),
+      setDeviceEquipment: vi
+        .fn()
+        .mockReturnValueOnce(new Promise((_, reject) => (refuse = reject)))
+        .mockResolvedValueOnce(withSlip(PORTABLE)),
+    });
+    const sheet = await openDeviceSheet(el);
+    const field = (name: string) =>
+      sheet.shadowRoot!.querySelector<WtCombobox>(`[name="${name}"]`)!;
+    const slip = () => field("paymentSlipPrinterId");
+    await userEvent.click(slip().shadowRoot!.querySelector<HTMLElement>('[role="combobox"]')!);
+    const options = [...slip().shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    await userEvent.click(options.find((option) => text(option).includes("Slip printer"))!);
+    const scanned = new Promise((resolve) => el.addEventListener("pay-equipment-sticker", resolve));
+
+    camera.show(formatEquipmentCode("printer", PRINTER_ID));
+    await scanned;
+    refuse({ code: "device.binding_invalid", status: 400 });
+    await vi.waitFor(() => expect(field("receiptPrinterId").value).toBe(PRINTER_ID), {
+      timeout: 10_000,
+    });
+    expect(slip().value).toBe(BAR_PRINTER.id);
+    expect(slip().error).not.toBe("");
+  });
+
+  it("two stickers in a row send two scan choices and leave the camera on", async () => {
+    camera = cameraShowing(null);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const { el, setDeviceEquipment } = await phonePay();
+    const sheet = await openDeviceSheet(el);
+
+    camera.show(formatEquipmentCode("reader", READER_ID));
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(1), {
+      timeout: 10_000,
+    });
+    await flush(el);
+    camera.show(formatEquipmentCode("printer", PRINTER_ID));
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(2), {
+      timeout: 10_000,
+    });
+    await flush(el);
+
+    expect(setDeviceEquipment.mock.calls.map(([change]) => change)).toEqual([
+      { kind: "reader", selection: { id: READER_ID }, via: "scan" },
+      { kind: "printer", selection: { id: PRINTER_ID }, via: "scan" },
+    ]);
+    expect(deviceSheetOpen(el)).toBe(true);
+    expect(sheet.shadowRoot!.querySelector("till-equipment-scanner")).not.toBeNull();
   });
 });
 
@@ -2763,7 +2906,6 @@ describe("till-app: a sticker's notice inside the sheet", () => {
 
   const toast = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-nfc-notice]")!;
-  const row = (el: TillApp) => inDialog(el, "till-pay-equipment") as unknown as TillPayEquipment;
 
   beforeEach(() => {
     installNfc();
@@ -2804,12 +2946,8 @@ describe("till-app: a sticker's notice inside the sheet", () => {
     expect(inDialog(el, "[data-pay-notice]")!.getAttribute("role")).toBe("status");
     expect(toast(el).open).toBe(false);
     expect(await rowSummary(el)).toContain("Lector 3");
-    await row(el).updateComplete;
-    const change = row(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]");
-    if (change !== null) await userEvent.click(change);
-    await flush(el);
-    await row(el).updateComplete;
-    const combobox = row(el).shadowRoot!.querySelector<WtCombobox>(
+    expect(deviceSheetOpen(el)).toBe(false);
+    const combobox = deviceSheet(el)!.shadowRoot!.querySelector<WtCombobox>(
       'wt-combobox[name="cardReaderId"]',
     )!;
     expect(combobox.value).toBe(READER_ID);
@@ -4061,9 +4199,8 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
       expect(dialog(el)).not.toBeNull();
       expect(dialog(el)!.equipment).toEqual(equipmentWith(SECOND_READER));
-      expect(inDialog(el, "[data-quiet-pay-equipment]")?.getAttribute("aria-expanded")).toBe(
-        "false",
-      );
+      expect(deviceSheet(el)).not.toBeNull();
+      expect(deviceSheetOpen(el)).toBe(false);
 
       await vi.advanceTimersByTimeAsync(IDLE_SECONDS * 1000 - 10_001);
       await settle(el);
@@ -5548,12 +5685,8 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
 
   /** The open sheet: the bill's dialog, else the presented bill's. */
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
-  const row = (el: TillApp) =>
-    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
-  const equipmentButton = (el: TillApp) =>
-    sheet(el)!.shadowRoot!.querySelector<HTMLElement>("[data-quiet-pay-equipment]");
-  const expanded = (el: TillApp) =>
-    equipmentButton(el)?.getAttribute("aria-expanded") ?? String(row(el).open);
+  const row = devicesOf;
+  const expanded = (el: TillApp) => String(devicesOpen(el));
   async function readerField(el: TillApp): Promise<WtCombobox> {
     await sheet(el)!.updateComplete;
     await row(el).updateComplete;
@@ -5561,25 +5694,16 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
   }
   async function summary(el: TillApp): Promise<string> {
     await sheet(el)!.updateComplete;
-    const button = row(el) === null ? equipmentButton(el) : null;
-    if (button !== null) {
-      button.click();
-      await flush(el);
-    }
     await row(el).updateComplete;
     const root = row(el).shadowRoot!;
-    const summaryText =
+    return (
       text(root.querySelector("[data-pay-equipment-summary]")) ||
       text(
         root
           .querySelector('wt-combobox[name="cardReaderId"]')
           ?.shadowRoot?.querySelector(".trigger") ?? null,
-      );
-    if (button !== null) {
-      button.click();
-      await flush(el);
-    }
-    return summaryText;
+      )
+    );
   }
   async function closeSheet(el: TillApp): Promise<void> {
     if (dialog(el) !== null) emit(dialog(el)!, "bill-pay-close");
@@ -5647,7 +5771,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       answers[0]!.fail({ code: "device.equipment_held", status: 409 });
       await flush(el);
 
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       const reader = await readerField(el);
       expect(reader.value).toBe("");
       expect(reader.error).toBe(codeMessage("device.equipment_held"));
@@ -5655,7 +5779,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     },
   );
 
-  it("an automatic pick with no answer opens the row and says it was not saved", async () => {
+  it("an automatic pick with no answer opens the device sheet and says it was not saved", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const { el, order } = await firstUsePhone({ setDeviceEquipment });
     await pressPaySheet(el, order);
@@ -5664,7 +5788,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     answers[0]!.fail(new TypeError("Failed to fetch"));
     await flush(el);
 
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     const reader = await readerField(el);
     expect(reader.value).toBe("");
     expect(reader.error).toBe(t("pay_equipment.not_saved"));
@@ -5708,7 +5832,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
 
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
   });
 
   it("a tap arriving before the opening read answers takes the reader, and nothing is picked by itself", async () => {
@@ -5753,7 +5877,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
 
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
   });
 
   it("a phone that held Lector 2 earlier in the page and lost it picks nothing by itself", async () => {
@@ -5766,7 +5890,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
 
     expect(setDeviceEquipment).not.toHaveBeenCalled();
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect((await readerField(el)).value).toBe("");
   });
 
@@ -5780,7 +5904,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     });
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
     await pressPaySheet(el, order);
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     const combobox = await readerField(el);
     await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     await combobox.updateComplete;
@@ -5833,10 +5957,10 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
 
     expect(setDeviceEquipment).not.toHaveBeenCalled();
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
   });
 
-  it("an opening read that never answers is cut off, and the row opens with nothing picked", async () => {
+  it("an opening read that never answers is cut off, and the device sheet opens with nothing picked", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5862,14 +5986,14 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
       await el.updateComplete;
       await sheet(el)!.updateComplete;
       await row(el).updateComplete;
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(setDeviceEquipment).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("an automatic pick refused while a reopened sheet's opening read is out keeps the row closed until that read answers", async () => {
+  it("an automatic pick refused while a reopened sheet's opening read is out keeps the device sheet closed until that read answers", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5894,11 +6018,11 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     for (const read of reads) read(firstUse(held));
     await flush(el);
     await row(el).updateComplete;
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
   });
 
-  it("an earlier opening's read failing after the sheet reopened leaves the row to the newer opening", async () => {
+  it("an earlier opening's read failing after the sheet reopened leaves the device sheet to the newer opening", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5927,7 +6051,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(await summary(el)).toContain("Lector 2");
   });
 
-  it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the row stays open", async () => {
+  it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the device sheet stays open", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue({
       roles: [roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]), roleOf("card_terminal", null, [])],
@@ -5940,7 +6064,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     await flush(el);
 
     expect(setDeviceEquipment.mock.calls[0]![0]).toEqual(pickOf(SECOND_READER.id));
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect((await readerField(el)).value).toBe(SECOND_READER.id);
   });
 
@@ -5984,7 +6108,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
         path: `__screenshots__/look/a796-first-use-${state}-${theme}-${width}.png`,
       });
       const box = panel.getBoundingClientRect();
-      const rowBox = (row(el) ?? equipmentButton(el)!).getBoundingClientRect();
+      const rowBox = row(el).getBoundingClientRect();
       await commands.writeFile(
         `src/${shot}.json`,
         JSON.stringify({
@@ -6018,8 +6142,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
   const dropped = withReader(roleOf("card_terminal", null, [THIRD_READER]));
 
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
-  const row = (el: TillApp) =>
-    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  const row = devicesOf;
   async function reason(el: TillApp): Promise<{ line: string; hint: string | null } | null> {
     await sheet(el)!.updateComplete;
     await row(el)?.updateComplete;
@@ -6073,7 +6196,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     async (_path, over) => {
       const { el } = await lostPhone(takenByMarc, over);
 
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(await reason(el)).toEqual({
         line: takenLine(),
         hint: t("pay_equipment.choose_in_hand"),
@@ -6087,7 +6210,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
   ] as const)("a %s reader says it is switched off", async (_how, then) => {
     const { el } = await lostPhone(then);
 
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect(await reason(el)).toEqual({
       line: t("equipment.switched_off").replace("{item}", "Lector 2"),
       hint: null,
@@ -6113,7 +6236,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     async (_path, over) => {
       const { el } = await lostPhone(dropped, over);
 
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(await reason(el)).toEqual({
         line: t("pay_equipment.reader_gone").replace("{item}", "Lector 2"),
         hint: null,
@@ -6126,7 +6249,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
       getDeviceEquipment: vi.fn().mockResolvedValue(takenByMarc),
     });
 
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect(await reason(el)).toBeNull();
   });
 
@@ -6153,7 +6276,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     getDeviceEquipment.mockResolvedValue(withReader(roleOf("card_terminal", null, [THIRD_READER])));
     await pressPaySheet(el, order);
     await flush(el);
-    expect(row(el).open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect(await reason(el)).toBeNull();
   });
 
@@ -6183,7 +6306,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     await flush(el);
     await row(el).updateComplete;
 
-    expect(text(row(el).shadowRoot!.querySelector("[data-pay-take-question]"))).toBe(
+    expect(text(row(el).shadowRoot!.querySelector("[data-equipment-confirm] p"))).toBe(
       t("equipment.take_question_person")
         .replace("{item}", "Lector 2")
         .replace("{device}", "Móvil 2")
@@ -6206,7 +6329,7 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
       const { el } = await lostPhone(takenByMarc, {}, theme, { locale: "es-ES" });
       await row(el).updateComplete;
       expect(currentLocale()).toBe("es-ES");
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(await reason(el)).toEqual({
         line: takenLine(),
         hint: t("pay_equipment.choose_in_hand"),
@@ -6259,8 +6382,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
   const notHeld = () => ({ code: "reader.not_held", status: 409 });
 
   const sheet = (el: TillApp) => dialog(el) ?? presented(el);
-  const row = (el: TillApp) =>
-    sheet(el)!.shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
+  const row = devicesOf;
   async function settled(el: TillApp): Promise<TillPayEquipment> {
     await flush(el);
     await sheet(el)!.updateComplete;
@@ -6308,7 +6430,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
   });
 
   describe("a card refused reader.not_held on its first send", () => {
-    it("on the bill path, says so under the reader field, reads the equipment once, and opens the row with the reader empty", async () => {
+    it("on the bill path, says so under the reader field, reads the equipment once, and opens the device sheet with the reader empty", async () => {
       const { el, getDeviceEquipment } = await billReadyToCharge({
         takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
       });
@@ -6317,7 +6439,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       const before = apiCalls();
 
       await takeBillPaymentFromDialog(el);
-      const shown = await settled(el);
+      await settled(el);
 
       expect(sent()).toHaveLength(1);
       expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
@@ -6333,7 +6455,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         getDeviceEquipment: 1,
       });
       expect(getDeviceEquipment.mock.calls.at(-1)).toEqual([{ signal: expect.any(AbortSignal) }]);
-      expect(shown.open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(field(el, "cardReaderId").value).toBe("");
       expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
       expect(bottom(el)).toBe("");
@@ -6357,12 +6479,12 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       const readsBefore = getDeviceEquipment.mock.calls.length;
 
       presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
-      const shown = await settled(el);
+      await settled(el);
 
       expect(pay).toHaveBeenCalledOnce();
       expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
       expect(getDeviceEquipment.mock.calls.at(-1)).toEqual([{ signal: expect.any(AbortSignal) }]);
-      expect(shown.open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(field(el, "cardReaderId").value).toBe("");
       expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
       expect(bottom(el)).toBe("");
@@ -6375,7 +6497,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     ] as const;
 
     it.each(rereads)(
-      "on the bill path, the row opens with the refusal under the reader field when the re-read %s",
+      "on the bill path, the device sheet opens with the refusal under the reader field when the re-read %s",
       async (_name, reread) => {
         const { el, getDeviceEquipment } = await billReadyToCharge({
           takeBillPayment: vi.fn().mockRejectedValue(notHeld()),
@@ -6384,9 +6506,9 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         getDeviceEquipment.mockImplementation(reread);
 
         await takeBillPaymentFromDialog(el);
-        const shown = await settled(el);
+        await settled(el);
 
-        expect(shown.open).toBe(true);
+        expect(devicesOpen(el)).toBe(true);
         expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
       },
     );
@@ -6405,13 +6527,13 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         const order = await openPhoneTable(el);
         await pressPaySheet(el, order);
         await settled(el);
-        expect(row(el).open).toBe(false);
+        expect(devicesOpen(el)).toBe(false);
         getDeviceEquipment.mockImplementation(reread);
 
         presented(el)!.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
-        const shown = await settled(el);
+        await settled(el);
 
-        expect(shown.open).toBe(true);
+        expect(devicesOpen(el)).toBe(true);
         expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
       },
     );
@@ -6517,7 +6639,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       }
       await settled(el);
       expect(currentLocale()).toBe("es-ES");
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(refused);
       if (refused) expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
       else
         expect(printerWarning(el)).toBe(
@@ -6597,8 +6719,8 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
   ): Promise<void> {
     getDeviceEquipment.mockResolvedValue(reread);
     const readsBefore = getDeviceEquipment.mock.calls.length;
-    const shown = await act();
-    expect(shown.open).toBe(true);
+    await act();
+    expect(devicesOpen(el)).toBe(true);
     expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held_unknown"));
     expect(bottom(el)).toBe("");
     expect(getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
@@ -6678,7 +6800,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         getDeviceEquipment.mockResolvedValue(takenByMarc);
         await pressTake(el);
         expect(currentLocale()).toBe("es-ES");
-        expect(row(el).open).toBe(true);
+        expect(devicesOpen(el)).toBe(true);
         expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held_unknown"));
         const panel = presented(el)!
           .shadowRoot!.querySelector("wt-dialog")!
@@ -6901,10 +7023,10 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     getDeviceEquipment.mockResolvedValue(takenByMarc);
 
     await press(el, "[data-pay-confirm]");
-    const shown = await settled(el);
+    await settled(el);
 
     expect(sent()).toHaveLength(5);
-    expect(shown.open).toBe(true);
+    expect(devicesOpen(el)).toBe(true);
     expect(field(el, "cardReaderId").error).toBe(t("bill_pay.reader_not_held"));
   });
 
@@ -7013,13 +7135,13 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       getDeviceEquipment.mockResolvedValue(takenByMarc);
 
       await takeBillPaymentFromDialog(el);
-      const shown = await settled(el);
+      await settled(el);
 
       const ids = sent().map((request) => request.submissionId);
       expect(ids).toHaveLength(3);
       expect(ids[1]).toBe(ids[0]);
       expect(ids[2]).not.toBe(ids[0]);
-      expect(shown.open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(field(el, "cardReaderId").error).toBe(t(refusal));
     },
   );
@@ -7068,11 +7190,14 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         () => t("pay_equipment.printer_none"),
       ],
     ] as const)(
-      "a printer %s opens the row with the printer empty and a warning; Charge stays enabled and the card is sent",
+      "a printer %s marks the device button and leaves the printer empty with a warning; Charge stays enabled and the card is sent",
       async (_how, receipt, warning) => {
         const el = await onForm(receipt);
 
-        expect(row(el).open).toBe(true);
+        expect(deviceSheetOpen(el)).toBe(false);
+        expect(
+          deviceSheet(el)!.shadowRoot!.querySelector("[data-device-sheet-badge]"),
+        ).not.toBeNull();
         expect(field(el, "receiptPrinterId").value).toBe("");
         expect(printerWarning(el)).toBe(warning());
         expect(continueDisabled(el)).toBe(false);
@@ -7089,10 +7214,8 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
         default: TERRACE_PRINTER,
       });
 
-      expect(inDialog(el, "[data-quiet-pay-equipment]")?.getAttribute("aria-expanded")).toBe(
-        "false",
-      );
-      await openEquipment(el);
+      expect(deviceSheet(el)).not.toBeNull();
+      expect(deviceSheetOpen(el)).toBe(false);
       expect(field(el, "receiptPrinterId").value).toBe(TERRACE_PRINTER.id);
       expect(printerWarning(el)).toBeUndefined();
       await takeCard(el);
@@ -7101,12 +7224,9 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     it("a profile with no receipt printer has an empty printer picker and can send the card", async () => {
       const el = await onForm(roleOf("receipt", null, []));
 
-      expect(inDialog(el, "[data-quiet-pay-equipment]")?.getAttribute("aria-expanded")).toBe(
-        "false",
-      );
-      await openEquipment(el);
-      expect(field(el, "receiptPrinterId").value).toBe("");
-      expect(field(el, "receiptPrinterId").options).toEqual([]);
+      expect(deviceSheet(el)).not.toBeNull();
+      expect(deviceSheetOpen(el)).toBe(false);
+      expect(field(el, "receiptPrinterId")).toBeNull();
       expect(printerWarning(el)).toBeUndefined();
       await takeCard(el);
     });
@@ -7128,7 +7248,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       await pressPaySheet(el, order);
       await settled(el);
 
-      expect(row(el).open).toBe(true);
+      expect(devicesOpen(el)).toBe(true);
       expect(printerWarning(el)).toBe(switchedOffLine());
       const take = presented(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
         "[data-presented-pay-take]",
@@ -7614,6 +7734,16 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
       expect(documentChoice(el)!.result.invoiceNumber).toBe("F-PARKED");
     },
   );
+
+  it("on a handheld, a counter bill's pay window keeps the folded row and draws no device sheet", async () => {
+    const el = await openRow(parked, onPhone());
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await choosePayMethod(el, "card");
+
+    expect(inDialog(el, "[data-quiet-pay]")).toBeNull();
+    expect(deviceSheet(el)).toBeNull();
+    expect(inDialog(el, "till-pay-equipment")).not.toBeNull();
+  });
 
   it.each(devices)("on %s, a part-paid bill still opens on a contribution", async (_, device) => {
     const el = await openRow(partPaid, device);
