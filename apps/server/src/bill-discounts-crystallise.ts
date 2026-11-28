@@ -192,14 +192,17 @@ async function writeWorked(
   const changed = partChanges(worked, parts);
   // Split parts numbered in the order the working-out numbered them.
   changed.sort((a, b) => (a.split?.lineNo ?? 0) - (b.split?.lineNo ?? 0));
-  const { splits, taken } = await reprice(
-    tx,
-    cfg,
-    billId,
-    null,
-    changed.map(({ change }) => change),
-    [],
-  );
+  const { splits, taken } =
+    changed.length === 0
+      ? { splits: [], taken: [] }
+      : await reprice(
+          tx,
+          cfg,
+          billId,
+          null,
+          changed.map(({ change }) => change),
+          [],
+        );
   const splitIds = splits.map(({ to }) => to);
   const numbered = new Map(
     splitIds.length === 0
@@ -342,7 +345,7 @@ export async function crystalliseBillDiscounts(
   for (const one of worked) {
     const discount = input.discounts.find(({ id }) => id === one.id)!;
     const held = heldOf.get(one.id)!;
-    if (one.lines.length > 0) {
+    if (one.holds !== "set_menu_gone") {
       const line = discount.target.kind === "bill" ? null : lineOf.get(discount.target.lineId!)!;
       const dish = line?.parentLineId == null ? line : lineOf.get(line.parentLineId)!;
       await writeWorked(tx, cfg, billId, parts, { discount, held, line, dish }, one);

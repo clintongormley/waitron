@@ -381,6 +381,37 @@ describe("crystalliseBillDiscounts", () => {
     expect(second.lines).toEqual(first.lines);
   });
 
+  it.each([
+    ["0.01% off a beer at 3.35", 335, 1],
+    ["10% off a line costing one cent", 1, 1000],
+  ])(
+    "records %s, which takes nothing, once, with nothing off and no price moved",
+    async (_, unit, percentBp) => {
+      const billId = await groupedBill([{ name: "Draught beer" }], unit);
+      const beer = await lineIdOf(venue, billId, 1);
+      await inTx(venue, (tx) =>
+        holdDiscount(tx, venue, { lineId: beer, action: "discount_percent", percentBp }),
+      );
+      const before = await inTx(venue, (tx) => linesOf(tx, billId));
+      expect((await inTx(venue, (tx) => workedNow(tx, billId))).discounts).toMatchObject([
+        { holds: "yes", takes: 0 },
+      ]);
+      await inTx(venue, (tx) => crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true }));
+      const after = await inTx(venue, async (tx) => ({
+        pending: await pendingOn(tx, billId),
+        written: await adjustmentsOn(tx, billId),
+        lines: await linesOf(tx, billId),
+        taken: await recordedTakes(tx, billId),
+      }));
+      expect(after.pending).toEqual([]);
+      expect(after.written).toMatchObject([
+        { lineId: beer, action: "discount_percent", reduction: 0 },
+      ]);
+      expect(after.taken).toEqual({ records: 0, lines: 0 });
+      expect(after.lines).toEqual(before);
+    },
+  );
+
   it("records each discount under the pending row's reason, people and note", async () => {
     const billId = await groupedBill([{ name: "Bread" }]);
     const bread = await lineIdOf(venue, billId, 1);
