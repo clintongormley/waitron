@@ -22,6 +22,7 @@ import {
   mountWidget,
   PHONE_FONT,
   shownLines,
+  textRects,
   type Theme,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
@@ -818,18 +819,13 @@ describe("till-menu-browser", () => {
       ).getBoundingClientRect();
       const name = entries(el, "structure")[0]!.querySelector<HTMLElement>(".name")!;
       const own = name.getBoundingClientRect();
-      const text = document.createRange();
-      text.selectNodeContents(name);
-      const boxes = [...text.getClientRects()].filter((box) => box.width > 0);
-      expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1);
-      // Chromium draws a cut line's text as a second, shortened box, the "…" after it.
-      expect(boxes).toHaveLength(2);
-      const drawn = boxes.reduce((a, b) => (a.width < b.width ? a : b));
-      const pen = document.createElement("canvas").getContext("2d")!;
-      pen.font = getComputedStyle(name).font;
+      expect(textRects(name)).toHaveLength(2);
+      const lines = shownLines(name);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]!.cut).toBe(true);
       expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
-      expect(drawn.left).toBeGreaterThanOrEqual(own.left);
-      expect(drawn.right + pen.measureText("…").width).toBeLessThanOrEqual(own.right);
+      expect(lines[0]!.text.left).toBeGreaterThanOrEqual(own.left);
+      expect(lines[0]!.right).toBeLessThanOrEqual(own.right);
       expect(own.left).toBeGreaterThanOrEqual(tile.left);
       expect(own.right).toBeLessThanOrEqual(tile.right);
     });
@@ -3241,8 +3237,6 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           color: "#256bb1",
         }),
       ];
-      const overlaps = (a: DOMRect, b: DOMRect) =>
-        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       const layout = async (inOrder?: Map<string, number>) => {
         const { el, host } = await mount({
           menu: lunch({
@@ -3302,7 +3296,9 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
               ),
               cut: name.scrollHeight > name.clientHeight,
               clearOfNumber: badge(tile)
-                ? shown.every((line) => !overlaps(badge(tile)!.getBoundingClientRect(), line))
+                ? shownLines(name).every((line) =>
+                    clearOf(line, badge(tile)!.getBoundingClientRect()),
+                  )
                 : null,
             };
           });

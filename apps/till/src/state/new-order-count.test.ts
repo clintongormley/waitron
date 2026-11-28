@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { TillProduct } from "../api/menu-api.js";
-import { newOrderByProduct, newOrderDishes, newOrderItems } from "./new-order-count.js";
+import {
+  memoNewOrderByProduct,
+  newOrderByProduct,
+  newOrderDishes,
+  newOrderItems,
+} from "./new-order-count.js";
 import type { OrderLine } from "./working-order.js";
 
 const dish = (id: string, name: string, extra: Partial<TillProduct> = {}): TillProduct => ({
@@ -44,5 +49,27 @@ describe("counting the New order", () => {
     expect(newOrderItems([])).toBe(0);
     expect(newOrderDishes([], name)).toEqual([]);
     expect(newOrderByProduct([])).toEqual(new Map());
+  });
+
+  it("by product, the same map until a count changes", () => {
+    const memo = memoNewOrderByProduct();
+    const both = memo([
+      { product: pork, quantity: "1" },
+      { product: croquettes, quantity: "1" },
+    ]);
+    expect(
+      memo([
+        { product: { ...pork }, quantity: "1" },
+        { product: croquettes, quantity: "1" },
+      ]),
+    ).toBe(both);
+    const porkOnly = memo([{ product: pork, quantity: "1" }]);
+    expect(porkOnly).not.toBe(both);
+    expect(porkOnly).toEqual(new Map([["pork", 1]]));
+    const more = memo([{ product: pork, quantity: "2" }]);
+    expect(more).not.toBe(porkOnly);
+    expect(more).toEqual(new Map([["pork", 2]]));
+    expect(memo([{ product: croquettes, quantity: "2" }])).toEqual(new Map([["croquettes", 2]]));
+    expect(memo([])).toEqual(new Map());
   });
 });

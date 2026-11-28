@@ -1081,10 +1081,8 @@ export const nameText = (name: Element) =>
 /** The lines a name shows, top first. Chromium draws a cut line's text as a second, shortened box
  * at the line's start with the "…" after it: `text` is that box, `right` the end of its "…". */
 export function shownLines(name: HTMLElement): { text: DOMRect; right: number; cut: boolean }[] {
-  const words = document.createRange();
-  words.selectNodeContents(nameText(name));
   const bottom = name.getBoundingClientRect().bottom;
-  const boxes = [...words.getClientRects()].filter((box) => box.width > 0 && box.top < bottom);
+  const boxes = textRects(nameText(name)).filter((box) => box.top < bottom);
   const pen = document.createElement("canvas").getContext("2d")!;
   pen.font = getComputedStyle(name).font;
   return [...new Set(boxes.map((box) => box.top))].map((top) => {

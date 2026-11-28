@@ -13,6 +13,7 @@ import {
   PHONE_FONT,
   placeGlyphsFractionally,
   resetPage,
+  shownLines,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 
@@ -234,11 +235,11 @@ function expectNameDrawnInside(name: HTMLElement): void {
     return;
   }
   const own = name.getBoundingClientRect();
-  const text = document.createRange();
-  text.selectNodeContents(name);
-  const shown = [...text.getClientRects()].filter((box) => box.width > 0 && box.top < own.bottom);
-  const drawn = shown.reduce((a, b) => (a.width < b.width ? a : b));
   expect(look.textOverflow).toBe("ellipsis");
-  expect(drawn.left).toBeGreaterThanOrEqual(own.left);
-  expect(drawn.right + pen.measureText("…").width).toBeLessThanOrEqual(own.right);
+  const lines = shownLines(name);
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    expect(line.text.left).toBeGreaterThanOrEqual(own.left);
+    expect(line.right).toBeLessThanOrEqual(own.right);
+  }
 }

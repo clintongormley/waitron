@@ -1,4 +1,5 @@
-import { css, html, type TemplateResult } from "lit";
+import { css, html, unsafeCSS, type TemplateResult } from "lit";
+import { MENU_WIDE_SCREEN, menuNamePhoneSize } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 
 export interface MenuPathStep {
@@ -8,14 +9,14 @@ export interface MenuPathStep {
 
 export const menuPathStyles = css`
   .breadcrumb {
-    /* 15 px, then 16 px from 720 px: no font-size token holds either. */
-    --wt-action-font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
+    --wt-action-font-size: ${menuNamePhoneSize};
     font-size: var(--wt-action-font-size);
     font-weight: var(--wt-font-weight-bold);
   }
 
-  @media (width >= 720px) {
+  @media ${unsafeCSS(MENU_WIDE_SCREEN)} {
     .breadcrumb {
+      /* 16 px: no font-size token holds it. */
       --wt-action-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
     }
   }

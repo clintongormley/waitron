@@ -11,6 +11,7 @@ import {
   pageAt,
   resetPage,
   servedMenus,
+  shownLines,
   textRects,
   expectNoA11yViolations,
 } from "../widgets/test-helpers.js";
@@ -327,25 +328,17 @@ function drawnNames(el: HTMLElement): DrawnName[] {
   ];
 }
 
-/** Each name whose drawn text runs outside its own box, with that box's width. Chromium draws a
- * line a tile cuts as a second, shortened box, its "…" after it. */
+/** Each name whose drawn text runs outside its own box, with that box's width. */
 function overflows(names: DrawnName[]): string[] {
   return names.flatMap(({ name, box: own, text, tile }) => {
     const edge = own.getBoundingClientRect();
-    const pen = document.createElement("canvas").getContext("2d")!;
-    pen.font = getComputedStyle(text).font;
-    const lines = new Map<number, DOMRect[]>();
-    for (const rect of textRects(text).filter((each) => !tile || each.top < edge.bottom)) {
-      const top = Math.round(rect.top);
-      lines.set(top, [...(lines.get(top) ?? []), rect]);
-    }
-    const out = [...lines.values()].some((boxes) => {
-      if (!tile)
-        return boxes.some((rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5);
-      const drawn = boxes.reduce((a, b) => (a.width < b.width ? a : b));
-      const end = drawn.right + (boxes.length > 1 ? pen.measureText("…").width : 0);
-      return drawn.left < edge.left - 0.5 || end > edge.right + 0.5;
-    });
+    const out = tile
+      ? shownLines(text).some(
+          (line) => line.text.left < edge.left - 0.5 || line.right > edge.right + 0.5,
+        )
+      : textRects(text).some(
+          (rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5,
+        );
     return out ? [`${name} (box ${Math.round(edge.width)}px)`] : [];
   });
 }

@@ -42,3 +42,19 @@ export function newOrderByProduct(lines: readonly OrderLine[]): Map<string, numb
   }
   return byProduct;
 }
+
+/**
+ * {@link newOrderByProduct}, answering the same map while the counts are unchanged: the menu
+ * browser redraws its tiles whenever it is handed a new map.
+ */
+export function memoNewOrderByProduct(): typeof newOrderByProduct {
+  let last: Map<string, number> | undefined;
+  return (lines) => {
+    const counts = newOrderByProduct(lines);
+    const kept = last;
+    if (kept?.size === counts.size && [...counts].every(([id, n]) => kept.get(id) === n))
+      return kept;
+    last = counts;
+    return counts;
+  };
+}

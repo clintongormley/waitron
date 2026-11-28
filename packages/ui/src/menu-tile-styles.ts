@@ -20,6 +20,15 @@ export function menuTilePaint(color: string | null | undefined): string | undefi
   return paint;
 }
 
+/** A dish name's size on a phone, 15 px as drawn: no font-size token holds it. The till's menu path
+ * reads it too, so the path and the tiles change together. */
+export const menuNamePhoneSize: CSSResult = css`calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4)`;
+
+/** Where the menu stops being drawn for a phone: a viewport query, not a size container, since
+ * containment would stop the browser's content counting toward the width a screen's layout gives
+ * it. A media condition cannot read a custom property. */
+export const MENU_WIDE_SCREEN = "(width >= 720px)";
+
 /**
  * The menu's tiles as the till draws them, shared with the dashboard's Device home preview. A tile is a `.tile` (a `wt-button`, or a `div` where it is not a
  * control) holding a `.label`; `[data-painted]` fills it from `--tile-fill` and `--tile-ink`. The
@@ -39,14 +48,12 @@ export const menuTileStyles: CSSResult = css`
     padding-block-start: calc(var(--count-outside) + var(--count-ring));
     padding-inline-end: calc(var(--count-outside) + var(--count-ring));
     --menu-tile-height: calc(var(--wt-tap-min) + var(--wt-space-6));
-    /* 15 px on a phone, as drawn: no font-size token holds it. The till's side-by-side tiles are
-       narrower than drawn, where 15 px would cut a name a tile showing a count holds whole. */
-    --menu-name-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
+    /* The till's side-by-side tiles are narrower than drawn, where 15 px would cut a name a tile
+       showing a count holds whole. */
+    --menu-name-size: ${menuNamePhoneSize};
   }
 
-  /* A viewport query, not a size container: containment would stop the browser's content counting
-     toward the width a screen's layout gives it. */
-  @media (width >= 720px) {
+  @media ${unsafeCSS(MENU_WIDE_SCREEN)} {
     .grid {
       --menu-tile-height: calc(2 * var(--wt-tap-min) - var(--wt-space-1));
       --menu-name-size: var(--wt-font-size-md);
