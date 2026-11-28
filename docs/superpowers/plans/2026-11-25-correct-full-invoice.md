@@ -287,7 +287,8 @@ invoice it corrects, which covers M7's sites at once. An R4 replacement's delive
 `corrective:<id>`) the original's way (D8); the answer's corrective part gains number, customer, amount and how it
 was sent. Failing first: cash on paper; a late answer by email; an A4 printer switched off since (alert, filing
 stands); no receipt printer on the opening device (nothing queued, filing stands); a resend sends nothing again.
-**Leaves:** a corrective reaches the customer as the original did; staff cannot yet choose another way.
+**Leaves:** a corrective reaches the customer as the original did; staff cannot yet choose another way
+(since PR 4a-choice they can, PR 5's note).
 _2026-11-28, as built: when the original went on A4, the corrective goes on the filing till's own
 active A4 printer, and otherwise on its receipt printer with no alert, as D8 says (lane L's reading;
 Task 13's list said "alert" for an A4 printer switched off since); the answer's field is
@@ -320,7 +321,7 @@ no till screen sends them until PR 5.
 
 ## PR 5 — staff can change it (till)
 
-_2026-11-28 (PR 4a-choice): the give-back form already offers **Change** for a corrective full invoice, and the press carries `correctiveDelivery`; it is not stored, so until PR 4b only a corrective filed during the press goes the chosen way._
+_2026-11-28 (PR 4a-choice), built ahead of this section: the give-back form's line "Corrective invoice: …" with **Change** (`widgets/corrective-choice.ts`), and Task 18's three corrective-invoice lines on the end screen. The press field is `correctiveDelivery` (`{ medium: "print", printerId }` or `{ medium: "email", recipient }`), checked by `checkCorrectiveDelivery`, not Pay's `delivery` and `checkedInvoiceChoiceDelivery`: Pay's shape has no slot for a receipt printer chosen by id, so Task 14 stores one of the two shapes and Task 16 reconciles the sheet's Delivery field with the recipient dialog's. Its refusals are forgotten on a first send only (`refusesChosenWay` in `state/give-back.ts`), so Task 17 adds nothing to `PROVES_NOTHING`. Not stored: until PR 4b only a corrective filed during a Give back press goes the chosen way._
 
 **Task 16.** The Delivery field and email box move from `invoice-recipient-dialog.ts` to
 `widgets/invoice-delivery-choice.ts`; that dialog's tests pass unedited.
