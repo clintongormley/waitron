@@ -62,16 +62,12 @@ interface LineState {
 }
 
 async function linesOf(tx: Transaction, billId: string): Promise<LineState[]> {
-  return tx
-    .select({
-      lineNo: workingOrderLines.lineNo,
-      quantity: workingOrderLines.quantity,
-      unit: workingOrderLines.unitPriceGross,
-      total: workingOrderLines.lineTotal,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, billId))
-    .orderBy(asc(workingOrderLines.lineNo));
+  return (await withIds(tx, billId)).map(({ lineNo, quantity, unit, total }) => ({
+    lineNo,
+    quantity,
+    unit,
+    total,
+  }));
 }
 
 /** Every line's rows once all of `worked`'s discounts are written, as PR 1 simulates them. */

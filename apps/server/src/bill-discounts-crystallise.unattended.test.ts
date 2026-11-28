@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { activityLog, billPayments, sales, taxpayer, withTransaction } from "@waitron/db";
+import { billPayments, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { issueHeldBill } from "./bill-payment-settlement.js";
-import { REASONS, lineIdOf, type AdjustmentVenue } from "./testing/adjustment-venue.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { REASONS, type AdjustmentVenue } from "./testing/adjustment-venue.js";
+import { cutDownOn, discountsHeldOn, salesOf, writtenAsItStood } from "./testing/bill-discounts.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
@@ -35,50 +34,10 @@ useVenueDb({
   },
 });
 
-/** 50.00 off the bill's first line (Tarta, 18.00), more than it costs: it no longer holds as
- * given, and as it stands takes 18.00 off. */
-async function cutDownOn(billId: string): Promise<string> {
-  const lineId = await lineIdOf(venue, billId, 1);
-  return inTx(venue, (tx) =>
-    holdDiscount(tx, giver, {
-      lineId,
-      action: "discount_amount",
-      percentBp: null,
-      amount: 5000,
-    }),
-  );
-}
-
-async function salesOf(billId: string) {
-  return inTx(venue, (tx) =>
-    tx.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-}
-
-function stillHeld(billId: string) {
-  return venue.db.all(sql`
-    select id from bill_discounts where working_order_id = ${billId}
-      or line_id in (select id from working_order_lines where working_order_id = ${billId})`);
-}
-
-async function writtenAsItStood(billId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ data: activityLog.data })
-      .from(activityLog)
-      .where(
-        and(
-          eq(activityLog.kind, "discount.written_as_it_stood"),
-          eq(activityLog.subjectId, billId),
-        ),
-      ),
-  );
-}
-
 describe("paths nobody is asked on write a discount that no longer holds as it stood", () => {
   it("a bill whose invoice was held back once its money moved", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    const discountId = await cutDownOn(billId);
+    const discountId = await cutDownOn(venue, giver, billId);
     // Received without issuing, as a card captured while the invoice waited leaves it.
     await inTx(venue, (tx) =>
       tx.insert(billPayments).values({
@@ -114,9 +73,9 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
     );
 
     expect(issued).not.toBeNull();
-    expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
-    expect(stillHeld(billId)).toEqual([]);
-    expect(await writtenAsItStood(billId)).toMatchObject([
+    expect(await salesOf(venue, billId)).toEqual([{ total: 2500 }]);
+    expect(discountsHeldOn(venue, billId)).toEqual([]);
+    expect(await writtenAsItStood(venue, billId)).toMatchObject([
       { data: { discountId, why: "cut_down", takes: "18.00" } },
     ]);
   });
@@ -141,7 +100,7 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
     expect(card.status, JSON.stringify(card.json)).toBe(200);
     const paymentId = (card.json.payment as { id: string }).id;
     // The bill now owes 25.00 and holds 30.00.
-    const discountId = await cutDownOn(billId);
+    const discountId = await cutDownOn(venue, giver, billId);
 
     const refunded = await send(
       venue.app,
@@ -158,9 +117,9 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
     );
 
     expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
-    await vi.waitFor(async () => expect(await salesOf(billId)).toEqual([{ total: 2500 }]));
-    expect(stillHeld(billId)).toEqual([]);
-    expect(await writtenAsItStood(billId)).toMatchObject([
+    await vi.waitFor(async () => expect(await salesOf(venue, billId)).toEqual([{ total: 2500 }]));
+    expect(discountsHeldOn(venue, billId)).toEqual([]);
+    expect(await writtenAsItStood(venue, billId)).toMatchObject([
       { data: { discountId, why: "cut_down", takes: "18.00" } },
     ]);
   });
@@ -197,7 +156,7 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
       expect(paid.status, JSON.stringify(paid.json)).toBe(200);
       const paymentId = (paid.json.payment as { id: string }).id;
       // The bill now owes 25.00 and holds 30.00.
-      const discountId = await cutDownOn(billId);
+      const discountId = await cutDownOn(venue, giver, billId);
 
       const refunded = await send(
         venue.app,
@@ -216,9 +175,9 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
 
       expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
       expect(refunded.json).toMatchObject({ refund: { paymentId, state: "completed" } });
-      expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
-      expect(stillHeld(billId)).toEqual([]);
-      expect(await writtenAsItStood(billId)).toMatchObject([
+      expect(await salesOf(venue, billId)).toEqual([{ total: 2500 }]);
+      expect(discountsHeldOn(venue, billId)).toEqual([]);
+      expect(await writtenAsItStood(venue, billId)).toMatchObject([
         { data: { discountId, why: "cut_down", takes: "18.00" } },
       ]);
     },

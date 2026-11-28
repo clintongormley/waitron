@@ -9,7 +9,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { createTable } from "./testing/live-table.js";
 import { REASONS, lineIdOf, type AdjustmentVenue } from "./testing/adjustment-venue.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { discountsHeldOn, holdDiscount } from "./testing/bill-discounts.js";
 import {
   inTx,
   partyRevisionOf,
@@ -96,9 +96,7 @@ function snapshot(billId: string) {
     lines: venue.db.all(sql`
       select id, line_no, quantity, line_total from working_order_lines
       where working_order_id = ${billId} order by line_no`),
-    discounts: venue.db.all(sql`
-      select id from bill_discounts where working_order_id = ${billId}
-        or line_id in (select id from working_order_lines where working_order_id = ${billId})`),
+    discounts: discountsHeldOn(venue, billId),
     payments: venue.db.all(sql`
       select id, state from bill_payments where working_order_id = ${billId}`),
   };

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
@@ -8,8 +8,8 @@ import {
   policySnapshotOf,
   type NewPendingDiscount,
 } from "@waitron/adjustments";
-import { workingOrderLines, type Transaction } from "@waitron/db";
-import type { AdjustmentVenue } from "./adjustment-venue.js";
+import { activityLog, sales, workingOrderLines, type Transaction } from "@waitron/db";
+import { inTx, lineIdOf, type AdjustmentVenue } from "./adjustment-venue.js";
 
 /**
  * Holds a discount on an open bill through the store, as the till will give it: 10% under the
@@ -37,6 +37,53 @@ export async function holdDiscount(
   });
 }
 
+/** 50.00 off line `lineNo` of `billId`, more than it costs: it no longer holds as given. */
+export async function cutDownOn(
+  venue: Pick<AdjustmentVenue, "db">,
+  giver: Pick<AdjustmentVenue, "reasonId" | "staffId">,
+  billId: string,
+  lineNo = 1,
+): Promise<string> {
+  const lineId = await lineIdOf(venue, billId, lineNo);
+  return inTx(venue, (tx) =>
+    holdDiscount(tx, giver, {
+      lineId,
+      action: "discount_amount",
+      percentBp: null,
+      amount: 5000,
+    }),
+  );
+}
+
+/** The total of each sale `billId` issued. */
+export async function salesOf(venue: Pick<AdjustmentVenue, "db">, billId: string) {
+  return inTx(venue, (tx) =>
+    tx.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, billId)),
+  );
+}
+
+/** Each `discount.written_as_it_stood` activity entry on `billId`. */
+export async function writtenAsItStood(venue: Pick<AdjustmentVenue, "db">, billId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ data: activityLog.data })
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.kind, "discount.written_as_it_stood"),
+          eq(activityLog.subjectId, billId),
+        ),
+      ),
+  );
+}
+
+/** The id of each discount still held on `billId`, on the whole bill or on one of its lines. */
+export function discountsHeldOn(venue: Pick<AdjustmentVenue, "db">, billId: string) {
+  return venue.db.all(sql`
+    select id from bill_discounts where working_order_id = ${billId}
+      or line_id in (select id from working_order_lines where working_order_id = ${billId})`);
+}
+
 /**
  * Every adjustment record on `billId` with its adjustment lines, every column but ids and times,
  * each line named by its line number, so two bills' records compare.
@@ -46,24 +93,40 @@ export async function writtenAdjustments(tx: Transaction, billId: string) {
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
-  const lineNo = (id: string) => numbered.find((line) => line.id === id)?.lineNo ?? id;
+  const lineNoOf = new Map(numbered.map((line) => [line.id, line.lineNo]));
+  const lineNo = (id: string) => lineNoOf.get(id) ?? id;
   const records = await tx
     .select()
     .from(adjustments)
     .where(eq(adjustments.workingOrderId, billId))
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
-  const written = [];
-  for (const { id, workingOrderId, createdAt, lineId, splits, ...columns } of records) {
-    void workingOrderId;
-    void createdAt;
-    const lines = await tx
+  const linesOf = new Map<string, { lineId: string; reduction: number; quantity: number }[]>();
+  if (records.length > 0) {
+    const all = await tx
       .select({
+        adjustmentId: adjustmentLines.adjustmentId,
         lineId: adjustmentLines.lineId,
         reduction: adjustmentLines.reduction,
         quantity: adjustmentLines.quantity,
       })
       .from(adjustmentLines)
-      .where(eq(adjustmentLines.adjustmentId, id));
+      .where(
+        inArray(
+          adjustmentLines.adjustmentId,
+          records.map(({ id }) => id),
+        ),
+      );
+    for (const { adjustmentId, ...line } of all) {
+      const lines = linesOf.get(adjustmentId);
+      if (lines === undefined) linesOf.set(adjustmentId, [line]);
+      else lines.push(line);
+    }
+  }
+  const written = [];
+  for (const { id, workingOrderId, createdAt, lineId, splits, ...columns } of records) {
+    void workingOrderId;
+    void createdAt;
+    const lines = linesOf.get(id) ?? [];
     written.push({
       ...columns,
       line: lineId === null ? null : lineNo(lineId),

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { activityLog, parties, sales, taxpayer, withTransaction } from "@waitron/db";
+import { parties, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
@@ -10,7 +10,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { endMeal } from "./meal-end.js";
 import { REASONS, lineIdOf, type AdjustmentVenue } from "./testing/adjustment-venue.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { cutDownOn, discountsHeldOn, salesOf, writtenAsItStood } from "./testing/bill-discounts.js";
 import {
   capturedPendingPayment,
   inTx,
@@ -66,19 +66,6 @@ useVenueDb({
   },
 });
 
-/** 50.00 off line `lineNo` of the bill, more than it costs: it no longer holds as given. */
-async function cutDownOn(billId: string, lineNo = 1): Promise<string> {
-  const lineId = await lineIdOf(venue, billId, lineNo);
-  return inTx(venue, (tx) =>
-    holdDiscount(tx, giver, {
-      lineId,
-      action: "discount_amount",
-      percentBp: null,
-      amount: 5000,
-    }),
-  );
-}
-
 function pay(billId: string, body: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
     submissionId: randomUUID(),
@@ -115,32 +102,6 @@ function preview(billId: string, body: Record<string, unknown>) {
   });
 }
 
-async function salesOf(billId: string) {
-  return inTx(venue, (tx) =>
-    tx.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-}
-
-function pendingOn(billId: string) {
-  return venue.db.all(sql`
-    select id from bill_discounts where working_order_id = ${billId}
-      or line_id in (select id from working_order_lines where working_order_id = ${billId})`);
-}
-
-async function writtenAsItStood(billId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ data: activityLog.data })
-      .from(activityLog)
-      .where(
-        and(
-          eq(activityLog.kind, "discount.written_as_it_stood"),
-          eq(activityLog.subjectId, billId),
-        ),
-      ),
-  );
-}
-
 function revisionOf(partyId: string): number {
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${partyId}`,
@@ -167,42 +128,42 @@ async function partyOf(billId: string): Promise<string> {
 describe("a payment that would complete the bill is asked before money moves", () => {
   it("refuses cash, and leaves no payment row", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    await cutDownOn(billId);
+    await cutDownOn(venue, giver, billId);
 
     expectRefused(await cash(billId, "25.00"));
 
     expect(await paymentRows(venue, billId)).toEqual([]);
     expect(await statusOf(venue, billId)).toBe("open");
-    expect(await salesOf(billId)).toEqual([]);
-    expect(pendingOn(billId)).toHaveLength(1);
+    expect(await salesOf(venue, billId)).toEqual([]);
+    expect(discountsHeldOn(venue, billId)).toHaveLength(1);
   });
 
   it("refuses a reader card in its first transaction: the provider is asked for nothing", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    await cutDownOn(billId);
+    await cutDownOn(venue, giver, billId);
     const calls = venue.card.collectCalls.length;
 
     expectRefused(await reader(billId, "25.00"));
 
     expect(venue.card.collectCalls).toHaveLength(calls);
     expect(await paymentRows(venue, billId)).toEqual([]);
-    expect(await salesOf(billId)).toEqual([]);
+    expect(await salesOf(venue, billId)).toEqual([]);
   });
 
   it("takes a part payment, which issues nothing", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    await cutDownOn(billId);
+    await cutDownOn(venue, giver, billId);
 
     const paid = await cash(billId, "10.00");
 
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(paid.json).toMatchObject({ outcome: "received", balance: { outstanding: "15.00" } });
-    expect(pendingOn(billId)).toHaveLength(1);
+    expect(discountsHeldOn(venue, billId)).toHaveLength(1);
   });
 
   it("the preview refuses a payment that would complete the bill, and not a part one", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    await cutDownOn(billId);
+    await cutDownOn(venue, giver, billId);
 
     expectRefused(await preview(billId, { kind: "share", shareOf: 1 }));
     const part = await preview(billId, { kind: "contribution", amount: "10.00" });
@@ -223,7 +184,7 @@ describe("a payment that would complete the bill is asked before money moves", (
       zoneId: counterZone,
       operatorId: venue.operatorId,
     });
-    await cutDownOn(id);
+    await cutDownOn(venue, giver, id);
     const [order] = venue.db.all<{ revision: number }>(
       sql`select revision from working_orders where id = ${id}`,
     );
@@ -255,14 +216,14 @@ describe("a payment that would complete the bill is asked before money moves", (
 
     expectRefused(paid);
     expect(await paymentRows(venue, id)).toEqual([]);
-    expect(await salesOf(id)).toEqual([]);
+    expect(await salesOf(venue, id)).toEqual([]);
   });
 });
 
 describe("every other path that would issue the invoice is asked", () => {
   it("Print the bill", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak");
-    await cutDownOn(party.tabId);
+    await cutDownOn(venue, giver, party.tabId);
     const { billId, editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
       readBillEditState(tx, party.tabId),
     );
@@ -284,12 +245,12 @@ describe("every other path that would issue the invoice is asked", () => {
         endMeal(tx, deps, venue.cfg, party.partyId, request, venue.operatorId, null),
       ),
     ).rejects.toMatchObject({ code: "adjustment.no_longer_applies" });
-    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(await salesOf(venue, party.tabId)).toEqual([]);
   });
 
   it("unpaid departure", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak");
-    await cutDownOn(party.tabId);
+    await cutDownOn(venue, giver, party.tabId);
     const departed = await send(
       venue.app,
       venue.cookie,
@@ -303,16 +264,16 @@ describe("every other path that would issue the invoice is asked", () => {
       },
     );
     expectRefused(departed);
-    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(await salesOf(venue, party.tabId)).toEqual([]);
   });
 
   it("the deferred close", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak");
-    await cutDownOn(party.tabId);
+    await cutDownOn(venue, giver, party.tabId);
     await expect(
       kit.close(await kit.requestFor(party.tabId, "25.00", party.partyId)),
     ).rejects.toMatchObject({ code: "adjustment.no_longer_applies" });
-    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(await salesOf(venue, party.tabId)).toEqual([]);
   });
 
   async function payForItemsByReader(sourceId: string, lineNos: number[], applied: string) {
@@ -334,7 +295,7 @@ describe("every other path that would issue the invoice is asked", () => {
 
   it("Pay for items, for the new bill: the reader is asked for nothing", async () => {
     const sourceId = await tabWith(venue, "Tarta", "Small beer", "Steak");
-    await cutDownOn(sourceId);
+    await cutDownOn(venue, giver, sourceId);
     const calls = venue.card.collectCalls.length;
     const payments = paymentCount();
 
@@ -343,25 +304,25 @@ describe("every other path that would issue the invoice is asked", () => {
 
     expect(venue.card.collectCalls).toHaveLength(calls);
     expect(paymentCount()).toBe(payments);
-    expect(pendingOn(sourceId)).toHaveLength(1);
+    expect(discountsHeldOn(venue, sourceId)).toHaveLength(1);
   });
 
   it("Pay for items, for the source bill it would issue: the reader is asked for nothing", async () => {
     const sourceId = await tabWith(venue, "Tarta", "Steak");
     // 50.00 off the Steak takes all of it, so paying for the Tarta leaves the source covered.
-    await cutDownOn(sourceId, 2);
+    await cutDownOn(venue, giver, sourceId, 2);
     const calls = venue.card.collectCalls.length;
 
     expectRefused(await payForItemsByReader(sourceId, [1], "18.00"));
 
     expect(venue.card.collectCalls).toHaveLength(calls);
-    expect(await salesOf(sourceId)).toEqual([]);
-    expect(pendingOn(sourceId)).toHaveLength(1);
+    expect(await salesOf(venue, sourceId)).toEqual([]);
+    expect(discountsHeldOn(venue, sourceId)).toHaveLength(1);
   });
 
   it("a cancel that leaves a part-paid bill exactly covered", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak", "Small beer");
-    await cutDownOn(party.tabId);
+    await cutDownOn(venue, giver, party.tabId);
     expect((await cash(party.tabId, "25.00")).status).toBe(200);
     const beer = await lineIdOf(venue, party.tabId, 3);
     const [partyRow] = await venue.db.select().from(parties).where(eq(parties.id, party.partyId));
@@ -387,7 +348,7 @@ describe("every other path that would issue the invoice is asked", () => {
     );
 
     expectRefused(cancelled);
-    expect(await salesOf(party.tabId)).toEqual([]);
+    expect(await salesOf(venue, party.tabId)).toEqual([]);
     expect(await lineIdOf(venue, party.tabId, 3)).toBe(beer);
   });
 });
@@ -395,7 +356,7 @@ describe("every other path that would issue the invoice is asked", () => {
 describe("a completion after money moved is not asked", () => {
   it("the card follow-up writes the discount as it stood, with its activity entry", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    const discountId = await cutDownOn(billId);
+    const discountId = await cutDownOn(venue, giver, billId);
     await capturedPendingPayment(venue, billId, 2500);
 
     await settlePendingBillPayments({
@@ -407,9 +368,9 @@ describe("a completion after money moved is not asked", () => {
     });
 
     expect(await statusOf(venue, billId)).toBe("settled");
-    expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
-    expect(pendingOn(billId)).toEqual([]);
-    expect(await writtenAsItStood(billId)).toEqual([
+    expect(await salesOf(venue, billId)).toEqual([{ total: 2500 }]);
+    expect(discountsHeldOn(venue, billId)).toEqual([]);
+    expect(await writtenAsItStood(venue, billId)).toEqual([
       { data: expect.objectContaining({ discountId, why: "cut_down", takes: "18.00" }) as unknown },
     ]);
   });
