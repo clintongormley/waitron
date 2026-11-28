@@ -201,7 +201,7 @@ it("keeps the first counter menu choice focused in one handheld row", async () =
 });
 
 describe("closed zone ordering", () => {
-  it("replaces add controls with the area notice and retains the counter basket", async () => {
+  it("shows the closed area beside the menu and retained Counter basket", async () => {
     const previous = currentLocale();
     try {
       setLocale("en-GB");
@@ -220,11 +220,11 @@ describe("closed zone ordering", () => {
         },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
-        "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
+        "Terrace is closed.",
       );
       const cards = body(el)!;
       await cards.updateComplete;
-      expect(cards.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+      expect(cards.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
       expect(cards.shadowRoot!.querySelector("till-basket")).not.toBeNull();
       expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([["p1", "2"]]);

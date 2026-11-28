@@ -890,7 +890,12 @@ export interface VenueServiceContribution {
     tx: Transaction,
     requestId: string,
     receiver: DepartmentTransferReceiver,
-    input: { tabRevision: number; zoneId: string; tableId: string | null },
+    input: {
+      tabRevision: number;
+      zoneId: string;
+      tableId: string | null;
+      zoneConfirmation?: ClosedZoneConfirmation;
+    },
   ): Promise<DepartmentTransfer>;
   declineDepartmentTransfer(
     tx: Transaction,

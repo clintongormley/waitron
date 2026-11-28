@@ -983,6 +983,11 @@ for (const locale of ["en-GB", "es-ES"]) {
               },
               theme,
             );
+            const zoneTab = el.shadowRoot!.querySelector<HTMLElement>("[data-zone=z1]")!;
+            expect(zoneTab.textContent).toContain(
+              locale === "en-GB" ? "Terrace · Closed" : "Terraza · Cerrada",
+            );
+            expect(zoneTab.getBoundingClientRect().right).toBeLessThanOrEqual(width);
             if (view === "map") {
               el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
                 new CustomEvent("wt-table-tap", {
@@ -995,12 +1000,9 @@ for (const locale of ["en-GB", "es-ES"]) {
               el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
             }
             await el.updateComplete;
-            const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-zone-closed]");
-            expect(notice?.textContent).toContain(
-              locale === "en-GB" ? "Terrace is closed" : "Terraza está cerrada",
-            );
-            expect(notice!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-            expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+            const seating = el.shadowRoot!.querySelector("till-seat-dialog")!;
+            await seating.updateComplete;
+            expect(seating.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
             await expectNoA11yViolations(host);
             await page.screenshot({
               path: `../__screenshots__/a366-floor-closed/${view}-${locale}-${theme}-${width}.png`,

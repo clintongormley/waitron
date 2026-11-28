@@ -9,9 +9,10 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  activityLog,
   deviceProfiles,
   parties,
   devices,
@@ -43,7 +44,11 @@ import {
   departmentTransferRequests,
   departments,
   writePartyAllergy,
+  replaceMenuWeek,
+  replaceZoneClosedWeek,
+  saveMenuPeriod,
 } from "@waitron/venue-service";
+import { createMenu } from "@waitron/menu";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { issueUnpaidInvoice, priceForIssuance } from "./working-order-invoice.js";
 import { parkOrder } from "./working-order-open.js";
@@ -87,7 +92,7 @@ let personId: string;
 /** `personId`'s open session on `v.cfg`'s device, which a bill payment is taken under. */
 let operator: { personId: string; sessionId: string };
 
-async function login(profileId: string) {
+async function login(profileId: string, operatorId = personId) {
   const d = await enrolDeviceForTest(suite.db, v.cfg, { name: randomUUID(), profileId });
   const response = await app.request("/api/session", {
     method: "POST",
@@ -95,7 +100,7 @@ async function login(profileId: string) {
       "content-type": "application/json",
       cookie: `${DEVICE_COOKIE}=${d.deviceId}.${d.token}`,
     },
-    body: JSON.stringify({ personId, pin: "5555" }),
+    body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(response.status).toBe(200);
   return {
@@ -319,6 +324,72 @@ describe("department transfer till writes", () => {
       body: { error: { code: "department_transfer.not_pending" } },
     });
   });
+  it("records the receiver who confirms an incoming transfer into a closed zone", async () => {
+    vi.setSystemTime(new Date("2026-10-05T23:45:00+02:00"));
+    try {
+      const f = await ready();
+      const id = await pending(f);
+      const [receiver] = await seedPersons(suite.db, {
+        displayName: "Receiving waiter",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
+      const desk = await login(f.deskProfile, receiver!.id);
+      await withTransaction(suite.db, async (tx) => {
+        const menu = await createMenu(tx, { name: "Dinner" });
+        const period = await saveMenuPeriod(tx, f.b, {
+          name: "Dinner",
+          menuId: menu.id,
+          staffMenuIds: [],
+        });
+        const weekdays = [0, 1, 2, 3, 4, 5, 6];
+        await replaceMenuWeek(
+          tx,
+          f.b,
+          weekdays.map((weekday) => ({
+            weekday,
+            slots: [{ periodId: period.id, startsAt: "21:00", endsAt: "01:00" }],
+          })),
+          new Date(),
+          1,
+        );
+        await replaceZoneClosedWeek(
+          tx,
+          f.bz,
+          weekdays.map((weekday) => ({
+            weekday,
+            ranges: [{ startsAt: "23:30", endsAt: "05:00" }],
+          })),
+          1,
+          new Date(),
+        );
+      });
+      const route = resolutionPath(id, "accept");
+      const choice = { revision: 0, zoneId: f.bz };
+      expect(await post(desk.cookie, route, choice)).toMatchObject({
+        status: 409,
+        body: { error: { code: "service_zone.closed" } },
+      });
+      expect(await post(desk.cookie, route, { ...choice, closedZoneId: f.bz })).toMatchObject({
+        status: 200,
+        body: { status: "accepted" },
+      });
+      expect(
+        await suite.db
+          .select({ personId: activityLog.personId })
+          .from(activityLog)
+          .where(
+            and(
+              eq(activityLog.kind, "zone.closed_action_confirmed"),
+              eq(activityLog.subjectId, f.bz),
+            ),
+          ),
+      ).toEqual([{ personId: receiver!.id }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("Mark moved names the split group member that accepted an open delivery", async () => {
     const now = new Date("2026-10-10T12:00:00Z");
     const z = await standardAndDinner(

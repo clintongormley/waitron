@@ -1007,6 +1007,13 @@ has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como 
 tiene ninguna. Si las mesas están demasiado juntas para tocarlas en el mapa, cambia esa zona a
 **Lista**. Cuando el mapa muestre **Arrastra para ver más**, arrástralo para ver las demás.
 
+## Atiende una zona cerrada {#closed-zone}
+
+Cuando el TPV pregunte por una zona cerrada, confirma para seguir con esa acción o elige
+**Cancelar** para abandonarla. Si el aviso también indica que ha terminado un periodo, consulta con
+la estación antes de confirmar. Para cambiar el horario de la zona ese día, usa **Calendario** en
+el panel.
+
 ## Unir y separar mesas {#join-tables}
 
 Una mesa unida guardada empieza como sus mesas reales juntas en un grupo con nombre. Para añadir una mesa, abre sus detalles en el mapa y elige **Unir con…**. Para separar mesas, abre el grupo, elige **Separar mesas…**, marca las mesas que quieres sacar y confirma **Separar**. Usa **Unir con…** para volver a añadir una mesa al grupo.

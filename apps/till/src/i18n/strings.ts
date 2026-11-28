@@ -2332,8 +2332,7 @@ export const en = {
   "late_send.agreed_save": "Station agreed — save",
   "basket_refresh.period_ended": "{name}: last orders have ended",
   "menu.department_closed": "{department} is closed: no period is running",
-  "menu.zone_closed":
-    "{zone} is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
+  "menu.zone_closed": "{zone} is closed.",
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
   "menu.search": "Search",
@@ -4810,8 +4809,7 @@ export const es: Record<StringKey, string> = {
   "late_send.agreed_save": "La estación acepta — guardar",
   "basket_refresh.period_ended": "{name}: ya no se admiten pedidos",
   "menu.department_closed": "{department} está cerrado: no hay ningún periodo en curso",
-  "menu.zone_closed":
-    "{zone} está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
+  "menu.zone_closed": "{zone} está cerrada.",
   "menu.switcher": "Carta",
   "menu.search": "Buscar",
   "menu.shortcuts": "Accesos directos",

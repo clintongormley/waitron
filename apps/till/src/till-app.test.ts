@@ -26007,7 +26007,7 @@ it("a completed sale can start the next basket while its held-list refresh is st
 });
 
 describe("closed floor zone refusals", () => {
-  it("refreshes a closed floor zone on the live tick so a reopened table can be seated", async () => {
+  it("refreshes a closed floor zone on the live tick while its seating form is open", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
@@ -26025,15 +26025,14 @@ describe("closed floor zone refusals", () => {
       const screen = floor(el)!;
       screen.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
       await screen.updateComplete;
-      expect(screen.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+      const seating = screen.shadowRoot!.querySelector("till-seat-dialog");
+      expect(seating).not.toBeNull();
       expect(screen.zones[0]!.closed).toBe(true);
       listZones.mockResolvedValue([{ ...floorZone, closed: false }]);
       vi.advanceTimersByTime(15_000);
       await flush(el);
       expect(screen.zones[0]!.closed).toBe(false);
-      screen.shadowRoot!.querySelector<HTMLElement>("[data-table=t1]")!.click();
-      await screen.updateComplete;
-      expect(screen.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+      expect(screen.shadowRoot!.querySelector("till-seat-dialog")).toBe(seating);
     } finally {
       vi.useRealTimers();
     }

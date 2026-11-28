@@ -863,20 +863,18 @@ closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
 
-A closed zone refuses new service, new dish lines and quantity increases with `service_zone.closed`.
-`assertZoneTakesNewOrders` is called by
-`apps/server/src/table-actions.ts`, `working-order-open.ts`, `working-order-pricing.ts` and `move-bill.ts`; the route cases in
-`apps/server/src/till-api.zone-closed.test.ts` check the resulting refusals. A move bringing an open
-bill or guests into that zone is refused. Accepting a department transfer into it is also refused,
-before resolving the request or changing its bill (`acceptDepartmentTransfer` in
-`packages/venue-service/src/department-transfers.ts`; the closed-destination case in
-`packages/venue-service/src/department-transfers.test.ts`). Notes, decreases, payment and splitting
+A closed zone asks for confirmation before seating, starting an order, adding dishes or increasing
+a quantity, or moving guests or an open bill in. The till retries the `service_zone.closed` refusal
+with the confirmed zone. `assertZoneTakesNewOrders` records the signed-in person when the
+confirmation matches. Accepting a department transfer checks the zone before resolving the request
+or changing its bill. The refusal and confirmed writes are covered in
+`apps/server/src/till-api.zone-closed.test.ts` and `apps/server/src/department-transfer-api.test.ts`.
+Notes, decreases, payment and splitting
 existing bills (moving dishes to a new bill included) or joined tables remain possible. Bills and
 guests can move within the closed zone or out to an open zone (`moveGuests` in `table-actions.ts`,
 `adoptZone` in `move-bill.ts`, and the move-dishes-to-a-new-bill and same-zone/outbound
 cases in `till-api.zone-closed.test.ts`). A presented bill moved on its own into another party or
-to a free table in the closed zone takes its service context, because `adoptZone` refuses a closed
-zone only for an open bill. Printing existing orders remains
+to a free table in the closed zone takes its service context, because `adoptZone` checks the closed zone only for an open bill. Printing existing orders remains
 possible: `/api/orders/:id/reprint` in `apps/server/src/till-kitchen-counter-routes.ts` checks profile zone access through
 `apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
 `apps/server/src/kitchen-ticket-reprint.ts`.

@@ -2439,6 +2439,55 @@ describe("counter place and park", () => {
     expect(api.placeOrder).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ["parks", "save", park, {}],
+    ["places", "send", place, PLACE],
+    ["places", null, place, PLACE],
+  ] as const)(
+    "%s the first Counter order after one closed-zone question (%s)",
+    async (_, verb, act, options) => {
+      const parkOrder = vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "service_zone.closed",
+          zoneId: "zone-bar",
+          closedZoneName: "Bar",
+          closesAt: "22:00",
+          ...(verb === null
+            ? {}
+            : {
+                lateSend: {
+                  ...BREAKFAST_ENDED,
+                  menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
+                },
+              }),
+        })
+        .mockResolvedValue({ id: "wo-new", orderNumber: 7, serviceMode: "ticket_then_pay" });
+      const mountBasket = verb === null ? counterBasket : lateCounter;
+      const el = await mountBasket(parking({ parkOrder }), options);
+      counterMenus = { ...counterMenus, service: { ...counterMenus.service, zoneOpen: false } };
+      await poll(el);
+      await act(el);
+
+      expect(heading(el)).toBe("Bar closed at 22:00");
+      expect(windowOf(el)!.shadowRoot!.textContent!.includes("Breakfast has ended")).toBe(
+        verb !== null,
+      );
+      expect(agreedText(el)).toBe(verb === null ? "Continue" : `Station agreed — ${verb}`);
+      expect(parkOrder).toHaveBeenCalledOnce();
+      expect(api.placeOrder).not.toHaveBeenCalled();
+      await choose(el, "data-late-agreed");
+      expect(parkOrder.mock.calls[1]).toEqual([
+        {
+          ...parkOrder.mock.calls[0]![0],
+          closedZoneId: "zone-bar",
+          ...(verb === null ? {} : { lateSend: BREAKFAST_CONFIRMED }),
+        },
+      ]);
+      expect(api.placeOrder).toHaveBeenCalledTimes(act === place ? 1 : 0);
+    },
+  );
+
   it("keeps the confirmation on the Place it repeats after a menu version change", async () => {
     const parkOrder = vi
       .fn()
@@ -2888,6 +2937,36 @@ describe("extras added to a sent dish after its period", () => {
     });
     await flush(el, 6);
   }
+
+  it("retries a higher quantity only after staff confirm the closed zone", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "service_zone.closed",
+        zoneId: "zone-dining-room",
+        closedZoneName: "Terrace",
+        closesAt: "22:00",
+      })
+      .mockResolvedValueOnce(SAVED);
+    const el = await sentTable(updateOrderLine);
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    const patch = { portionLineNos: [], quantity: "2" };
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Omelette",
+      patch,
+      revision: 2,
+      expectedEdit: order.billEdit,
+    });
+    await flush(el, 6);
+    expect(heading(el)).toBe("Terrace closed at 22:00");
+    expect(updateOrderLine).toHaveBeenCalledOnce();
+    await choose(el, "data-late-agreed");
+    expect(updateOrderLine.mock.calls[1]).toEqual([
+      ...updateOrderLine.mock.calls[0]!,
+      "zone-dining-room",
+    ]);
+  });
 
   it("opens the window naming the period, and Kitchen agreed saves the extra with the refused menu", async () => {
     const updateOrderLine = vi

@@ -19,6 +19,7 @@ import { moveDishesToStation } from "./station-move.js";
 import { readTabLines } from "./stored-order-lines.js";
 import { stationMoveRequest, recheckFireSession, allergyCommand } from "./till-order-commands.js";
 import {
+  parseClosedZoneConfirmation,
   requireUuidId,
   requireRevision,
   requireTabParam,
@@ -175,12 +176,14 @@ export function mountTillOrderLineRoutes(
         revision,
         expectedEdit,
         lateSend: lateSendBody,
+        closedZoneId,
         ...patch
       } = await readJsonBody<
         OrderLinePatch & {
           revision?: unknown;
           expectedEdit: BillEditExpected | null;
           lateSend?: unknown;
+          closedZoneId?: unknown;
         }
       >(c);
       const copy = requireRevision(revision);
@@ -204,6 +207,7 @@ export function mountTillOrderLineRoutes(
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
               late,
+              parseClosedZoneConfirmation(closedZoneId, personId),
             );
             const invoice = await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
             return {

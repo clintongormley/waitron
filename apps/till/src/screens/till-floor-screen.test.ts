@@ -642,7 +642,7 @@ describe("till-floor-screen — map/list toggle and tray", () => {
 });
 
 describe("closed floor zones", () => {
-  it.each(["en-GB", "es-ES"])("labels the zone and refuses a free table in %s", async (locale) => {
+  it.each(["en-GB", "es-ES"])("offers seating in a closed zone in %s", async (locale) => {
     const previous = currentLocale();
     try {
       setLocale(locale);
@@ -660,14 +660,7 @@ describe("closed floor zones", () => {
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
-      const notice = el.shadowRoot!.querySelector("[data-zone-closed]");
-      expect(notice?.textContent?.trim()).toBe(
-        locale === "en-GB"
-          ? "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area."
-          : "Terrace está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
-      );
-      expect(notice?.getAttribute("role")).toBe("status");
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
       expect(open).not.toHaveBeenCalled();
     } finally {
       setLocale(previous);
@@ -695,17 +688,14 @@ describe("closed floor zones", () => {
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
   });
 
-  it("seats free tables after the zone reopens and clears the old notice", async () => {
+  it("keeps seating available when the zone reopens", async () => {
     const { el } = await mount({ zones: [zone({ closed: true })], canChangeToday: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
     el.zones = [zone({ closed: false })];
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
-    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
   });
 });

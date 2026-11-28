@@ -295,7 +295,7 @@ export class TillCounterScreen extends LitElement {
   }
 
   #menu(): TemplateResult | typeof nothing {
-    const open = this.service?.open === true && this.service.zoneOpen;
+    const open = this.service?.open === true;
     const menu = !open
       ? undefined
       : this.menuSelectionRequired
@@ -399,7 +399,7 @@ export class TillCounterScreen extends LitElement {
       <div class="sale-grid">
         <div class="menu-column">
           <div class="menu-cell">
-            ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
+            ${this.service?.open === true && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
             ${this.#menu()}
           </div>
           ${this.store.lastAdded === undefined ? nothing : html`<till-last-added .store=${this.store} .disabled=${this.busy || this.orderInFlight} .readOnly=${this.stage === "collect"} @open-line-details=${(event: CustomEvent<{ line: import("../state/working-order.js").OrderLine }>) => this.shadowRoot!.querySelector("till-basket")?.openLineDetails(event.detail.line)}></till-last-added>`}

@@ -395,6 +395,7 @@ import {
   type LateSendApprovalPrompt,
 } from "./widgets/late-send-prompts.js";
 import { lateChangeMessage, lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
+import type { DishMove, WaitingOrderMove } from "./state/station-move-types.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -1621,46 +1622,6 @@ const REASON_REFUSALS = new Set(["adjustment.action_not_allowed", "adjustment_re
 function drawerError(code: string | undefined): StringKey | { code: string } {
   if (code === "storage.disk_full" || code === NO_BOX_ANSWERING) return { code };
   return code === "drawer.not_attached" ? code : "drawer.error";
-}
-
-/** One dish of a table's or the counter basket's order, moving to another station. */
-interface DishMove {
-  kind?: undefined;
-  workingOrderId: string;
-  lineId: string;
-  /** Every portion a grouped row moves, by line number; absent, the move is `lineId` alone. */
-  lineIds?: string[];
-  name: string;
-  stationId: string | null;
-  refusal: string | null;
-  stationName?: string;
-  busy: boolean;
-  counter?: boolean;
-  basketRevision?: number;
-  basketGeneration?: number;
-  counterContext?: { api: TillApi; session: number; visit: number };
-  bill?: {
-    expectedEdit: BillEditExpected;
-    api: TillApi;
-    session: number;
-    visit: number;
-    partyId: string;
-    viewBillId: string | undefined;
-  };
-}
-
-/** Every dish of a paid order in the counter's waiting list that can still move. `stationId` is
- * the station they all share, or null. */
-interface WaitingOrderMove {
-  kind: "waiting";
-  workingOrderId: string;
-  name: string;
-  stationId: string | null;
-  refusal: string | null;
-  stationName?: string;
-  busy: boolean;
-  session: number;
-  api: TillApi;
 }
 
 interface ServedCommand {
@@ -8554,10 +8515,13 @@ export class TillApp extends LitElement {
     refusalRetry = false,
     clearInactiveChoices = false,
     lateSend?: LateSend,
+    closedZoneId?: string,
   ): Promise<void> {
     if (this.placing) return;
-    const retry = (confirmed: LateSend) => this.#onPlaceOrder(false, false, false, confirmed);
-    if (this.#askLateSendAtCounter(lateSend, retry)) return;
+    const retry = (confirmed: LateSend | undefined, zoneId = closedZoneId) =>
+      this.#onPlaceOrder(false, false, false, confirmed, zoneId);
+    if (this.counterService?.zoneOpen !== false && this.#askLateSendAtCounter(lateSend, retry))
+      return;
     this.placing = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -8613,7 +8577,11 @@ export class TillApp extends LitElement {
         const label = this.#store.label;
         const payload = this.#basketPayload();
         if (this.#store.persisted) {
-          if (!(await this.#syncIfDirty(id, lines, rows, label, lateSend)) || !current()) return;
+          if (
+            !(await this.#syncIfDirty(id, lines, rows, label, lateSend, closedZoneId)) ||
+            !current()
+          )
+            return;
           // A refused save can precede a replay, but unsaved edits are a different placement.
           if (this.#basketPayload() !== this.#basketBaseline) {
             this.errorKey = "place.error";
@@ -8627,6 +8595,7 @@ export class TillApp extends LitElement {
             dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(lateSend === undefined ? {} : { lateSend }),
+            ...(closedZoneId === undefined ? {} : { closedZoneId }),
           });
           if (!current()) return;
           this.#setSavedCounterFlow(parked?.serviceMode);
@@ -8672,6 +8641,7 @@ export class TillApp extends LitElement {
         else this.#releasePlaceEditLock();
       }
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
+      if (askCounterClosedZone(error, this.#presentLateSend, basketLines, retry, current)) return;
       const stored = storedLateSendAsked(error, basketLines);
       const asked = stored === undefined ? lateSendAsked(error, basketLines) : undefined;
       const approval =
@@ -8708,11 +8678,11 @@ export class TillApp extends LitElement {
       void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_place"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onPlaceOrder(true, false, false, lateSend),
+        this.#onPlaceOrder(true, false, false, lateSend, closedZoneId),
       );
     if (recheck) {
       this.errorKey = "place.refused";
-      await this.#onPlaceOrder(retried, true, inactiveChoice, lateSend);
+      await this.#onPlaceOrder(retried, true, inactiveChoice, lateSend, closedZoneId);
     }
   }
 
@@ -9562,10 +9532,20 @@ export class TillApp extends LitElement {
     await this.#boot();
   }
 
-  async #onParkOrder(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
+  async #onParkOrder(
+    event: Event,
+    retried = false,
+    lateSend?: LateSend,
+    closedZoneId?: string,
+  ): Promise<void> {
     if (this.parking) return;
-    const retry = (confirmed: LateSend) => this.#onParkOrder(event, false, confirmed);
-    if (this.#askLateSendAtCounter(lateSend, retry, "save")) return;
+    const retry = (confirmed: LateSend | undefined, zoneId = closedZoneId) =>
+      this.#onParkOrder(event, false, confirmed, zoneId);
+    if (
+      this.counterService?.zoneOpen !== false &&
+      this.#askLateSendAtCounter(lateSend, retry, "save")
+    )
+      return;
     this.parking = true;
     this.#counterSends++;
     const session = this.#operatorSession;
@@ -9574,6 +9554,11 @@ export class TillApp extends LitElement {
     // values sent must be captured against the basket as it stands now.
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
+    const api = this.api;
+    const current = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      basketVisit === this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     const basketLines = [...this.#store.lines];
     this.errorKey = undefined;
@@ -9600,6 +9585,7 @@ export class TillApp extends LitElement {
             basketLines,
             label ?? this.#store.label,
             lateSend,
+            closedZoneId,
           )) ||
             basketVisit !== this.#store.loadGeneration)
         )
@@ -9622,6 +9608,7 @@ export class TillApp extends LitElement {
           dining: this.#store.dining,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
           ...(lateSend === undefined ? {} : { lateSend }),
+          ...(closedZoneId === undefined ? {} : { closedZoneId }),
         });
       }
       if (session !== this.#operatorSession) return;
@@ -9645,6 +9632,8 @@ export class TillApp extends LitElement {
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
+      if (askCounterClosedZone(error, this.#presentLateSend, basketLines, retry, current, "save"))
+        return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry, "save");
@@ -9683,7 +9672,7 @@ export class TillApp extends LitElement {
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
-        this.#onParkOrder(event, true, lateSend),
+        this.#onParkOrder(event, true, lateSend, closedZoneId),
       );
     if (recheck) {
       this.errorKey = "held.park_error";
@@ -9691,7 +9680,7 @@ export class TillApp extends LitElement {
         (await this.#askCounterDeadEnds("place", false, inactiveChoice)) &&
         session === this.#operatorSession
       )
-        await this.#onParkOrder(event, true, lateSend);
+        await this.#onParkOrder(event, true, lateSend, closedZoneId);
     }
   }
 
@@ -16832,7 +16821,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #onChangeLine(event: Event, lateSend?: LateSend): Promise<void> {
+  async #onChangeLine(event: Event, lateSend?: LateSend, closedZoneId?: string): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
@@ -16868,6 +16857,7 @@ export class TillApp extends LitElement {
           revision,
           change.expectedEdit,
           lateSend,
+          ...(closedZoneId === undefined ? [] : ([closedZoneId] as const)),
         ),
       };
     } catch (error) {
@@ -16925,11 +16915,20 @@ export class TillApp extends LitElement {
       return;
     }
     const dish = lateExtrasDish(change, this.tabLines, this.#tableOffers);
+    const zone = closedZoneQuestionOf(outcome.error);
+    if (zone !== undefined) {
+      this.#presentLateSend(
+        closedZonePrompt(zone, dish === undefined ? [] : [dish], "extras", (confirmed) => {
+          if (identity() && !left()) return this.#onChangeLine(event, confirmed, zone.zoneId);
+        }),
+      );
+      return;
+    }
     const asked =
       dish === undefined
         ? undefined
         : lateSendAsked(outcome.error, [dish], new Set([dish.workingOrderLineId!]));
-    const retry = (confirmed: LateSend) => this.#onChangeLine(event, confirmed);
+    const retry = (confirmed: LateSend) => this.#onChangeLine(event, confirmed, closedZoneId);
     if (asked !== undefined) {
       // Don't add them only abandons the change: the dish was never changed, so Sent is read as it
       // stands.
@@ -25183,6 +25182,7 @@ export class TillApp extends LitElement {
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}
                                   .snapshot=${this.transferSnapshot}
+                                  .showLateSendPrompt=${this.#presentLateSend}
                                   .open=${this.transferQueueOpen}
                                   @close-transfers=${() => {
                                     this.transferQueueOpen = false;

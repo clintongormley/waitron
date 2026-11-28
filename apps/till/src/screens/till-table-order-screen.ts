@@ -4421,10 +4421,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #gridRegion(draft: WorkingOrderStore): TemplateResult {
     if (this.service === null) return html`<div class="grid-region"></div>`;
-    if (this.service.zoneOpen === false)
-      return html`<div class="grid-region">
-        ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
-      </div>`;
     if (this.service?.open === false)
       return html`<div class="grid-region">
         ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
@@ -5928,11 +5924,9 @@ export class TillTableOrderScreen extends LitElement {
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
-    const sourceZoneId = this.#partyZoneId();
-    const zoneId = this.actionVerb === "join" ? sourceZoneId : null;
+    const zoneId = this.actionVerb === "join" ? this.#partyZoneId() : null;
     const tables = this.tables
       .filter((table) => zoneId === null || table.zoneId === zoneId)
-      .filter((table) => this.#mayEnterZone(table.zoneId, sourceZoneId))
       .filter(
         (table) =>
           table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),
@@ -5940,21 +5934,6 @@ export class TillTableOrderScreen extends LitElement {
       .sort((a, b) => inNumberOrder(tableShownName(a), tableShownName(b)));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];
-  }
-
-  /** Whether the current action may take the party or bill into `zoneId`: one that takes orders
-   * may not enter a closed area other than its own, as the server refuses it; an area this screen
-   * has not read is allowed. */
-  #mayEnterZone(zoneId: string | null, sourceZoneId = this.#partyZoneId()): boolean {
-    const takesOrders =
-      this.actionVerb === "move" ||
-      (this.actionVerb === "move-bill" &&
-        (this.#shownBill === undefined || this.#shownBill.status === "open"));
-    return (
-      !takesOrders ||
-      zoneId === sourceZoneId ||
-      !this.zones.find((zone) => zone.id === zoneId)?.closed
-    );
   }
 
   /** The zone of the first of the party's tables this screen knows with one; null when none. */
@@ -7191,11 +7170,10 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** Move guests', Join a table's and Move this bill's list: every table it may name, with its
-   * condition, and for a bill the counter first when the bill may enter the counter's area. */
   #tablePicker(): TemplateResult {
-    const toCounter =
-      this.actionVerb === "move-bill" && this.#mayEnterZone(this.counterZoneId || null);
+    const toCounter = this.actionVerb === "move-bill";
+    const closed = (zoneId: string | null) =>
+      this.zones.some((zone) => zone.id === zoneId && zone.closed);
     const targets = this.#tableTargets();
     const heading = this.#tablePickerHeading();
     const body = html`${
@@ -7211,6 +7189,7 @@ export class TillTableOrderScreen extends LitElement {
                     @click=${() => this.#moveBillToCounter()}
                   >
                     <span class="target-label">${t("table.to_counter")}</span>
+                    ${closed(this.counterZoneId) ? html`<span class="target-state">${t("floor.closed")}</span>` : nothing}
                   </wt-button>`
                 : nothing
             }
@@ -7220,6 +7199,7 @@ export class TillTableOrderScreen extends LitElement {
                 this.party?.id,
                 (picked) => this.#pickTable(picked),
                 this.actionVerb !== "move-bill",
+                closed(table.zoneId),
               ),
             )}
           </div>`

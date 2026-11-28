@@ -24,8 +24,9 @@ At 13:52 the owner said, “i don't think we should have the option to extend th
 
 ## 1b. Offer the actions while the area is closed
 
-- [ ] Before enabling the screens, check that the first-order and increased-quantity paths and accepting an incoming transfer can ask, as the queue requires.
-- [ ] In `screens/{till-floor-screen,till-counter-screen,till-table-order-screen}.ts` and the move destination lists, expose the affected actions and keep the closed status visible. Move the floor’s table chip assembly and waiting-table labels to `screens/floor-table-indicators.ts`. Show the question in English and Spanish, in both themes, at phone and till widths. Send pictures to the watcher for the owner. Update the affected guide twins.
+- [x] First Counter orders, increases to a saved dish quantity and incoming transfers use the same question. The retry keeps the order or transfer identity and passes the confirmed destination to the server.
+- [x] In `screens/{till-floor-screen,till-counter-screen,till-table-order-screen}.ts` and the move destination lists, expose the affected actions and keep the closed status visible. Move the floor’s table chip assembly and waiting-table labels to `screens/floor-table-indicators.ts`. Update the affected guide twins.
+- [x] Show the question to the watcher for the owner in English and Spanish, in both themes, at phone and till widths.
 
 ## 2. Remove Keep open and its storage
 

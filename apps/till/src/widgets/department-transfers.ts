@@ -20,6 +20,7 @@ import type { TableState } from "../api/floor-api.js";
 import type { ServiceZoneSummary } from "../api/menu-api.js";
 import type { TransferSnapshot } from "../state/department-transfer-monitor.js";
 import { limited } from "../state/draft-sync.js";
+import { writeWithClosedZone, type LateSendPrompt } from "./late-send-prompts.js";
 import { shownName } from "../state/floor-today.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -92,6 +93,7 @@ export class TillDepartmentTransfers extends LitElement {
   ];
 
   @property({ attribute: false }) api!: TillApi;
+  @property({ attribute: false }) showLateSendPrompt?: (prompt: LateSendPrompt) => void;
   @property({ attribute: false }) snapshot!: TransferSnapshot;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property({ type: Boolean }) open = false;
@@ -313,13 +315,25 @@ export class TillDepartmentTransfers extends LitElement {
         if (this.#write === identity) this.requested = request;
       } else {
         requestId = detail.request.id;
-        if (this.action === "accept")
-          await this.api.acceptDepartmentTransfer(detail.request.id, {
+        if (this.action === "accept") {
+          const api = this.api;
+          const choice = {
             revision: detail.tab.revision,
             zoneId: this.zoneId,
             tableId: this.tableId || null,
-          });
-        else await this.api.declineDepartmentTransfer(detail.request.id, this.reason.trim());
+          };
+          const write = (closedZoneId?: string) =>
+            api.acceptDepartmentTransfer(requestId, {
+              ...choice,
+              ...(closedZoneId === undefined ? {} : { closedZoneId }),
+            });
+          const current = () => this.#write === identity && this.open && this.api === api;
+          const result =
+            this.showLateSendPrompt === undefined
+              ? await write()
+              : await writeWithClosedZone(write, this.showLateSendPrompt, current);
+          if (result === undefined) return;
+        } else await this.api.declineDepartmentTransfer(detail.request.id, this.reason.trim());
       }
       if (this.#write !== identity) return;
       this.#scope?.commit(this.#draft());

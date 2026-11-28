@@ -214,11 +214,18 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).not.toBeNull();
   });
 
-  it("a closed zone refuses the map's free table", async () => {
-    const el = await mount({ zones: [zone({ closed: true })], canChangeToday: true });
+  it("offers seating from the map and shows that the zone is closed", async () => {
+    const el = await mount({
+      zones: [zone({ closed: true, closesAt: "22:00" })],
+      canChangeToday: true,
+    });
+    const opened = captureOpenTable(el);
     await tap(el, "t1");
-    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")?.tableLabel).toBe("1");
+    expect(el.shadowRoot!.querySelector("[data-zone-control]")?.textContent).toContain(
+      "Comedor is closed now.",
+    );
+    expect(opened.detail).toBeUndefined();
   });
 
   it("a tap naming a table the floor no longer has does nothing", async () => {

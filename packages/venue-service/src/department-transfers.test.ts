@@ -553,7 +553,10 @@ describe("departmental tab transfers", () => {
       }),
     );
 
-  it("refuses a closed destination without resolving its transfer or changing its bill", async () => {
+  it.each([
+    ["after confirmation", true],
+    ["after the last period ends", false],
+  ] as const)("accepts a transfer %s", async (_, confirmed) => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {
       await (async () => {
@@ -609,8 +612,17 @@ describe("departmental tab transfers", () => {
       departmentId: v.a,
       serviceMode: "table_tab",
     });
-    vi.setSystemTime(new Date("2026-10-06T01:15:00+02:00"));
-    expect(await accept(v)).toMatchObject({ status: "accepted", destinationZoneId: v.bz });
+    if (!confirmed) vi.setSystemTime(new Date("2026-10-06T01:15:00+02:00"));
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        service.acceptDepartmentTransfer(tx, v.request.id, receiver(v), {
+          tabRevision: 0,
+          zoneId: v.bz,
+          tableId: null,
+          ...(confirmed ? { zoneConfirmation: { zoneId: v.bz, personId: "receiver" } } : {}),
+        }),
+      ),
+    ).toMatchObject({ status: "accepted", destinationZoneId: v.bz });
   });
 
   it("keeps every pending request but bounds department-wide resolved history to the newest 100", async () => {

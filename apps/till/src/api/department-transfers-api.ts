@@ -130,7 +130,7 @@ export class DepartmentTransfersApi extends OrdersApi {
   }
   acceptDepartmentTransfer(
     requestId: string,
-    choice: { revision: number; zoneId: string; tableId: string | null },
+    choice: { revision: number; zoneId: string; tableId: string | null; closedZoneId?: string },
   ): Promise<DepartmentTransfer> {
     return this.#request(
       `/api/department-transfers/${encodeURIComponent(requestId)}/accept`,
