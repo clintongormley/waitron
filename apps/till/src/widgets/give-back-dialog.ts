@@ -25,7 +25,6 @@ import type { AdjustmentReason } from "../api/payments-api.js";
 import type { StaffMember } from "../api/device-session-api.js";
 import type {
   GiveBackAsk,
-  GiveBackLine,
   GiveBackOutcome,
   GiveBackPreview,
   GiveBackPurpose,
