@@ -106,6 +106,7 @@ export async function issueBillAtClose(
       deps.backend,
       cfg,
       billId,
+      { asked: false },
       deps.log,
     );
   } catch (error) {

@@ -17,7 +17,7 @@ import {
 } from "./bill-discounts-crystallise.js";
 import { gatherBillDiscountInputs, readBillDiscounts } from "./bill-discounts-read.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import { readStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
+import { priceStoredOrder, readStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
 import { holdDiscount } from "./testing/bill-discounts.js";
 import {
   billWith,
@@ -170,11 +170,14 @@ async function crystallisesAsShown(billId: string): Promise<number> {
   return inTx(venue, async (tx) => {
     const shown = (await readBillDiscounts(tx, [billId])).get(billId)!.takes;
     const expected = simulated(await withIds(tx, billId), await workedNow(tx, billId));
-    const before = decimalToCents(await storedOrderTotal(tx, billId));
+    const before = decimalToCents((await priceStoredOrder(tx, billId)).total);
+    const owedBefore = decimalToCents(await storedOrderTotal(tx, billId));
     await crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true });
-    const after = decimalToCents(await storedOrderTotal(tx, billId));
+    const after = decimalToCents((await priceStoredOrder(tx, billId)).total);
     expect(shown).toBeGreaterThan(0);
     expect(before - after).toBe(shown);
+    expect(owedBefore).toBe(before - shown);
+    expect(decimalToCents(await storedOrderTotal(tx, billId))).toBe(owedBefore);
     expect(await recordedTakes(tx, billId)).toBe(shown);
     expect(await receiptTakes(tx, billId)).toBe(shown);
     expect(await linesOf(tx, billId)).toEqual(expected);

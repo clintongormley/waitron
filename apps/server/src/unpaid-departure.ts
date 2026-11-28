@@ -111,6 +111,7 @@ export async function recordUnpaidDeparture(
       deps.backend,
       cfg,
       req.billId,
+      { asked: true },
       deps.log,
     );
     const recorded = await issueUnpaidInvoice(

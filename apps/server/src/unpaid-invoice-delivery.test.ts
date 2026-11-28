@@ -117,15 +117,16 @@ async function syntheticSelection(orderId: string) {
 }
 
 function issue(tx: Transaction, orderId: string) {
-  return priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, orderId).then((invoice) =>
-    issueUnpaidInvoice(
-      tx,
-      venue.backend,
-      venue.cfg,
-      invoice,
-      venue.operatorId,
-      testTradingAdmission(),
-    ),
+  return priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, orderId, { asked: true }).then(
+    (invoice) =>
+      issueUnpaidInvoice(
+        tx,
+        venue.backend,
+        venue.cfg,
+        invoice,
+        venue.operatorId,
+        testTradingAdmission(),
+      ),
   );
 }
 

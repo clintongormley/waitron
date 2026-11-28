@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimalToCents } from "@waitron/shared";
 import { crystalliseBillDiscounts } from "./bill-discounts-crystallise.js";
 import { readBillDiscounts } from "./bill-discounts-read.js";
-import { storedOrderTotal } from "./stored-order-lines.js";
+import { priceStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
 import { holdDiscount } from "./testing/bill-discounts.js";
 import { COMP_BILL_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import type { AdjustmentVenue } from "./testing/adjustment-venue.js";
@@ -48,11 +48,14 @@ it("writes a set menu's discount on its row and the dishes it covers, recorded o
   });
   const seen = await inTx(venue, async (tx) => {
     const shown = (await readBillDiscounts(tx, [bill.tabId])).get(bill.tabId)!;
-    const before = decimalToCents(await storedOrderTotal(tx, bill.tabId));
+    const before = decimalToCents((await priceStoredOrder(tx, bill.tabId)).total);
+    const owedBefore = decimalToCents(await storedOrderTotal(tx, bill.tabId));
     await crystalliseBillDiscounts(tx, venue.cfg, bill.tabId, { asked: true });
     return {
       shown,
-      fell: before - decimalToCents(await storedOrderTotal(tx, bill.tabId)),
+      owedBefore: before - owedBefore,
+      owedAfter: before - decimalToCents(await storedOrderTotal(tx, bill.tabId)),
+      fell: before - decimalToCents((await priceStoredOrder(tx, bill.tabId)).total),
       written: await tx
         .select({ lineId: adjustments.lineId, reduction: adjustments.reduction })
         .from(adjustments)
@@ -62,5 +65,7 @@ it("writes a set menu's discount on its row and the dishes it covers, recorded o
   expect(seen.shown.discounts[0]!.holds).toBe("yes");
   expect(seen.shown.takes).toBeGreaterThan(0);
   expect(seen.fell).toBe(seen.shown.takes);
+  expect(seen.owedBefore).toBe(seen.shown.takes);
+  expect(seen.owedAfter).toBe(seen.shown.takes);
   expect(seen.written).toEqual([{ lineId: row, reduction: seen.shown.takes }]);
 });

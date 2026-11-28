@@ -24,6 +24,7 @@ import {
   type DatedRate,
   type Decimal,
   centsToDecimal,
+  decimalToCents,
   AppError,
   thousandthsToDecimal,
   optionSnapshotNames,
@@ -37,6 +38,7 @@ import {
 } from "@waitron/shared";
 import { sql, type SQL, type GetColumnData, eq, inArray } from "drizzle-orm";
 import { type LineNutrition, readDisplayLineNutrition } from "./line-nutrition.js";
+import { readBillDiscounts } from "./bill-discounts-read.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { readLineVatRates } from "./line-vat-rates.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -259,12 +261,20 @@ export async function priceStoredOrder(
 ): Promise<GrossLines> {
   return (await readStoredOrder(tx, workingOrderId)).gross;
 }
-/** What a persisted order's stored lines total, the figure its invoice is issued at; a lineless
- * order totals nothing. */
+/** What a persisted order owes: its stored lines' total less what the discounts it holds take
+ * off, on an open or placed order with no sale (plan A1621 D23), the figure its invoice is issued
+ * at once they are written; a lineless order totals nothing. */
 export async function storedOrderTotal(tx: Transaction, workingOrderId: string): Promise<Decimal> {
-  return (await hasStoredLines(tx, workingOrderId))
-    ? (await priceStoredOrder(tx, workingOrderId)).total
-    : decimal("0.00");
+  if (!(await hasStoredLines(tx, workingOrderId))) return decimal("0.00");
+  const lines = (await priceStoredOrder(tx, workingOrderId)).total;
+  const { takes } = (await readBillDiscounts(tx, [workingOrderId])).get(workingOrderId)!;
+  if (takes === 0) return lines;
+  const [sale] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId))
+    .limit(1);
+  return sale === undefined ? centsToDecimal(decimalToCents(lines) - takes) : lines;
 }
 /** Whether the order holds any line, so {@link readStoredOrder} can read it without refusing. */
 export async function hasStoredLines(tx: Transaction, workingOrderId: string): Promise<boolean> {

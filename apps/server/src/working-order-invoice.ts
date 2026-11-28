@@ -20,6 +20,7 @@ import {
   readBillAdvances,
   refuseWhileAdvanceCorrectionOpen,
 } from "./bill-advances.js";
+import { crystalliseBillDiscounts } from "./bill-discounts-crystallise.js";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
 import { linkBillCardPaymentsToSale } from "./bill-payment-rows.js";
 import {
@@ -289,15 +290,19 @@ export function filedLines(
   ];
 }
 /** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment} and
- * refused while one of its advances has a correction open. Writes nothing but `log`'s lines. */
+ * refused while one of its advances has a correction open, once it has written the discounts the
+ * order holds into its lines ({@link crystalliseBillDiscounts}, `asked` as there). Writes nothing
+ * else but `log`'s lines. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
   backend: FiscalBackend,
   cfg: TradingContext,
   id: string,
+  options: { asked: boolean },
   log?: Logger,
 ): Promise<PricedInvoice> {
+  await crystalliseBillDiscounts(tx, cfg, id, options);
   const order = await priceStoredOrderForIssuance(tx, id);
   const choice = await readOrderInvoiceChoice(tx, id);
   const { credits } = await readBillAdvances(tx, [id]);
