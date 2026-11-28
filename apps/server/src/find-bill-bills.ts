@@ -14,6 +14,7 @@ import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { recordedTableNamesSql } from "./orders-list-places.js";
+import { readPendingOff, type PendingOff } from "./pending-off-sql.js";
 import "./errors.js";
 
 type RawBill = {
@@ -37,7 +38,7 @@ type RawBill = {
   collection_status: BillRow["collectionStatus"];
 };
 
-function findBillsRelation(inZones?: OrderZoneCondition): SQL {
+function findBillsRelation(off: PendingOff, inZones?: OrderZoneCondition): SQL {
   const zone = VENUE_SERVICE.orderZoneIdSql(sql`wo.id`);
   const active = sql`l.quantity - coalesce(cancelled.quantity, 0)`;
   // The part payments the bill's own ticket took off: their money was paid on the bill but is not
@@ -67,7 +68,7 @@ function findBillsRelation(inZones?: OrderZoneCondition): SQL {
        from working_order_lines l
        left join line_service_cancellations cancelled on cancelled.line_id = l.id
        where l.working_order_id = wo.id and l.parent_line_id is null) as item_count,
-      coalesce(s.total + ${takenOff}, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
+      coalesce(s.total + ${takenOff}, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id) - ${off.of(sql`wo.id`)}) as total_cents,
       coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}),0) as corrections,
       case when exists(select 1 from sale_settlements settled where settled.sale_id = s.id) then
         (select coalesce(sum(t.amount - t.tip_amount),0) from tenders t where t.sale_id = s.id)
@@ -206,7 +207,7 @@ export async function readFindBills(
   query: BillsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillPage<BillRow>> {
-  const relation = findBillsRelation(inZones);
+  const relation = findBillsRelation(await readPendingOff(tx), inZones);
   const place =
     query.q === "" && query.sort.key !== "tableName"
       ? sql`null`
@@ -244,7 +245,7 @@ export async function readFindBill(
   inZones?: OrderZoneCondition,
 ): Promise<BillRow> {
   const { rows } = await tx.execute<RawBill>(
-    sql`${findBillsRelation(inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
+    sql`${findBillsRelation(await readPendingOff(tx), inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
   );
   if (rows.length === 0) throw new AppError("working_order.not_found", { workingOrderId });
   return (await projectBills(tx, rows))[0]!;

@@ -49,6 +49,7 @@ import { readCorrectiveNumbers } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
 import { discountNoticesOf, readBillsDiscountNotices } from "./discount-notices.js";
+import { readPendingOff } from "./pending-off-sql.js";
 import "./errors.js";
 
 /** A staged delivery choice as a bill shows it: who staged it stays on the server. */
@@ -744,6 +745,7 @@ export async function readBillsOfParties(
   if (partyIds.length === 0) return new Map();
   const families = await partyFamilies(tx, partyIds);
   const members = [...new Set([...families.values()].flat())];
+  const off = await readPendingOff(tx);
   const rows = await tx
     .select({
       workingOrderId: workingOrders.id,
@@ -751,7 +753,7 @@ export async function readBillsOfParties(
       label: workingOrders.label,
       status: workingOrders.status,
       leftUnpaid: sql<boolean>`${unpaidDepartures.id} is not null`.mapWith(Boolean),
-      total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+      total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) - ${off.of(workingOrders.id)} as text)`,
       lines: sql<number>`count(${workingOrderLines.id})`,
     })
     .from(workingOrders)

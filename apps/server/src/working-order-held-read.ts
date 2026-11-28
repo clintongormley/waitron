@@ -53,6 +53,7 @@ import { soldProduct } from "./stored-order-lines.js";
 import { readBillSignals } from "./table-signals.js";
 import type { WorkingOrderDeps } from "./working-order-context.js";
 import { optional } from "./working-order-station-queue.js";
+import { readPendingOff } from "./pending-off-sql.js";
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
@@ -183,13 +184,14 @@ export interface HeldOrder {
 export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderSummary[]> {
   return deps.db.withWriteLock(async () => {
     const tx = deps.db;
+    const off = await readPendingOff(tx);
     const rows = await tx
       .select({
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         partyId: workingOrders.partyId,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
-        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) - ${off.of(workingOrders.id)} as text)`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)

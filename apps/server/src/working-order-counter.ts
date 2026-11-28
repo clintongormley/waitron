@@ -63,6 +63,7 @@ import {
 } from "./working-order-kitchen-fire.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
 import { optional } from "./working-order-station-queue.js";
+import { readPendingOff } from "./pending-off-sql.js";
 
 export interface PlaceOrderResult {
   id: string;
@@ -447,6 +448,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
       .selectDistinct({ id: workingOrderLines.workingOrderId })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId));
+    const off = await readPendingOff(tx);
     const rows = await tx
       .select({
         id: workingOrders.id,
@@ -459,7 +461,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
           string | null
         >`max(case when ${ticketItems.state} = 'ready' then ${ticketItems.readyAt} end)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
-        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) - ${off.of(workingOrders.id)} as text)`,
         // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
         // the query joins.
         fired: sql<number>`${workingOrders.id} in ${firedOrders}`,
