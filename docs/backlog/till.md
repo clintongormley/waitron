@@ -1333,7 +1333,7 @@ Send all, Fire and Move buttons at 390 and 1280 px in both languages and themes:
 case measures the replacement held-group controls, Fire confirmation and Move earlier/later.
 Its twice-pressed Fire/Move cases use scripted clicks.
 
-The native Sent integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
+The native sent rows integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
 dish, a group's Serve all and group Fire on till and phone while the API reply waits. They check one
 request, disabled service controls and no premature display change, then the accepted snapshot.
 A subsequent dish press or Undo uses the accepted party revision. These are application checks

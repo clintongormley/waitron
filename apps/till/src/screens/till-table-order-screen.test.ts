@@ -1635,7 +1635,7 @@ describe("till-table-order-screen", () => {
     parentProductId: null,
   };
 
-  describe("the party's groups in the Sent panel", () => {
+  describe("the party's groups in the sent rows", () => {
     const at = "2026-09-27T10:00:00.000Z";
     /** A dish line of this bill in group `groupId`, held (never sent) unless `fired`. */
     function dishLine(
@@ -1908,7 +1908,7 @@ describe("till-table-order-screen", () => {
         );
     });
 
-    it("sits above the bill total and hides an empty Sent panel", async () => {
+    it("sits above the bill total and hides empty sent rows", async () => {
       const { el, panel } = await mountSentGroups();
       const list = el.shadowRoot!.querySelector("[data-sent-orders]")!;
       const total = el.shadowRoot!.querySelector("[data-order-total]");

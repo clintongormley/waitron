@@ -9394,7 +9394,7 @@ describe("till-app: Current orders", () => {
     expect(notice()?.open ?? false).toBe(false);
   });
 
-  describe("native Sent panel integration", () => {
+  describe("native sent rows integration", () => {
     for (const formFactor of ["till", "phone-portrait"] as const) {
       it.each(["row", "all", "fire"] as const)(
         `native ${formFactor} repeated Sent %s presses wait for the accepted reply`,

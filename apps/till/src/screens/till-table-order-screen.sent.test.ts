@@ -49,7 +49,7 @@ async function click(el: TillTableOrderScreen, selector: string) {
   await panel(el).updateComplete;
 }
 
-it("places this bill's Sent panel before its New order on the table screen", async () => {
+it("places this bill's sent rows before its New order on the table screen", async () => {
   const { el } = await sent();
   const pane = find(el, "[data-draft-pane]");
   expect(pane.contains(panel(el))).toBe(true);

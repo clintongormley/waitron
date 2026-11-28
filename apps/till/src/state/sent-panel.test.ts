@@ -62,7 +62,7 @@ function current(
 const slices = (rows: ReturnType<typeof sentPanel>["served"]) =>
   rows.map(({ row, kind, quantity, amount }) => ({ id: row.lineId, kind, quantity, amount }));
 
-describe("Sent panel (A773)", () => {
+describe("sentPanel (A773)", () => {
   it("puts a fully cancelled fractional dish in Served at its original quantity", () => {
     const panel = sentPanel(
       current(

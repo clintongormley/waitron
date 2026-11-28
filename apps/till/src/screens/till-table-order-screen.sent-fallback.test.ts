@@ -214,7 +214,7 @@ it("A803 portion grouping: a served portion and an unserved one show two rows", 
   ]);
 });
 
-it("A803 portion grouping: the Sent panel shows identical portions as one row", async () => {
+it("A803 portion grouping: the sent rows show identical portions as one row", async () => {
   const lines = [portion("burger-1", 1), portion("burger-2", 2)];
   const { el } = await mount({
     lines,

@@ -74,7 +74,7 @@ async function orderedInWindow(
   return { el, host };
 }
 
-/** Waits for the Sent panel, which lists every sent dish above the unsent order. */
+/** Waits for the sent rows, which list every sent dish above the unsent order. */
 async function sentExpanded(el: TillTableOrderScreen): Promise<void> {
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
