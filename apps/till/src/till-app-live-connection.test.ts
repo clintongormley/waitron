@@ -9,13 +9,19 @@ import {
   lock,
   mountApp,
   openTable,
+  party,
   resetAllergyFixture,
   shell,
   signIn,
+  table,
   till,
 } from "../test/allergy-app-fixture.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { ServerRouter } from "./api/server-router.js";
+import type { CurrentOrders } from "./api/kitchen-api.js";
+import { checkBill, tabBill } from "../test/party-app-fixture.js";
+import { showView } from "./screens/till-table-order-screen.test-helpers.js";
+import { formatMoney } from "@waitron/shared";
 
 const locale = currentLocale();
 beforeEach(() => {
@@ -265,6 +271,108 @@ it.each(["working_orders", "working_order_lines", "order_drafts"])(
     expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
   },
 );
+
+it.each(["till", "phone-portrait"] as const)(
+  "shows the Counter's newly sent dish on the open bill on %s",
+  async (formFactor) => {
+    const stream = liveReadFixture();
+    if (formFactor === "phone-portrait")
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    const { el } = await mountApp({
+      readLiveEvents: stream.read,
+      reprintOrder: vi.fn().mockResolvedValue(undefined),
+      getTill: vi.fn().mockResolvedValue(till(formFactor)),
+      getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "till-dev", formFactor }),
+    });
+    const order = await openTable(el);
+    if (formFactor === "till") {
+      stream.event("ready");
+      await flush(el);
+    }
+    await showView(order, "order", { ifShown: true });
+    const sent = order.shadowRoot!.querySelector("till-sent-orders")!;
+    expect(sent.shadowRoot!.textContent).not.toContain("Hake");
+    expect(order.orderId).toBe("wo-4");
+
+    const before = order.currentOrders!;
+    const delayed = Promise.withResolvers<CurrentOrders>();
+    if (formFactor === "till") {
+      api.readCurrentOrders!.mockReturnValueOnce(delayed.promise);
+      emit(order, "reprint-kitchen-tickets", { workingOrderIds: ["wo-4"] });
+      await flush(el);
+      expect(api.readCurrentOrders!.mock.results.at(-1)?.value).toBe(delayed.promise);
+    }
+    const updated: CurrentOrders = {
+      ...before,
+      revision: 4,
+      ungrouped: [
+        {
+          lineId: "hake",
+          workingOrderId: "wo-4",
+          lineNo: 1,
+          billStatus: "open",
+          name: "Hake",
+          courseId: null,
+          quantity: "1.000",
+          unitPrecision: 0,
+          netAmount: "17.50",
+          servedQuantity: "0.000",
+          servedAt: null,
+          readyAt: null,
+          requestedAt: null,
+          firedAt: null,
+          released: true,
+          kitchen: null,
+          note: null,
+          extras: [],
+        },
+      ],
+    };
+    api.readCurrentOrders!.mockResolvedValue(updated);
+    if (formFactor === "till") stream.event("change", '[{"type":"working_order_lines"}]');
+    else await vi.advanceTimersByTimeAsync(15_000);
+    await flush(el);
+    const fresh = sent.shadowRoot!.textContent;
+
+    delayed.resolve(before);
+    await flush(el);
+    expect(fresh).toContain("Hake");
+    expect(sent.shadowRoot!.textContent).toContain("Hake");
+    expect(order.orderId).toBe("wo-4");
+  },
+);
+
+it("updates the table's outstanding amount when a sibling bill changes", async () => {
+  const stream = liveReadFixture();
+  const floorWith = (revision: number, outstanding: string) => [
+    table("t4", "4", party({ revision, outstanding, billCount: 2 })),
+  ];
+  const first = { ...tabBill, total: "89.90", outstanding: "89.90" };
+  const sibling = { ...checkBill, total: "19.00", outstanding: "19.00" };
+  const { el } = await mountApp({
+    readLiveEvents: stream.read,
+    getPartyBills: vi.fn().mockResolvedValue([first, sibling]),
+    getTablesState: vi.fn().mockResolvedValue(floorWith(3, "108.90")),
+  });
+  const order = await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  await showView(order, "order", { ifShown: true });
+  const outstanding = () =>
+    order.shadowRoot!.querySelector("[data-party-outstanding]")?.textContent;
+  expect(outstanding()).toBe(formatMoney("108.90", "en"));
+
+  api.getPartyBills!.mockResolvedValue([
+    first,
+    { ...sibling, total: "36.50", outstanding: "36.50" },
+  ]);
+  api.getTablesState!.mockResolvedValue(floorWith(4, "126.40"));
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el);
+
+  expect(outstanding()).toBe(formatMoney("126.40", "en"));
+  expect(order.orderId).toBe("wo-4");
+});
 
 it("the bill-draft timer quiets while connected and resumes after a connection ends", async () => {
   const stream = liveReadFixture();

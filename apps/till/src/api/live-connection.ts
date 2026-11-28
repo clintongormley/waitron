@@ -80,6 +80,15 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "printers",
     "settings.venue",
   ],
+  tableOrder: [
+    "working_orders",
+    "working_order_lines",
+    "bill_set_menu_copies",
+    "bill_payments",
+    "refunds",
+    "tenders",
+    "sales",
+  ],
   billDraft: [
     ...DEVICE_TYPES,
     ...ORDER_TYPES,

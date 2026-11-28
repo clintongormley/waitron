@@ -2083,6 +2083,7 @@ export class TillApp extends LitElement {
   #live?: TillLiveConnection;
   #liveApi?: TillApi;
   #billDraftLive?: { stop(): void };
+  #tableOrderLive?: { stop(): void };
   #deliveryLive?: { stop(): void };
   readonly #routerLive = () => this.router?.setLive(this.#live?.up ?? false);
   readonly #pauseLive = () => {
@@ -2441,12 +2442,14 @@ export class TillApp extends LitElement {
   readonly #onDraftFocus = (): void => {
     void this.#refreshBillDraft();
     void this.#rereadBillsOnTimer();
+    void this.#rereadOpenTableOrder();
     void this.#refreshTableAllergy();
   };
 
   readonly #onVisibility = (): void => {
     void this.#refreshBillDraft();
     void this.#rereadBillsOnTimer();
+    void this.#rereadOpenTableOrder();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
@@ -2570,6 +2573,7 @@ export class TillApp extends LitElement {
     this.#pauseLive();
     this.#live = undefined;
     this.#billDraftLive?.stop();
+    this.#tableOrderLive?.stop();
     this.#deliveryLive?.stop();
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
@@ -5003,6 +5007,7 @@ export class TillApp extends LitElement {
           this.#live.addEventListener("down", this.#routerLive);
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
           this.#billDraftLive?.stop();
+          this.#tableOrderLive?.stop();
           this.#deliveryLive?.stop();
           const live = this.#live;
           this.#billDraftLive = queuedLiveRefresh(live, {
@@ -5011,6 +5016,12 @@ export class TillApp extends LitElement {
             run: async () => {
               if (this.isConnected && this.#live === live)
                 await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+            },
+          });
+          this.#tableOrderLive = queuedLiveRefresh(live, {
+            types: TILL_LIVE_TYPES.tableOrder!,
+            run: async () => {
+              if (this.#live === live) await this.#rereadOpenTableOrder();
             },
           });
           this.#deliveryLive = queuedLiveRefresh(live, {
@@ -13063,19 +13074,19 @@ export class TillApp extends LitElement {
     return placed;
   }
 
-  async #refreshTableLines(): Promise<void> {
+  async #refreshTableLines(isCurrent = () => true): Promise<void> {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const read = ++this.#tabLinesRead;
+    const applies = () => read === this.#tabLinesRead && billId === this.activeTabId && isCurrent();
     try {
       const tab = await this.api.getTabLines(billId);
-      if (read !== this.#tabLinesRead || billId !== this.activeTabId) return;
+      if (!applies()) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
       this.#refreshOpenPayLines(billId);
     } catch {
-      if (read === this.#tabLinesRead && billId === this.activeTabId)
-        this.#tableOffers.liveFields = undefined;
+      if (applies()) this.#tableOffers.liveFields = undefined;
     }
   }
 
@@ -13112,15 +13123,24 @@ export class TillApp extends LitElement {
       if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
       this.tabLines = [];
     }
-    const { groups: partyGroups, printProblems: partyProblems } = await groups;
+    const groupAnswer = await groups;
     const partyOrders = await orders;
     if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
-    this.requestUpdate();
-    this.#showPrintProblems(groupsRead, partyProblems);
-    if (!this.#showGroups(groupsRead, partyGroups ?? [], partyOrders)) return;
-    this.#groupsUnread = partyGroups === null;
+    this.#applyTabGroups(groupsRead, partyId, groupAnswer, partyOrders);
+  }
+
+  #applyTabGroups(
+    read: number,
+    partyId: string | null,
+    { groups, printProblems }: { groups: OrderGroup[] | null; printProblems: PrintProblem[] },
+    orders: CurrentOrders | null,
+  ): void {
+    this.#showPrintProblems(read, printProblems);
+    if (!this.#showGroups(read, groups ?? [], orders)) return;
+    this.#groupsUnread = groups === null;
     this.#groupsReadFor = partyId;
-    this.currentOrdersUnread = partyId !== null && partyOrders === null;
+    this.currentOrdersUnread = partyId !== null && orders === null;
+    this.requestUpdate();
   }
 
   #showPrintProblems(read: number, problems: PrintProblem[]): void {
@@ -13215,12 +13235,13 @@ export class TillApp extends LitElement {
   /** After a command that moved the party on, or may have: the floor is read again, and its party
    * taken while the open table still holds that party and the floor's revision is not lower than
    * the one held. A failed read leaves the last floor, which can be older. */
-  async #retakePartyFromFloor(): Promise<boolean> {
+  async #retakePartyFromFloor(isCurrent = () => true): Promise<boolean> {
     const partyId = this.orderParty?.id;
     const read = await this.#refreshFloor();
     const row = this.tables.find((table) => table.id === this.activeTableId);
     const held = this.orderParty;
     if (
+      isCurrent() &&
       partyId !== undefined &&
       row?.party?.id === partyId &&
       held?.id === partyId &&
@@ -13601,7 +13622,11 @@ export class TillApp extends LitElement {
     this.#billDraftTimer = setTimeout(() => {
       const refresh = this.#live?.up
         ? Promise.resolve()
-        : Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+        : Promise.all([
+            this.#refreshBillDraft(),
+            this.#rereadBillsOnTimer(),
+            this.#rereadOpenTableOrder(),
+          ]);
       void refresh.finally(() => {
         if (
           this.isConnected &&
@@ -13612,6 +13637,31 @@ export class TillApp extends LitElement {
           this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
+  }
+
+  async #rereadOpenTableOrder(): Promise<void> {
+    const partyId = this.orderParty?.id;
+    const billId = this.activeTabId;
+    if (
+      partyId === undefined ||
+      billId === undefined ||
+      !this.isConnected ||
+      !this.#tableMenuActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    const visit = this.#orderVisit;
+    const sent = this.#sentNow();
+    const current = () => !this.#hasLeftOrder(billId, visit) && !this.#hasLeftParty(partyId, sent);
+    const read = ++this.#groupsRead;
+    const floor = this.#retakePartyFromFloor(current);
+    const paying = this.billPaying?.surface === "table" && this.billPaying.billId === billId;
+    const lines = paying ? undefined : this.#refreshTableLines(current);
+    const [groups, orders] = await Promise.all([this.#readGroups(), this.#readCurrentOrders()]);
+    if (current() && groups.groups !== null && orders !== null)
+      this.#applyTabGroups(read, partyId, groups, orders);
+    await Promise.all([floor, lines]);
   }
 
   async #rereadBillsOnTimer(): Promise<void> {
