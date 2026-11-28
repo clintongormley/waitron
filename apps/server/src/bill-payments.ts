@@ -47,6 +47,7 @@ import { createOpenOrder } from "./working-order-open.js";
 import { captureOrderEdit } from "./working-order-context.js";
 import type { TillSaleDeps } from "./working-order-context.js";
 import { refuseWhileAdvanceCorrectionOpen } from "./bill-advances.js";
+import { refuseDiscountsNotHolding } from "./bill-discounts-crystallise.js";
 import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { enqueueRequestedPaymentSlip, readerSlipWanted } from "./payment-slip-print.js";
@@ -176,7 +177,19 @@ export async function previewBillPayment(
       held,
     );
     const { doc } = await readPaymentsSettings(tx);
-    return previewAllocation(funds, allocationRequestFor(ask), { tipsEnabled: doc.tipsEnabled });
+    const preview = previewAllocation(funds, allocationRequestFor(ask), {
+      tipsEnabled: doc.tipsEnabled,
+    });
+    // A hand-keyed card is charged before its payment is sent, so this is where it is asked.
+    if (
+      !payable.invoiced &&
+      compareDecimal(
+        sumDecimals([funds.received, funds.reserved, preview.applied]),
+        funds.total,
+      ) === 0
+    )
+      await refuseDiscountsNotHolding(tx, workingOrderId);
+    return preview;
   });
 }
 
@@ -557,6 +570,7 @@ export async function beginBillPayment(
   // Refused before any card is charged: the payment would issue the bill's invoice.
   if (coversBill && advances.credits.has(workingOrderId))
     await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+  if (coversBill) await refuseDiscountsNotHolding(tx, workingOrderId);
   // A reserved card may finish on recovery, so save the language once the bill is covered.
   if (req.receiptLanguage !== undefined && coversBill)
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);

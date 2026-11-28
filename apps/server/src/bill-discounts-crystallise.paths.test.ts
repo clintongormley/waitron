@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { activityLog, readVenueClock, sales, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -374,14 +374,20 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
 
   it("the reader's second transaction, with its activity entry", async () => {
     const billId = await tabWith(venue, "Tarta", "Steak");
-    const discountId = await cutDownOn(billId);
-    const paid = await pay(billId, {
+    // Held once the card is at the reader: the payment's first transaction is asked.
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const answer = pay(billId, {
       kind: "contribution",
       amount: "25.00",
       method: "card",
       entry: "reader",
       applied: "25.00",
     });
+    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+    const discountId = await cutDownOn(billId);
+    release();
+    const paid = await answer;
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
