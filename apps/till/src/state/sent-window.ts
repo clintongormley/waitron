@@ -58,3 +58,12 @@ export function sentWindowShare(
     dish: (extras) => subtractDecimal(amount, sumDecimals(extras.map(of))),
   };
 }
+
+/** What a whole dish line (its extras left out) or one extra's whole line charges. */
+export const sentLineNet = (row: CurrentOrderRow, extra?: CurrentOrderRow["extras"][number]) =>
+  extra === undefined
+    ? subtractDecimal(
+        decimal(row.netAmount),
+        sumDecimals(row.extras.map((each) => decimal(each.netAmount))),
+      )
+    : decimal(extra.netAmount);

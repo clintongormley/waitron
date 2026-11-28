@@ -64,6 +64,7 @@ import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
 import { byFiringOrder, sentPanel, type SentSlice, waitsForFire } from "../state/sent-panel.js";
 import { type SentWindowCount, partlyServed, sentWindowShare } from "../state/sent-window.js";
+import { sentLineNet } from "../state/sent-window.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -3894,8 +3895,8 @@ export class TillTableOrderScreen extends LitElement {
     return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
   }
 
-  /** A price shown in a sent dish's window; `amount` is already its portions', and `part` takes
-   * their part of a whole line's list price. */
+  /** A price shown in a sent dish's window; `amount` is already its portions'. `part` takes their
+   * part of a whole line's list price, struck through only when the whole line has a price cut. */
   #sentPrice(
     row: CurrentOrderRow,
     amount: Decimal,
@@ -3903,11 +3904,10 @@ export class TillTableOrderScreen extends LitElement {
     part: (value: Decimal) => Decimal = (value) => value,
   ): TemplateResult {
     const line = this.#sentBillLine(row, extra);
-    const before =
-      line?.listUnitPriceGross === undefined
-        ? amount
-        : part(listedGross({ ...line, quantity: extra?.quantity ?? row.quantity }));
-    return lineTotal(before, amount);
+    if (line?.listUnitPriceGross === undefined) return lineTotal(amount, amount);
+    const listed = listedGross({ ...line, quantity: extra?.quantity ?? row.quantity });
+    const cut = compareDecimal(listed, sentLineNet(row, extra)) !== 0;
+    return lineTotal(cut ? part(listed) : amount, amount);
   }
 
   /** Whether Change dish would move the bill: another count, or other extras. What the server
