@@ -153,11 +153,23 @@ export interface ActivityKindData {
     readonly to: string;
     readonly rows: number;
   };
-  /** A held discount an invoice wrote although it no longer held as given, and what it took. */
+  /** A held discount an invoice wrote although it no longer held as given, and what it took:
+   * what it was given on, its value as given, and its reason and people, by id. */
   readonly "discount.written_as_it_stood": {
     readonly discountId: string;
     readonly why: "set_menu_gone" | "cut_down";
     readonly takes: string;
+    readonly on: {
+      readonly kind: "dish" | "extra" | "set_menu" | "bill";
+      readonly targetName: string | null;
+    };
+    readonly action: "comp" | "discount_percent" | "discount_amount";
+    readonly percentBp: number | null;
+    readonly amount: string | null;
+    readonly reasonId: string;
+    readonly reasonName: string;
+    readonly requestedBy: string;
+    readonly approvedBy: string | null;
   };
   /** Who kept as a tip what a bill was paid over its total: the whole amount, and
    * how much each bill payment moved from its applied money to its tip. */

@@ -218,10 +218,15 @@ Recommendations, each with why. None changes what the owner decided, except wher
   `abandoned`, deletes the bill's rows and the rows on its lines. The alternative, a delete at each
   of the five abandoning sites (held order, merge, declined card, counter abandon, an emptied party),
   is easier to miss.
-- **D5. How crystallising writes.** One discount at a time, in spec 7.2's order, each through
-  today's `reprice` and `recordAdjustment` (`adjustments-apply.ts:1029-1105`, `:1185-1227` (†)), so the
-  records keep today's shape. The record's `created_at` is the moment of the invoice; the people,
-  reason and note are the pending row's. Part of a line is never crystallised: a discount on part of
+- **D5. How crystallising writes: work out once, write as worked out** (the watcher, 2026-11-28
+  03:43, replacing "one at a time, each worked out again on the bill as it now stands"). The bill's
+  discounts are worked out once, by PR 1's working-out over the inputs the shown total reads, and
+  each is written with exactly those figures, line by line and part by part: one record per
+  discount over every line or part it covers, through today's `reprice` and `recordAdjustment`
+  (`adjustments-apply.ts:1029-1105`, `:1185-1227` (†)), so the records keep today's shape and the
+  amount charged is the amount shown. The `asked` check reads the same working-out, and the bill's
+  pending rows are deleted before any price changes, after that check. The record's `created_at`
+  is the moment of the invoice; the people, reason and note are the pending row's. Part of a line is never crystallised: a discount on part of
   a line splits the line when it is given (spec 6.1).
 - **D6. Who is asked before the invoice.** Asked (refused with the check, before any money moves):
   a payment that would complete the bill, cash or card, checked where a payment's start already
@@ -264,12 +269,14 @@ Recommendations, each with why. None changes what the owner decided, except wher
   whole-bill percentage only when every moved dish came from one bill and that bill holds it; if two
   source bills hold one each, each moved dish takes its share as an amount (D8), so a percentage never
   reaches dishes that did not carry it.
-- **D10. A discounted line split later** (Pay for items taking 1 of 3 beers on one line, or
-  crystallising itself splitting a line into two prices; `carveLines` copies a split line's
-  reductions today, `working-order-transfer.ts:635`, `order-portions.ts:144-174`): the new part gets
-  a copy of each pending discount on the line, a percentage or Free as it is, an amount shared by
-  quantity (cents left over to the earlier part). Built in 2b, since crystallising splits lines
-  (I-7), and PR 1's working-out splits a line the same way, so the two agree. A whole-bill amount
+- **D10. A discounted line split later** (Pay for items taking 1 of 3 beers on one line;
+  `carveLines` copies a split line's reductions today, `working-order-transfer.ts:635`,
+  `order-portions.ts:144-174`): the new part gets a copy of each pending discount on the line, a
+  percentage or Free as it is, an amount shared by quantity (cents left over to the earlier part),
+  no share above what its part costs once the discounts worked out before it are off, as PR 1's
+  working-out shares an amount over a split line's parts (2026-11-28: shared by quantity alone,
+  5 beers at 3.35 holding 15.72 then 1.03 lost a cent when one beer was split off). Built in 2b
+  (I-7); crystallising itself deletes the pending rows before it splits a line (D5). A whole-bill amount
   split between two bills keeps `shared_from` so a declined card gives it back (spec 6.4's
   put-back, builder's call; 4b).
 - **D11. A cancel still records the stored lines' drop**, undiscounted
@@ -747,10 +754,10 @@ payment covers the bill (`bill-payments.ts:1831-1836` (†)), and in Pay for ite
 **The change.**
 1. `apps/server/src/bill-discounts-crystallise.ts` (new): `crystalliseBillDiscounts(tx, cfg, billId,
    { asked })`. With `asked`, a discount that does not hold refuses `adjustment.no_longer_applies`
-   (D7; the code and its details land here, its till wording in 6b). Otherwise, for each discount in
-   order: run PR 1 on the bill as it now stands for that one discount, write it with `reprice`
-   (moved from `adjustments-apply.ts:1003-1105` to `apps/server/src/adjustment-reprice.ts`, unchanged)
-   and `recordAdjustment` (D5), delete the pending row; a discount that did not hold gets a
+   (D7; the code and its details land here, its till wording in 6b). Otherwise, delete the bill's
+   pending rows, run PR 1 once and write each discount in order with exactly its figures, with
+   `reprice` (moved from `adjustments-apply.ts:1003-1105` to `apps/server/src/adjustment-reprice.ts`,
+   unchanged) and `recordAdjustment` (D5); a discount that did not hold gets a
    `discount.written_as_it_stood` activity entry (D20).
 2. Call it first in `priceForIssuance` (an `asked` parameter, its doc changed to say it writes the
    bill's discounts) and before `bill-payments.ts:1165` (`asked` unless D6's not-asked paths;
@@ -779,9 +786,10 @@ payment covers the bill (`bill-payments.ts:1831-1836` (†)), and in Pay for ite
 
 **Tests (failing first).** `apps/server/src/bill-discounts-crystallise.test.ts`, with inserted rows:
 - **the shown total equals the invoice**: for each fixture of Review focus 1, `readBillDiscounts`'
-  total off equals the fall in `storedOrderTotal` after crystallising, and equals the receipt's
-  discount lines (the assertion that fails if crystallising wrote anything else); the split rows'
-  line numbers equal PR 1's simulation;
+  total off equals the fall in the lines' own total after crystallising (`storedOrderTotal`, which
+  already takes it off, item 3, stays the same), and equals the receipt's discount lines (the
+  assertion that fails if crystallising wrote anything else); the split rows' line numbers equal
+  PR 1's simulation;
 - **two discounts on one line of three units** (fresh read I-7): 10% then 1.00 off a line of three
   beers at 3.35; PR 1's figures equal what crystallising writes, line by line (the assertion that
   fails if the second discount reached only the original part);

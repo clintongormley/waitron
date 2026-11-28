@@ -410,7 +410,7 @@ describe("a completion after money moved is not asked", () => {
     expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
     expect(pendingOn(billId)).toEqual([]);
     expect(await writtenAsItStood(billId)).toEqual([
-      { data: { discountId, why: "cut_down", takes: "18.00" } },
+      { data: expect.objectContaining({ discountId, why: "cut_down", takes: "18.00" }) as unknown },
     ]);
   });
 });

@@ -356,7 +356,7 @@ export function byQuantity(amount: number, quantities: readonly number[]): numbe
 
 /** {@link byQuantity}, no share above its part's cost: what a part cannot take is shared again
  * over the parts that still can. `amount` must not exceed the costs' sum. */
-function byQuantityWithin(
+export function byQuantityWithin(
   amount: number,
   quantities: readonly number[],
   costs: readonly number[],

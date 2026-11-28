@@ -1,6 +1,12 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { adjustments, workOutBillDiscounts, type WorkedBill } from "@waitron/adjustments";
+import {
+  adjustmentLines,
+  adjustments,
+  computeAdjustmentReport,
+  workOutBillDiscounts,
+  type WorkedBill,
+} from "@waitron/adjustments";
 import {
   activityLog,
   billDiscounts,
@@ -16,6 +22,7 @@ import {
   refuseDiscountsNotHolding,
 } from "./bill-discounts-crystallise.js";
 import { gatherBillDiscountInputs, readBillDiscounts } from "./bill-discounts-read.js";
+import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
 import { receiptLines } from "./receipt-adjustments.js";
 import { priceStoredOrder, readStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
 import { holdDiscount } from "./testing/bill-discounts.js";
@@ -96,14 +103,30 @@ async function workedNow(tx: Transaction, billId: string): Promise<WorkedBill> {
   return workOutBillDiscounts(input.lines, input.discounts);
 }
 
-/** What the bill's adjustment records took off, summed. A split copies a line's adjustment lines
- * to its part, so these are summed per record, not per line. */
-async function recordedTakes(tx: Transaction, billId: string): Promise<number> {
+/** What the bill's adjustment records took off, summed once from the records and once from their
+ * adjustment lines. A later split copies a line's adjustment lines to its part, each copy keeping
+ * the quantity it was taken over, so each line counts the share its quantity now holds. */
+async function recordedTakes(
+  tx: Transaction,
+  billId: string,
+): Promise<{ records: number; lines: number }> {
   const [row] = await tx
     .select({ taken: sql<number>`coalesce(sum(${adjustments.reduction}), 0)` })
     .from(adjustments)
     .where(eq(adjustments.workingOrderId, billId));
-  return row!.taken;
+  const lines = await tx
+    .select({
+      reduction: adjustmentLines.reduction,
+      then: adjustmentLines.quantity,
+      now: workingOrderLines.quantity,
+    })
+    .from(adjustmentLines)
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentLines.adjustmentId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .where(eq(adjustments.workingOrderId, billId));
+  const shares = lines.reduce((sum, { reduction, then, now }) => sum + (reduction * now) / then, 0);
+  expect(Math.abs(shares - Math.round(shares))).toBeLessThan(1e-6);
+  return { records: row!.taken, lines: Math.round(shares) };
 }
 
 /** What the bill's receipt prints as taken off, under its lines and on the whole bill. */
@@ -166,19 +189,19 @@ async function groupedBill(lines: RoundLine[], unit?: number): Promise<string> {
  * off, what the stored total fell by, and what the written adjustment lines took; and that the
  * lines are left as PR 1 simulated them, split rows' numbers included.
  */
-async function crystallisesAsShown(billId: string): Promise<number> {
+async function crystallisesAsShown(billId: string, asked = true): Promise<number> {
   return inTx(venue, async (tx) => {
     const shown = (await readBillDiscounts(tx, [billId])).get(billId)!.takes;
     const expected = simulated(await withIds(tx, billId), await workedNow(tx, billId));
     const before = decimalToCents((await priceStoredOrder(tx, billId)).total);
     const owedBefore = decimalToCents(await storedOrderTotal(tx, billId));
-    await crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true });
+    await crystalliseBillDiscounts(tx, venue.cfg, billId, { asked });
     const after = decimalToCents((await priceStoredOrder(tx, billId)).total);
     expect(shown).toBeGreaterThan(0);
     expect(before - after).toBe(shown);
     expect(owedBefore).toBe(before - shown);
     expect(decimalToCents(await storedOrderTotal(tx, billId))).toBe(owedBefore);
-    expect(await recordedTakes(tx, billId)).toBe(shown);
+    expect(await recordedTakes(tx, billId)).toEqual({ records: shown, lines: shown });
     expect(await receiptTakes(tx, billId)).toBe(shown);
     expect(await linesOf(tx, billId)).toEqual(expected);
     return shown;
@@ -230,6 +253,70 @@ describe("crystalliseBillDiscounts", () => {
     expect(worked.discounts[0]!.lines[0]!.rows).toHaveLength(2);
     const shown = await crystallisesAsShown(billId);
     expect(shown).toBe(worked.takes);
+  });
+
+  it("writes 15.73 then 1.02 off five beers at 3.35 as shown, refusing nothing and noting nothing", async () => {
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "5" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(1573), position: 1 });
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(102), position: 2 });
+    });
+    const worked = await inTx(venue, (tx) => workedNow(tx, billId));
+    expect(worked.discounts.map(({ holds }) => holds)).toEqual(["yes", "yes"]);
+    // The beers' whole 16.75: no beer is left at 0.01.
+    expect(await crystallisesAsShown(billId)).toBe(1675);
+    const totals = (await inTx(venue, (tx) => linesOf(tx, billId))).map(({ total }) => total);
+    expect(totals).toEqual(totals.map(() => 0));
+    const entries = await inTx(venue, (tx) =>
+      tx.select().from(activityLog).where(eq(activityLog.subjectId, billId)),
+    );
+    expect(entries).toEqual([]);
+  });
+
+  it.each([
+    [1572, 103],
+    [1568, 107],
+    [1567, 108],
+    [1573, 103],
+    [1573, 107],
+    [1573, 108],
+  ])("writes %i then %i off five beers at 3.35 as shown", async (first, second) => {
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "5" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(first), position: 1 });
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(second), position: 2 });
+    });
+    const worked = await inTx(venue, (tx) => workedNow(tx, billId));
+    const holding = worked.discounts.every(({ holds }) => holds === "yes");
+    expect(await crystallisesAsShown(billId, holding)).toBe(worked.takes);
+  });
+
+  it("records one discount once, though an earlier one split its line", async () => {
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await holdDiscount(tx, venue, { lineId: beers, ...tenPercent, position: 1 });
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(100), position: 2 });
+    });
+    const report = () =>
+      inTx(venue, async (tx) => {
+        const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
+        const day = currentBusinessDay(clock);
+        return (
+          await computeAdjustmentReport(tx, { ...clock, fromBusinessDay: day, toBusinessDay: day })
+        ).overall.count;
+      });
+    const counted = await report();
+    await crystallisesAsShown(billId);
+    const written = await inTx(venue, (tx) => adjustmentsOn(tx, billId));
+    expect(written.map(({ action, reduction }) => ({ action, reduction }))).toEqual([
+      { action: "discount_percent", reduction: 101 },
+      { action: "discount_amount", reduction: 100 },
+    ]);
+    expect(written.map(({ lineId }) => lineId)).toEqual([beers, beers]);
+    expect((await report()) - counted).toBe(2);
   });
 
   it("leaves no pending row and writes nothing more when called again", async () => {
@@ -386,10 +473,40 @@ describe("discounts that no longer hold", () => {
       120, 250,
     ]);
     expect(seen.entries).toHaveLength(2);
-    expect(seen.entries.map(({ data }) => data)).toEqual(
+    const given = {
+      reasonId: venue.reasonId.complaint,
+      reasonName: "Guest complaint",
+      requestedBy: venue.staffId,
+      approvedBy: null,
+    };
+    expect(seen.entries).toEqual(
       expect.arrayContaining([
-        { discountId: held.setMenu, why: "set_menu_gone", takes: "0.00" },
-        { discountId: held.bread, why: "cut_down", takes: "2.50" },
+        {
+          personId: venue.staffId,
+          data: {
+            discountId: held.setMenu,
+            why: "set_menu_gone",
+            takes: "0.00",
+            on: { kind: "set_menu", targetName: "Daily" },
+            action: "discount_percent",
+            percentBp: 1000,
+            amount: null,
+            ...given,
+          },
+        },
+        {
+          personId: venue.staffId,
+          data: {
+            discountId: held.bread,
+            why: "cut_down",
+            takes: "2.50",
+            on: { kind: "dish", targetName: "Bread" },
+            action: "discount_amount",
+            percentBp: null,
+            amount: "50.00",
+            ...given,
+          },
+        },
       ]),
     );
   });
@@ -479,5 +596,55 @@ describe("a split line's pending discounts", () => {
     ]);
     const after = await inTx(venue, (tx) => workedNow(tx, billId));
     expect(after.takes).toBe(before.takes);
+  });
+
+  it.each([
+    [1573, 102],
+    [1572, 103],
+    [1568, 107],
+    [1567, 108],
+  ])(
+    "keep what %i then %i off five beers at 3.35 take, and both still hold, when one beer is split off",
+    async (first, second) => {
+      const billId = await groupedBill([{ name: "Draught beer", quantity: "5" }], 335);
+      const beers = await lineIdOf(venue, billId, 1);
+      await inTx(venue, async (tx) => {
+        await holdDiscount(tx, venue, { lineId: beers, ...amountOf(first), position: 1 });
+        await holdDiscount(tx, venue, { lineId: beers, ...amountOf(second), position: 2 });
+      });
+      const before = await inTx(venue, (tx) => workedNow(tx, billId));
+      await inTx(venue, (tx) =>
+        splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }]),
+      );
+      const after = await inTx(venue, (tx) => workedNow(tx, billId));
+      expect(before.discounts.map(({ holds }) => holds)).toEqual(["yes", "yes"]);
+      expect(after.discounts.map(({ holds }) => holds)).toEqual(after.discounts.map(() => "yes"));
+      expect(after.takes).toBe(before.takes);
+    },
+  );
+
+  it("keep an amount cut down before one beer is split off cut down after it, taking as much", async () => {
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "5" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    await inTx(venue, async (tx) => {
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(1573), position: 1 });
+      await holdDiscount(tx, venue, { lineId: beers, ...amountOf(108), position: 2 });
+    });
+    const before = await inTx(venue, (tx) => workedNow(tx, billId));
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    const after = await inTx(venue, (tx) => workedNow(tx, billId));
+    expect(before.discounts.map(({ holds }) => holds)).toEqual(["yes", "cut_down"]);
+    expect(after.discounts.map(({ holds }) => holds)).toContain("cut_down");
+    expect(after.takes).toBe(before.takes);
+    const amounts = await inTx(venue, (tx) =>
+      tx
+        .select({ amount: billDiscounts.amount })
+        .from(billDiscounts)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, billDiscounts.lineId))
+        .where(and(eq(billDiscounts.position, 2), eq(workingOrderLines.workingOrderId, billId))),
+    );
+    expect(amounts.reduce((sum, { amount }) => sum + amount!, 0)).toBe(108);
   });
 });

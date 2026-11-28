@@ -368,7 +368,7 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
     expect(await salesOf(party.tabId)).toEqual([{ total: 2500 }]);
     expect((await writtenOn(party.tabId)).pending).toEqual([]);
     expect(await writtenAsItStood(party.tabId)).toEqual([
-      { data: { discountId, why: "cut_down", takes: "18.00" } },
+      { data: expect.objectContaining({ discountId, why: "cut_down", takes: "18.00" }) as unknown },
     ]);
   });
 
@@ -393,7 +393,7 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
     expect(await salesOf(billId)).toEqual([{ total: 2500 }]);
     expect((await writtenOn(billId)).pending).toEqual([]);
     expect(await writtenAsItStood(billId)).toEqual([
-      { data: { discountId, why: "cut_down", takes: "18.00" } },
+      { data: expect.objectContaining({ discountId, why: "cut_down", takes: "18.00" }) as unknown },
     ]);
   });
 
