@@ -44,7 +44,7 @@ export function managerDayField(
   target: AttendanceChange["target"],
   date: string,
   time: string,
-) {
+): { kind: string | undefined; label: string; notes: string; requiredTarget: boolean } {
   const previous = recorded(day, target);
   const request = requested(day).find((entry) => key(entry.target) === key(target));
   const byId = new Map(day.view.record.entries.map(({ entry }) => [entry.entryId, entry]));

@@ -455,7 +455,8 @@ export class AttendanceCorrectionDialog extends LitElement {
     const dayFields =
       manager?.view &&
       this.draft.rows.map((row) => managerDayField(manager, row.target, row.date, row.time));
-    const lastNote = dayFields?.findLastIndex(({ notes }) => !!notes) ?? -1;
+    const lastNote =
+      dayFields?.reduce((last, { notes }, index) => (notes ? index : last), -1) ?? -1;
     const minutes = manager && all ? previewDayMinutes(manager.view, all) : undefined;
     const worked =
       minutes === undefined
