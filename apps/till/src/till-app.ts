@@ -395,6 +395,7 @@ import {
   type LateSendApprovalPrompt,
 } from "./widgets/late-send-prompts.js";
 import { lateChangeMessage, lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
+import type { DishMove, WaitingOrderMove } from "./state/station-move-types.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -1621,46 +1622,6 @@ const REASON_REFUSALS = new Set(["adjustment.action_not_allowed", "adjustment_re
 function drawerError(code: string | undefined): StringKey | { code: string } {
   if (code === "storage.disk_full" || code === NO_BOX_ANSWERING) return { code };
   return code === "drawer.not_attached" ? code : "drawer.error";
-}
-
-/** One dish of a table's or the counter basket's order, moving to another station. */
-interface DishMove {
-  kind?: undefined;
-  workingOrderId: string;
-  lineId: string;
-  /** Every portion a grouped row moves, by line number; absent, the move is `lineId` alone. */
-  lineIds?: string[];
-  name: string;
-  stationId: string | null;
-  refusal: string | null;
-  stationName?: string;
-  busy: boolean;
-  counter?: boolean;
-  basketRevision?: number;
-  basketGeneration?: number;
-  counterContext?: { api: TillApi; session: number; visit: number };
-  bill?: {
-    expectedEdit: BillEditExpected;
-    api: TillApi;
-    session: number;
-    visit: number;
-    partyId: string;
-    viewBillId: string | undefined;
-  };
-}
-
-/** Every dish of a paid order in the counter's waiting list that can still move. `stationId` is
- * the station they all share, or null. */
-interface WaitingOrderMove {
-  kind: "waiting";
-  workingOrderId: string;
-  name: string;
-  stationId: string | null;
-  refusal: string | null;
-  stationName?: string;
-  busy: boolean;
-  session: number;
-  api: TillApi;
 }
 
 interface ServedCommand {
