@@ -100,8 +100,9 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
   // `chain` walks each start up through the correctives it corrects to the invoice whose day they
   // take: an ordinary invoice (its own day) or a replacement (its `supply_day`, else its original's
   // own day). `placed`: each ordinary invoice and non-replacement corrective, with the day its VAT
-  // first belongs to and the day it belongs to now (an ordinary invoice's replacement's
-  // `supply_day`, voided or not, moves it). `sales_one_replacement_uq` admits at most one
+  // first belongs to and the day it belongs to now: an ordinary invoice's replacement's
+  // `supply_day`, voided or not, moves the invoice, and places a corrective of that invoice from
+  // the start, as it does the replacement's own correctives. `sales_one_replacement_uq` admits at most one
   // replacement per sale, so the joins add no rows. Each `indexed by` is there because a box gathers
   // no planner statistics.
   const invoiceColumns = invoices
@@ -145,8 +146,8 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
       select c.start_id, up.corrects_sale_id from chain c join sales up on up.id = c.cur_id
       where up.corrects_sale_id is not null and up.replaces_original = 0
     ),
-    rooted(id, corrects_sale_id, day) as (
-      select st.id, st.corrects_sale_id, case
+    rooted(id, corrects_sale_id, root_id, day) as (
+      select st.id, st.corrects_sale_id, root.id, case
         when root.replaces_original = 1 then coalesce(root.supply_day, ${ownDay("o")})
         else ${ownDay("root")}
       end
@@ -159,10 +160,11 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
         and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = st.id)
     ),
     placed(id, first_day, now_day) as (
-      select t.id, t.day,
-        case when t.corrects_sale_id is null then coalesce(r.supply_day, t.day) else t.day end
+      select t.id,
+        case when t.corrects_sale_id is null then t.day else coalesce(r.supply_day, t.day) end,
+        coalesce(r.supply_day, t.day)
       from rooted t
-      left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1
+      left join sales r on r.corrects_sale_id = t.root_id and r.replaces_original = 1
     ),
     m as (
       select st.id as sale_id, st.corrects_sale_id, st.issued_at,

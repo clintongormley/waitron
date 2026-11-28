@@ -28,7 +28,11 @@ import {
   currentBusinessDay,
   resolveVenueClock,
 } from "@waitron/reporting";
-import { filedRecordsOf, filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  correctiveRecordsOf,
+  filedRecordsOf,
+  filedSales,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
   acceptedByAeat,
   refusedByAeat,
@@ -628,9 +632,10 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     await expectRefused(id, () => split(id), { status: 409, code: "bill.not_issued" });
   });
 
-  it("reopens a ticket AEAT refused that nothing replaced, crediting it; Send the replacement then refuses it", async () => {
+  it("reopens a ticket AEAT refused that nothing replaced, crediting it; Send the replacement then replaces it at its whole amount, once", async () => {
     const party = await printed("Tarta");
-    const saleId = (await invoiceOf(party.tabId)).id;
+    const ticket = await invoiceOf(party.tabId);
+    const saleId = ticket.id;
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
 
     const answer = await split(party.tabId);
@@ -639,6 +644,16 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(await creditsOf(saleId)).toHaveLength(1);
     expect(await filedRecordsOf(venue.db, saleId)).toEqual([
       { kind: "invoice", state: "rechazado" },
+    ]);
+
+    const replacementId = await sendReplacement(saleId);
+
+    expect(correctiveRecordsOf(venue.db, saleId)).toEqual([
+      expect.objectContaining({ type: "R5", by: "differences", total: -ticket.total }),
+      expect.objectContaining({ type: "R5", by: "replacement", total: ticket.total }),
+    ]);
+    expect(await filedRecordsOf(venue.db, replacementId)).toEqual([
+      { kind: "invoice", state: "pendiente" },
     ]);
     await expect(sendReplacement(saleId)).rejects.toMatchObject({
       code: "sale.replacement_not_first",

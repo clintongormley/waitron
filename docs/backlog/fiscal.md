@@ -1208,9 +1208,9 @@ CORRECT-FULL-INVOICE PR 2b.)
 (2026-11-27, A1619: Correct invoice no longer waits for, or is stopped by, the tax agency's answer to
 the original, on this box's tickets or another box's, a full invoice refused with no fix included. So
 Refund a payment no longer waits on that answer either: it refuses the money Correct invoice gives
-back (`tender.refund_needs_correction`), and Give money back files the corrective. Until A1619 PR 2,
-once a receipt AEAT refused for a future date has a corrective, Fiscal filing's **Send the replacement** is refused
-(`sale.replacement_not_first`)
+back (`tender.refund_needs_correction`), and Give money back files the corrective. Since A1619 PR 2
+(2026-11-28), a receipt AEAT refused for a future date that has a corrective still takes Fiscal
+filing's **Send the replacement**, at the receipt's whole amount, the corrective still counting
 ([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
@@ -1284,8 +1284,8 @@ refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
 corrective file their credit at once, whatever AEAT has answered about the receipt, on this box's
 chain or another's (the owner's answer, D1, and the watcher's D2 of the
 [plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md), retiring the
-watcher's 26 November rule). Until A1619 PR 2, Fiscal filing's replacement of such a receipt is
-then refused (`sale.replacement_not_first`, `packages/core/src/record-replacement.ts`). **Nothing
+watcher's 26 November rule). Since A1619 PR 2 (2026-11-28), Fiscal filing's replacement of such a
+receipt still goes through afterwards, at the receipt's whole amount. **Nothing
 was served**, which cancels the receipt rather than correcting it, still refuses both
 (`fiscal.original_refused`, `fiscal.original_unanswered`, `packages/fiscal-verifactu/src/backend.ts`'s
 `recordVoid`).)
@@ -1447,8 +1447,9 @@ recipients, correction type, corrected invoice or replaced invoice with
 
 A simplified invoice AEAT refused for a future date is put right by a replacement corrective
 invoice, R5 with `TipoRectificativa` "S", offered on any day (owner's picker, 2026-11-13 22:09, same
-`desk/done` file). (2026-11-27, A1619: until A1619 PR 2, not once the receipt has a corrective,
-which money given back or a credit now files at once; `sale.replacement_not_first`.) Answers A–D (owner, relayed 2026-11-14 09:50): rectified amounts 0.00, the real
+`desk/done` file). (2026-11-28, A1619 PR 2: also once the receipt has a corrective, which money
+given back or a credit files at once; the replacement carries the receipt's whole amount and the
+corrective keeps counting.) Answers A–D (owner, relayed 2026-11-14 09:50): rectified amounts 0.00, the real
 day as its operation date, the printed copy says it replaces the invoice in full with a 0,00 €
 rectification, and a later refund names the replacement. E: the sale counts in its real day's VAT
 period (owner, 2026-11-14 17:20). The replacement is dated today (watcher, 11:54); the real day is

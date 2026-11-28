@@ -1057,6 +1057,35 @@ describe("readGiveBack: a receipt replaced after AEAT refused it", () => {
   });
 });
 
+describe("a receipt given money back in part, then replaced after AEAT refused it", () => {
+  it("offers what is left of the receipt after the earlier refund, and refuses a cent more", async () => {
+    const b = await tab([
+      ["Paella", "2"],
+      ["Cheesecake", "2"],
+    ]);
+    const saleId = await pay(b, [{ cash: "50.00" }]);
+    await gaveCash(saleId, ask("goodwill", "5.00"));
+    const replacement = await replace(saleId);
+
+    const view = await read(saleId);
+    const left = view.lines.reduce((sum, line) => sum + decimalToCents(decimal(line.left)), 0);
+    expect(centsToDecimal(left).toString()).toBe("45.00");
+    expect(view.choices.goodwill).toEqual({ available: true, reason: null });
+    expect(await preview(saleId, ask("goodwill", "45.01"))).toEqual(invalidField("amount"));
+    expect(await preview(saleId, ask("goodwill", "45.00"))).toEqual(
+      planned([{ kind: "correction", amount: "45.00", way: "cash", lineIds: [] }]),
+    );
+    await gaveCash(saleId, ask("goodwill", "45.00"));
+    expect(correctiveRecordsOf(venue.db, saleId).map(({ by, total }) => ({ by, total }))).toEqual([
+      { by: "differences", total: -500 },
+      { by: "replacement", total: 5000 },
+    ]);
+    expect(
+      correctiveRecordsOf(venue.db, replacement).map(({ by, total }) => ({ by, total })),
+    ).toEqual([{ by: "differences", total: -4500 }]);
+  });
+});
+
 const ask = (
   purpose: GiveBackRequest["purpose"],
   amount: string,

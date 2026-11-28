@@ -4129,6 +4129,10 @@ exception for unintelligible data would not apply? Removed as a paid question by
 
 _2026-11-28: moved, reworded, into question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md) (its last point); send that, not the text below. Under the owner's decisions of that day ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 and D2), still to be built, the 5.00 refund that leaves 45.00 is itself a corrective by substitution (R5, type S), not by differences, and the date fix is a further substitution naming that latest version. So (a) becomes whether a substitution may follow a substitution; (b) follows from the decisions as we read them (the date fix carries 45.00 and the refund is not issued again), and question 15 asks what it states as replaced; (c) is asked as before._
 
+_2026-11-28, A1619 part 2: built as option (a) without waiting for the answer. Send the replacement now replaces a receipt that already has a refund, at the receipt's whole amount (50.00), and the earlier 5.00 refund keeps counting, so 45.00 is left to give back; AEAT's test service accepted that order (verifactu run 46070947073). Also to confirm: a refund written under the same wrong clock is itself refused as dated in the future (1112), and Waitron has no fix for a refused corrective; part 2 leaves that case out._
+
+> _También por confirmar: una devolución emitida con el mismo reloj adelantado también es rechazada por fecha posterior a la actual (1112), y el sistema no tiene forma de corregir una rectificativa rechazada; este caso queda fuera por ahora._
+
 **Why we ask.** A table's 50.00 receipt prints at 23:58 on 31 March while the box's clock runs a day
 ahead, so it is dated 1 April. Before AEAT's refusal (dated in the future, error 1112) comes back, the
 guest is given 5.00 back: Waitron issues a corrective by difference (R5, type I) naming the receipt.

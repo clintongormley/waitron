@@ -251,6 +251,51 @@ describe("vatMovements", () => {
       ]);
     });
 
+    it("of an original refunded before it was replaced puts the refund on the replacement's supply day, the sale's quarter", async () => {
+      const original = await sale("2026-04-01");
+      const correction = await refund("2026-03-31", original);
+      const repl = await replacement("2026-03-31", original, "2026-03-31");
+      const sold = await movements(Q1);
+      expect(sold.filter((m) => m.kind === "date_moved_in")).toEqual([
+        {
+          ...PLUS,
+          kind: "date_moved_in",
+          madeDay: "2026-03-31",
+          belongsDay: "2026-03-31",
+          saleId: repl,
+          correctedSaleId: original,
+        },
+      ]);
+      expect(sold.filter((m) => m.kind === "correction")).toEqual([
+        {
+          ...MINUS,
+          kind: "correction",
+          madeDay: "2026-03-31",
+          belongsDay: "2026-03-31",
+          saleId: correction,
+          correctedSaleId: original,
+        },
+      ]);
+      expect((await movements(Q2)).filter((m) => m.saleId === correction)).toEqual([]);
+    });
+
+    it("of an original refunded before it was replaced takes the refund off with it when the refund is voided", async () => {
+      const original = await sale("2026-04-01");
+      const correction = await refund("2026-03-31", original);
+      await replacement("2026-03-31", original, "2026-03-31");
+      await seedVoid(suite.db, { saleId: correction }, at("2026-05-01"));
+      expect((await movements(Q2)).filter((m) => m.kind === "void")).toEqual([
+        {
+          ...PLUS,
+          kind: "void",
+          madeDay: "2026-05-01",
+          belongsDay: "2026-03-31",
+          saleId: correction,
+          correctedSaleId: original,
+        },
+      ]);
+    });
+
     it("without a supply day, refunded later, puts the refund on the original's own day", async () => {
       const original = await sale("2026-03-30", { supplyDay: "2026-03-28" });
       const repl = await replacement("2026-04-10", original);
