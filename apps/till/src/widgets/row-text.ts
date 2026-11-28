@@ -44,8 +44,8 @@ export const rowTextStyles = css`
 export const OPEN_BORDER = css`2px`;
 /** How far an opened row's box sits in from the row's edges. */
 export const OPEN_MARGIN = css`var(--wt-space-2)`;
-/** An opened row's lead column, narrowed by the box's margin so its quantity and name keep a
- * closed row's place, moved by the border alone. */
+/** An opened sent row's lead column, which holds no button, narrowed by the box's margin so its
+ * quantity and name keep a closed row's place, moved by the border alone. */
 export const OPEN_LEAD = css`calc(var(--wt-tap-min) - ${OPEN_MARGIN})`;
 
 /** An opened order row's box, new or sent: the declarations for the rule that opens it. */

@@ -693,7 +693,7 @@ describe("opening a row near the window's foot", () => {
   });
 });
 
-it("an opened new row's quantity and name stay where a closed row's are, moved by the border alone, its selection box still a full tap wide", async () => {
+it("an opened new row's selection box stays a full tap wide inside the box, its focus ring too, and the quantity and name move in by the box's margin and border", async () => {
   const { el } = await open([
     { product: beer, quantity: "2", place: { kind: "fire" } },
     { product: flan, quantity: "1", place: { kind: "fire" } },
@@ -702,13 +702,15 @@ it("an opened new row's quantity and name stay where a closed row's are, moved b
   const entry = row(el, 0).closest(".entry")!;
   expect(entry.hasAttribute("data-open")).toBe(true);
   const border = Number.parseFloat(getComputedStyle(entry).borderLeftWidth);
+  const margin = Number.parseFloat(getComputedStyle(entry).marginLeft);
   expect(border).toBeGreaterThan(0);
+  expect(margin).toBeGreaterThan(0);
   for (const cell of [".row-qty", ".row-name"]) {
     const moved =
       row(el, 0).querySelector(cell)!.getBoundingClientRect().left -
       row(el, 1).querySelector(cell)!.getBoundingClientRect().left;
-    expect(moved, cell).toBeGreaterThanOrEqual(border - 0.5);
-    expect(moved, cell).toBeLessThanOrEqual(border + 0.5);
+    expect(moved, cell).toBeGreaterThanOrEqual(margin + border - 0.5);
+    expect(moved, cell).toBeLessThanOrEqual(margin + border + 0.5);
   }
   const select = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
   const tap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
@@ -717,4 +719,12 @@ it("an opened new row's quantity and name stay where a closed row's are, moved b
   expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
     row(el, 0).getBoundingClientRect().left + 0.5,
   );
+  const inside = entry.getBoundingClientRect().left + border;
+  expect(select.getBoundingClientRect().left).toBeGreaterThanOrEqual(inside - 0.5);
+  select.focus({ focusVisible: true } as FocusOptions);
+  expect(select.matches(":focus-visible")).toBe(true);
+  const ring = getComputedStyle(select);
+  expect(Number.parseFloat(ring.outlineWidth)).toBeGreaterThan(0);
+  const reach = Number.parseFloat(ring.outlineOffset) + Number.parseFloat(ring.outlineWidth);
+  expect(select.getBoundingClientRect().left - reach).toBeGreaterThanOrEqual(inside - 0.5);
 });

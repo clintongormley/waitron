@@ -6650,9 +6650,9 @@ border but its text reads `--wt-color-text`, since the green text measures 4.13:
 the light theme. A tap opens the row in place, and a second tap closes it; one row is open at a time
 (`OpenDraftRow`, `apps/till/src/widgets/draft-row-open.ts`). The opened row is boxed: a 2px
 `--wt-color-primary` edge, `--wt-radius-md`, on `--wt-color-surface`, inset `--wt-space-1` above and
-below and `--wt-space-2` at the sides, its lead column narrowed by that side inset so the quantity
-and name move only by the edge's width, while the selection box reaches over the inset to keep its
-full `--wt-tap-min` width; on a row whose period ended, the amber `--wt-space-1` stripe is drawn inside that edge and the line keeps every opened row's inset. Its line keeps a closed row's height. On a row of more than
+below and `--wt-space-2` at the sides. The selection box keeps its full `--wt-tap-min` width inside
+the edge, so the quantity and name move in by the side inset and the edge's width; its focus ring,
+like every selection box's, is drawn inside it. On a row whose period ended, the amber `--wt-space-1` stripe is drawn inside that edge and the line keeps every opened row's inset. Its line keeps a closed row's height. On a row of more than
 one, the split control keeps its full `--wt-tap-min` width and, with the price, the closed rows'
 column, reaching over the box's side margin and border while its arrow stays inside; on a row of one, the price ends `--wt-space-2` in from the box's edge, as frame `g` 3
 draws it. Opening a row whose box would end under the draft bar scrolls the list until the box's
