@@ -494,17 +494,17 @@ async function discardTabChanges(app: OnlineSettingsLeaveApp): Promise<void> {
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
 }
 
-async function chooseTerrace(): Promise<void> {
+async function chooseStyle(name: string): Promise<void> {
   await styleButton().click();
   await page.getByRole("combobox", { name: "Style Use venue default", exact: true }).click();
-  await page.getByRole("option", { name: "Terrace", exact: true }).click();
+  await page.getByRole("option", { name, exact: true }).click();
 }
 
 it("previews a draft choice, restores it on Cancel, and reads the saved style on reload", async () => {
   const { app, save, styles } = await open();
   const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
   const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
-  await chooseTerrace();
+  await chooseStyle("Terrace");
   await expect.poll(() => canvasColor(editor)).toBe("rgb(31, 41, 40)");
   await expect.poll(() => canvasColor(screen)).toBe("rgb(251, 247, 239)");
   await page.getByRole("button", { name: "Use style", exact: true }).click();
@@ -515,33 +515,41 @@ it("previews a draft choice, restores it on Cancel, and reads the saved style on
   await expect.element(saveButton()).toBeDisabled();
   expect(save).not.toHaveBeenCalled();
 
-  await chooseTerrace();
+  await chooseStyle("Terrace");
   await page.getByRole("button", { name: "Use style", exact: true }).click();
   await expect.element(styleDialog()).not.toBeInTheDocument();
   await saveButton().click();
   await expect.element(saveButton()).toBeDisabled();
   expect(save).toHaveBeenCalledExactlyOnceWith("menu", { ...initial, styleId: "terrace" });
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(31, 41, 40)");
   const terrace = styles.find(({ id }) => id === "terrace")!;
   terrace.appearance = { pageColor: "#ffffff" };
   await screen.querySelector("dashboard-menu-online-preview")!.reload();
   await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
 });
 
-it("stages the picked style when its colours are saved in the window", async () => {
-  const { app, save } = await open();
-  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
-  await chooseTerrace();
-  await pageColor().fill("#ffffff");
-  await page.getByRole("button", { name: "Save style", exact: true }).click();
-  await expect.element(styleDialog()).not.toBeInTheDocument();
-  await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
-  expect(save).not.toHaveBeenCalled();
-  await saveButton().click();
-  expect(save).toHaveBeenCalledExactlyOnceWith("menu", { ...initial, styleId: "terrace" });
-});
+it.each([
+  { name: "Terrace", styleId: "terrace" },
+  { name: "Default", styleId: "default" },
+])(
+  "stages the explicitly picked $name style when its colours are saved",
+  async ({ name, styleId }) => {
+    const { app, save } = await open();
+    const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+    await chooseStyle(name);
+    await pageColor().fill("#ffffff");
+    await page.getByRole("button", { name: "Save style", exact: true }).click();
+    await expect.element(styleDialog()).not.toBeInTheDocument();
+    await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+    expect(save).not.toHaveBeenCalled();
+    await saveButton().click();
+    expect(save).toHaveBeenCalledExactlyOnceWith("menu", { ...initial, styleId });
+  },
+);
 
 it("uses a newly named style immediately and keeps an unsaved address", async () => {
   const { app, save } = await open();
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
   await address().fill("lunch-today");
   await styleButton().click();
   await pageColor().fill("#ffffff");
@@ -550,10 +558,18 @@ it("uses a newly named style immediately and keeps an unsaved address", async ()
   await page.getByRole("button", { name: "Save as new style", exact: true }).click();
   await expect.element(styleDialog()).not.toBeInTheDocument();
   await expect.element(page.getByText("White terrace", { exact: true })).toBeVisible();
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
   await expect.element(address()).toHaveValue("lunch-today");
   await discardTabChanges(app);
   await expect.element(address()).toHaveValue("lunch");
   await expect.element(page.getByText("White terrace", { exact: true })).toBeVisible();
   await expect.element(saveButton()).toBeDisabled();
   expect(save).not.toHaveBeenCalled();
+  await address().fill("lunch-today");
+  await saveButton().click();
+  expect(save).toHaveBeenCalledExactlyOnceWith("menu", {
+    ...initial,
+    address: "lunch-today",
+    styleId: "white-terrace",
+  });
 });
