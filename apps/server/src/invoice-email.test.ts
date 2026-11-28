@@ -719,6 +719,46 @@ describe("invoice email privacy notice", () => {
     },
   );
 
+  it("carries the notice on a corrective full invoice (R1), which names the same customer", async () => {
+    const corrective = {
+      ...fixture,
+      result: {
+        ...fixture.result,
+        invoiceType: "R1" as const,
+        invoiceNumber: "FR/1",
+        corrects: { invoiceNumber: "FF/1", issuedAt: fixture.result.issuedAt },
+      },
+    };
+    const opening = await sendText({ document: corrective });
+    expect(opening).toContain("FR/1");
+    expect(
+      await sendText({
+        document: corrective,
+        privacy: { privacyEmail: email, privacyNoticeUrl: page, taxRecord: true },
+      }),
+    ).toBe(`${opening}\n\n${notice("es", true, `${email}, ${page}`)}`);
+  });
+
+  it("carries the notice on a replacement full invoice (R4), which names the same customer", async () => {
+    const replacement = {
+      ...fixture,
+      result: {
+        ...fixture.result,
+        invoiceType: "R4" as const,
+        invoiceNumber: "FR/2",
+        corrects: { invoiceNumber: "FF/1", issuedAt: fixture.result.issuedAt },
+      },
+    };
+    const opening = await sendText({ document: replacement });
+    expect(opening).toContain("FR/2");
+    expect(
+      await sendText({
+        document: replacement,
+        privacy: { privacyEmail: email, privacyNoticeUrl: page, taxRecord: true },
+      }),
+    ).toBe(`${opening}\n\n${notice("es", true, `${email}, ${page}`)}`);
+  });
+
   it("sends just the invoice sentence when the message carries no privacy facts", async () => {
     expect(await sendText({ document: fixture })).toBe(spanish);
   });

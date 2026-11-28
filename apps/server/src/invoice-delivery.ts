@@ -49,7 +49,11 @@ export async function reserveInvoiceDelivery(
   options: { allowInactivePagePrinter?: boolean } = {},
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
-    .select({ counterpartyTaxId: sales.counterpartyTaxId, correctsSaleId: sales.correctsSaleId })
+    .select({
+      counterpartyTaxId: sales.counterpartyTaxId,
+      correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
+    })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});

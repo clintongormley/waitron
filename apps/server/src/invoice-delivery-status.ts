@@ -149,6 +149,15 @@ export interface InvoiceDeliveryState {
    * `printers`, so it may not be sent there again.
    */
   receiptPrinterWithdrawn: boolean;
+  /** How the original went out (see {@link originalWent}). */
+  original: OriginalWay | null;
+}
+
+/** The medium, address and printer of the attempt {@link originalWent} picks. */
+export interface OriginalWay {
+  medium: InvoiceDeliveryMedium;
+  recipient: string | null;
+  printerId: string | null;
 }
 
 /** Null for a sale that is not a full invoice. */
@@ -171,6 +180,22 @@ export async function readInvoiceDeliveryState(
   );
   if (state === undefined) throw new AppError("invoice_delivery.not_found", {});
   return state;
+}
+
+/**
+ * How `saleId`'s original went out ({@link originalWent}), read also for a sale not delivered as a
+ * full invoice, so a replacement's emails and printed originals count. Null when there is no such
+ * sale or no attempt.
+ */
+export async function readOriginalWay(
+  tx: Transaction,
+  saleId: string,
+): Promise<OriginalWay | null> {
+  const states = await readStates(tx, [saleId], {
+    emailAvailable: false,
+    includeSimplifiedEmail: true,
+  });
+  return states.get(saleId)?.original ?? null;
 }
 
 /**
@@ -221,6 +246,7 @@ async function readStates(
       id: sales.id,
       counterpartyTaxId: sales.counterpartyTaxId,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
     })
     .from(sales)
     .where(inArray(sales.id, ids));
@@ -277,10 +303,12 @@ async function readStates(
     const saleRows = rowsOf.get(sale.id) ?? [];
     const saleJobs = jobsOf.get(sale.id) ?? [];
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);
+    const original = originalWent(saleRows, saleJobs, receipt);
     const status = deliveryStatus(
       saleRows,
       saleJobs,
       receipt,
+      original,
       withdrawn,
       printers,
       emailable,
@@ -300,6 +328,7 @@ async function readStates(
       printers,
       receipt,
       receiptPrinterWithdrawn: withdrawn,
+      original,
     });
   }
   return states;
@@ -350,10 +379,60 @@ function receiptPrinterWithdrawn(
   );
 }
 
+/** The receipt original's job when no delivery row tracks it; such a job predates delivery rows. */
+function untrackedReceiptOriginal(
+  rows: readonly InvoiceDelivery[],
+  jobs: readonly OriginalJob[],
+  receipt: OriginalReceiptPrint,
+): OriginalJob | undefined {
+  if (receipt.status === "not_queued" || rows.some((row) => row.printJobId === receipt.jobId))
+    return undefined;
+  return jobs.find((candidate) => candidate.id === receipt.jobId)!;
+}
+
+/**
+ * The original attempt that was sent, else the newest original attempt; an untracked receipt
+ * original counts as the oldest attempt, sent once printed. A duplicate never counts.
+ */
+function originalWent(
+  rows: readonly InvoiceDelivery[],
+  jobs: readonly OriginalJob[],
+  receipt: OriginalReceiptPrint,
+): OriginalWay | null {
+  const jobPrinter = (jobId: string | null) =>
+    jobs.find((candidate) => candidate.id === jobId)?.printerId ?? null;
+  const originals = rows
+    .filter((row) => row.designation === "original")
+    .map((row) => ({
+      sent: row.status === "sent",
+      medium: row.medium,
+      recipient: row.recipient,
+      printerId:
+        row.medium === "a4"
+          ? row.printerId
+          : row.medium === "receipt"
+            ? jobPrinter(row.printJobId)
+            : null,
+    }));
+  const untracked = untrackedReceiptOriginal(rows, jobs, receipt);
+  if (untracked !== undefined)
+    originals.push({
+      sent: receipt.status === "done",
+      medium: "receipt",
+      recipient: null,
+      printerId: untracked.printerId,
+    });
+  const picked = originals.find((attempt) => attempt.sent) ?? originals[0];
+  return picked === undefined
+    ? null
+    : { medium: picked.medium, recipient: picked.recipient, printerId: picked.printerId };
+}
+
 function deliveryStatus(
   rows: InvoiceDeliveryAttemptRow[],
   jobs: OriginalJob[],
   receipt: OriginalReceiptPrint,
+  original: OriginalWay | null,
   receiptWithdrawn: boolean,
   printers: OfferedPrinter[],
   emailAvailable: boolean,
@@ -366,29 +445,15 @@ function deliveryStatus(
       ? { invoiceRecipientEmail: row.recipient }
       : {}),
   }));
-  const jobPrinter = (jobId: string | null) =>
-    jobs.find((candidate) => candidate.id === jobId)?.printerId ?? null;
-  const originals = rows
-    .filter((row) => row.designation === "original")
-    .map((row) => ({
-      sent: row.status === "sent",
-      printerId:
-        row.medium === "a4"
-          ? row.printerId
-          : row.medium === "receipt"
-            ? jobPrinter(row.printJobId)
-            : null,
-    }));
-  if (receipt.status !== "not_queued" && !rows.some((row) => row.printJobId === receipt.jobId)) {
-    const job = jobs.find((candidate) => candidate.id === receipt.jobId)!;
-    originals.push({ sent: receipt.status === "done", printerId: job.printerId });
+  const job = untrackedReceiptOriginal(rows, jobs, receipt);
+  if (job !== undefined) {
     // Listed as the oldest attempt: an untracked receipt original predates delivery rows.
     history.push({
       id: null,
       medium: "receipt",
       designation: "original",
       status: inFlight(job) ? (job.status === "printing" ? "sending" : "queued") : receiptSent(job),
-      failureCode: receipt.failureCode ?? null,
+      failureCode: receipt.status === "not_queued" ? null : (receipt.failureCode ?? null),
       requestedAt: job.createdAt,
       at: job.deliveredAt,
       personId: null,
@@ -433,7 +498,6 @@ function deliveryStatus(
         ? "receipt"
         : null;
   const designation = originalCompleted ? "duplicate" : "original";
-  const original = originals.find((attempt) => attempt.sent) ?? originals[0];
   return {
     current,
     originalCompleted,

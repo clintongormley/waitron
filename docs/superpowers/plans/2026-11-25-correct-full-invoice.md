@@ -1,7 +1,7 @@
 # CORRECT-FULL-INVOICE: giving money back on a full invoice files a corrective full invoice
 
 Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Give money
-back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b is built on `feat/correct-full-invoice-cancelled-dish`. Design:
+back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b landed as #4483 (`30fc335b78`); PR 4a is built on `feat/correct-full-invoice-goes-out`. Design:
 [2026-11-25-correct-full-invoice-design.md](../specs/2026-11-25-correct-full-invoice-design.md), with the
 owner's answers at the end of its section 6. FISCAL: the owner lands every pull request.
 
@@ -159,6 +159,8 @@ amount, D10) is dropped: it blanked whole weighed dishes and whole credits. Unch
 files a whole credit of a bill with a shared free item and a divided set menu and finds no row blank, and by
 the existing whole-credit cases unedited: Cancel and credit and Reopen to split negate `line_gross` row for
 row (`reversedLines`, `cancel-credit.ts`); a replacement names no line. A reprint reads the same rows.
+_2026-11-28 (PR 4a, the watcher's ruling of 2026-11-27 19:45): a row whose money is k whole dishes of a row
+of several prints −k × price; the stored row is unchanged._
 
 ## PR 0 — delete three routes nothing calls
 
@@ -286,6 +288,10 @@ invoice it corrects, which covers M7's sites at once. An R4 replacement's delive
 was sent. Failing first: cash on paper; a late answer by email; an A4 printer switched off since (alert, filing
 stands); no receipt printer on the opening device (nothing queued, filing stands); a resend sends nothing again.
 **Leaves:** a corrective reaches the customer as the original did; staff cannot yet choose another way.
+_2026-11-28, as built: when the original went on A4, the corrective goes on the filing till's own
+active A4 printer, and otherwise on its receipt printer with no alert, as D8 says (lane L's reading;
+Task 13's list said "alert" for an A4 printer switched off since); the answer's field is
+`invoiceNumber`._
 
 ## PR 4b — staff's choice is stored, and try again (server)
 

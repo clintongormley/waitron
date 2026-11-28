@@ -323,9 +323,12 @@ manual-remedy confirmation and current business-invoice delivery qualification a
 Future structured B2B integration has its own entry above. F3 conversion remains a separate
 decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a, PR 2b
 (a cancelled dish's money goes on the corrective) and PR 3 (a line given back in part prints with no quantity and no
-unit price) are built;
-PR 4a and 4b (the corrective goes out the way the original went, staff's choice stored and tried
-again) and PR 5 (staff can change it on the till) are still to come.
+unit price) are built, and with PR 4a the corrective goes out once, when it is filed, from the
+filing till: by email to the address the invoice went to, when the box can send invoice email then;
+on that till's own A4 invoice printer when the invoice went on A4 and the printer is switched on;
+otherwise on that till's receipt printer when its profile may print receipts, and otherwise not at
+all; PR 4b (staff's choice stored and tried again) and PR 5 (staff can change it on the
+till) are still to come.
 
 ## When the business e-invoicing regime starts
 
@@ -1349,6 +1352,9 @@ cash correction prints its receipt and a card one does not
 ([plan](../superpowers/plans/2026-11-24-give-money-back.md), D14).
 _2026-11-15 (A1407): a replacement corrective's first till reprint is its original; later ones are
 copies._
+_2026-11-28 (CORRECT-FULL-INVOICE PR 4a): a corrective invoice (R1) is sent once when it is filed,
+whoever files it, where it can be sent (the CORRECT-FULL-INVOICE line above), and the till's Reprint prints its original while none has gone out; a corrective
+receipt keeps the rule above._
 
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
 

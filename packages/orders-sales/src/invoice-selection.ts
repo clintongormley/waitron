@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, type SQL } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 import {
   getCountryPack,
   normalizeRecipientCountryCode,
@@ -30,19 +30,24 @@ export function storedRecipientIdentifier(
 }
 
 /**
- * Whether a stored sale is delivered as a full invoice: it names a customer and is not a
- * corrective.
+ * Whether a stored sale is delivered as a full invoice: it names a customer and does not replace
+ * another invoice, so an F1, or a corrective naming a customer that does not replace (an R1),
+ * never an R4 replacement.
  */
 export function deliversAsFullInvoice(row: {
   counterpartyTaxId: string | null;
   correctsSaleId: string | null;
+  replacesOriginal: boolean;
 }): boolean {
-  return row.counterpartyTaxId !== null && row.correctsSaleId === null;
+  return row.counterpartyTaxId !== null && (row.correctsSaleId === null || !row.replacesOriginal);
 }
 
 /** {@link deliversAsFullInvoice} as a filter on `sales`. */
 export function deliversAsFullInvoiceSql(): SQL {
-  return and(isNotNull(sales.counterpartyTaxId), isNull(sales.correctsSaleId))!;
+  return and(
+    isNotNull(sales.counterpartyTaxId),
+    or(isNull(sales.correctsSaleId), eq(sales.replacesOriginal, false)),
+  )!;
 }
 
 export function checkedInvoiceRecipient(

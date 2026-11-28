@@ -87,11 +87,12 @@ async function bill(full = false, withHistory = false) {
   });
 }
 
-it("selects only original sales with a recipient in JavaScript and SQLite", async () => {
+it("selects sales with a recipient, correctives of a full invoice included and its replacement left out, in JavaScript and SQLite", async () => {
   const order = await bill();
   const fullId = randomUUID();
   const ticketId = randomUUID();
   const fullCorrectionId = randomUUID();
+  const replacementId = randomUUID();
   const ticketCorrectionId = randomUUID();
   const header = {
     nodeId: order.cfg.nodeId,
@@ -132,17 +133,37 @@ it("selects only original sales with a recipient in JavaScript and SQLite", asyn
         invoiceNumber: 2,
         correctsSaleId: ticketId,
       },
+      {
+        ...header,
+        id: replacementId,
+        seriesId: order.correctiveSeriesId,
+        invoiceNumber: 3,
+        correctsSaleId: fullId,
+        replacesOriginal: true,
+        ...customer,
+      },
     ]);
   });
 
-  const fixtureSales = inArray(sales.id, [fullId, ticketId, fullCorrectionId, ticketCorrectionId]);
+  const fixtureSales = inArray(sales.id, [
+    fullId,
+    ticketId,
+    fullCorrectionId,
+    ticketCorrectionId,
+    replacementId,
+  ]);
   const rows = await suite.db.select().from(sales).where(fixtureSales);
-  expect(rows.filter(deliversAsFullInvoice).map(({ id }) => id)).toEqual([fullId]);
+  expect(
+    rows
+      .filter(deliversAsFullInvoice)
+      .map(({ id }) => id)
+      .sort(),
+  ).toEqual([fullId, fullCorrectionId].sort());
   const filtered = await suite.db
     .select({ id: sales.id })
     .from(sales)
     .where(and(fixtureSales, deliversAsFullInvoiceSql()));
-  expect(filtered).toEqual([{ id: fullId }]);
+  expect(filtered.map(({ id }) => id).sort()).toEqual([fullId, fullCorrectionId].sort());
 });
 
 describe("stored bill invoice selection", () => {

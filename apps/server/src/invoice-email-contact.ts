@@ -1,4 +1,5 @@
-import type { Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { sales, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -13,8 +14,27 @@ async function departmentOf(
   source: InvoiceEmailContactSource,
 ): Promise<string | null> {
   switch (source.kind) {
-    case "sale":
-      return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
+    case "sale": {
+      const correction = async (id: string) =>
+        (
+          await tx
+            .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
+            .from(sales)
+            .where(eq(sales.id, id))
+        )[0];
+      // A filed corrective records no department of its own (corrective-invoice-delivery.test.ts),
+      // and an R1 of a replaced invoice is filed against the replacement.
+      const sale = await correction(source.saleId);
+      if (sale?.corrects == null || sale.replaces)
+        return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
+      // A replacement is never itself replaced (packages/core/src/record-replacement.ts), so one
+      // step reaches the invoice that has the department.
+      const target = await correction(sale.corrects);
+      return VENUE_SERVICE.receiptDepartmentForSale(
+        tx,
+        target?.replaces === true ? target.corrects! : sale.corrects,
+      );
+    }
     case "order":
       return VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);
     case "new-order":

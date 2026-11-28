@@ -40,6 +40,7 @@ export function mountGiveBackApi(
     clock: deps.clock,
     attendance: deps.attendance,
     refundProviderFor,
+    invoiceEmailAvailable: deps.invoiceEmailAvailable,
   };
   const filingDeps: TenderRefundDeps = {
     db: deps.db,
@@ -50,6 +51,7 @@ export function mountGiveBackApi(
     attendance: deps.attendance,
     refundProviderFor,
     clockUnconfirmed: deps.clockUnconfirmed,
+    invoiceEmailAvailable: deps.invoiceEmailAvailable,
     log,
   };
   const run = createErrorBoundary(

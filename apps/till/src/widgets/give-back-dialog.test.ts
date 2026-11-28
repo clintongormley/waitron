@@ -1502,6 +1502,68 @@ describe("sending", () => {
     expect(outcomeText(el)).not.toContain(t("give_back.print_later"));
   });
 
+  it.each([
+    ["it is being sent", { delivery: { medium: "email" } }, false],
+    ["nothing was sent", { delivery: null }, true],
+    ["the answer names none", undefined, true],
+  ])(
+    "says a full invoice's corrective invoice can be printed from Find a bill unless the box sent it (%s)",
+    async (_case, corrective, said) => {
+      const api = fakeGiveBackApi();
+      answering(api, {
+        parts: [{ kind: "correction", amount: "5.00", way: "card-1", lineIds: [] }],
+      });
+      api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => {
+        const outcome = completedFor(body);
+        return {
+          ...outcome,
+          parts: outcome.parts.map((part) =>
+            corrective === undefined ? part : { ...part, corrective },
+          ),
+        };
+      });
+      const el = await press(api, "card-1");
+      el.fullInvoice = true;
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€5.00 is refunded to card ···4242."),
+      );
+      expect(outcomeText(el).includes(t("give_back.print_later_invoice"))).toBe(said);
+    },
+  );
+
+  it.each([
+    ["went to the receipt printer instead of A4", true],
+    ["sent the way its invoice went", false],
+  ])(
+    "says where a full invoice's corrective invoice is printing when it %s",
+    async (_case, flag) => {
+      const api = fakeGiveBackApi();
+      answering(api, {
+        parts: [{ kind: "correction", amount: "5.00", way: "card-1", lineIds: [] }],
+      });
+      api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => {
+        const outcome = completedFor(body);
+        return {
+          ...outcome,
+          parts: outcome.parts.map((part) => ({
+            ...part,
+            corrective: { delivery: { medium: "receipt" }, printedOnReceiptNotA4: flag },
+          })),
+        };
+      });
+      const el = await press(api, "card-1");
+      el.fullInvoice = true;
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€5.00 is refunded to card ···4242."),
+      );
+      expect(
+        outcomeText(el).includes(
+          "Its corrective invoice is printing on the receipt printer, not on A4.",
+        ),
+      ).toBe(flag);
+    },
+  );
+
   it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();
     answering(api, { needs: ["sale.refund", "sale.rectify"] });

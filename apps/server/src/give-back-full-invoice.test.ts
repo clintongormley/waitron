@@ -13,11 +13,15 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { refundsWithoutCorrectiveQuery } from "./accountant-export.js";
 import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
 import type { GiveBackView } from "./give-back-read.js";
+import { readReceiptEmailDocument } from "./invoice-document.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import * as fixture from "./testing/full-invoice-give-back.js";
 import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { takeOver } from "./testing/taken-over.js";
+import type { TillSaleLine } from "./till-sale.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 
 let venue: BillVenue;
 let reasonId: string;
@@ -726,3 +730,79 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
 
 /** A still-charge cancel of the bill's Steak (its first line) with Refund ticked; its id. */
 const cancelSteak = (billId: string) => fixture.refundableCancelFor(venue, billId, 1, voidReasonId);
+
+describe("steaks given back from a full invoice's row of three", () => {
+  /** A full invoice naming Harbour Foods for three steaks, filed as one row, paid in cash. */
+  const threeSteaks = async () => {
+    const billId = await tabWith(venue);
+    await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Steak"), quantity: "3" }]),
+    );
+    await fixture.chooseFullInvoice(venue, billId);
+    await payPart(billId, { cash: "75.00" });
+    const saleId = await fixture.saleOf(venue, billId);
+    const read = await send(venue.app, adminCookie, "GET", `/api/transactions/${saleId}/give-back`);
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    const { lines } = read.json as unknown as GiveBackView;
+    expect(lines.map((line) => line.gross)).toEqual(["75.00"]);
+    return { billId, saleId, steak: lines[0]! };
+  };
+
+  /** The corrective's one line as the reprinted receipt and the emailed document carry it. */
+  const printedCorrective = async (saleId: string) => {
+    const [corrective] = venue.db.all<{ id: string }>(
+      sql`select id from sales where corrects_sale_id = ${saleId}`,
+    );
+    const shown = (lines: readonly TillSaleLine[]) =>
+      lines.map((line) => ({
+        quantity: line.quantity,
+        unitPrice: line.net?.unitPrice,
+        inPart: line.givenBackInPart === true,
+      }));
+    const receipt = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, corrective!.id),
+    );
+    const emailed = await inTx(venue, (tx) =>
+      readReceiptEmailDocument(venue.backend, tx, venue.cfg, corrective!.id),
+    );
+    return { receipt: shown(receipt.lines), emailed: shown(emailed.result.lines) };
+  };
+  const printedAs = (quantity: string) => {
+    const line = { quantity, unitPrice: "22.73", inPart: false };
+    return { receipt: [line], emailed: [line] };
+  };
+
+  it("prints the steak cancelled with Refund ticked and given back as -1 at 22.73", async () => {
+    const { billId, saleId, steak } = await threeSteaks();
+    const cancelId = await cancelSteak(billId);
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] }),
+    );
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
+    expect(await printedCorrective(saleId)).toEqual(printedAs("-1"));
+  });
+
+  it("prints one steak's money given back by Dishes as -1 at 22.73", async () => {
+    const { saleId, steak } = await threeSteaks();
+    const answer = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "25.00", { lineIds: [steak.id] })),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await printedCorrective(saleId)).toEqual(printedAs("-1"));
+  });
+
+  it("prints two steaks' money given back by Dishes as -2 at 22.73", async () => {
+    const { saleId, steak } = await threeSteaks();
+    const answer = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "50.00", { lineIds: [steak.id] })),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(correctivesOf(saleId)).toEqual([r1(-5000)]);
+    expect(await printedCorrective(saleId)).toEqual(printedAs("-2"));
+  });
+});

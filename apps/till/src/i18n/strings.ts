@@ -232,6 +232,8 @@ export const en = {
   "give_back.done_terminal": "{amount} refunded on the separate card terminal is recorded.",
   "give_back.print_later": "Its corrective receipt can be printed from Find a bill.",
   "give_back.print_later_invoice": "Its corrective invoice can be printed from Find a bill.",
+  "give_back.printing_on_receipt_not_a4":
+    "Its corrective invoice is printing on the receipt printer, not on A4.",
   "give_back.pending": "{amount} is waiting for the card company's answer.",
   "give_back.rest": "{amount} is not refunded yet: it follows when the card company answers.",
   "give_back.check_again": "Check again",
@@ -2727,6 +2729,8 @@ export const es: Record<StringKey, string> = {
   "give_back.print_later": "Su ticket rectificativo se puede imprimir desde Buscar cuenta.",
   "give_back.print_later_invoice":
     "Su factura rectificativa se puede imprimir desde Buscar cuenta.",
+  "give_back.printing_on_receipt_not_a4":
+    "Su factura rectificativa se está imprimiendo en la impresora de tickets, no en A4.",
   "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
   "give_back.rest":
     "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",
