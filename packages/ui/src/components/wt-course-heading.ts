@@ -88,8 +88,11 @@ export class WtCourseHeading extends LitElement {
         grid-template-rows: subgrid;
       }
 
+      /* Only here may a word break: beside the mark and action an unbreakable run is what moves them
+         down, and the age phrase stays whole at every width where it fits. */
       :host([stacked]) .title {
         grid-column: 1 / -1;
+        overflow-wrap: anywhere;
       }
 
       :host([stacked]) .mark,

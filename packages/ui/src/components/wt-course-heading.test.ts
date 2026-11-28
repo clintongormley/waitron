@@ -390,6 +390,25 @@ describe("laying out a title, the mark and an action", () => {
     });
   });
 
+  it("breaks a name too long for the whole row once the mark and action are under it", async () => {
+    const el = await laidOut(250, "Charcuterieandcheeseboards · fired 8 min ago");
+    const { left, right } = parts(el);
+    const ink = inked(el);
+    expect(el.hasAttribute("stacked")).toBe(true);
+    expect(ink.left).toBeGreaterThanOrEqual(left - 0.5);
+    expect(ink.right).toBeLessThanOrEqual(right + 0.5);
+  });
+
+  it("keeps the time phrase whole once the mark and action are under the title, where it fits the row", async () => {
+    const el = await laidOut(240);
+    expect(el.hasAttribute("stacked")).toBe(true);
+    const phrase = document.createRange();
+    phrase.setStart(el.firstChild!, title.lastIndexOf(" ") + 1);
+    phrase.setEnd(el.firstChild!, title.length);
+    const tops = new Set([...phrase.getClientRects()].map((box) => Math.round(box.top)));
+    expect(tops.size).toBe(1);
+  });
+
   it("balances the title's lines", async () => {
     const el = await mount("<wt-course-heading>Mains</wt-course-heading>");
     expect(getComputedStyle(titleBox(el)).textWrapStyle).toBe("balance");
