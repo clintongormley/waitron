@@ -1257,12 +1257,14 @@ The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` ch
 fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
 replay after serving. The unpaid served-food case retains its separate cancellation behavior.
 
-The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open Sent's dish
-window and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
+The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open a sent dish's
+window through Dish details and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
 one request despite repeated confirmation, unchanged service facts until acceptance, and Undo of
 the accepted two portions. They cover English and Spanish, both themes, at 390 and 1280 px.
-These app checks use a controlled API boundary; server persistence remains separate. Partial
-serving is now on the open sent row (Serve 1 / Serve {N}, till redesign 8b). The quantity buttons use the standard size; their previous small setting measured
+These app checks use a controlled API boundary; server persistence remains separate. Serve 1 on the
+opened sent row is checked by the "serving from the opened row" cases in the same file: two of three
+served by pressing Serve 1 twice, one request a press, 44 px targets and Undo of the last press, in
+English at one width and theme, plus one Spanish count check. The quantity buttons use the standard size; their previous small setting measured
 32 px high in those cases on 2026-10-19.
 
 **2026-11-11:** [R3-owner](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r3-owner-retire-recall.md)

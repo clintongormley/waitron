@@ -9575,7 +9575,7 @@ describe("till-app: Current orders", () => {
             }
             const mark = vi.mocked(api.markServed);
             mark.mockResolvedValue({ revision: 5 });
-            // Line 2 has two portions left: Serve 2 sends both, as a tap on its row used to.
+            // Line 2 has two portions left: Serve 2 sends both.
             if (action === "all")
               await userEvent.click(native(control('[data-sent-section="g2"] [data-serve-all]')));
             else await serveSentRow(panel, "line-2", "rest");

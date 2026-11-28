@@ -1252,7 +1252,7 @@ colour behind it. While the bar's own place is below the foot of the till's scro
 at that foot and what is above it scrolls under it; otherwise it sits in its own place below the
 New order's lines. A line the till scrolls into view (a dish just added while the order is in view) stops just
 above the bar rather than under it: the screen measures
-the bar's height into `--draft-bar-size`, which the basket's lines keep clear below them
+the bar's height into `--draft-bar-size`, kept on the order pane (`[data-draft-pane]`), which the basket's lines and an opened sent row keep clear below them
 (`scroll-margin-block-end`). Its wrappers, `[data-round-controls]` and `.round-bar`, are
 `display: contents`, so the bar can rise anywhere in the order pane, over the sent rows too.
 While a round is being sent the outer wrapper stays `inert`, and the fade is drawn on each of its
@@ -6704,13 +6704,18 @@ those not yet fired after them; then rows still held, in the order the bill's re
 whether the section is held or fired; and last the rows with nothing left, served or cancelled but
 charged, in line order. Rows with the same time go by line id.
 
-A tap opens a sent row in place in the opened new row's box, and a second tap closes it; one row is
-open at a time, and it stays open after a serve (`OpenSentRow`, `apps/till/src/widgets/sent-row-open.ts`).
-Under its line sit the count ("1 of 3 served") in muted `md` text at the left and the outlined Serve
-buttons at the right: Serve 1, and Serve {N} when more than one is left, or one Serve for a weighed
-dish; none while any dish left is held or not released, nor on a cancelled but charged row, which
-also has no count. Under them, Dish details, outlined like
-them, opens the dish's details window, which a held press on the row also opens.
+A tap opens a sent row in place in the opened new row's box, its text in `--wt-color-text` with a
+bold quantity, and a second tap closes it; one row is open at a time, and it stays open after a
+serve (`OpenSentRow`, `apps/till/src/widgets/sent-row-open.ts`). Under its line sit the count
+("1 of 3 served") in muted `md` text starting under the name, which the row's second line then
+leaves out, and the outlined Serve buttons at the right, the last ending `--wt-space-2` in from the
+box's edge, in line with the price: Serve 1, and Serve {N} when more than one is left, or one Serve
+for a weighed dish or one not counted in whole portions; none while any dish left is held or not
+released, nor on a wholly served or cancelled but charged row, which also have no count. Under
+them, Dish details, outlined like them, opens the dish's details window, which a held press on any
+sent row also opens. Opening a row whose box would end under the draft bar scrolls the list until
+the box's lower edge sits `--wt-space-2` above the bar, as an opened new row's does, and a change of
+the screen's width while it is open brings it back the same way.
 
 ### The dish picker
 

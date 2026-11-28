@@ -830,7 +830,9 @@ it("shows Spanish ready age, information and charged cancellations without a mis
   expect(find(el, "h2").textContent).toBe("Enviado");
   expect(second(el, "[data-fired-line=Bravas]")).toBe("Listo 1 min");
   await openRow(el, "[data-fired-line=Bravas]");
-  expect(text(find(el, "[data-fired-line=Bravas] [data-sent-details]"))).toBe("Detalles del plato");
+  expect(text(find(el, "[data-fired-line=Bravas] [data-sent-details]"))).toBe(
+    es["table.sent_info"],
+  );
   expect(second(el, "[data-served-line=Cancelado]")).toBe("Cancelado, cobrado");
   expect(text(find(el, "[data-serve-all]"))).toBe(es["table.serve_group"]);
 });
