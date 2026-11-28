@@ -25,8 +25,10 @@ record builder files what core hands it; the paper shows the corrected bill.
 **Tech stack:** TypeScript, Drizzle on `node:sqlite`, Vitest; the `@waitron/verifactu` library and its
 `scripts/live-aeat.mjs` in `~/workspace/repos/verifactu` for PR 0.
 
-**Base.** `main` at `2bfa7a34e3`. Line numbers are that commit's unless a line says otherwise. Every
-`file:line` below was read; nothing was run.
+**Base.** `main` at `dc97abe4b7`, which holds the design and #4560 (CORRECT-FULL-INVOICE PR 4a,
+landed as `9eae032090`). Line numbers were read at `2bfa7a34e3` and rechecked at `dc97abe4b7` for every
+file #4560 or the design changed (`transaction-receipt-api.ts`, the till guide, `docs/backlog/fiscal.md`,
+`docs/backlog.md`). Every `file:line` below was read; nothing was run.
 
 **Words.** A *receipt* is a simplified invoice (AEAT's F2). A *full invoice* names the customer (F1).
 A *corrective* is a new invoice that corrects an earlier one (R1 for a full invoice, R5 for a
@@ -55,11 +57,12 @@ restatement of it. The *restated* figures are a restatement's corrected total an
   venue).
 - Receipts take R5 and the `corrective` series; full invoices R1, the same customer as stored, and the
   `full_corrective` series (D1; series rules unchanged, `record-correction.ts:206-211`).
-- Every corrective filed after PR 1 names the latest version, a refused one included (D2; the owner's
+- Every corrective filed after PR 1b names the latest version, a refused one included (D2; the owner's
   rule of 27 November, quoted in [the A1619 plan](2026-11-27-a1619-corrections-never-wait-for-aeat.md)
   "D1, the owner's answer").
 - A corrective never corrects a corrective other than a Q37 replacement (Task 1's trigger, Task 3's
-  refusal, Task 6b's admission).
+  refusal, Task 6b's admission, which answers a restatement `not_simplified` as it answers an "I"
+  today).
 - One rebuild of core's starting migration in flight at a time (PR 1's section lists them).
 
 ## Should this exist?
@@ -74,8 +77,8 @@ restatement of it. The *restated* figures are a restatement's corrected total an
    alternative:** change nothing; corrections by differences are legal (AEAT developer FAQ §27, design
    §6) and cost nothing. The owner chose against that. A smaller build (no new columns, everything
    worked out from the record) is weighed under decision S1 and rejected.
-2. **True size.** Estimated below under *True size*: about 1,150 production and 2,300 test lines over
-   PRs 0 to 4, plus about 80 generated lines (core's starting migration and its snapshot) in PR 1.
+2. **True size.** Estimated below under *True size*: about 2,210 production and 3,410 test lines over
+   PRs 0 to 4 (the table's *Expect* column), plus about 80 generated lines (core's starting migration and its snapshot) in PR 1a.
    Later changes to correctives touch one more idea (the latest version) in core and the paper.
 3. **Who approved it.** D1 to D3: the owner, quoted with dates in the design's §1 table. Everything in
    *Decisions, each with a default* is this plan's, unreviewed until the watcher clears it.
@@ -107,7 +110,7 @@ Each is this plan's best guess unless it quotes the owner. **A** marks one for t
 
 | # | Decision | Default and why |
 | --- | --- | --- |
-| S1 (O) | **How a restatement is marked and what it stores** | Three nullable columns on `sales`: `restates_sale_id` (the version it replaces; a foreign key to `sales`, unique, so each version is replaced at most once and the versions form one line), `restated_total` and `restated_vat_breakdown`. Not the record's `tipo_rectificativa`: a Q37 replacement is "S" too, so the record cannot tell them apart; and the paper, the tax-office list and core's checks are generic code, which must not read Veri\*Factu's tables (`scripts/module-seams.test.ts`). Storing the restated figures, not working them out along the line each time, lets the tax-office list search them in SQL and lets `refuseMovedFigures` compare like with like. Cost: core's starting migration is rebuilt and **every venue is reset** (PR 1). |
+| S1 (O) | **How a restatement is marked and what it stores** | Three nullable columns on `sales`: `restates_sale_id` (the version it replaces; a foreign key to `sales`, unique, so each version is replaced at most once and the versions form one line), `restated_total` and `restated_vat_breakdown`. Not the record's `tipo_rectificativa`: a Q37 replacement is "S" too, so the record cannot tell them apart; and the paper, the tax-office list and core's checks are generic code, which must not read Veri\*Factu's tables (`scripts/module-seams.test.ts`). Storing the restated figures, not working them out along the line each time, lets the tax-office list search them in SQL and lets `refuseMovedFigures` compare like with like. Cost: core's starting migration is rebuilt and **every venue is reset** (PR 1a). |
 | S2 | **The database keeps the line of versions honest** | A `sales` insert trigger refuses a restatement unless it names the target or another restatement of the same target, and refuses one once the target holds a correction by differences (core never asks for one then, by the global rule, so the trigger only catches a bug). A second trigger refuses any corrective whose corrected sale is itself a corrective other than a Q37 replacement. With the unique index, a new restatement can only name the latest version, and nothing follows a correction to zero. |
 | S3 (A) | **What a correction to zero names** | The latest version, like a restatement (the owner's 27 November rule: "a correction points to the previous invoice/receipt"; the design's §2 "minus the latest version's total"). Its paper names the same version. |
 | S4 (A) | **A restatement's date of operation** | The target's day of operation (its `supply_day`, else its issue day in its own offset), **stored** on the restatement's `supply_day` when earlier than its issue day (so the paper prints "Date of the sale" through `saleDayOf`, `invoice-typing.ts:63-68`, and the tax-office list's operation filter, `tax-office-list.ts:108`, finds it), and filed as `FechaOperacion` from that value: AEAT's option 1 example sets it (`procedimientos-facturacion.txt:89`), and AEAT checks a VAT rate against `FechaOperacion` when present (`val.txt:475-529`). `sales_supply_day_ck` (`sales.ts:152-155`) widens to allow it. The VAT return keeps a correction on its root's day whatever its own `supply_day` (`vat-movements.ts:125-126`, `:140-156`); the accountant sheet keeps listing a restatement on its own issue day, as it lists corrections today. PR 0 cases C and G decide: if AEAT refuses it, restatements store and send none. |
@@ -176,11 +179,16 @@ production does.
 
 ## PR 1 — the writer can file a restatement (packages; nothing calls it)
 
-**First line of the PR: "Resets every venue: core's starting migration is rebuilt."** Full review
-path (fiscal, migration, cross-package contract): two Codex reviews. Sale-path read changed: no.
-Dispatch order: Tasks 1, 2, 5, 3, 4, 6a, 6b (Task 3 calls Task 5's contract). `db` and `fiscal` are
-mutation-tested at a floor of 90 (CLAUDE.md §2); CI runs it, and a survivor in the new CHECKs,
-triggers or fake is fixed in this PR.
+Three pull requests, in order, each on the full review path (fiscal, migration, cross-package
+contract: two Codex reviews), each leaving nothing changed for anyone. Sale-path read changed: no.
+`db` and `fiscal` are mutation-tested at a floor of 90 (CLAUDE.md §2); CI runs it, and a survivor in
+the new CHECKs, triggers or fake is fixed in the PR that adds it.
+
+- **PR 1a — Tasks 1, 2, 5** (the only rebuild of core's starting migration in this plan). **First line
+  of the PR: "Resets every venue: core's starting migration is rebuilt."**
+- **PR 1b — Tasks 3, 4** (core files a restatement through the seam and checks filed figures).
+- **PR 1c — Tasks 6a, 6b** (the Veri\*Factu record, and admission telling a restatement from a
+  replacement).
 
 **Core rebuilds in flight or planned.** Each regenerates core's starting migration and snapshot
 (`pnpm --filter @waitron/server migration-baseline rebuild --set core`). Known now: lane L's
@@ -189,7 +197,7 @@ triggers or fake is fixed in this PR.
 (`invoice_corrections.delivery`); plan 2's schema PRs; plan 3's PRs 1 and 2. **The rule: one core
 rebuild in flight at a time; the second to land takes `main`'s copy of the generated files
 (`git checkout --ours` during the rebase) and reruns the rebuild** (CLAUDE.md §3). The lane asks the
-watcher which goes first before opening PR 1.
+watcher which goes first before opening PR 1a.
 
 ### Task 1: the columns, the checks and the triggers
 
@@ -306,8 +314,9 @@ remaining check `:252-264`, the insert `:358-387`, the backend call `:405-421`);
     refusal;
   - a receipt issued yesterday: the restatement's `supply_day` is that day and the backend saw it as
     `operationDate`; issued today: `supply_day` null, no `operationDate`;
-  - a correction whose `correctsSaleId` is a restatement or an "I" refuses `sale.correction_not_admitted`
-    with `reason: "unsupported"` before a number is taken (Task 6b's admission answers the same);
+  - a correction whose `correctsSaleId` is a restatement refuses `sale.correction_not_admitted`
+    with `reason: "not_simplified"` before a number is taken, the answer Task 6b's admission gives and
+    the one an "I" already gets (`correction-admission.ts:49-51`);
   - `byRestatement` taking everything left throws; beside `wholeInvoice` throws; nothing is written
     and no number is taken;
   - a target whose correctives' sum disagrees with `figuresOfVersion(latest)` refuses
@@ -316,7 +325,8 @@ remaining check `:252-264`, the insert `:358-387`, the backend call `:405-421`);
     argument exactly, which gains `rectifiesSaleId` equal to the target.
 - [ ] **Step 2:** `pnpm --filter @waitron/core exec vitest run src/record-correction.test.ts` fails.
 - [ ] **Step 3: implement.** After `correctionTargetFor`, refuse a target that is a corrective other
-  than a replacement (its `correctsSaleId` and `replacesOriginal`, already read at `:183-184`). Before
+  than a replacement (its `correctsSaleId` and `replacesOriginal`, already read at `:183-184`) with
+  `not_simplified`. Before
   the number is taken: `latest = latestVersionOf(tx, correctsSaleId)`; with the seam and no "I" on the
   target, `replaced = figuresOfVersion(tx, latest)`, checked against the target's stored figures plus
   every corrective of it (the `remaining` sum `:252-255`, and per rate the same rows'
@@ -339,7 +349,7 @@ remaining check `:252-264`, the insert `:358-387`, the backend call `:405-421`);
 - [ ] **Step 2:** run `pnpm --filter @waitron/core exec vitest run src/correction-history.test.ts`; it fails.
 - [ ] **Step 3:** `readStored` also selects `restatesSaleId`, `restatedTotal`, `restatedVatBreakdown`;
   `refuseMovedFigures` compares a restatement's restated figures, any other sale's stored ones.
-- [ ] **Step 4:** pass. **Step 5:** commit.
+- [ ] **Step 4:** pass. **Step 5:** commit. **PR 1b leaves:** nothing changes for anyone.
 
 ### Task 5: the backend contract and the fake
 
@@ -355,7 +365,10 @@ record files `restated` and names `rectifiesSaleId` (absent: `correctsSaleId`); 
 with `replaces` or `restatement`; `replaces` beside `restatement` is refused.
 
 - [ ] Steps: failing fake test (a restatement's filed figures are its restated ones) → run
-  `pnpm --filter @waitron/fiscal exec vitest run` → implement → pass → commit.
+  `pnpm --filter @waitron/fiscal exec vitest run` → implement → pass → commit. **PR 1a leaves:**
+  nothing changes for anyone; every venue reset.
+
+*(Task 5 is listed here for its contract but builds in PR 1a, before Task 3.)*
 
 ### Task 6a: the restatement's record fields (pure)
 
@@ -393,11 +406,14 @@ Today both readers take `tipo_rectificativa === "S"` to mean a Q37 replacement
 would be admitted as an invoice to correct, reachable through the Fiscal filing page's corrective
 remedy (`record-remedy-corrective.ts:159-161`, where `correctionTargetFor` returns a restatement
 unchanged), and its corrective would hang from a corrective that `correctivesOf` never counts. Both
-readers therefore read the record's sale's `replaces_original` (one join on `sales.id = sale_id`):
-`correctionRecordType(original, namesCustomer, replacement: boolean)` treats "S" as a replacement only
-when `replacement`; the admission answers a restatement's or a correction's record `{ eligible: false,
-reason: "unsupported" }` (an existing reason, already worded on the till, `apps/till/src/i18n/codes.ts`
-near `:1118`).
+readers therefore read the record's sale's `replaces_original` (one join on `sales.id = sale_id`) and
+treat an "S" record as a replacement only when it is set: `correctionRecordType(original: {
+tipo_factura; tipo_rectificativa; replacement: boolean }, namesCustomer)` returns R1 or R5 for an R4 or
+R5 "S" only when `replacement`, and the admission's `byReplacement` (`:46`) becomes
+`tipoRectificativa === "S" && replacement`. A restatement then falls through to today's `{ eligible:
+false, reason: "not_simplified" }` (`:49-51`), the answer an "I" corrective already gets. Records of
+"I" correctives keep that answer; nothing moves to another reason. (Plan 2 adds a `reason` to
+`correctionRecordType`; whichever plan lands second merges both into one signature.)
 
 - [ ] **Step 1: failing tests:**
   - F2 9.00, then a restatement: the record is R5 "S" with Task 6a's fields, `FacturasRectificadas` the
@@ -412,7 +428,8 @@ near `:1118`).
     figures;
   - `replaced` differing from the named version's newest filed figures (`filedFiguresFor`) refuses
     `fiscal.correction_unsupported` with `reason: "replaced_figures_differ"`, nothing appended;
-  - admission of a restatement's sale answers `unsupported`; of a Q37 replacement's, eligible as today;
+  - admission of a restatement's sale answers `not_simplified`; of a Q37 replacement's, eligible as
+    today; of an "I" corrective's, `not_simplified` as today (pinned unedited);
     `correctionRecordType` of an R5 "S" record returns R5 only with `replacement: true`;
   - the corrective remedy on a restatement's filing case refuses before anything is written;
   - Q37 unchanged: `backend.test.ts:903-927` passes unedited;
@@ -429,24 +446,28 @@ near `:1118`).
   reason.
 - [ ] **Step 4:** the command passes; then
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
-- [ ] **Step 5:** commit. **PR 1 leaves:** nothing changes for anyone; every venue reset.
+- [ ] **Step 5:** commit. **PR 1c leaves:** nothing changes for anyone; the writer can file a
+  restatement end to end.
 
 ---
 
 ## PR 2 — the paper and the lists show a restatement (receipts; still nothing calls it)
 
-After #4560 (CORRECT-FULL-INVOICE PR 4a) is on `main`: Task 8a reuses its whole-dish test
-(`wholeDishesOf` in `apps/server/src/corrective-lines-in-part.ts` on that branch, exported here), and
-Task 7 edits `transaction-receipt-api.ts`, which #4560 changes. Light path except Task 10 (the
-tax-office list is a filing record: full). Sale-path read changed: no (`readInvoiceTyping` returns
-before any new read for a sale that corrects nothing, `invoice-typing.ts:78`).
+After PR 1c. #4560 is on `main` (`9eae032090`): Task 8a reuses its whole-dish test (`wholeDishesOf`,
+`apps/server/src/corrective-lines-in-part.ts:19`, private today, exported here). Sale-path read
+changed: no (`readInvoiceTyping` returns before any new read for a sale that corrects nothing,
+`invoice-typing.ts:78`). Three pull requests, in order, each leaving nothing changed for anyone:
+
+- **PR 2a — Tasks 7, 8a, 8b** (what a corrective names; the corrected bill's lines). Light path.
+- **PR 2b — Tasks 9, 11** (the roll paper, and looking at it). Light path.
+- **PR 2c — Task 10** (the tax-office list is a filing record, and the accountant sheet). Full path.
 
 ### Task 7: what a corrective names, and the amount printed
 
 **Files:** `packages/orders-sales/src/invoice-typing.ts` (`TypedSale` `:7-20`, `corrects` `:23-30`,
 `readInvoiceTyping` `:73-105`), `packages/orders-sales/src/receipt-facts.ts` (`:191`, `:585`),
 `packages/orders-sales/src/receipt-issuer.ts` (its select `:27-39`),
-`apps/server/src/transaction-receipt-api.ts:291`, `apps/till/src/api/payments-api.ts:207-212` (the
+`apps/server/src/transaction-receipt-api.ts:325`, `apps/till/src/api/payments-api.ts:207-212` (the
 mirrored type). Tests: `packages/orders-sales/src/receipt-issuer.test.ts` (where `readInvoiceTyping`
 is tested), `apps/server/src/receipt-issuer.test.ts`, `apps/server/src/transaction-receipt-api.test.ts`.
 
@@ -459,11 +480,11 @@ rectificationAmount?: string; replacement?: true }`. A restatement: names `resta
 
 - [ ] **Step 1: failing tests:** each of the three shapes above, from rows filed through
   `recordCorrection` (`byRestatement` for the first, one of a receipt issued yesterday printing its
-  sale date); the reprint route's "first print is its original" branch (`:291`) runs for a Q37
+  sale date); the reprint route's "first print is its original" branch (`:325`) runs for a Q37
   replacement and not for a restatement.
 - [ ] **Step 2:** `pnpm --filter @waitron/orders-sales exec vitest run src/receipt-issuer.test.ts` and
   `pnpm --filter @waitron/server exec vitest run src/receipt-issuer.test.ts src/transaction-receipt-api.test.ts` fail.
-- [ ] **Step 3:** implement; `:291` tests `ticket.corrects?.replacement === true`.
+- [ ] **Step 3:** implement; `:325` tests `ticket.corrects?.replacement === true`.
 - [ ] **Step 4:** pass. **Step 5:** commit.
 
 ### Task 8a: the corrected bill's lines (reader)
@@ -510,7 +531,7 @@ the existing tests of `receipt-deferred-payment.ts`.
 - [ ] **Step 3:** use the reader when it answers; `TillSaleResult` gains `reductions`. In
   `deferredTenderQuery`'s recursive part, a third branch follows `s.corrects_sale_id` from a sale with
   a non-null `restates_sale_id`.
-- [ ] **Step 4:** pass. **Step 5:** commit.
+- [ ] **Step 4:** pass. **Step 5:** commit. **PR 2a leaves:** nothing changes for anyone.
 
 ### Task 9: the roll paper
 
@@ -555,6 +576,7 @@ existing labels were).
   before `"corrective"` (the local `substitution` at `:530`, `:600` stays the F3's). If the list's
   join line moves, update its `scripts/corrective-sums.test.ts` entry (`:43-47`).
 - [ ] **Step 4:** pass, and `pnpm exec vitest run scripts/corrective-sums.test.ts`. **Step 5:** commit.
+  **PR 2c leaves:** nothing changes for anyone; the lists are ready.
 
 ### Task 11: look at the paper
 
@@ -568,14 +590,14 @@ nothing checking that it renders (CLAUDE.md §4).
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts "$(mktemp -d)"`, then
   open every PNG with the Read tool and check against the design's §2 table: the lines, the total, the
   named version, −3,00, no stray 0,00, nothing cut or overlapping.
-- [ ] **Step 3:** commit the fixtures only (pictures are never committed). **PR 2 leaves:** nothing
-  changes for anyone; the paper and lists are ready.
+- [ ] **Step 3:** commit the fixtures only (pictures are never committed). **PR 2b leaves:** nothing
+  changes for anyone; the paper is ready.
 
 ---
 
 ## PR 3 — receipts are corrected by substitution
 
-Waits for PR 0's gate and PR 2. Full path: two Codex reviews. The PR names the AEAT run. Sale-path
+Waits for PR 0's gate and PRs 2a–2c. Full path: two Codex reviews. The PR names the AEAT run. Sale-path
 read changed: no.
 
 ### Task 12: core decides
@@ -583,7 +605,7 @@ read changed: no.
 **Files:** `packages/core/src/record-correction.ts` (delete `byRestatement`; the rule); tests: every
 "I" pin the change moves — `packages/fiscal-verifactu/src/correction-path.e2e.test.ts:205`,
 `correction-form.test.ts:135,193` (exact XML), `apps/server/src/give-back.test.ts`, the
-`byRestatement` uses from PRs 1 and 2 (the seam's lines go; the expectations stay). Unchanged and
+`byRestatement` uses from PRs 1b to 2c (the seam's lines go; the expectations stay). Unchanged and
 passing unedited: `rectificativa-columns.test.ts` (inserts its own records),
 `give-back-full-invoice.test.ts`, `testing/full-invoice-give-back.ts`, `backend.test.ts:1207` (a
 full invoice's R1 "I").
@@ -592,16 +614,18 @@ The rule: a restatement when the invoice names nobody (`!fullInvoice`), it is no
 target holds no correction by differences, and the restated total is above zero; otherwise by
 differences. Every caller is unchanged (S8).
 
-- [ ] **Step 1: failing end-to-end tests** (`apps/server/src/give-back-restatement.e2e.test.ts`): a
-  9.00 receipt given back 3.00 by dish files R5 "S" naming the receipt; 3.00 more files R5 "S" naming
-  the first; the rest files R5 "I" −3.00 naming the second; goodwill on an untouched receipt is "S";
-  everything at once is "I" naming the receipt; Cancel and credit and Reopen bill are "I"; an advance
-  given back in part is "S"; a receipt already holding an "I" (filed through a whole-line path that
-  leaves money, if one exists, else through the core seam before deleting it) takes another "I"; the
-  VAT return for the day holds −3.00 three times on the receipt's day
-  (`packages/reporting/src/vat-movements.ts`, unchanged) and the payment-coverage trigger still settles
-  (`core.sql:118-130`); the paper of each prints per Task 9; two presses one after the other from two
-  tills name the versions in order.
+- [ ] **Step 1: failing end-to-end tests** (`apps/server/src/give-back-restatement.e2e.test.ts`), one
+  case per caller whose answer differs (the restatement-then-restatement-then-"I" sequence is Task 3's,
+  in core, and is not repeated here): Give money back by dish on a 9.00 receipt, 3.00, files R5 "S"
+  naming the receipt; goodwill on an untouched receipt is "S"; everything at once is "I" naming the
+  receipt; Cancel and credit and Reopen bill are "I"; an advance given back in part is "S"; the Fiscal
+  filing page's corrective remedy for part of a receipt is "S". A receipt already holding an "I" is
+  **seeded directly**: its partial "I" written through `VerifactuBackend.recordCorrection` with no
+  `restatement` and its `sales` and `sale_lines` rows through the test fixtures, as a correction filed
+  before PR 3 would be; a give-back on it files "I". Then: two presses one after the other from two
+  tills name the versions in order; the VAT return holds each change on the receipt's day
+  (`packages/reporting/src/vat-movements.ts`, unchanged); the payment-coverage trigger still settles
+  (`core.sql:118-130`).
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/give-back-restatement.e2e.test.ts` fails.
 - [ ] **Step 3:** implement; update the pins listed.
 - [ ] **Step 4:** the new file, `pnpm --filter @waitron/core exec vitest run`,
@@ -611,17 +635,16 @@ differences. Every caller is unchanged (S8).
 
 ### Task 13: words and records
 
-- [ ] The till guide's give-back section (`apps/server/src/guide/en/table-service.md:446` and its
-  Spanish twin): after "A corrective receipt or invoice that does not print by itself…", one sentence:
+- [ ] The till guide's give-back section (`apps/server/src/guide/en/table-service.md:448-449` and its
+  Spanish twin): after "A corrective receipt or invoice that does not print by itself can be printed
+  from **Find a bill**.", one sentence:
   "A corrective receipt shows the bill as it stands now and how much was given back." / «Un ticket
   rectificativo muestra la cuenta tal como queda y cuánto se ha devuelto.» Run
   `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
   `pnpm exec vitest run scripts/guide-links.test.ts`.
-- [ ] `docs/backlog.md:1832` (Q31's row): "`recordCorrection` files by substitution ("S") when the
+- [ ] `docs/backlog.md:1833` (Q31's row): "`recordCorrection` files by substitution ("S") when the
   invoice stays above zero, by differences ("I") to zero (2026-11-28 design, D1–D3)".
-- [ ] (Question 15 and the notes below come with the design's own docs change, in worktree
-  `waitron-docs-corrections-by-substitution`, not yet on `main` at `2bfa7a34e3`; rebase onto it.)
-- [ ] `docs/backlog/fiscal.md`: the design's 2026-11-28 note under A231 ("planned, not built… Today's
+- [ ] `docs/backlog/fiscal.md:286` (the design's 2026-11-28 note under A231: "planned, not built… Today's
   code still corrects by differences") becomes "built for receipts (PR 3); full invoices follow".
 - [ ] `docs/compliance/2026-11-19-adviser-meeting.md` question 15, both parts: add S3, S4 (with PR 0
   cases C and G's answers) and S11, one line each, as best guesses.
@@ -634,12 +657,12 @@ differences. Every caller is unchanged (S8).
 
 ## PR 4 — full invoices are corrected by substitution
 
-Waits for CORRECT-FULL-INVOICE PR 4b and PR 5 on `main`, and PR 0 case C accepted. What those change
+Waits for PR 3, CORRECT-FULL-INVOICE PR 4b and PR 5 on `main`, and PR 0 case C accepted. What those change
 that this touches: PR 4b rebuilds core's starting migration (`invoice_corrections.delivery`) and gives
 a corrective email and try-again in `transaction-receipt-api.ts`; PR 5 adds the till's end-screen line,
 whose −{amount} is the corrective's `sales.total` (the change, S10), and a past R1's delivery block in
-Find a bill. #4560's `deliversAsFullInvoice` (`packages/orders-sales/src/invoice-selection.ts` on that
-branch) admits any corrective that is not a replacement, so a restatement goes out unchanged; Task 14
+Find a bill. #4560's `deliversAsFullInvoice` (`packages/orders-sales/src/invoice-selection.ts`, on `main`
+since `9eae032090`) admits any corrective that is not a replacement, so a restatement goes out unchanged; Task 14
 pins it. Do not edit their branches. Full path. PR 4 resets nothing: an F1 already holding an R1 "I"
 keeps taking "I" by the global rule.
 
@@ -666,8 +689,8 @@ stays above zero and holds no "I"), `apps/server/src/testing/full-invoice-give-b
 
 - [ ] receipt-look fixtures for an R1 "S" on A4 and both rolls, `es-ES` and `en-GB`, one with a bank
   transfer; render to a `mktemp -d` folder; open every PNG with Read; commit fixtures only.
-- [ ] `docs/backlog/fiscal.md:303` ("Refund on an F1 files an R1 by differences") and the design's
-  2026-11-28 note there: now by substitution when above zero. `docs/backlog.md:1142` (A1407): "A full
+- [ ] `docs/backlog/fiscal.md:309` ("Refund on an F1 files an R1 by differences") and the design's
+  2026-11-28 note there: now by substitution when above zero. `docs/backlog.md:1143` (A1407): "A full
   invoice that already holds a corrective (an R1)…". A dated pointer at §3 ("By differences") of
   `docs/superpowers/specs/2026-11-25-correct-full-invoice-design.md` naming this plan.
 - [ ] Commit. **PR 4 leaves:** D1–D3 done.
@@ -689,12 +712,17 @@ CORRECT-FULL-INVOICE's PRs came out (its plan, *True size*).
 | PR | Tasks | By file (production / test) | Expect | Generated |
 | --- | --- | --- | --- | --- |
 | 0 | 0 | 200 / 250 (verifactu repo) | 330 / 450 | none |
-| 1 | 1–6b | 270 / 600 | 800 / 1,150 | core's starting migration and snapshot, about 80 lines |
-| 2 | 7–11 | 280 / 520 | 750 / 1,000 | none |
-| 3 | 12–13 | 40 / 220 | 80 / 380 | none |
-| 4 | 14–15 | 90 / 220 | 250 / 430 | none |
+| 1a | 1, 2, 5 | 90 / 220 | 270 / 420 | core's starting migration and snapshot, about 80 lines |
+| 1b | 3, 4 | 80 / 180 | 240 / 350 | none |
+| 1c | 6a, 6b | 100 / 200 | 290 / 380 | none |
+| 2a | 7, 8a, 8b | 160 / 280 | 430 / 540 | none |
+| 2b | 9, 11 | 60 / 120 | 160 / 230 | none |
+| 2c | 10 | 60 / 120 | 160 / 230 | none |
+| 3 | 12–13 | 40 / 200 | 80 / 360 | none |
+| 4 | 14–15 | 90 / 220 | 250 / 450 | none |
+| **All** | | **880 / 1,790** | **2,210 / 3,410** | about 80 lines, one reset |
 
 Tasks are sized for 50 to 80 implementer calls; one that passes 60 unfinished is split. Order: PR 0
-and PR 1 now, in parallel (PR 1 only when no other core rebuild is in flight); PR 2 after #4560 lands;
-PR 3 after PR 0's gate and PR 2; PR 4 after CORRECT-FULL-INVOICE PR 4b and PR 5 and case C. Each leaves
+and PR 1a now, in parallel (PR 1a only when no other core rebuild is in flight); then 1b, 1c, 2a, 2b,
+2c; PR 3 after PR 0's gate and 2c; PR 4 after PR 3, CORRECT-FULL-INVOICE PR 4b and PR 5, and case C. Each leaves
 `main` green and working as its "leaves" line says.

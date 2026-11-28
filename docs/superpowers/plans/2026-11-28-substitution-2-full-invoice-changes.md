@@ -20,17 +20,16 @@ R4 is stored on the sale, not guessed from its shape.
 **Tech stack:** TypeScript, Hono server, Drizzle on `node:sqlite`, Lit till, Vitest (Node and
 browser), the `@waitron/verifactu` library and its live AEAT test mode.
 
-**Spec:** `docs/superpowers/specs/2026-11-28-corrections-by-substitution-design.md` (branch
-`docs/corrections-by-substitution`, worktree `~/workspace/worktrees/waitron-docs-corrections-by-substitution`):
-D4 and D5, its section 2 rows "Split or cancel a printed full invoice" to "Invoice the meal to a
+**Spec:** `docs/superpowers/specs/2026-11-28-corrections-by-substitution-design.md` (on `main` at
+`dc97abe4b7`): D4 and D5, its section 2 rows "Split or cancel a printed full invoice" to "Invoice the meal to a
 different customer", and section 5 points 2 and 3. Plan 1 (D1–D3) is
 `docs/superpowers/plans/2026-11-28-substitution-1-correctives.md`; plan 3 (D6–D10) is
-`docs/superpowers/plans/2026-11-28-full-invoice-for-a-receipt.md` (both read as scratchpad drafts,
-2026-11-28).
+`docs/superpowers/plans/2026-11-28-full-invoice-for-a-receipt.md`, both on `main` at `dc97abe4b7`
+and read there.
 
-Status: written 2026-11-28 for lane L; revised the same day after one fresh-context review; not yet cleared by the watcher. FISCAL: the owner lands every pull request. Lane L builds it. Line numbers are `main` at
-`2bfa7a34e3`, read, not run, unless a run is named. Lines on unlanded branches name the branch and
-its head.
+Status: written 2026-11-28 for lane L; revised the same day after one fresh-context review and the watcher's read; awaiting the watcher's clearing. FISCAL: the owner lands every pull request. Lane L builds it. Line numbers are `main` at
+`dc97abe4b7`, read, not run, unless a run is named (#4560 landed as `9eae032090` before it). Lines on
+unlanded branches name the branch and its head.
 
 **Words.** A *receipt* is a simplified invoice (AEAT's F2). A *full invoice* names the customer (F1).
 A *corrective* is a new invoice correcting an earlier one: R1 for art. 80 causes (money back,
@@ -41,7 +40,7 @@ column `restates_sale_id`). *What it stands at* is the latest version's figures.
 corrective by differences of minus what the invoice stands at. The *customer block* is what AEAT's
 record carries about the customer (`Destinatarios`): name and tax number, never the address.
 
-**Two parts.** Part A (PR 0's A cases, PRs 1, 2, 3) delivers D4 and needs nothing from part B or from plans 1 and
+**Two parts.** Part A (PR 0's A cases, PRs 1a, 1b, 2, 3) delivers D4 and needs nothing from part B or from plans 1 and
 3. Part B (PR 0's B cases, PRs 4 to 8) delivers D5, and needs plan 1's restatements and plan 3's link. The owner
 can land part A and defer part B.
 
@@ -72,7 +71,7 @@ can land part A and defer part B.
    corrected full invoice's, since the code is the same (P13).
 2. **True size** (estimate; by file, then three times for production, as CORRECT-FULL-INVOICE's
    "True size"): about 2,850 production and 5,150 test lines over nine pull requests, plus the
-   library PR. Generated: core's starting migration and its snapshot, once per part (PR 1, PR 5b),
+   library PR. Generated: core's starting migration and its snapshot, once per part (PR 1a, PR 5b),
    about 20 and 40 lines. Table at the end.
 3. **Who approved it.** D4 and D5 and their quotes are in the design's §1 table, status "approved by
    the owner in session waitron-84, 2026-11-28". R1 for a cancel and R4 for a split are the main
@@ -121,18 +120,18 @@ The main session adds these to question 15 of `docs/compliance/2026-11-19-advise
 
 | On | What this plan assumes, without designing it | Needed by |
 | --- | --- | --- |
-| **Plan 1** | PR 1: `restates_sale_id`, `restated_total`, `restated_vat_breakdown`, the trigger that refuses a restatement once the target holds a correction by differences (its S2), `latestVersionOf(tx, targetId)` and `figuresOfVersion(tx, saleId)` (its Task 2), the backend's `rectifiesSaleId` and `substitution: { replaced; restated }` (Tasks 3 and 5), `substitutionFields` (Task 6). PR 2: `apps/server/src/restated-invoice.ts` (Task 8) and the tax-office list (Task 10). PR 4: the full invoice's A4 page for an "S" (Task 14). Its PR 0 may carry this plan's cases. | part B (PR 0's B cases, PR 4 onward). Part A uses none of it; if plan 1 PR 1 lands first, PR 1 Task 4 also checks against `figuresOfVersion`. |
+| **Plan 1** | PR 1: `restates_sale_id`, `restated_total`, `restated_vat_breakdown`, the trigger that refuses a restatement once the target holds a correction by differences (its S2), `latestVersionOf(tx, targetId)` and `figuresOfVersion(tx, saleId)` (its Task 2), `restatement-figures.ts` (its Task 2), `byRestatement` and the backend's `rectifiesSaleId` and `restatement: { replaced; restated }` (Tasks 3 and 5), `restatementFields` in `restatement-record.ts` (Task 6a), `correctionRecordType`'s `replacement` argument and admission's `unsupported` for a restatement (Task 6b). PR 2: `apps/server/src/restated-invoice.ts` (Task 8a) and the tax-office list (Task 10). PR 4: the full invoice's A4 page for an "S" (Task 14). Its PR 0 may carry this plan's cases. | part B (PR 0's B cases, PR 4 onward). Part A uses none of it, except the check against `figuresOfVersion` (Task 4) and `correctionRecordType`'s merged signature (Task 2) when plan 1's PR 1 tasks land first. |
 | **Plan 3** | PR 2: Task 2.1's `sale_reissues` (`original_sale_id`, `credit_sale_id`, `invoice_sale_id`, each with a unique index) and its trigger `sale_reissues_check_pair`; Task 2.2's `correctivesOf` branches and coverage trigger (a link's new invoice's correctives count against the original) and `correctionTargetFor` (a linked original answers its new invoice). PR 3: Task 3.3's internal `writeSale` in `record-sale.ts`. PRs 4a/4b: every reader of its §5 following `sale_reissues`. Its "Seams with plans 1 and 2" names what PR 5b adds. Its PRs 8 and 9 (a receipt that took an advance off, an unpaid one). | PR 5b; PR 8 |
-| **CORRECT-FULL-INVOICE** (lane L) | PR 4a #4560 (open, head `411edfbd56`): `sendFiledCorrective` in `apps/server/src/corrective-delivery.ts`; the choose-way branch (`feat/correct-full-invoice-choose-way`, head `8732f4f400`, not pushed): `readCorrectiveChoice`, `parseCorrectiveDelivery`, `checkCorrectiveDelivery`, `sendFiledCorrective`'s `chosen`, the till's `widgets/corrective-choice.ts`; PR 4b's `invoice_corrections.delivery` and its rebuild; PR 5's past R1 in Find a bill | PR 2 (4a); PRs 5a, 7 (choose-way, 4b, 5) |
+| **CORRECT-FULL-INVOICE** (lane L) | PR 4a #4560 (landed, `9eae032090`): `sendFiledCorrective` in `apps/server/src/corrective-delivery.ts`; the choose-way branch (`feat/correct-full-invoice-choose-way`, head `8732f4f400`, not pushed): `readCorrectiveChoice`, `parseCorrectiveDelivery`, `checkCorrectiveDelivery`, `sendFiledCorrective`'s `chosen`, the till's `widgets/corrective-choice.ts`; PR 4b's `invoice_corrections.delivery` and its rebuild; PR 5's past R1 in Find a bill | PR 2 (4a); PRs 5a, 7 (choose-way, 4b, 5) |
 | **Lane O** (`docs/superpowers/plans/2026-11-28-o-o5-invoice-details.md`, not yet cleared, nothing built) | O5a-0's `apps/till/src/widgets/invoice-details-fields.ts` (`till-invoice-details-fields`, `check()` → `{ recipient, send }`); O5a's full screen; O5b's `widgets/pay-invoice-line.ts` | PR 3 (O5a, O5b); PR 6 (O5a-0) |
 
 Plan 1 and plan 3 may still rename things before they land. The first step of each PR that
 consumes them reads their landed Interfaces and writes any rename into the PR description.
 
 **Core's starting migration** is rebuilt by plan 1 PR 1, plan 3 PR 2, CORRECT-FULL-INVOICE PR 4b and
-this plan's PRs 1 and 5b. Whichever lands second takes `main`'s copy of the migration during the
+this plan's PRs 1a and 5b. Whichever lands second takes `main`'s copy of the migration during the
 rebase (`git checkout --ours`) and reruns `pnpm --filter @waitron/server migration-baseline rebuild
---set core` (CLAUDE.md §3). One rebuild per part: PR 5b's also adds PR 7's column, so part B resets
+--set core` (CLAUDE.md §3). One rebuild per part (PR 1a, PR 5b): PR 5b's also adds PR 7's column, so part B resets
 venues once, and part A carries nothing of part B if the owner defers it.
 
 ## Global constraints
@@ -183,7 +182,7 @@ In `~/workspace/repos/verifactu`, as plan 1's PR 0 and lane A's `canje` (verifac
 mode in `scripts/live-aeat.mjs` (builder plus branch, through `submitChainedProbe`), its tests in
 `scripts/live-aeat.test.mjs`, its name in `.github/workflows/live-aeat.yml`'s options. Each case is its
 own chain, one record per request. Test service only. **If plan 1's PR 0 is not yet built, lane L
-adds these cases to its `substitution-corrections` mode and this PR is dropped.**
+adds these cases to its `restatement-corrections` mode and this PR is dropped.**
 
 ### Task 0: the `full-invoice-changes` mode
 
@@ -192,7 +191,7 @@ adds these cases to its `substitution-corrections` mode and this PR is dropped.*
 | A1 | F1 to customer A (NIF) at 10 % and 21 %; R4 "I" to zero: F1's `Desglose` negated, `Destinatarios` A as sent, no `ImporteRectificacion` | PR 2 |
 | A2 | the same with R1 "I" to zero (run 37286368370's R1 "I" took off part of an F1, not all) | PR 2 |
 | A3 | F1 to A; R1 "I" of one dish; R4 "I" of the rest, naming the F1 | PR 2 |
-| A4 | F1 to A; R1 "S" (plan 1's case C shape); R4 "I" of minus its restated figures, naming the R1 "S" | PR 2 once plan 1 PR 4 is on `main` |
+| A4 | F1 to A; R1 "S" (the shape of plan 1's PR 0 case C); R4 "I" of minus its restated figures, naming the R1 "S" | PR 2 once plan 1 PR 4 is on `main` |
 | B1 | F1 to A; R4 "S": same `Desglose` and `ImporteTotal`, `ImporteRectificacion` the F1's base and tax, A's NIF with another name | PR 4 |
 | B2 | the same with `Destinatarios` identical to the F1's (P7, address-only) | PR 4 |
 | B3 | F1 to A; R1 "S" one dish lower, A's NIF with another name | PR 7 |
@@ -217,8 +216,9 @@ Part A's cases can run alone (mode argument `part-a`) if part B is deferred.
 
 ## PR 1 — the packages credit a full invoice, or a corrected invoice, to zero (nothing calls it)
 
-**First line: "Resets every venue: core's starting migration is rebuilt."** Risk triggers: fiscal,
-migration. Full path, two Codex reviews.
+Two pull requests. **PR 1a** (Tasks 1–3) holds the rebuild; its first line: "Resets every venue:
+core's starting migration is rebuilt." **PR 1b** (Tasks 4–5) follows it. Risk triggers: fiscal,
+migration (1a). Full path, two Codex reviews, each.
 
 Today a corrective's type is guessed: R4 when it is a replacement, else R1
 (`packages/orders-sales/src/invoice-typing.ts:96`; the tax-office list in SQL,
@@ -251,18 +251,31 @@ null exactly when `corrects_sale_id` is null (`sales_correction_reason_ck`). "ar
 
 **Files:**
 
-- Modify: `packages/fiscal-verifactu/src/correction-record-type.ts:8-26` (plan 1's Task 6 edits its comment; whichever lands second rebases)
+- Modify: `packages/fiscal-verifactu/src/correction-record-type.ts:8-26` (plan 1's Task 6b changes the same signature; whichever lands second merges both arguments, below)
 - Modify: `packages/fiscal-verifactu/src/backend.ts:567-700` (type `:635`, customer block `:655-656`)
 - Modify: `packages/fiscal/src/backend.ts:503-507`, its fake, `packages/fiscal-none/src/backend.ts`
 - Test: `correction-record-type.test.ts`, `backend.test.ts`
 
-**Interfaces:** Produces `correction: { …; reason: "article_80" | "other" }` and
-`correctionRecordType(original, namesCustomer, reason)` → `"R1" | "R4" | "R5" | undefined`: R4 for an
-F1 (or an R4 "S" replacing one) naming a customer with "other"; R1 with "article_80", as today; R5
-whatever the reason.
+**Interfaces:** Produces `correction: { …; reason: "article_80" | "other" }` and, merged with plan 1's
+Task 6b:
+
+```ts
+correctionRecordType(
+  original: { tipo_factura: unknown; tipo_rectificativa: unknown },
+  namesCustomer: boolean,
+  replacement: boolean, // plan 1: an "S" original counts as a replacement only when its sale's replaces_original is set
+  reason: "article_80" | "other", // this plan
+): "R1" | "R4" | "R5" | undefined
+```
+
+R4 for an F1, or an R4 "S" with `replacement`, naming a customer, with "other"; R1 for the same with
+"article_80", as today; R5 for an F2, or an R5 "S" with `replacement`, naming nobody, whatever the
+reason; `undefined` otherwise. If this plan lands first, `replacement` is passed as `tipo_rectificativa
+=== "S"` (today's reading, `:12`), and plan 1's Task 6b replaces it with the sale's `replaces_original`.
 
 - [ ] **Step 1: failing tests**: the grid gains the reason (F1 + customer + "other" → R4; + "article_80"
-  → R1; R4 "S" + "other" → R4; F2 + "other" → R5; F3 and an earlier "I" stay `undefined`). An R4 "I"
+  → R1; R4 "S" with `replacement` + "other" → R4; F2 + "other" → R5; F3 and an earlier "I" stay
+  `undefined`). An R4 "I"
   against an F1 carries `TipoFactura` R4, `TipoRectificativa` I, the **stored** `Destinatarios` even
   when the sale names another customer, no `ImporteRectificacion`, and `validate` returns nothing.
 - [ ] **Step 2:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/correction-record-type.test.ts src/backend.test.ts`; FAIL.
@@ -291,7 +304,10 @@ credit of a full invoice must state it; "other" is refused on a partial credit a
   receipt's corrective stores "article_80".
 - [ ] **Step 2–5:** `pnpm --filter @waitron/core exec vitest run src/record-correction.test.ts src/record-replacement.test.ts` FAIL; implement; PASS with `pnpm --filter @waitron/core test:coverage` at 98/98/98/95; commit.
 
-### Task 4: crediting an invoice that holds corrections (P13)
+**PR 1a leaves:** nothing changes for anyone; the packages can file a full invoice's credit to zero as
+R1 or R4.
+
+### Task 4: crediting an invoice that holds corrections (P13), PR 1b
 
 **Files:**
 
@@ -307,9 +323,12 @@ credit of a full invoice must state it; "other" is refused on a partial credit a
   minus the target's stored figures plus every corrective's change (`correctivesOf`), per rate in
   whole cents; its lines reverse what is left of each invoice line (`readCorrectionAmountHistory`,
   `correction-history.ts:221`, then `remainingLines`, `correction-allocation.ts:189`), each naming the
-  line in `correctsLineId`; lines with nothing left are left out. When plan 1's `figuresOfVersion` is
-  on `main`, the figures must equal minus `figuresOfVersion(latestVersionOf(target))`, else
-  `sale.correction_history_unusable`.
+  line in `correctsLineId`; lines with nothing left are left out. The figures must also equal minus
+  `figuresOfVersion(latestVersionOf(target))`, else `sale.correction_history_unusable`. **Who adds
+  that check:** if plan 1's pull request holding its Task 2 (`figuresOfVersion`) is on `main` when
+  PR 1b is built, PR 1b adds it, with a test of a restated target; if PR 1b lands first, plan 1's pull
+  request holding its Task 3 adds it there, beside its own check of the same sum, with the same test,
+  and its description says so. Lane L builds both.
 - `wholeInvoice` admits a target holding corrections when `total`, the breakdown and the lines equal
   `standingCredit`'s; otherwise `sale.correction_not_whole`. A target at zero refuses it too. Which
   version the record names is plan 1's (its S3: the latest).
@@ -343,15 +362,15 @@ words (P12); the accountant export's labels only where one says "replacement" fo
 - [ ] **Step 2–5:** FAIL, implement, PASS; look at both from `receipt-look.ts` (80 mm and A4, Spanish
   and English; pictures stay in the working folder); commit.
 
-**Leaves:** nothing changes for anyone. Sale-path read changed: no.
+**PR 1b leaves:** nothing changes for anyone. Sale-path read changed: no.
 
 ---
 
 ## PR 2 — Reopen bill and Nothing was served on a printed full invoice (server and till, one PR)
 
 One PR, so that no `main` answers "reopen the bill first" (`advance-taken-off.ts:145-151`) while the
-till still hides Reopen bill (`till-table-order-screen.ts:7114`). Waits for #4560 and PR 0's cases
-A1 to A3. Risk triggers: fiscal, money. Full path, two Codex reviews.
+till still hides Reopen bill (`till-table-order-screen.ts:7114`). #4560 is on `main` (`9eae032090`); waits for
+PR 0's cases A1 to A3. Risk triggers: fiscal, money. Full path, two Codex reviews.
 
 Today: Reopen bill and Pay for items on a printed bill reach `refuseSplitBill`
 (`split-after-print.ts:145-154`), which refuses a customer-named invoice (`bill-reopen-state.ts:26-35`);
@@ -423,8 +442,8 @@ removes F3.
 **Files:**
 
 - Modify: `apps/till/src/screens/till-table-order-screen.ts:7110-7148` (drop `!namesCustomer(bill)` from `reopens`) and `:514-515` (cut the comment saying the server refuses it; `namesCustomer` stays for `:5472`)
-- Modify: `apps/till/src/widgets/cancel-credit-dialog.ts`, the Reopen bill window, `apps/till/src/i18n/strings.ts` (`:2241-2268` and the Spanish from `:4718`)
-- Modify: `apps/server/src/guide/en/table-service.md:132-148`, `:776-789`, and `guide/es/table-service.md`'s twins (`:831-836` and the full-invoice section)
+- Modify: `apps/till/src/widgets/cancel-credit-dialog.ts`, the Reopen bill window, `apps/till/src/i18n/strings.ts` (`:2244-2271` and the Spanish from `:4724`)
+- Modify: `apps/server/src/guide/en/table-service.md:132-148`, `:779-792`, and `guide/es/table-service.md`'s twins (`:833-838` and the full-invoice section)
 - Test: `apps/till/src/till-app-parties-closing.test.ts` (it pins the cancel's refusals; the menu cases go beside them), `apps/till/src/widgets/cancel-credit-dialog.test.ts`, `apps/server/src/guide-content.test.ts`
 
 If `till-app.ts` needs a line, move one block out first.
@@ -437,7 +456,7 @@ If `till-app.ts` needs a line, move one block out first.
 | `split.scope_full` | This cancels the invoice to {customer} with a corrective invoice and reopens the bill. Each new bill starts as a full invoice to {customer}; you can change that. | Esto anula la factura a {customer} con una factura rectificativa y reabre la cuenta. Cada cuenta nueva empieza como factura completa a {customer}; puedes cambiarlo. |
 | `split.done_full` | Corrective invoice {number} for {customer} issued. The bill is reopened. | Factura rectificativa {number} para {customer} emitida. La cuenta está reabierta. |
 
-Guides: "Nothing was served" (`en :784-788`, `es :831-836`) loses "names no customer" and gains, for a
+Guides: "Nothing was served" (`en :787-791`, `es :833-838`) loses "names no customer" and gains, for a
 full invoice, that the paper stays with the customer, that a corrective invoice cancels it, and that
 it needs **Issue corrective receipts and invoices**, not **Void sales**. "Once the bill is printed or
 has taken a payment, it stays a full invoice" (`en :147-148`) becomes: printed and not reopened, or
@@ -453,7 +472,10 @@ customer.
 - [ ] **Step 5:** commit.
 
 **Leaves:** D4 for Reopen bill, Move dishes after it, and Nothing was served. Sale-path read changed:
-yes (Reopen reads the target's customer). The description quotes the owner's two answers and P1–P3, P5, P13.
+yes (Reopen reads the target's customer). The description quotes the owner's two answers and P1–P3, P5, P13,
+and names for the owner one assertion rewritten on purpose because D4 requires it:
+`apps/server/src/reopen-with-advance.test.ts:997-1034`, which today expects Reopen bill on a printed
+full invoice to answer 409 `sale.correction_unsupported` and now expects the reopen.
 
 ---
 
@@ -526,7 +548,7 @@ incident); tests `same-customer.test.ts`, `record-customer-correction.test.ts`.
   breakdown, reason "other", the new customer and the registered address, `corrects_sale_id` the
   target, `restates_sale_id` = `latestVersionOf(target)`, `restated_total` and
   `restated_vat_breakdown` = `figuresOfVersion(latest)`. Calls the backend with `rectifiesSaleId` the
-  latest version, `substitution: { replaced: figures, restated: figures }` and `customerChange: true`.
+  latest version, `restatement: { replaced: figures, restated: figures }` and `customerChange: true`.
 
 - [ ] **Step 1: failing tests**: the same NIF with spaces or lower case is the same; another NIF, a
   passport of the same number, another issuing country are not. An F1 of 36.30 € (two rates) gives one
@@ -761,7 +783,7 @@ part of the plan").
 | PR | Tasks | By file (production / test) | Expect | Generated |
 | --- | --- | --- | --- | --- |
 | PR 0 (library) | 0 | 130 / 360 | 390 / 1,050 | none |
-| PR 1 | 1–5 | 170 / 330 | 510 / 800 | core's starting migration, about 20 |
+| PR 1a / 1b | 1–3 / 4–5 | 100 / 180; 70 / 150 | 300 / 440; 210 / 360 | 1a: core's starting migration, about 20 |
 | PR 2 | 6–8 | 120 / 340 | 360 / 980 | none |
 | PR 3 | 9–10a | 90 / 200 | 270 / 600 | none |
 | PR 4 | 11, 12, 10b | 120 / 240 | 360 / 580 | none |
@@ -773,10 +795,10 @@ part of the plan").
 About **2,850 production and 5,150 test lines**, plus the library's. Tasks of 50 to 80 tool calls; an
 implementer passing 150 stops at a passing point, commits and hands over.
 
-**Order.** Part A: PR 0 (part A's cases), PR 1, PR 2 (after #4560), PR 3 (after O5a and O5b). Part B:
+**Order.** Part A: PR 0 (part A's cases), PRs 1a and 1b, PR 2, PR 3 (after O5a and O5b). Part B:
 PR 4 (after plan 1's PRs 1, 2, 4 and PR 0's part B cases), 5a, 5b (after plan 3's PRs 2, 3, 4a, 4b),
 6 (after O5a-0), 7 (after CORRECT-FULL-INVOICE PR 4b/5), 8 (after plan 3's PRs 8 and 9). Each leaves
-`main` green and working, as its "Leaves" says. Full path with two Codex run-it reviews: PRs 1, 2, 3,
+`main` green and working, as its "Leaves" says. Full path with two Codex run-it reviews: PRs 1a, 1b, 2, 3,
 4, 5a, 5b, 7; light path: PR 0, 6. Every PR keeps the fresh plan-vs-spec read and the Codex seat. The
 owner lands each.
 

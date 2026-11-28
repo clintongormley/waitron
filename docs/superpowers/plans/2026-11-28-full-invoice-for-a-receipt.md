@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
-Status: written 2026-11-28 for lane A; revised the same day after one fresh-context review; not yet cleared by the watcher. FISCAL: the owner lands every
+Status: written 2026-11-28 for lane A; revised the same day after one fresh-context review and the watcher's read; awaiting the watcher's clearing. FISCAL: the owner lands every
 pull request. Lane A builds it. It replaces lane A's `~/waitron-campaign/till-fiscal-f3-plan.md` from
 F3-1a on; F3-0 (verifactu#158, merged, every case `Correcto`) needs no undoing.
 
@@ -18,8 +18,8 @@ receipt's day. The receipt keeps its payments; the credit and the full invoice m
 **Tech Stack:** TypeScript, Drizzle on `node:sqlite`, Hono server routes, Lit till, Vitest,
 `@waitron/verifactu` (the library repo `waitron-io/verifactu` for PR 0).
 
-**Spec:** `docs/superpowers/specs/2026-11-28-corrections-by-substitution-design.md` (on branch
-`waitron-docs-corrections-by-substitution`, not yet on `main`), decisions D6–D10 only. Also the till
+**Spec:** `docs/superpowers/specs/2026-11-28-corrections-by-substitution-design.md`, decisions D6–D10
+only. Also the till
 redesign spec `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md` §7.4, §7.12 item 2,
 §13, frames `bf` and `q` 4.
 
@@ -52,15 +52,15 @@ never anything this plan adds. *FechaOperacion* is the record's "day the sale ha
    **Simplest alternative:** the accountant issues the invoice by hand, outside Waitron's numbering
    and record chain; it does not meet the ask. Keeping the unused F3 code on `main` costs every
    reader below a second exclusion to maintain, so removing it is the smaller thing.
-2. **True size (estimated, not counted).** PR 1 removes about 3,000 lines (four whole test files of
-   1,886 lines, `wc -l`, and about 800 matching lines in 87 other files, `rg -c`). PRs 2–9 add
-   about 2,500 product lines and 4,500 test lines across roughly 60 files; PR 2 alone regenerates
+2. **True size (estimated, not counted).** PRs 1a and 1b remove about 3,100 lines (four whole test files of
+   1,886 lines, `wc -l`, and about 800 matching lines in 87 other files, `rg -c`). PRs 2–9 add about 2,400 product lines and 5,000 test lines across roughly 60 files (each
+   PR's own estimate is in its heading); PR 2 alone regenerates
    `packages/db/drizzle/0000_baseline.sql` and `meta/0000_snapshot.json` (generated), dropping the
    F3's table and adding the new ones. Later changes to money readers touch one more table
    (`sale_reissues`) than today; the F3's table goes, so the count of such tables does not grow.
 3. **Who approved it.** The owner's words above are recorded in the spec's §1 table (session
-   waitron-84, 2026-11-28). D2's "anyone who may take orders" is recorded in lane A's
-   `questions.md` per `research-swap.md` §1 (not read by me: UNVERIFIED here). This plan's own
+   waitron-84, 2026-11-28). D2's "Anyone who takes orders (Recommended)" is the owner's
+   answer recorded at `~/waitron-campaign/questions.md:691` (2026-11-28 05:42). This plan's own
    decisions in §2 are mine until the watcher clears them; the watcher has not read this plan.
 
 ---
@@ -73,8 +73,8 @@ never anything this plan adds. *FechaOperacion* is the record's "day the sale ha
 | --- | --- | --- |
 | **Lane A's D1–D8 under the new route** | | |
 | A-D1 | How many receipts per full invoice | One (spec D7). Several receipts would need one FechaOperacion for several days, which the record has one field for |
-| A-D2 (owner) | Who may | Anyone allowed to take orders, as when choosing a full invoice at payment (`till-working-order-routes.ts:243-247`), plus the zone check. No supervisor PIN: it moves no money. It now also files a credit, so the owner is asked to reconfirm; build on the default |
-| A-D3 | Which receipts | Any receipt in this venue's records, of any age, from this box or an earlier main box, refused as §PR 3 lists. A receipt from another box whose record AEAT has not answered waits (A1614's rule); one AEAT refused and that is being put right is refused until it is put right; one still waiting in **this** box's own queue is admitted, because the queue sends in order and the receipt goes ahead of its credit |
+| A-D2 | Who may | Anyone allowed to take orders, as when choosing a full invoice at payment (`till-working-order-routes.ts:243-247`), plus the zone check. No supervisor PIN: the credit moves no money. Answered by the owner: "Anyone who takes orders (Recommended)" (`~/waitron-campaign/questions.md:691`, the watcher's 2026-11-28 05:42 entry) |
+| A-D3 | Which receipts | Any receipt in this venue's records, of any age, from this box or an earlier main box, refused as Task 3.3 lists. A receipt from another box whose record AEAT has not answered waits (A1614's rule); one AEAT refused and that is being put right is refused until it is put right; one still waiting in **this** box's own queue is admitted, because the queue sends in order and the receipt goes ahead of its credit |
 | A-D4 (owner) | A receipt with a refund | **Inverted.** Admitted at its standing value. Refused only when nothing is left (every euro given back), while a refund is open or a card refund is still pending |
 | A-D5 (adviser) | The sale's date | Both new records carry the receipt's day in FechaOperacion when it is earlier than today (spec D10). Same day: no FechaOperacion on either, as `record-sale.ts:276-281` and `backend.ts:313-316` already decide. Kept because it matches Waitron's existing rule that a sale counts in its real day's VAT period (owner, 2026-11-14, as the plan review cites it; I did not read that record). Against it, AEAT's own worked example of a substitution done as a credit then a new invoice (option 2) leaves the date blank on the credit: «Tipo Factura: F1 / Fecha Operación: dejar en blanco / Fecha expedición: 18/10/2024 / Desglose IVA: se indicará el importe que se rectifica con signo contrario» (AEAT procedures FAQ, option 2, example 1; design §6). The adviser is asked (question 15); PR 0 cannot settle it |
 | A-D6 | A refund after the swap | An R1 on the full invoice (R1 "S" once plan 1 lands), the money paid back from the receipt's payments. The F3's "money back with no corrective" path goes |
@@ -82,16 +82,16 @@ never anything this plan adds. *FechaOperacion* is the record's "day the sale ha
 | A-D8 (adviser) | Series | Full invoice: the full-invoice series. Credit: the receipt series (`standard`), which `recordSale` already requires for a sale naming nobody (`record-sale.ts:250`). Question 15 asks |
 | **New** | | |
 | N1 | Storage | Option (b), §4: column `sales.credits_sale_id` plus table `sale_reissues`, whose columns name an original, a credit and a full invoice so plan 2 can reuse it (Seams section) |
-| N2 (owner) | Money | The receipt keeps its payments and stays the one place a payment, refund or debt is recorded. The credit and the full invoice moved no money: no "owed", "waiting for payment" or outstanding reader lists either. Correctives of the full invoice count against the receipt, as a replacement's do today (`correctives-of.ts:16-21`). This reads the spec's "the money readers count the credit against the receipt" differently, for §4's reason |
+| N2 (owner) | Money | The receipt keeps its payments and stays the one place a payment, refund or debt is recorded. The credit and the full invoice moved no money: no "owed", "waiting for payment" or outstanding reader lists either. Correctives of the full invoice count against the receipt, as a replacement's do today (`correctives-of.ts:16-21`). §4 works the reason through |
 | N3 | Daily reports (sales, VAT summary, top sellers, categories, counts) | Leave both out. They net to zero by construction (the credit is the exact negative of the full invoice), so totals are unchanged, and items are not counted three times. The full invoice's later correctives are counted, as a replacement's are (`business-day.ts:210-217`) |
 | N4 | VAT return, corrections list, accountant workbook, tax-office list | Count both, each on the receipt's day (§6). These list every record AEAT holds |
-| N5 | Standing lines | From the stored figures: each receipt line (its replacement's, if any) plus every corrective line naming it, **at the receipt's own line numbers** (gaps allowed: `sale_lines_line_no_ck` is only `>= 1`, `sales.ts:321`), so `correctionTargetLines`' pairing by line number (`cancelled-lines.ts:215-226`) holds for the full invoice as it does for a replacement. Quantity = the line's quantity plus the quantities of the corrective lines that take dishes back. A corrective line is a money-only reduction when its gross is not its quantity's share of the line's gross (today's partial give-back writes the whole quantity with part of the money, `correction-history.ts:475`, `:480`): then the quantity stays and the line is charged what is left, printing like a discount. Quantity 0: left off. VAT breakdown: the filed breakdowns summed per rate, passed to `recordSale` explicitly |
+| N5 | Standing lines | From the stored figures: each receipt line (its replacement's, if any) plus every corrective line naming it, **at the receipt's own line numbers** (gaps allowed: `sale_lines_line_no_ck` is only `>= 1`, `sales.ts:321`), so `correctionTargetLines`' pairing by line number (`cancelled-lines.ts:215-226`) holds for the full invoice as it does for a replacement. The money left on each line comes from `readCorrectionAmountHistory` and `remainingLines` (`correction-allocation.ts:189`), the readers refunds already use. **Quantity:** no corrective stores units returned: every real give-back writes the whole line's quantity with the money taken ("an amount correction's quantity is the scope shown, never units returned", `correction-history.ts:446-448`), and the dish cancels `cancelsAndFreeByLine` reads (`cancelled-lines.ts:167`) are not read for a unit count here. So a line keeps its quantity and is charged what is left, printing like a discount; a line with nothing left is left off. After one of two chips is given back, the full invoice prints "2 × chips", list €6.00, charged €3.00. The owner sees that in PR 6's pictures. VAT breakdown: the filed breakdowns summed per rate, passed to `recordSale` explicitly |
 | N6 (adviser) | Delivering the credit | Print: the full invoice, then the credit, on the chosen printer's device's receipt printer. Email: the full invoice only; the credit stays printable from Find a bill. Asked whether the customer must be given the credit |
 | N7 | What the paper names | Full invoice: «Sustituye a la factura simplificada FS/123 de 30/09/2026» and the sale's day (already printed when it differs, `invoice-typing.ts:63-68`). Credit: «Abono de la factura simplificada FS/123 de 30/09/2026». Where a replacement exists, they name the replacement's number and date, the document AEAT holds in the receipt's place (`correction-target.ts:7-11`) |
 | N8 | AEAT refuses the receipt after the swap (it was still queued) | The Fiscal filing page's replacement of that receipt is refused (`sale.correction_not_admitted`, reason `reissued`), and the filing case's wording says the receipt was made a full invoice: the accountant decides. Alternative (refuse every receipt AEAT has not yet answered) was not chosen: A-D3 keeps lane A's cleared rule |
 | N9 | Cancel or Reopen the receipt's bill after the swap | Refused, as for a full invoice, until plan 2 (spec D4) builds it: `correctionTargetFor` now answers the full invoice, and a full invoice's whole credit is refused (`correction-eligibility.ts:24-32`) |
 | N10 | Correcting the credit itself, and a credit AEAT refuses | Refused everywhere: `recordCorrection`, the correction preview and `recordReplacement` refuse it (`sale.correction_not_admitted`, reason `credit`). `correctionTargetFor` answers the credit itself rather than throwing, so the Fiscal filing page's path (`record-remedy-corrective.ts:160-162`) keeps refusing with its own `fiscal.remedy_invalid`. A credit AEAT refuses gets no fix offered (`put-right.ts`), and its filing case's wording says Waitron cannot put it right and the accountant decides. A negative R5 "S" replacement is never written: nothing has tested one (PR 0's case (e) only reports AEAT's answer) |
-| N16 | A full invoice from a swap that AEAT refuses | Put right as any full invoice: its R4 "S" replacement (A1407, while `FULL_INVOICE_REPLACEMENT_ON`) stands in its place. `correctionTargetFor` goes receipt → full invoice → its replacement, and `correctivesOf(receipt)` counts the full invoice's correctives except its replacement, plus the replacement's correctives, mirroring its own first two branches |
+| N16 | A full invoice from a swap that AEAT refuses | **Today** `FULL_INVOICE_REPLACEMENT_ON` is `false` (`put-right.ts:29`): the Fiscal filing page offers it whatever it offers any full invoice for that refusal, and where that is nothing (a `1112` refusal, among others), its filing case says, EN: "The tax agency refused full invoice FF/12, made from receipt FS/123. Waitron cannot put it right; your accountant decides what to issue." / ES: «La Agencia Tributaria rechazó la factura FF/12, hecha a partir del tique FS/123. Waitron no puede corregirla; su gestor decide qué emitir.» A refund meanwhile goes as it would on any full invoice refused with nothing Waitron can fix. **Once the switch is on**, its R4 "S" replacement (A1407) stands in its place. `correctionTargetFor` goes receipt → full invoice → its replacement, and `correctivesOf(receipt)` counts the full invoice's correctives except its replacement, plus the replacement's correctives, mirroring its own first two branches |
 | N11 | Find a bill | The credit is a new type `receipt-credit`, "Credit of a receipt" / «Abono de factura simplificada», included under the Correctives filter; the full invoice is `full-invoice`, as any F1 |
 | N12 | Fiscal regime with no records (`fiscal-none`) | Not offered: `creditAdmissionFor` answers `unsupported`, as its `correctionAdmissionFor` does (`fiscal-none/src/backend.ts:80-82`) |
 | N13 | F3 removal scope | Remove everything that issues an F3 or treats a sale as one. Keep the code that reads or repeats AEAT's record shape, F3 included, as the library does: `verifactu_records.facturas_sustituidas` and its round trip (`registro-row.ts:200`, `:446`) and check `verifactu_records_facturas_sustituidas_f3_ck` (`schema/verifactu-records.ts:148-153`); the remedy's copy of it (`record-remedy-http.ts:113`, `:184`, `:206`); returned invoices' typing (`returned-invoices.ts:75`); the put-right reading of a record's type (`put-right.ts:60`); the remedy's list of types (`record-remedy-facts.ts:113`); the Fiscal filing screen's kinds (`dashboard/fiscal-filing-screen.ts:123`, `fiscal_filing.kind.F3` at `dashboard/strings.ts:361`, `:765`); and the doc sentence at `correction-record-type.ts:6`, which stays true. Archive branch `archive/f3-canje` |
@@ -164,9 +164,9 @@ exactly as a replacement's correctives work today.
 
 ## 5. Every reader of `sale_substitutions` today, and its rule now
 
-PR 1 removes each F3 clause; PR 4 adds the new one where the right column says so. Lines are `main`'s.
+PRs 1a and 1b remove each F3 clause; PRs 4a–4c add the new one where the right column says so. Lines are `main`'s.
 
-| Reader | Today | After PR 4 |
+| Reader | Today | After PRs 4a–4c |
 | --- | --- | --- |
 | `packages/core/src/list-outstanding-sales.ts:55` | leaves an F3 out | leaves out `credits_sale_id is not null` and a full invoice in `sale_reissues` |
 | `apps/server/src/orders-list.ts:177-178` (walk-up sales) | same | same as above |
@@ -291,6 +291,9 @@ Like F3-0 (verifactu#158, `be5ccf2aab`). Runs in parallel with PR 1.
   - (b) F2 +€12.00 at two rates (10 %: €5.00 gross → €4.55/€0.45; 21 %: €7.00 → €5.79/€1.21)
     yesterday; F2 −€12.00 at both rates today with FechaOperacion yesterday; F1 €12.00 today with
     FechaOperacion yesterday.
+  - In (a) and (b) the credit and the full invoice carry the **same** `FechaHoraHusoGenRegistro`,
+    as the build will send them: both are written with one frozen clock (`issue-clock.ts:22-30`) and
+    `backend.ts` files `generadoEn: sale.issuedAt` (`:334`). The test asserts the two values equal.
   - (c) control, reported only: an F2 −€9.00 today with FechaOperacion **tomorrow**, which AEAT is
     expected to refuse; its answer shows the service reads FechaOperacion on these records at all.
   - (d) reported only: (b)'s F1, then an R4 "S" replacing it (same figures, FechaOperacion
@@ -317,7 +320,15 @@ whichever they are.
 
 ---
 
-## PR 1 (waitron, FISCAL, about a day): remove the F3 code from `main`
+## PR 1a (waitron, FISCAL, half a day; about −300 product lines, −500 test lines): the F3's readers go
+
+Tasks 1.1–1.2c. Code only, no schema change. The archive branch below is pushed before PR 1a.
+
+## PR 1b (FISCAL, half a day; about −400 product lines, −1,900 test lines, four whole files of 1,886 among them): the F3's writer and codes go
+
+Task 1.3, after PR 1a.
+
+### Both
 
 Code only, no schema change and no reset: after it, `sale_substitutions` is still in the schema but
 nothing reads or writes it, and PR 2 drops it in its own rebuild.
@@ -412,7 +423,7 @@ A556 deleted (`docs/backlog.md:281-283`, `docs/backlog/fiscal.md:1031-1041`, men
 
 ---
 
-## PR 2 (FISCAL, about a day): storage — nothing writes it yet
+## PR 2 (FISCAL, about a day; about +180 product lines and −120 for the F3's table, +400 test lines, plus the regenerated baseline and snapshot): storage — nothing writes it yet
 
 The one venue reset of this plan: the F3's table is dropped and the new column and table added in
 one rebuild of core's starting migration.
@@ -517,7 +528,13 @@ Leaves: nothing reachable changes; the database can now hold a swap.
 
 ---
 
-## PR 3 (FISCAL, about a day): the writer — nothing calls it yet
+## PR 3a (FISCAL, half a day; about +200 product lines, +350 test lines): the regime files a credit
+
+Task 3.1.
+
+## PR 3b (FISCAL, about a day; about +350 product lines, +750 test lines): core writes the swap
+
+Tasks 3.2–3.4, after PR 3a. Nothing calls either yet.
 
 ### Task 3.1: the regime files a credit
 
@@ -584,26 +601,29 @@ export interface ReceiptStanding {
 }
 export async function readReceiptStanding(tx: Transaction, receiptId: SaleId): Promise<ReceiptStanding>;
 ```
-Lines (N5): for each line of `standsAs`, add the money of every corrective line naming it
-(`sale_lines.corrects_line_id`): `lineTotal`, `lineGross`, `setMenuPart`. A corrective line whose
-`lineGross` equals its quantity's share of the line's (`quantity × lineGross / line quantity`, at the
-cent) also takes its quantity off; any other is money-only and leaves the quantity. Quantity 0 (or
-gross 0): dropped. Otherwise: the quantity left, the original's `unitPrice`, `listGross` the
-original's list for that quantity (its `listGross` if it had one, else its `lineGross`, scaled by
-quantity left / quantity), `lineGross` and `lineTotal` what is left. Each line keeps its `lineNo`;
+Lines (N5): read `readCorrectionAmountHistory(tx, standsAs)` (`correction-history.ts:221`) and
+`remainingLines(history)` (`correction-allocation.ts:189`): each line's gross left. That function
+cuts only the gross (`correction-allocation.ts:232-243`), so each line's base left is its `base` less
+the `base` of `history.consumed` allocations for that line, the same allocations. Both refuse a
+history they cannot read (`sale.correction_history_unusable`). On top, only the quantity rule: gross
+left 0, the line is dropped; otherwise it keeps its stored quantity, `unitPrice`, and as `listGross`
+its own `listGross`, else its `lineGross`; `lineGross` and `lineTotal` are what is left; its
+`setMenuPart` less what corrective lines took of it (`partsTaken`, which `readHistory` builds, `correction-history.ts:379-385`).
+Each line keeps its `lineNo`;
 `parentLineNo` keeps naming the parent's number, and a child whose parent was dropped keeps it too
 (the parent's row is still the receipt's). The credit's lines are the same rows negated, at the same
 numbers. `operationDay` uses the same
-expression as `saleVatDay` (`accountant-export.ts:446-454`). Refused `sale.correction_history_unusable`
-when a corrective line names no line of `standsAs`. No check ties the lines to the breakdown: a
+expression as `saleVatDay` (`accountant-export.ts:446-454`). No check ties the lines to the breakdown: a
 receipt's own breakdown may be supplied rather than derived from its lines (`record-sale.ts:84-90`),
 and the full invoice copies both as they stand; its total and breakdown equal the standing ones by
 construction.
 
-- [ ] **Step 1: Failing tests** (seeded with `recordSale` and `recordCorrection`): untouched receipt (§4's
-  €9.00: lines and breakdown equal the receipt's); the beer refunded (2 chips at line 2, no line 1,
-  €6.00, €5.45/€0.55); one of the two chips given back (a corrective line −1 × chips, −€3.00, seeded
-  directly): 1 chips, €3.00, quantity 1;
+- [ ] **Step 1: Failing tests** (receipts seeded with `recordSale`; every corrective written as the
+  real give-back writes it, through `previewCorrectionAmounts` then `recordCorrection` with the
+  preview's lines, the calls `fileCorrectionIn` makes, `invoice-corrections.ts:471`, `:482`, never
+  hand-built rows): untouched receipt (§4's €9.00: lines and breakdown equal the receipt's); the beer
+  refunded whole (2 chips at line 2, no line 1, €6.00, €5.45/€0.55); €3.00 given back on the chips
+  line (one of two chips): "2 × chips", list €6.00, charged €3.00, quantity 2;
   €1.00 goodwill on the chips (chips line €6.00 list, €5.00 charged, `lineTotal` €4.54; breakdown
   €7.27/€0.73); a shared free item's share (CLAUDE.md §3, A445) and a divided set menu, each with
   a partial refund, summing exactly; a receipt with a replacement (lines from the replacement, its
@@ -682,8 +702,11 @@ clock the caller passes (`prepareIssueClock`'s), so they carry one instant.
   an F2 alta of −€6.00 and an F1 alta of €6.00 with `Destinatarios`, both with `FechaOperacion`
   30/09 when the swap is 02/10 and neither on the same day; both chained after the receipt; the
   library's `validate` empty for both; a receipt refused by AEAT and unfixed writes nothing.
-  **A refused full invoice (N16):** FF/12 refused `1100`, then put right by its R4 "S" through the
-  Fiscal filing page's path with `FULL_INVOICE_REPLACEMENT_ON`; a refund opened from FS/123 then files
+  **A refused full invoice, switch off (N16, today's path):** FF/12 refused `1112`; the put-right
+  offers no fix, the filing case carries N16's wording in both languages, and a refund opened from
+  FS/123 ends as `give-back-full-invoice.test.ts` asserts for an F1 refused with nothing to fix.
+  **Switch on:** FF/12 refused `1112`, then put right by its R4 "S" through the Fiscal filing page's
+  path; a refund opened from FS/123 then files
   an R1 naming the R4, and `correctivesOf(FS/123)` counts that R1 and not the R4. **A refused credit
   (N10):** FS/140 refused; the put-right offers no fix, the remedy route refuses `fiscal.remedy_invalid`,
   `recordReplacement` of FS/140 is refused `credit`, and no record is written.
@@ -694,7 +717,7 @@ Leaves: nothing reachable changes.
 
 ---
 
-## PR 4a (FISCAL, half a day): the reports
+## PR 4a (FISCAL, half a day; about +40 product lines, +300 test lines): the reports
 
 ### Task 4.1: outstanding and daily reports leave the pair out
 
@@ -729,7 +752,9 @@ Leaves: reports right for a swap no one can yet make.
 
 ---
 
-## PR 4b (FISCAL, about a day): server readers, and refunds after the swap
+## PR 4b (FISCAL, about a day; about +250 product lines, +600 test lines): server readers
+
+Tasks 4.3a–4.4b.
 
 ### Task 4.3a: Find a bill and the invoice lookup
 
@@ -774,6 +799,10 @@ swap (rows copied, a held different row a conflict).
   each live list names `sale_reissues`.
 - [ ] **Steps 2–5:** run, implement, rerun, commit.
 
+## PR 4c (FISCAL, half a day; about +80 product lines, +450 test lines): corrections after the swap
+
+Task 4.5, after PR 4b.
+
 ### Task 4.5: corrections after the swap
 
 **Files:** Tests: create `apps/server/src/reissue-corrections.test.ts`. Modify
@@ -792,7 +821,9 @@ as one opened from a replacement is); `apps/server/src/cancelled-lines.ts` and
   Cancel and Reopen of FS/123's bill refused with the code a full invoice's Cancel gets today, the
   test naming and asserting it (N9); the Fiscal filing
   page's replacement of FS/123 refused `reissued`; a correction opened from FF/12 itself (Find a bill)
-  is accepted and files an R1 paid from the receipt's payments; a dish of FS/123 cancelled after the
+  is accepted and files an R1 paid from the receipt's payments; one of two chips given back through
+  the real give-back route before the swap, then the swap: FF/12's lines read "2 × chips", charged
+  €3.00 (N5); a dish of FS/123 cancelled after the
   swap: its refund goes on the R1 for that dish's line on FF/12 (the cancel paired by line number),
   and the cancel is paid as CORRECT-FULL-INVOICE §5 rules.
 - [ ] **Steps 2–5:** run, implement, rerun, commit.
@@ -801,7 +832,7 @@ Leaves: every reader is ready; still no route.
 
 ---
 
-## PR 5a (FISCAL, about a day): the route
+## PR 5a (FISCAL, about a day; about +300 product lines, +450 test lines): the route
 
 ### Task 5.1: preview and write
 
@@ -849,7 +880,7 @@ Leaves: the route works; no screen calls it.
 
 ---
 
-## PR 5b (FISCAL, about a day): the paper
+## PR 5b (FISCAL, about a day; about +200 product lines, +350 test lines): the paper
 
 ### Task 5.3: both documents say what they are
 
@@ -876,7 +907,7 @@ invoice has none: both read the receipt's for it, settled when the receipt is.
 
 ---
 
-## PR 6 (till, about a day; the owner lands: it is the fiscal action's only entry)
+## PR 6 (till, about a day; about +400 product lines, +500 test lines; the owner lands: it is the fiscal action's only entry)
 
 ### Task 6.1: the action and its place
 
@@ -906,7 +937,9 @@ emailed"); a refused write keeps the typed details; Back asks before losing them
 at `:142-143` ("Turning a paid bill into a full invoice would correct an invoice already issued, and
 Waitron does not offer that correction yet") with a short section under `{#full-invoice}`: open the
 receipt from Find a bill, Make it a full invoice, the customer, Print or Email; refunds after go on
-the full invoice. Shared `{#id}`. Pictures beside frames `bf` and `q` 4 at 390 px, light and dark;
+the full invoice. Shared `{#id}`. Pictures beside frames `bf` and `q` 4 at 390 px, light and dark,
+including a full invoice made from a receipt with one of two chips given back, which prints
+"2 × chips" charged €3.00 (N5), so the owner sees it;
 lane P's read says "ready for the owner"; shown to the owner, never committed.
 
 - [ ] Steps: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts` pass; commit.
@@ -915,7 +948,7 @@ Leaves: staff can make a past receipt a full invoice.
 
 ---
 
-## PR 7 (FISCAL): a receipt that is an advance
+## PR 7 (FISCAL; about +150 product lines, +300 test lines, to be re-estimated when expanded): a receipt that is an advance
 
 **Expand before dispatch.** PRs 7–9 state their rules and defaults here; their file lists and failing
 tests are written out, to Task 3.3's level, by lane A when PR 6 has landed and before any implementer
@@ -948,7 +981,7 @@ taken off already is refused; a give-back of the advance after the swap files an
 
 - [ ] Steps: failing tests, implement, rerun, commit.
 
-## PR 8 (FISCAL): a receipt that took an advance off
+## PR 8 (FISCAL; about +100 product lines, +250 test lines, to be re-estimated): a receipt that took an advance off
 
 **Expand before dispatch** (as PR 7).
 
@@ -968,7 +1001,7 @@ off by FF/14"; the advance's own give-back is unchanged.
 
 - [ ] Steps: failing tests, implement, rerun, commit.
 
-## PR 9 (FISCAL): an unpaid (deferred) receipt
+## PR 9 (FISCAL; about +150 product lines, +300 test lines, to be re-estimated): an unpaid (deferred) receipt
 
 **Expand before dispatch** (as PR 7).
 
@@ -1016,14 +1049,11 @@ a full invoice: the export row names FF/15 in `reissuedAs`, and FF/15's paper pr
   `correctivesOf` condition leaving an R4 that is a link's credit out of the original's sum (an R4
   sets `corrects_sale_id`, so the first branch would count it; this plan's credit does not, because
   it uses `credits_sale_id`). Plan 2 does not need a second link table.
-- **The design's §3** says "the money readers count the credit against the receipt". **2026-11-28:**
-  superseded by N2 here (the receipt keeps its payments; the credit and the full invoice are left out
-  of every "owed" sum; the full invoice's correctives count against the receipt). The main session
-  adds that dated note to the design.
 
 ## Order, and overlaps
 
-D → PR 0 ∥ archive push + PR 1 → PR 2 → PR 3 → PR 4a ∥ PR 4b → PR 5a ∥ PR 5b → (PR 0's answer) →
+D → PR 0 ∥ archive push + PR 1a → PR 1b → PR 2 → PR 3a → PR 3b → PR 4a ∥ (PR 4b → PR 4c) →
+PR 5a ∥ PR 5b → (PR 0's answer) →
 PR 6 → PRs 7, 8, 9 in any order. Only PR 2 rebuilds core's baseline.
 
 - **Lane L, plans 1 and 2:** see the section above.
