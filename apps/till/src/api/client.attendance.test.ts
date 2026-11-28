@@ -126,12 +126,6 @@ describe("attendance client", () => {
       },
     ],
     ["getAttendanceCommand", ["command/id"], "/api/attendance/commands/command%2Fid", null],
-    [
-      "listAttendanceApprovers",
-      ["item/id", "decline"],
-      "/api/attendance/items/item%2Fid/approvers?action=decline",
-      [{ personId: "manager", displayName: "Marta" }],
-    ],
   ] as const)(
     "%s preserves scope, cancellation and credentials",
     async (method, args, path, body) => {
@@ -147,35 +141,31 @@ describe("attendance client", () => {
     },
   );
 
-  it.each([undefined, { personId: "selected-manager", pin: "1234" }])(
-    "posts the command once with only the selected PIN envelope when present: %j",
-    async (override) => {
-      const answer = { commandId: "command", entryIds: ["saved"], replayed: false };
-      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(answer)));
-      const api = new TillApi("", fetcher);
-      expect(api.sendAttendanceCommand).toBeTypeOf("function");
-      const signal = new AbortController().signal;
-      const command = {
-        action: "approve" as const,
-        commandId: "command",
-        itemId: "request",
-        expectedRevision: "revision",
-      };
-      expect(await api.sendAttendanceCommand(command, override, { signal })).toEqual(answer);
-      expect(fetcher.mock.calls).toEqual([
-        [
-          "/api/attendance/commands",
-          {
-            method: "POST",
-            credentials: "include",
-            signal,
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(override ? { ...command, override } : command),
-          },
-        ],
-      ]);
-    },
-  );
+  it("posts a worker response once, with cancellation and credentials", async () => {
+    const answer = { commandId: "command", entryIds: ["saved"], replayed: false };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(answer)));
+    const api = new TillApi("", fetcher);
+    const signal = new AbortController().signal;
+    const command = {
+      action: "accept" as const,
+      commandId: "command",
+      itemId: "proposal",
+      expectedRevision: "revision",
+    };
+    expect(await api.sendAttendanceCommand(command, { signal })).toEqual(answer);
+    expect(fetcher.mock.calls).toEqual([
+      [
+        "/api/attendance/commands",
+        {
+          method: "POST",
+          credentials: "include",
+          signal,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(command),
+        },
+      ],
+    ]);
+  });
 
   it("does not replay a lost answer or turn a refusal into a network failure", async () => {
     const fetcher = vi

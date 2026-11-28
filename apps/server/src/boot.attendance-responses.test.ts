@@ -172,7 +172,9 @@ describe("attendance response boot with permanent workforce", () => {
             "/api/attendance/inbox",
             "/api/attendance/day?date=2026-01-05",
             `/api/attendance/commands/${crypto.randomUUID()}`,
-            `/api/attendance/items/${crypto.randomUUID()}/approvers?action=approve`,
+            "/api/attendance/manager/lookups",
+            "/api/attendance/manager/queue",
+            `/api/attendance/manager/day?personId=${venue.personId}&date=2026-01-05`,
             "/management-api/attendance/lookups",
             "/management-api/attendance/queue",
             `/management-api/attendance/day?personId=${venue.personId}&date=2026-01-05`,
@@ -183,6 +185,11 @@ describe("attendance response boot with permanent workforce", () => {
             expect(inboxResponse.status).toBe(200);
             const inbox = (await inboxResponse.json()) as AttendanceInbox;
             expect(inbox).toMatchObject({ personId: venue.personId, prompts: [], items: [] });
+            const managerQueue = await get("/api/attendance/manager/queue", venue.cookie);
+            expect(managerQueue.status).toBe(403);
+            expect(await managerQueue.json()).toMatchObject({
+              error: { code: "authorization.not_permitted" },
+            });
             const beforePassive = statements.length;
             const lookup = await get("/management-api/attendance/lookups", managerCookie, true);
             expect(lookup.status).toBe(200);
@@ -242,6 +249,8 @@ describe("attendance response boot with permanent workforce", () => {
             }
             for (const path of [
               "/api/attendance/commands",
+              "/api/attendance/manager/commands",
+              "/api/attendance/manager/approve-days",
               "/management-api/attendance/commands",
             ]) {
               const response = await fetch(`${origin}${path}`, {

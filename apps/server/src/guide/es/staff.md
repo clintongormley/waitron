@@ -245,9 +245,7 @@ fichar. Elige la **Fecha** y pulsa **Corregir hora** junto a un fichaje, o **Fic
 También puedes añadir juntos la entrada y la salida que faltan, o el inicio y el fin de un descanso.
 
 Introduce las fechas y horas reales y un **Motivo**, y pulsa **Guardar** para registrar tu
-solicitud. Pide a otro supervisor, encargado o administrador que elija **Aprobar con PIN**,
-seleccione su nombre e introduzca su PIN. Si eres administrador, puedes aprobar tu propia
-solicitud. Consulta su estado en **Mis horas**.
+solicitud. Se envía a los encargados. Consulta su estado en **Mis horas**.
 
 ## Aprobar los días terminados {#approve-hours}
 

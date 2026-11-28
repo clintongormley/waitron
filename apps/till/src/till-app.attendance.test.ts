@@ -246,7 +246,6 @@ describe("till attendance sign-in flow", () => {
         action: "confirm",
         questionId: "question",
       },
-      undefined,
       { signal: expect.any(AbortSignal) },
     );
     expect(f.api.clockIn).not.toHaveBeenCalled();
@@ -279,7 +278,6 @@ describe("till attendance sign-in flow", () => {
     await working(f.el);
     expect(f.api.sendAttendanceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ action: "accept", itemId: "proposal" }),
-      undefined,
       { signal: expect.any(AbortSignal) },
     );
     expect(clockPage(f.el)).toBeNull();
@@ -453,33 +451,7 @@ async function saveCorrection(el: TillApp) {
   const dialog = await correction(el);
   await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-save]")!);
 }
-async function pinDialog(el: TillApp) {
-  await vi.waitFor(() =>
-    expect(
-      el.shadowRoot!.querySelector("till-supervisor-override-dialog[data-attendance-pin]"),
-    ).not.toBeNull(),
-  );
-  const dialog = el.shadowRoot!.querySelector<
-    import("./widgets/supervisor-override-dialog.js").TillSupervisorOverrideDialog
-  >("till-supervisor-override-dialog[data-attendance-pin]")!;
-  await dialog.updateComplete;
-  return dialog;
-}
-async function selectPin(el: TillApp, personId: string) {
-  const dialog = await pinDialog(el);
-  await userEvent.click(
-    dialog.shadowRoot!.querySelector<HTMLElement>(`[data-person="${personId}"]`)!,
-  );
-  await dialog.updateComplete;
-  const pad = dialog.shadowRoot!.querySelector("till-numeric-pad")!;
-  await pad.updateComplete;
-  for (let n = 0; n < 4; n++)
-    await userEvent.click(pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!);
-  await dialog.updateComplete;
-  await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
-}
-
-describe("till correction editors and manager PIN", () => {
+describe("till correction editors", () => {
   it("No, I left at opens the recorded time, submits a reasoned change, then closes before refresh", async () => {
     const f = await clockApp();
     f.api.getAttendanceInbox
@@ -508,7 +480,6 @@ describe("till correction editors and manager PIN", () => {
         ],
         reason: "Closed late",
       },
-      undefined,
       { signal: expect.any(AbortSignal) },
     );
     await vi.waitFor(() =>
@@ -619,98 +590,6 @@ describe("till correction editors and manager PIN", () => {
       [...editor.shadowRoot!.querySelectorAll("wt-input")].map((field) => field.value),
     ).toEqual(["", "", "", ""]);
   });
-
-  it.each([false, true])(
-    "reopened pending requests use the server's eligible picker, including admin self=%s",
-    async (admin) => {
-      const f = await clockApp({ state: clockState("working", "in") });
-      const item = attendanceItem({
-        personId: "p1",
-        direction: "worker_request",
-        status: "waiting-manager",
-      });
-      f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-      f.api.getAttendanceDay.mockImplementation(async (date) => ({
-        personId: "p1",
-        date,
-        revision: "day-revision",
-        timeZone: "Europe/Madrid",
-        record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
-        items: [item],
-      }));
-      f.api.listAttendanceApprovers.mockResolvedValue(
-        admin
-          ? [
-              { personId: "p1", displayName: "Ana" },
-              { personId: "manager", displayName: "Marta" },
-            ]
-          : [{ personId: "manager", displayName: "Marta" }],
-      );
-      await signIn(f.el);
-      await working(f.el);
-      await shellAction(f.el, "[data-fix-hours]");
-      await vi.waitFor(() =>
-        expect(f.el.shadowRoot!.querySelector("till-attendance-day-dialog")?.view).not.toBeNull(),
-      );
-      const day = f.el.shadowRoot!.querySelector("till-attendance-day-dialog")!;
-      await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-approve]")!);
-      const pin = await pinDialog(f.el);
-      expect(pin.shadowRoot!.querySelector('[data-person="p1"]') !== null).toBe(admin);
-      expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
-      await selectPin(f.el, admin ? "p1" : "manager");
-      await vi.waitFor(() => expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1));
-      expect(f.api.sendAttendanceCommand).toHaveBeenCalledWith(
-        {
-          commandId: expect.any(String),
-          expectedRevision: "day-revision",
-          action: "approve",
-          itemId: "proposal",
-        },
-        { personId: admin ? "p1" : "manager", pin: "5555" },
-        { signal: expect.any(AbortSignal) },
-      );
-      expect(
-        f.el.shadowRoot!.querySelector("till-supervisor-override-dialog[data-attendance-pin]"),
-      ).toBeNull();
-    },
-  );
-
-  it("canceling manager PIN leaves the request pending without a POST", async () => {
-    const f = await clockApp({ state: clockState("working", "in") });
-    const item = attendanceItem({
-      personId: "p1",
-      direction: "worker_request",
-      status: "waiting-manager",
-    });
-    f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-    f.api.getAttendanceDay.mockImplementation(async (date) => ({
-      personId: "p1",
-      date,
-      revision: "revision",
-      timeZone: "Europe/Madrid",
-      record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
-      items: [item],
-    }));
-    await signIn(f.el);
-    await working(f.el);
-    await shellAction(f.el, "[data-fix-hours]");
-    const day = f.el.shadowRoot!.querySelector("till-attendance-day-dialog")!;
-    await vi.waitFor(() => expect(day.shadowRoot!.querySelector("[data-approve]")).not.toBeNull());
-    await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-approve]")!);
-    const pin = await pinDialog(f.el);
-    const closed = new Promise((resolve) =>
-      pin.addEventListener("override-cancel", resolve, { once: true }),
-    );
-    await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
-    await closed;
-    await vi.waitFor(() =>
-      expect(
-        f.el.shadowRoot!.querySelector("till-supervisor-override-dialog[data-attendance-pin]"),
-      ).toBeNull(),
-    );
-    expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
-    expect(day.view!.items[0]!.status).toBe("waiting-manager");
-  });
 });
 
 it("a known absent receipt offers an explicit retry of the identical command, without auto-sending", async () => {
@@ -732,57 +611,6 @@ it("a known absent receipt offers an explicit retry of the identical command, wi
   await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
   expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(2);
   expect(f.api.sendAttendanceCommand.mock.calls[1]![0]).toEqual(sent);
-});
-
-it("a lost PIN approval is recovered from the day and retried with the same command and a fresh PIN", async () => {
-  const f = await clockApp({ state: clockState("working", "in") });
-  const item = attendanceItem({
-    direction: "worker_request",
-    status: "waiting-manager",
-    personId: "p1",
-  });
-  f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date) => ({
-    personId: "p1",
-    date,
-    revision: "revision",
-    timeZone: "Europe/Madrid",
-    record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
-    items: [item],
-  }));
-  f.api.sendAttendanceCommand.mockRejectedValueOnce(new TypeError("lost reply"));
-  f.api.getAttendanceCommand
-    .mockRejectedValueOnce(new TypeError("receipt offline"))
-    .mockResolvedValueOnce(null);
-  await signIn(f.el);
-  await working(f.el);
-  await shellAction(f.el, "[data-fix-hours]");
-  const day = f.el.shadowRoot!.querySelector("till-attendance-day-dialog")!;
-  await vi.waitFor(() => expect(day.shadowRoot!.querySelector("[data-approve]")).not.toBeNull());
-  await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-approve]")!);
-  await selectPin(f.el, "manager");
-  await vi.waitFor(() => expect(day.error).toContain("The answer was lost."));
-  expect(day.blocked).toBe(true);
-  const originalCommand = structuredClone(f.api.sendAttendanceCommand.mock.calls[0]![0]);
-  await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-retry]")!);
-  await vi.waitFor(() => expect(day.canRetry).toBe(true));
-  await vi.waitFor(() => expect(day.reading).toBe(false));
-  expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
-  await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-retry-command]")!);
-  const pin = await pinDialog(f.el);
-  expect(pin.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
-  expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
-  await selectPin(f.el, "manager");
-  await vi.waitFor(() => expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(2));
-  expect(f.api.sendAttendanceCommand.mock.calls[1]![0]).toEqual(originalCommand);
-  expect(f.api.sendAttendanceCommand.mock.calls[1]![1]).toEqual({
-    personId: "manager",
-    pin: "5555",
-  });
-  expect(f.api.listAttendanceApprovers.mock.calls.map((call) => call.slice(0, 2))).toEqual([
-    [item.id, "approve"],
-    [item.id, "approve"],
-  ]);
 });
 
 it("a recorded day's retime keeps its target and recovers a lost reply through the editor", async () => {
@@ -865,7 +693,7 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
   );
 });
 
-it("a new correction offers the matching pending request's PIN approval, and Cancel leaves it pending", async () => {
+it("a submitted correction goes to the manager and the worker can continue to Clock in", async () => {
   const f = await clockApp();
   const item = attendanceItem({
     id: "new-request",
@@ -887,18 +715,9 @@ it("a new correction offers the matching pending request's PIN approval, and Can
   await fillCorrection(f.el, "attendanceTime0", "02:15");
   await fillCorrection(f.el, "attendanceReason", "Closed late");
   await saveCorrection(f.el);
-  const pin = await pinDialog(f.el);
-  expect(f.api.listAttendanceApprovers).toHaveBeenCalledWith("new-request", "approve", {
-    signal: expect.any(AbortSignal),
-  });
+  await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+  expect(f.el.shadowRoot!.querySelector("[data-attendance-pin]")).toBeNull();
   expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
-  const closed = new Promise((resolve) =>
-    pin.addEventListener("override-cancel", resolve, { once: true }),
-  );
-  await userEvent.click(pin.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
-  await closed;
-  expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
-  expect(clockPage(f.el)).not.toBeNull();
 });
 
 it("Cancel can return to work during uncertainty, and Fix my hours can recover it without another POST", async () => {
@@ -934,49 +753,6 @@ it("Cancel can return to work during uncertainty, and Fix my hours can recover i
   expect(f.api.getAttendanceCommand).toHaveBeenCalledTimes(2);
   expect(f.api.clockIn).not.toHaveBeenCalled();
   expect(questions(f.el)).toBeNull();
-});
-
-it("closing during an approver read retires that opening and does not block a reopened day", async () => {
-  const f = await clockApp({ state: clockState("working", "in") });
-  const item = attendanceItem({
-    personId: "p1",
-    direction: "worker_request",
-    status: "waiting-manager",
-  });
-  f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date) => ({
-    personId: "p1",
-    date,
-    revision: "revision",
-    timeZone: "Europe/Madrid",
-    record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
-    items: [item],
-  }));
-  const held = deferred<import("./api/device-session-api.js").StaffMember[]>();
-  f.api.listAttendanceApprovers.mockReturnValueOnce(held.promise);
-  await signIn(f.el);
-  await working(f.el);
-  await shellAction(f.el, "[data-fix-hours]");
-  const day = f.el.shadowRoot!.querySelector("till-attendance-day-dialog")!;
-  await vi.waitFor(() => expect(day.shadowRoot!.querySelector("[data-approve]")).not.toBeNull());
-  await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-approve]")!);
-  await vi.waitFor(() => expect(f.api.listAttendanceApprovers).toHaveBeenCalledTimes(1));
-  const closed = new Promise((resolve) =>
-    day.addEventListener("attendance-day-close", resolve, { once: true }),
-  );
-  await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-close]")!);
-  await closed;
-  await shellAction(f.el, "[data-fix-hours]");
-  const reopened = f.el.shadowRoot!.querySelector("till-attendance-day-dialog")!;
-  await vi.waitFor(() => expect(reopened.view ?? null).not.toBeNull());
-  held.resolve([{ personId: "manager", displayName: "Marta" }]);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await f.el.updateComplete;
-  expect(
-    f.el.shadowRoot!.querySelector("till-supervisor-override-dialog[data-attendance-pin]"),
-  ).toBeNull();
-  expect(reopened.reading).toBe(false);
-  expect(reopened.shadowRoot!.querySelector("[data-approve]")).not.toBeNull();
 });
 
 it("keeps Retry read usable when the initial clock read fails before attendance loads", async () => {

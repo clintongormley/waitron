@@ -227,9 +227,7 @@ break** or **End break** to add a missing entry. You can also add a missing cloc
 or both ends of a break together.
 
 Enter the actual dates and times and a **Reason**, then choose **Save** to record your request.
-Ask another supervisor, manager or administrator to choose **Approve with a PIN**, select their
-name and enter their PIN. As an administrator, you can approve your own request. Check **My hours**
-for the request's progress.
+Your request goes to the managers. Check **My hours** for its progress.
 
 ## Approve finished days {#approve-hours}
 

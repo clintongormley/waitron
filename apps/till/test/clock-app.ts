@@ -52,7 +52,6 @@ type ClockTestApi = {
       | "getAttendanceInbox"
       | "getAttendanceDay"
       | "getAttendanceCommand"
-      | "listAttendanceApprovers"
       | "sendAttendanceCommand"
   ]: Mock<TillApi[K]>;
 };
@@ -187,9 +186,6 @@ export async function clockApp(
       items: [],
     })),
     getAttendanceCommand: vi.fn().mockResolvedValue(null),
-    listAttendanceApprovers: vi
-      .fn()
-      .mockResolvedValue([{ personId: "manager", displayName: "Marta" }]),
     sendAttendanceCommand: vi.fn().mockImplementation(async (command) => ({
       commandId: command.commandId,
       entryIds: ["answer"],

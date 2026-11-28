@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  AttendanceCommand,
-  AttendanceCommandResult,
-  AttendanceDayView,
-  AttendanceInbox,
-} from "../api/client.js";
+import type { AttendanceCommandResult, AttendanceDayView, AttendanceInbox } from "../api/client.js";
 import type { AttendanceController, AttendanceSnapshot } from "./attendance.js";
+import type { OwnAttendanceCommand } from "@waitron/workforce/attendance-contract";
 import { SessionActivity } from "../session-activity.js";
 
 const modules = import.meta.glob<typeof import("./attendance.js")>("./attendance.ts");
-const command: AttendanceCommand = {
+const command: OwnAttendanceCommand = {
   action: "confirm",
   commandId: "command",
   questionId: "question",
@@ -56,7 +52,6 @@ async function fixture() {
     getAttendanceInbox: vi.fn().mockResolvedValue(inbox()),
     getAttendanceDay: vi.fn().mockResolvedValue(day()),
     getAttendanceCommand: vi.fn().mockResolvedValue(null),
-    listAttendanceApprovers: vi.fn().mockResolvedValue([]),
     sendAttendanceCommand: vi.fn().mockResolvedValue(saved),
   };
   const changed = vi.fn<(value: AttendanceSnapshot) => void>();
@@ -75,29 +70,22 @@ afterEach(() => {
 });
 
 describe("attendance state ownership", () => {
-  it("stop aborts every outstanding inbox, day and picker read", async () => {
+  it("stop aborts outstanding inbox and day reads", async () => {
     const f = await fixture();
     await f.controller.start("ana");
     f.api.getAttendanceInbox.mockReturnValueOnce(new Promise(() => {}));
     f.api.getAttendanceDay.mockReturnValueOnce(new Promise(() => {}));
-    f.api.listAttendanceApprovers.mockReturnValueOnce(new Promise(() => {}));
-    const reads = [
-      f.controller.refresh(),
-      f.controller.readDay("2026-10-14"),
-      f.controller.readApprovers("item", "approve"),
-    ];
+    const reads = [f.controller.refresh(), f.controller.readDay("2026-10-14")];
     const signals = [
       f.api.getAttendanceInbox.mock.calls.at(-1)![0].signal,
       f.api.getAttendanceDay.mock.calls[0]![1].signal,
-      f.api.listAttendanceApprovers.mock.calls[0]![2].signal,
     ] as AbortSignal[];
     f.controller.stop();
-    expect(signals.map((signal) => signal.aborted)).toEqual([true, true, true]);
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, true]);
     await Promise.all(reads);
     expect(f.snapshot()).toMatchObject({
       reading: false,
       dayReading: false,
-      approversReading: false,
     });
   });
 
@@ -232,7 +220,6 @@ describe("attendance state ownership", () => {
     await f.controller.retryRead();
     expect(await f.controller.act(command)).toBeNull();
     expect(await f.controller.readDay("2026-10-14")).toBeNull();
-    expect(await f.controller.readApprovers("item", "approve")).toBeNull();
     for (const method of Object.values(f.api)) expect(method).not.toHaveBeenCalled();
   });
 
@@ -348,13 +335,12 @@ describe("attendance state ownership", () => {
     },
   );
 
-  it("recovers a lost response by its receipt without replaying a POST or retaining the PIN", async () => {
+  it("recovers a lost response by its receipt without replaying a POST", async () => {
     const f = await fixture();
     await f.controller.start("ana");
     f.api.sendAttendanceCommand.mockRejectedValueOnce(new TypeError("lost"));
     f.api.getAttendanceCommand.mockResolvedValueOnce({ ...saved, replayed: true });
-    const override = { personId: "manager", pin: "1234" };
-    expect(await f.controller.act(command, override)).toEqual({ ...saved, replayed: true });
+    expect(await f.controller.act(command)).toEqual({ ...saved, replayed: true });
     expect(f.api.sendAttendanceCommand).toHaveBeenCalledTimes(1);
     expect(f.api.getAttendanceCommand).toHaveBeenCalledWith("command", {
       signal: expect.any(AbortSignal),
@@ -363,7 +349,6 @@ describe("attendance state ownership", () => {
       uncertainCommandId: null,
       result: { ...saved, replayed: true },
     });
-    expect(JSON.stringify(f.snapshot())).not.toContain("1234");
   });
 
   it("keeps uncertainty after a failed receipt read and Retry read settles only that command", async () => {
@@ -439,7 +424,7 @@ describe("attendance state ownership", () => {
     const write = f.controller.act(command);
     await vi.advanceTimersByTimeAsync(25_000);
     expect(await write).toEqual(saved);
-    expect(f.api.sendAttendanceCommand.mock.calls[0]![2].signal.aborted).toBe(true);
+    expect(f.api.sendAttendanceCommand.mock.calls[0]![1].signal.aborted).toBe(true);
   });
 
   it("rejects an inbox or command receipt for another person or command", async () => {
@@ -495,56 +480,24 @@ describe("attendance state ownership", () => {
     },
   );
 
-  it("a write invalidates day and approver reads while a stopped editor cannot publish over a new session", async () => {
+  it("a write invalidates the day read while a stopped editor cannot publish over a new session", async () => {
     const f = await fixture();
     await f.controller.start("ana");
     const oldDay = deferred<AttendanceDayView>();
-    const oldPicker = deferred<{ personId: string; displayName: string }[]>();
     f.api.getAttendanceDay.mockReturnValueOnce(oldDay.promise);
-    f.api.listAttendanceApprovers.mockReturnValueOnce(oldPicker.promise);
     const read = f.controller.readDay("2026-10-14");
-    const picker = f.controller.readApprovers("item", "approve");
     expect(await f.controller.act(command)).toEqual(saved);
     oldDay.resolve(day());
-    oldPicker.resolve([{ personId: "manager", displayName: "Marta" }]);
     expect(await read).toBeNull();
-    expect(await picker).toBeNull();
     expect(f.snapshot()).toMatchObject({
       day: null,
       dayReading: false,
-      approvers: null,
-      approversReading: false,
     });
     f.api.getAttendanceDay.mockReturnValueOnce(new Promise(() => {}));
     const stopped = f.controller.readDay("2026-10-14");
     f.controller.stop();
     expect(await stopped).toBeNull();
     expect(f.snapshot().day).toBeNull();
-  });
-
-  it("keeps only the current approver selection and recovers its read refusal", async () => {
-    const f = await fixture();
-    await f.controller.start("ana");
-    const old = deferred<{ personId: string; displayName: string }[]>();
-    f.api.listAttendanceApprovers
-      .mockReturnValueOnce(old.promise)
-      .mockRejectedValueOnce({ code: "correction.not_pending" });
-    const first = f.controller.readApprovers("old", "approve");
-    expect(await f.controller.readApprovers("current", "decline")).toBeNull();
-    old.resolve([{ personId: "old-manager", displayName: "Old" }]);
-    expect(await first).toBeNull();
-    expect(f.snapshot()).toMatchObject({
-      approvers: null,
-      approversError: { code: "correction.not_pending" },
-      approversReading: false,
-    });
-    f.api.listAttendanceApprovers.mockResolvedValueOnce([
-      { personId: "manager", displayName: "Marta" },
-    ]);
-    expect(await f.controller.readApprovers("current", "approve")).toEqual([
-      { personId: "manager", displayName: "Marta" },
-    ]);
-    expect(f.snapshot().approversError).toBeNull();
   });
 
   it("attendance reads do not postpone idle logout or reacquire the wake lock", async () => {

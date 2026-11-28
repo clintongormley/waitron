@@ -10,25 +10,19 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import {
-  authorizeByPin,
-  canUseDeviceProfile,
-  listActivePersonsWithPermission,
-  type Override,
-  type PinAttempts,
-} from "@waitron/identity";
+import { authorizeApproval, canUseDeviceProfile } from "@waitron/identity";
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { createErrorBoundary, readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import {
+  approveAttendanceDays,
   executeAttendanceCommand,
-  maySelfApproveAttendance,
   readAttendanceCommand,
   readAttendanceDay,
   readAttendanceInbox,
+  readAttendanceManagerQueue,
   readPersonHours,
   reconcileAttendanceResponses,
 } from "@waitron/workforce";
-import type { AttendanceCommand, CorrectionItem } from "@waitron/workforce/attendance-contract";
 import {
   assertProfileAction,
   deviceBindingColumns,
@@ -37,9 +31,13 @@ import {
 } from "./device-session.js";
 import { assertStillSignedIn, requireSession, SESSION_STATUS } from "./till-session.js";
 import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
-import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
-import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { parseHoursQuery } from "./hours-request.js";
+import { readAttendanceLookups } from "./attendance-lookups.js";
+import {
+  parseAttendanceCommand,
+  parseAttendanceDayApprovals,
+  parseAttendanceDayQuery,
+} from "./attendance-request.js";
+import { parseHoursQuery, parseOwnAttendanceCommand } from "./hours-request.js";
 import type { Logger } from "./logger.js";
 
 export interface TillAttendanceApiDeps {
@@ -49,7 +47,6 @@ export interface TillAttendanceApiDeps {
   deviceChooserEnabled?: boolean;
   cfg: { nodeId: string };
   now: () => Date;
-  attemptsFor: (deviceId: string) => PinAttempts;
 }
 const run = createErrorBoundary(
   {
@@ -60,25 +57,12 @@ const run = createErrorBoundary(
     "attendance.not_permitted": 403,
     "correction.not_permitted": 403,
     "authorization.not_permitted": 403,
-    "pin.invalid": 403,
-    "pin.throttled": 429,
     "attendance.state_changed": 409,
     "attendance.not_pending": 409,
     "correction.not_pending": 409,
     "correction.target_not_found": 400,
     "attendance.already_open": 409,
     "attendance.no_open_entry": 409,
-  },
-  "workforce.failed",
-);
-const runItem = createErrorBoundary(
-  {
-    ...SESSION_STATUS,
-    "device.unauthorized": 403,
-    "device.forbidden_action": 403,
-    "attendance.not_permitted": 403,
-    "correction.target_not_found": 404,
-    "correction.not_pending": 409,
   },
   "workforce.failed",
 );
@@ -104,10 +88,10 @@ async function admit(tx: Transaction, session: SignedIn) {
   if (!(await canUseDeviceProfile(tx, current.deviceProfileId, session.personId)))
     throw new AppError("attendance.not_permitted", { personId: session.personId });
 }
-async function ownItem(tx: Transaction, personId: string, itemId: string): Promise<CorrectionItem> {
+async function assertOwnItem(tx: Transaction, personId: string, itemId: string): Promise<void> {
   const inbox = await readAttendanceInbox(tx, personId);
   const item = inbox.items.find((i) => i.id === itemId || i.requestEntryIds.includes(itemId));
-  if (item) return item;
+  if (item) return;
   // A legacy pair can split into terminal singletons after its original receipt was committed.
   const receipt = await readAttendanceCommand(tx, {
     commandId: itemId,
@@ -116,22 +100,10 @@ async function ownItem(tx: Transaction, personId: string, itemId: string): Promi
   const retained =
     receipt && inbox.items.find((i) => i.history.some((e) => receipt.entryIds.includes(e.entryId)));
   if (!retained) throw new AppError("correction.target_not_found", { entryId: itemId });
-  return retained;
 }
-function envelope(raw: unknown): { command: AttendanceCommand; override?: Override } {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) invalid("command");
-  const body = raw as Record<string, unknown>;
-  if (body.action !== "approve" && body.action !== "decline")
-    return { command: parseAttendanceCommand(raw, "worker") };
-  const { override, ...command } = body;
-  if (override === null || typeof override !== "object" || Array.isArray(override))
-    invalid("override");
-  const selected = override as Record<string, unknown>;
-  if (Object.keys(selected).length !== 2 || typeof selected.pin !== "string") invalid("override");
-  return {
-    command: parseAttendanceCommand(command, "worker"),
-    override: { personId: id(selected.personId, "personId"), pin: selected.pin },
-  };
+async function admitManager(tx: Transaction, session: SignedIn) {
+  await admit(tx, session);
+  await authorizeApproval(tx, { personId: session.personId, permission: "workforce.correct" });
 }
 
 export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, log: Logger): void {
@@ -200,77 +172,120 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       );
     }),
   );
-  app.get("/api/attendance/items/:itemId/approvers", (c) =>
-    runItem(c, log, async () => {
+  app.post("/api/attendance/commands", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "clock-in" });
+      noQuery(c);
+      const command = parseOwnAttendanceCommand(await readRawJsonBody<unknown>(c));
+      const result = await withTransaction(deps.db, async (tx) => {
+        await admit(tx, session);
+        if ("itemId" in command) await assertOwnItem(tx, session.personId, command.itemId);
+        const now = deps.now();
+        await reconcileAttendanceBeforeClock(tx, { ...deps.cfg, personId: session.personId }, now);
+        await reconcileAttendanceResponses(tx, session.personId);
+        try {
+          return {
+            value: await executeAttendanceCommand(tx, {
+              nodeId: deps.cfg.nodeId,
+              requestedByPersonId: session.personId,
+              authorizedByPersonId: session.personId,
+              origin: deviceOrigin(session.deviceId),
+              command,
+              now,
+            }),
+          };
+        } catch (error) {
+          if (error instanceof AppError && error.code === "attendance.state_changed")
+            return { error };
+          throw error;
+        }
+      });
+      if (result.error) throw result.error;
+      return c.json(result.value);
+    }),
+  );
+
+  const managerWriteSession = async (c: Context) => {
+    const session = await requireSession(deps, c, { action: "clock-in" });
+    await withTransaction(deps.db, (tx) => admitManager(tx, session));
+    noQuery(c);
+    return session;
+  };
+
+  app.get("/api/attendance/manager/lookups", (c) =>
+    run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "clock-in", passive: true });
-      const query = new URL(c.req.url).searchParams;
-      const action = query.get("action");
-      if (query.size !== 1 || (action !== "approve" && action !== "decline")) invalid("action");
-      const itemId = id(c.req.param("itemId"), "itemId");
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, session);
-          const item = await ownItem(tx, session.personId, itemId);
-          if (item.direction !== "worker_request" || item.status !== "waiting-manager")
-            throw new AppError("correction.not_pending", { correctionId: itemId });
-          const eligible = await listActivePersonsWithPermission(tx, "workforce.correct");
-          const canSelfApprove = await maySelfApproveAttendance(tx, session.personId);
-          return eligible.filter(
-            (p) =>
-              p.personId !== item.requestedByPersonId ||
-              (action === "approve" && p.personId === session.personId && canSelfApprove),
+          await admitManager(tx, session);
+          noQuery(c);
+          return readAttendanceLookups(tx, session.personId);
+        }),
+      );
+    }),
+  );
+  app.get("/api/attendance/manager/queue", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "clock-in", passive: true });
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          await admitManager(tx, session);
+          noQuery(c);
+          return readAttendanceManagerQueue(tx);
+        }),
+      );
+    }),
+  );
+  app.get("/api/attendance/manager/day", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "clock-in", passive: true });
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          await admitManager(tx, session);
+          const scope = parseAttendanceDayQuery(new URL(c.req.url).searchParams, "manager");
+          return readAttendanceDay(
+            tx,
+            { ...scope, personId: scope.personId! },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
           );
         }),
       );
     }),
   );
-  app.post("/api/attendance/commands", (c) =>
+  app.post("/api/attendance/manager/commands", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "clock-in" });
-      noQuery(c);
-      const { command, override } = envelope(await readRawJsonBody<unknown>(c));
-      const attempts = deps.attemptsFor(session.deviceId);
-      const result = await withPinCheckAhead(deps.db, override, attempts, (checked) =>
-        withTransaction(deps.db, async (tx) => {
-          await admit(tx, session);
-          if ("itemId" in command) await ownItem(tx, session.personId, command.itemId);
-          const authorizedByPersonId =
-            override === undefined
-              ? session.personId
-              : (
-                  await authorizeByPin(
-                    tx,
-                    { permission: "workforce.correct", override: withCheck(override, checked)! },
-                    attempts,
-                  )
-                ).authorizedBy;
-          const now = deps.now();
-          await reconcileAttendanceBeforeClock(
-            tx,
-            { ...deps.cfg, personId: session.personId },
-            now,
-          );
-          await reconcileAttendanceResponses(tx, session.personId);
-          try {
-            return {
-              value: await executeAttendanceCommand(tx, {
-                nodeId: deps.cfg.nodeId,
-                requestedByPersonId: session.personId,
-                authorizedByPersonId,
-                origin: deviceOrigin(session.deviceId),
-                command,
-                now,
-              }),
-            };
-          } catch (error) {
-            if (error instanceof AppError && error.code === "attendance.state_changed")
-              return { error };
-            throw error;
-          }
+      const session = await managerWriteSession(c);
+      const command = parseAttendanceCommand(await readRawJsonBody<unknown>(c), "manager");
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          await admitManager(tx, session);
+          return executeAttendanceCommand(tx, {
+            nodeId: deps.cfg.nodeId,
+            requestedByPersonId: session.personId,
+            authorizedByPersonId: session.personId,
+            origin: deviceOrigin(session.deviceId),
+            command,
+            now: deps.now(),
+          });
         }),
       );
-      if (result.error) throw result.error;
-      return c.json(result.value);
+    }),
+  );
+  app.post("/api/attendance/manager/approve-days", (c) =>
+    run(c, log, async () => {
+      const session = await managerWriteSession(c);
+      const days = parseAttendanceDayApprovals(await readRawJsonBody<unknown>(c));
+      await withTransaction(deps.db, async (tx) => {
+        await admitManager(tx, session);
+        await approveAttendanceDays(tx, {
+          days,
+          actorPersonId: session.personId,
+          nodeId: deps.cfg.nodeId,
+          origin: deviceOrigin(session.deviceId),
+          now: deps.now(),
+        });
+      });
+      return c.body(null, 204);
     }),
   );
 }

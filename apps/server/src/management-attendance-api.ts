@@ -1,8 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
-import { asc } from "drizzle-orm";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { authorizeManager, holds, persons, resolveManagementSession } from "@waitron/identity";
+import { authorizeManager, holds, resolveManagementSession } from "@waitron/identity";
 import { AppError, jobOrigin } from "@waitron/shared";
 import {
   createErrorBoundary,
@@ -13,7 +12,6 @@ import {
 import {
   approveAttendanceDays,
   executeAttendanceCommand,
-  maySelfApproveAttendance,
   readAttendanceCommand,
   readAttendanceDay,
   readAttendanceManagerQueue,
@@ -26,7 +24,6 @@ import {
   resolvePayPeriod,
   setPayPeriodCloseGraceDays,
 } from "@waitron/workforce";
-import type { AttendanceLookups } from "@waitron/workforce/attendance-contract";
 import {
   parseAttendanceCommand,
   parseAttendanceDayApprovals,
@@ -34,6 +31,7 @@ import {
 } from "./attendance-request.js";
 import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
+import { readAttendanceLookups } from "./attendance-lookups.js";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { parseHoursQuery, parseOwnAttendanceCommand } from "./hours-request.js";
 import { monthlyHoursCloseSchedule } from "./monthly-hours-close.js";
@@ -219,20 +217,10 @@ export function mountManagementAttendanceApi(
     run(c, log, async () => {
       const token = requireManagementSession(c);
       return c.json(
-        await withTransaction(deps.db, async (tx): Promise<AttendanceLookups> => {
+        await withTransaction(deps.db, async (tx) => {
           const viewer = await authorize(tx, token);
           noQuery(c);
-          const people = await tx
-            .select({ personId: persons.id, displayName: persons.displayName })
-            .from(persons)
-            .orderBy(asc(persons.displayName), asc(persons.id));
-          return {
-            viewer: {
-              personId: viewer.authorizedBy,
-              canSelfApprove: await maySelfApproveAttendance(tx, viewer.authorizedBy),
-            },
-            people,
-          };
+          return readAttendanceLookups(tx, viewer.authorizedBy);
         }),
       );
     }),

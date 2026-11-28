@@ -511,8 +511,19 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
       "GET /api/attendance/hours",
       "GET /api/attendance/day",
       "GET /api/attendance/commands/:commandId",
-      "GET /api/attendance/items/:itemId/approvers",
       "POST /api/attendance/commands",
+    ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["clock-in"],
+    basis: 'till-attendance-api.test.ts: "requires a clock-in device and manager permission on"',
+    routes: [
+      "GET /api/attendance/manager/lookups",
+      "GET /api/attendance/manager/queue",
+      "GET /api/attendance/manager/day",
+      "POST /api/attendance/manager/commands",
+      "POST /api/attendance/manager/approve-days",
     ],
   },
   {

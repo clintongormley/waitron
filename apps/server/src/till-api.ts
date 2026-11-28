@@ -118,7 +118,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         deviceChooserEnabled: deps.deviceChooserEnabled,
         cfg: deps.cfg,
         now: () => deps.clock.now().instant,
-        attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
         exporter: deps.exporter,
       },
       log,

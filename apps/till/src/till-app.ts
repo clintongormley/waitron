@@ -171,13 +171,16 @@ import "./screens/till-attendance-questions.js";
 import "./screens/till-hours-screen.js";
 import { HoursController, type HoursSnapshot } from "./state/hours.js";
 import { AttendanceController, type AttendanceSnapshot } from "./state/attendance.js";
-import type { AttendanceCommandPayload } from "@waitron/workforce/attendance-contract";
+import type {
+  AttendanceCommandPayload,
+  OwnAttendanceCommand,
+} from "@waitron/workforce/attendance-contract";
 import {
   ClockingController,
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
-import type { AttendanceChange, AttendanceCommand, HoursSelection } from "./api/client.js";
+import type { AttendanceChange, HoursSelection } from "./api/client.js";
 import type { TillClockState } from "./api/attendance-api.js";
 import "./widgets/attendance-correction-dialog.js";
 import "./widgets/attendance-day-dialog.js";
@@ -3107,18 +3110,9 @@ export class TillApp extends LitElement {
   #attendanceSettling = false;
   #attendanceRefreshClock = false;
   #lastAttendanceResultId: string | null = null;
-  #lastAttendanceCommand: AttendanceCommand | null = null;
   #attendancePanelVersion = 0;
   @state() private attendanceDayOpen = false;
   @state() private attendanceDayDate = "";
-  @state() private attendancePinReading = false;
-  @state() private attendancePin: {
-    itemId: string;
-    action: "approve" | "decline";
-    revision: string;
-    people: StaffMember[];
-    command?: AttendanceCommand;
-  } | null = null;
   @state() private attendanceEditor: {
     kind: "request" | "disagree";
     changes: AttendanceChange[];
@@ -5316,14 +5310,11 @@ export class TillApp extends LitElement {
     this.#attendanceSettling = false;
     this.#attendanceRefreshClock = false;
     this.#lastAttendanceResultId = null;
-    this.#lastAttendanceCommand = null;
     this.attendancePage = false;
     this.attendanceSnapshot = null;
     ++this.#attendancePanelVersion;
     this.attendanceDayOpen = false;
     this.attendanceEditor = null;
-    this.attendancePin = null;
-    this.attendancePinReading = false;
     controller?.stop();
   }
 
@@ -5352,28 +5343,10 @@ export class TillApp extends LitElement {
         this.#lastAttendanceResultId = snapshot.result.commandId;
         this.#attendanceRefreshClock = true;
         this.attendanceEditor = null;
-        this.attendancePin = null;
-        const command = this.#lastAttendanceCommand;
-        const panelVersion = this.#attendancePanelVersion;
         queueMicrotask(async () => {
           if (!current()) return;
           await controller.refresh();
           if (current() && this.attendanceDayOpen) await controller.readDay(this.attendanceDayDate);
-          if (
-            current() &&
-            panelVersion === this.#attendancePanelVersion &&
-            command?.action === "request" &&
-            this.attendanceSnapshot?.readError === null
-          ) {
-            const fresh = this.attendanceSnapshot.inbox;
-            const item = fresh?.items.find(
-              (item) =>
-                item.status === "waiting-manager" &&
-                item.direction === "worker_request" &&
-                snapshot.result!.entryIds.some((id) => item.requestEntryIds.includes(id)),
-            );
-            if (item && fresh) await this.#openAttendancePin(item.id, "approve", fresh.revision);
-          }
         });
         return;
       }
@@ -5474,11 +5447,7 @@ export class TillApp extends LitElement {
     const snapshot = this.attendanceSnapshot;
     if (snapshot?.uncertainCommandId) return t("attendance.uncertain");
     if (snapshot?.retryCommand) return t("attendance.retry_response_message");
-    const error =
-      snapshot?.actionError ??
-      snapshot?.readError ??
-      snapshot?.dayError ??
-      snapshot?.approversError;
+    const error = snapshot?.actionError ?? snapshot?.readError ?? snapshot?.dayError;
     if (inQuestions && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
       return attendanceConnectionRefusal(this.router, snapshot?.actionError != null);
     return error ? codeMessage(error.code) : this.#clockMessage();
@@ -5495,44 +5464,23 @@ export class TillApp extends LitElement {
   }
 
   async #sendAttendance(
-    payload: AttendanceCommandPayload,
+    payload: AttendanceCommandPayload & { action: OwnAttendanceCommand["action"] },
     revision?: string,
-    override?: { personId: string; pin: string },
   ): Promise<void> {
     const snapshot = this.attendanceSnapshot;
     if (!this.#attendance || !snapshot?.inbox || snapshot.busy || snapshot.uncertainCommandId)
       return;
-    await this.#runAttendance(
-      {
-        ...payload,
-        commandId: crypto.randomUUID(),
-        expectedRevision: revision ?? snapshot.inbox.revision,
-      },
-      override,
-    );
-  }
-
-  async #runAttendance(
-    command: AttendanceCommand,
-    override?: { personId: string; pin: string },
-  ): Promise<void> {
-    const controller = this.#attendance;
-    if (!controller) return;
-    this.#lastAttendanceCommand = command;
-    await controller.act(command, override);
+    await this.#attendance.act({
+      ...payload,
+      commandId: crypto.randomUUID(),
+      expectedRevision: revision ?? snapshot.inbox.revision,
+    });
   }
 
   async #retryAttendanceCommand(): Promise<void> {
     const command = this.attendanceSnapshot?.retryCommand;
     if (!command || this.attendanceSnapshot?.busy) return;
-    if (command.action === "approve" || command.action === "decline")
-      await this.#openAttendancePin(
-        command.itemId,
-        command.action,
-        command.expectedRevision,
-        command,
-      );
-    else await this.#runAttendance(command);
+    await this.#attendance?.act(command);
   }
 
   async #openAttendanceDay(scope?: { date: string }): Promise<void> {
@@ -5562,17 +5510,14 @@ export class TillApp extends LitElement {
 
   #closeAttendanceDay(): void {
     ++this.#attendancePanelVersion;
-    this.attendancePinReading = false;
     this.attendanceDayOpen = false;
     this.attendanceEditor = null;
-    this.attendancePin = null;
   }
 
   #selectAttendanceDay(event: CustomEvent<{ date: string }>): void {
     event.stopPropagation();
     if (!this.attendanceDayOpen || !this.#attendance) return;
     ++this.#attendancePanelVersion;
-    this.attendancePinReading = false;
     this.attendanceDayDate = event.detail.date;
     void this.#attendance.readDay(event.detail.date);
   }
@@ -5603,7 +5548,6 @@ export class TillApp extends LitElement {
       } else return;
     }
     ++this.#attendancePanelVersion;
-    this.attendancePinReading = false;
     this.attendanceEditor = {
       kind: disagree ? "disagree" : "request",
       changes,
@@ -5638,7 +5582,6 @@ export class TillApp extends LitElement {
       }
     }
     ++this.#attendancePanelVersion;
-    this.attendancePinReading = false;
     this.attendanceEditor = {
       kind: "request",
       changes,
@@ -5667,59 +5610,6 @@ export class TillApp extends LitElement {
     void this.#sendAttendance(payload, editor.revision);
   }
 
-  async #openAttendancePin(
-    itemId: string,
-    action: "approve" | "decline",
-    revision: string,
-    command?: AttendanceCommand,
-  ): Promise<void> {
-    const controller = this.#attendance;
-    const item =
-      this.attendanceSnapshot?.day?.items.find((item) => item.id === itemId) ??
-      this.attendanceSnapshot?.inbox?.items.find((item) => item.id === itemId);
-    if (
-      !controller ||
-      !item ||
-      item.direction !== "worker_request" ||
-      item.status !== "waiting-manager" ||
-      (action === "approve" && !item.readyToApply) ||
-      this.attendanceSnapshot?.busy ||
-      this.attendanceSnapshot?.uncertainCommandId
-    )
-      return;
-    const version = ++this.#attendancePanelVersion;
-    this.attendancePinReading = true;
-    const people = await controller.readApprovers(itemId, action);
-    if (
-      controller !== this.#attendance ||
-      version !== this.#attendancePanelVersion ||
-      !this.isConnected
-    )
-      return;
-    this.attendancePinReading = false;
-    if (people !== null) this.attendancePin = { itemId, action, revision, people, command };
-  }
-
-  #confirmAttendancePin(event: CustomEvent<{ personId: string; pin: string }>): void {
-    event.stopPropagation();
-    const context = this.attendancePin;
-    if (
-      !context ||
-      this.attendanceSnapshot?.busy ||
-      !context.people.some((person) => person.personId === event.detail.personId)
-    )
-      return;
-    this.attendancePin = null;
-    ++this.#attendancePanelVersion;
-    if (context.command) void this.#runAttendance(context.command, event.detail);
-    else
-      void this.#sendAttendance(
-        { action: context.action, itemId: context.itemId },
-        context.revision,
-        event.detail,
-      );
-  }
-
   #renderAttendanceEditors() {
     const snapshot = this.attendanceSnapshot;
     const blocked = snapshot?.uncertainCommandId != null || snapshot?.retryCommand != null;
@@ -5735,7 +5625,7 @@ export class TillApp extends LitElement {
               .open=${true}
               .view=${snapshot?.day ?? null}
               .date=${this.attendanceDayDate}
-              .reading=${snapshot?.dayReading || snapshot?.reading || this.attendancePinReading}
+              .reading=${snapshot?.dayReading || snapshot?.reading}
               .busy=${snapshot?.busy ?? false}
               .blocked=${blocked}
               .canRetry=${snapshot?.retryCommand != null}
@@ -5750,18 +5640,6 @@ export class TillApp extends LitElement {
               }}
               @attendance-day=${this.#selectAttendanceDay}
               @fix-entry=${this.#fixAttendanceEntry}
-              @decide-item=${(
-                event: CustomEvent<{ itemId: string; action: "approve" | "decline" }>,
-              ) => {
-                event.stopPropagation();
-                const day = this.attendanceSnapshot?.day;
-                if (day)
-                  void this.#openAttendancePin(
-                    event.detail.itemId,
-                    event.detail.action,
-                    day.revision,
-                  );
-              }}
               @attendance-day-close=${(event: Event) => {
                 event.stopPropagation();
                 this.#closeAttendanceDay();
@@ -5796,21 +5674,6 @@ export class TillApp extends LitElement {
                 this.attendanceEditor = null;
               }}
             ></till-attendance-correction-dialog>`
-          : nothing
-      }
-      ${
-        this.attendancePin
-          ? html`<till-supervisor-override-dialog
-              data-attendance-pin
-              .authorizers=${this.attendancePin.people}
-              .error=${null}
-              @override-confirm=${this.#confirmAttendancePin}
-              @override-cancel=${(event: Event) => {
-                event.stopPropagation();
-                ++this.#attendancePanelVersion;
-                this.attendancePin = null;
-              }}
-            ></till-supervisor-override-dialog>`
           : nothing
       }
     `;
@@ -5854,7 +5717,6 @@ export class TillApp extends LitElement {
     this.#attendanceGate = null;
     ++this.#attendanceGateVersion;
     ++this.#attendancePanelVersion;
-    this.attendancePinReading = false;
     this.#attendanceSettling = false;
     this.attendancePage = false;
     await this.#continueAfterClockIn();

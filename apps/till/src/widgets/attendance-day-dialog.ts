@@ -121,7 +121,6 @@ export class AttendanceDayDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("attendance-day-close", { bubbles: true, composed: true }));
   }
   #item(item: CorrectionItem) {
-    const pending = item.direction === "worker_request" && item.status === "waiting-manager";
     return html`<article data-item=${item.id}>
       <h2>${attendanceStatus(item.status)}</h2>
       ${item.selfApproved ? html`<p>${t("attendance.self_approved")}</p>` : nothing}
@@ -129,26 +128,6 @@ export class AttendanceDayDialog extends LitElement {
       <ul>
         ${item.history.map(attendanceHistory)}
       </ul>
-      ${
-        pending
-          ? html`<div class="actions">
-              <wt-button
-                data-approve
-                variant=${this.busy || this.blocked || !item.readyToApply ? "secondary" : "primary"}
-                .disabled=${this.busy || this.blocked || !item.readyToApply}
-                @click=${(event: Event) => this.#emit(event, "decide-item", { itemId: item.id, action: "approve" })}
-                >${t("attendance.approve")}</wt-button
-              >
-              <wt-button
-                data-decline
-                variant="secondary"
-                .disabled=${this.busy || this.blocked}
-                @click=${(event: Event) => this.#emit(event, "decide-item", { itemId: item.id, action: "decline" })}
-                >${t("attendance.decline")}</wt-button
-              >
-            </div>`
-          : nothing
-      }
     </article>`;
   }
   override render() {

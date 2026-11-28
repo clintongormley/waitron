@@ -217,7 +217,6 @@ it("hours responses use the current inbox revision and a later successful summar
         action: "confirm",
         questionId: "question",
       },
-      undefined,
       { signal: expect.any(AbortSignal) },
     ),
   );

@@ -600,8 +600,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and
   the Hours reads carry the status for each finished day. In the dashboard's **To approve** list,
   managers can approve the displayed finished days together, edit a whole day for the worker to
-  review, and settle a dispute in favour of the worker's time or send another edit. Still
-  open: clocking in and out with breaks, My hours,
+  review, and settle a dispute in favour of the worker's time or send another edit. On the till,
+  workers' requests go to managers without a PIN prompt. The till has manager-session approval
+  routes. Still open: clocking in and out with breaks, My hours,
   **To approve** on the till, export markers for approval and disputes (the labour adviser is asked
   L8), the cash drawer's screens, and waiter floats (A240).
   Pass 3's last part (27 November; §7.16–§7.17, not started): no blank screen while loading (grey
