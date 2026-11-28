@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -277,7 +277,7 @@ it("retries a silent first drawer read before opening the drawer", async ({ onTe
   expect(retry()).toBeTruthy();
   expect(el.shadowRoot!.querySelector("wt-placeholder")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-first-read-status]")?.textContent).toContain(
-    "esta caja está conectada",
+    t("first_read.till_network"),
   );
   const body = el
     .shadowRoot!.querySelector("wt-dialog")!
