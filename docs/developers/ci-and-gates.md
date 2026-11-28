@@ -223,8 +223,14 @@ the existing routing step selects GitHub. Checkout still fetches full history.
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
 memory or runner slots. Publish matching controller and host job-key support before
-adding a server-routed job or shard. Update the admitted names and labels in
-`scripts/ci-workflow.test.mjs` with the route, and run it and `scripts/ci-server-first.test.mjs`.
+adding a server-routed job or shard. Compare the release's job names and keys with the
+admitted list in `scripts/ci-workflow.test.mjs`. Update the list with the route and run
+both `scripts/ci-workflow.test.mjs` and `scripts/ci-server-first.test.mjs`.
+
+These source links are pinned to Cloud `a8ca7fed`.
+[Controller job names](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/scripts/disposable-tests/ci-canary.mjs),
+[controller keys](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/scripts/disposable-tests/ci-identity.mjs),
+[host keys](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/deploy/disposable-tests/session.py).
 
 Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
 for ordinary traffic. The watchdog uses the same selection. The selection reads the PR

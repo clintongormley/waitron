@@ -392,6 +392,7 @@ jobs:
             {"id":"test-till","count":7,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.till == 'true' }}},
             {"id":"test-dashboard","count":6,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.dashboard == 'true' }}},
             {"id":"test-setup","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.setup == 'true' }}},
+            {"id":"test-customer-menu","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.customer_menu == 'true' }}},
             {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.venue_service == 'true' }}},
             {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.adjustments == 'true' }}},
             {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.staffing == 'true' }}},
@@ -2784,7 +2785,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.customer_menu == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.run_attempt == 1 && 1 <= fromJSON(needs.changes.outputs.server_jobs || '{}')['test-customer-menu'] || github.run_attempt != 1 && github.run_attempt == needs.changes.outputs.server_route_attempt && needs.changes.outputs.server_route == 'server') && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-customer-menu-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
