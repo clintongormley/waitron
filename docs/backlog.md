@@ -513,6 +513,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
+- **A1647. The Units screen opens a unit and asks before deleting (owner, 28 November 2026).** A
+  row click opens Edit, not a "Delete unit" window; Delete asks through `wt-delete-dialog`, with
+  Show products while products use the unit. The list shows the staff name and a products count;
+  "Precision" becomes Decimal places with examples; the edit form is grouped; a repeated staff name
+  is refused. Also fixes `wt-data-table`'s search placeholder contrast and phone focus. Not started.
+  [Design](superpowers/specs/2026-11-28-units-screen-design.md)
+
 
 ### Service periods, opening hours and departments
 
