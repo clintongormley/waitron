@@ -95,8 +95,7 @@ const opened = (opening: string, row: SentRow): Opened => ({
  * change which line a row starts with, so the open row is followed by its portions as it stood when
  * opened or last served from: to the row holding the first of its unserved ones still unserved;
  * once none is, to a row holding any of its portions that has none left. It closes when the bill
- * or party changes or no row qualifies, so once nothing it held is left to serve, the box never
- * moves onto a row with something left to serve. Following does not narrow the portions it
+ * or party changes or no row qualifies. Following does not narrow the portions it
  * remembers: the bill's lines and its current orders arrive in separate draws, and a row drawn
  * from one new and one old can hold only part of the dish.
  */
@@ -210,7 +209,7 @@ export const sentOpenStyles = css`
     flex-wrap: wrap;
     align-items: center;
     gap: var(--wt-space-2);
-    /* No token is 2 px: half of --wt-space-1 makes frame e 3's 10 px under the last button. */
+    /* No spacing token is 2 px: half of --wt-space-1 makes frame e 3's 10 px under the last button. */
     padding-block: var(--wt-space-2) calc(var(--wt-space-2) + var(--wt-space-1) / 2);
     padding-inline: 0 var(--wt-space-2);
   }
