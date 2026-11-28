@@ -234,6 +234,8 @@ function outcomeLines(
     !corrected.some((part) => (part.corrective?.delivery ?? null) !== null)
   )
     lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
+  if (corrected.some((part) => part.corrective?.printedOnReceiptNotA4 === true))
+    lines.push(t("give_back.printed_on_receipt_not_a4"));
   if (positive(pending))
     lines.push(t("give_back.pending").replace("{amount}", () => money(pending)));
   if (outcome.rest !== null && outcome.refusal === null)

@@ -8,6 +8,7 @@ import {
   readInvoiceDeliveries,
   readOriginalWay,
   type InvoiceDeliveryAttempt,
+  type OriginalWay,
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import type { InvoiceCorrectionDeps } from "./invoice-corrections.js";
@@ -19,6 +20,29 @@ import {
 } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+
+/** How the invoice `correctiveSaleId` corrects went; for a replacement that never went out, how
+ * the invoice it replaced went. */
+async function readCorrectedWay(
+  tx: Transaction,
+  correctiveSaleId: string,
+): Promise<OriginalWay | null> {
+  const correctionLinkOf = async (saleId: string) =>
+    (
+      await tx
+        .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
+        .from(sales)
+        .where(eq(sales.id, saleId))
+    )[0]!;
+  const targetId = (await correctionLinkOf(correctiveSaleId)).corrects!;
+  const target = await correctionLinkOf(targetId);
+  // A replacement is never itself replaced (packages/core/src/record-replacement.ts), so one
+  // step back reaches the invoice it replaced.
+  return (
+    (await readOriginalWay(tx, targetId)) ??
+    (target.replaces ? await readOriginalWay(tx, target.corrects!) : null)
+  );
+}
 
 /**
  * Sends the corrective full invoice `correctiveSaleId` (request key `corrective:<correction id>`),
@@ -38,20 +62,7 @@ export async function sendFiledCorrective(
   await optionalDocument(tx, "sendFiledCorrective", correctiveSaleId, async () => {
     const requestKey = `corrective:${correction.id}`;
     const personId = correction.requestedBy;
-    const correctionLinkOf = async (saleId: string) =>
-      (
-        await tx
-          .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
-          .from(sales)
-          .where(eq(sales.id, saleId))
-      )[0]!;
-    const targetId = (await correctionLinkOf(correctiveSaleId)).corrects!;
-    const target = await correctionLinkOf(targetId);
-    // A replacement is never itself replaced (packages/core/src/record-replacement.ts), so one
-    // step back reaches the invoice it replaced.
-    const way =
-      (await readOriginalWay(tx, targetId)) ??
-      (target.replaces ? await readOriginalWay(tx, target.corrects!) : null);
+    const way = await readCorrectedWay(tx, correctiveSaleId);
     if (
       way?.medium === "email" &&
       way.recipient !== null &&
@@ -101,6 +112,8 @@ export interface SentCorrective {
   amount: string;
   /** How it is being sent, in the till's delivery-status shape; null when nothing was sent. */
   delivery: InvoiceDeliveryAttempt | null;
+  /** The invoice it corrects went on A4, and it is being printed on the receipt printer instead. */
+  printedOnReceiptNotA4: boolean;
 }
 
 /** The corrective `correctiveSaleId` when it is a full invoice's, else null. The recipient's
@@ -126,11 +139,15 @@ export async function readSentCorrective(
     emailAvailable: false,
     includeInvoiceRecipientEmail: await deviceMayPrintReceipts(tx, cfg.origin.deviceId),
   });
+  const delivery = status?.current ?? null;
   return {
     saleId: correctiveSaleId,
     invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
     customerName: sale.customerName,
     amount: centsToDecimal(-sale.total),
-    delivery: status?.current ?? null,
+    delivery,
+    printedOnReceiptNotA4:
+      delivery?.medium === "receipt" &&
+      (await readCorrectedWay(tx, correctiveSaleId))?.medium === "a4",
   };
 }

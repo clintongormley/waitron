@@ -186,7 +186,11 @@ async function printedCopy(saleId: string) {
 function correctivePart(answer: { json: unknown }) {
   return (answer.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!
     .corrective as
-    { delivery: { medium: string; invoiceRecipientEmail?: string } | null } | undefined;
+    | {
+        delivery: { medium: string; invoiceRecipientEmail?: string } | null;
+        printedOnReceiptNotA4: boolean;
+      }
+    | undefined;
 }
 
 /** Gives back 10.00 in cash on `saleId` and answers the filed R1's id with the answer. */
@@ -375,7 +379,8 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     onTestFinished(async () => {
       await venue.db.update(printers).set({ active: true }).where(eq(printers.id, officeId));
     });
-    const { correction, r1 } = await givenBackInCash(saleId);
+    const { answer, correction, r1 } = await givenBackInCash(saleId);
+    expect(correctivePart(answer)?.printedOnReceiptNotA4).toBe(true);
     expect(await deliveriesOf(r1)).toEqual([
       expect.objectContaining({
         requestKey: `corrective:${correction.id}`,
@@ -402,7 +407,8 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
         .set({ invoicePrinterId: null })
         .where(eq(devices.id, venue.deviceId));
     });
-    const { r1 } = await givenBackInCash(saleId);
+    const { answer, r1 } = await givenBackInCash(saleId);
+    expect(correctivePart(answer)?.printedOnReceiptNotA4).toBe(false);
     expect(await wayOf(r1)).toEqual({
       medium: "a4",
       recipient: null,
@@ -416,6 +422,7 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
     const { answer, r1 } = await givenBackInCash(saleId);
     expect(await wayOf(r1)).toEqual(EMAIL);
+    expect(correctivePart(answer)?.printedOnReceiptNotA4).toBe(false);
     expect(correctivePart(answer)?.delivery).toMatchObject({
       medium: "email",
       status: "queued",
@@ -426,7 +433,8 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
   it("prints the R1 on paper when the original was printed on paper", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await printedOriginal(saleId);
-    const { r1 } = await givenBackInCash(saleId);
+    const { answer, r1 } = await givenBackInCash(saleId);
+    expect(correctivePart(answer)?.printedOnReceiptNotA4).toBe(false);
     expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
   });
 
