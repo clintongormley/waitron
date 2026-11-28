@@ -2395,6 +2395,7 @@ export const en = {
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
   "menu.search": "Search",
+  "menu.search_placeholder": "Search the menu",
   "menu.shortcuts": "Shortcuts",
   "menu.full": "Full menu",
   "menu.results": "Search results",
@@ -4933,6 +4934,7 @@ export const es: Record<StringKey, string> = {
   "menu.zone_closed": "{zone} está cerrada.",
   "menu.switcher": "Carta",
   "menu.search": "Buscar",
+  "menu.search_placeholder": "Buscar en la carta",
   "menu.shortcuts": "Accesos directos",
   "menu.full": "Carta completa",
   "menu.results": "Resultados de la búsqueda",

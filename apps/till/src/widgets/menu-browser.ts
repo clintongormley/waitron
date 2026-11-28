@@ -45,6 +45,7 @@ import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.
 import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../state/set-menus.js";
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
 import { dishTile, sectionTile, setMenuTile, type DishTileHandlers } from "./menu-tiles.js";
+import { menuPath, menuPathStyles } from "./menu-path.js";
 
 registerIcons({
   "menu-section":
@@ -138,6 +139,7 @@ export class TillMenuBrowser extends LitElement {
     baseStyles,
     firstReadNoticeStyles,
     menuTileStyles,
+    menuPathStyles,
     css`
       :host {
         display: grid;
@@ -146,55 +148,24 @@ export class TillMenuBrowser extends LitElement {
         align-content: start;
       }
 
-      .menu-toolbar,
+      [data-menu-head] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-2);
+      }
+
+      :host([pinned-head]) [data-menu-head] {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: var(--wt-color-bg);
+      }
+
       [data-region="search"] {
         display: flex;
         gap: var(--wt-space-2);
-        align-items: end;
-      }
-      ::slotted([slot="menu-picker"]) {
-        flex: 1;
-      }
-
-      [data-region="search"] {
-        flex: 2;
+        align-items: center;
         min-inline-size: 0;
-      }
-
-      @supports (grid-template-columns: subgrid) {
-        .menu-toolbar[data-menu-picker] {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-        }
-
-        .menu-toolbar[data-menu-picker] [data-region="search"] {
-          display: grid;
-          grid-column: 2 / -1;
-          grid-template-columns: subgrid;
-        }
-      }
-
-      /* A viewport query, not a size container: containment would stop the browser's content
-         counting toward the width a screen's layout gives it. */
-      @media (width < 360px) {
-        .menu-toolbar[data-menu-picker] {
-          flex-wrap: wrap;
-        }
-
-        .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]) {
-          flex-basis: 100%;
-        }
-
-        @supports (grid-template-columns: subgrid) {
-          .menu-toolbar[data-menu-picker] {
-            grid-template-columns: minmax(0, 1fr) auto;
-          }
-
-          .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]),
-          .menu-toolbar[data-menu-picker] [data-region="search"] {
-            grid-column: 1 / -1;
-          }
-        }
       }
 
       [data-menu-content] {
@@ -211,6 +182,7 @@ export class TillMenuBrowser extends LitElement {
       [data-region="search"] wt-input {
         flex: 1;
         min-width: 0;
+        max-width: none;
       }
 
       section {
@@ -270,32 +242,6 @@ export class TillMenuBrowser extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .breadcrumb ol {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .breadcrumb li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        overflow-wrap: anywhere;
-      }
-
-      .breadcrumb [aria-current] {
-        font-weight: var(--wt-font-weight-bold);
-        padding-inline: var(--wt-space-2);
-      }
-
-      .sep {
-        color: var(--wt-color-text-muted);
-      }
-
       .weigh {
         position: sticky;
         bottom: 0;
@@ -312,6 +258,8 @@ export class TillMenuBrowser extends LitElement {
   @property({ attribute: false }) retryFirstRead?: () => void;
   @property({ type: Boolean }) handheld = false;
   @property({ type: Boolean }) hasMenuPicker = false;
+  /** Keeps the head in view while the tiles scroll under it. */
+  @property({ type: Boolean, reflect: true, attribute: "pinned-head" }) pinnedHead = false;
   @property({ type: Boolean }) locked = false;
 
   /** This menu's offers as till products. */
@@ -798,36 +746,27 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #sectionView(trail: SectionNode[], index: MenuIndex): TemplateResult {
-    const current = trail.at(-1)!;
     return html`<section data-region="section">
-      <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
-        <ol>
-          <li>
-            <wt-button variant="ghost" @click=${() => this.#open([])}>${t("menu.home")}</wt-button>
-            <span class="sep" aria-hidden="true">›</span>
-          </li>
-          ${trail.slice(0, -1).map(
-            (section, position) =>
-              html`<li>
-                <wt-button
-                  variant="ghost"
-                  @click=${() => this.#open(this.path.slice(0, position + 1))}
-                  >${this.#sectionName(section)}</wt-button
-                >
-                <span class="sep" aria-hidden="true">›</span>
-              </li>`,
-          )}
-          <li><span aria-current="location">${this.#sectionName(current)}</span></li>
-        </ol>
-      </nav>
       ${this.#grid(
         this.#listTiles(
-          shownMembers(current.members, this.setMenuCopies.length > 0),
+          shownMembers(trail.at(-1)!.members, this.setMenuCopies.length > 0),
           this.path,
           index,
         ),
       )}
     </section>`;
+  }
+
+  #path(trail: SectionNode[]): TemplateResult {
+    return menuPath(
+      () => this.#open([]),
+      trail.slice(0, -1).map((section, position) => ({
+        name: this.#sectionName(section),
+        open: () => this.#open(this.path.slice(0, position + 1)),
+      })),
+      this.#sectionName(trail.at(-1)!),
+      this.locked,
+    );
   }
 
   #heldMenuFolders(): OrderingCopy[] {
@@ -948,11 +887,16 @@ export class TillMenuBrowser extends LitElement {
       return firstMenuRead(stage, this.handheld, this.retryFirstRead);
     }
     if (!showContent && !this.hasMenuPicker) return nothing;
+    const pathShown =
+      menu !== undefined &&
+      this.setMenuFolder === undefined &&
+      this.query.trim() === "" &&
+      this.#trailShown.length > 0;
     return html`
       ${
         menu === undefined && !this.hasMenuPicker
           ? nothing
-          : html`<div class="menu-toolbar" ?data-menu-picker=${this.hasMenuPicker}>
+          : html`<div data-menu-head>
               <slot name="menu-picker"></slot>
               ${
                 menu === undefined
@@ -961,17 +905,21 @@ export class TillMenuBrowser extends LitElement {
                       <wt-input
                         type="search"
                         name="menu-search"
+                        variant="outlined"
                         label=${t("menu.search")}
+                        placeholder=${t("menu.search_placeholder")}
                         .value=${this.query}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-                        >${helpBadge("help.menu.dishes", t("menu.search"), {
-                          guide: "products.nutrition-at-the-till",
-                          slot: "help",
-                        })}</wt-input
+                        ><wt-icon slot="start" name="search"></wt-icon>${helpBadge(
+                          "help.menu.dishes",
+                          t("menu.search"),
+                          { guide: "products.nutrition-at-the-till", slot: "help" },
+                        )}</wt-input
                       >
                       <slot name="filters"></slot>
                     </div>`
               }
+              ${pathShown ? this.#path(this.#trailShown) : nothing}
             </div>`
       }
       ${

@@ -119,6 +119,8 @@ export const MENU_ICONS: Record<string, string> = {
 registerIcons({
   ...MENU_ICONS,
   check: CHECK_ICON_PATH,
+  // Material Symbols Outlined "home", Copyright Google, Apache-2.0, moved from its 960 grid to the 16 grid.
+  home: "M4 12.67h2v-4h4v4h2v-6L8 3.67 4 6.67v6Zm-1.33 1.33v-8l5.33-4 5.33 4v8H8.67v-4H7.33v4H2.67Z",
   // Filled-in copies of the stroke icons in the till redesign's frames (where they are kept: docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md §12), moved from the 24 grid to the 16 grid.
   search:
     "M12.73 7.33A5.4 5.4 0 1 1 1.93 7.33A5.4 5.4 0 1 1 12.73 7.33ZM11.27 7.33A3.93 3.93 0 1 0 3.4 7.33A3.93 3.93 0 1 0 11.27 7.33ZM11.52 10.48L13.85 12.81A0.73 0.73 0 0 1 12.81 13.85L10.48 11.52A0.73 0.73 0 0 1 11.52 10.48Z",

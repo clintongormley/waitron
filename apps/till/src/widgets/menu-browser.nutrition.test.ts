@@ -174,7 +174,9 @@ describe("product nutrition on the menu", () => {
   it("holding the search field after selecting a dish never opens stale product information", async () => {
     const { el, button } = await mount();
     await userEvent.click(button);
-    const search = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("label")!;
+    const search = el
+      .shadowRoot!.querySelector("wt-input")!
+      .shadowRoot!.querySelector<HTMLElement>(".field")!;
     await userEvent.click(search, { delay: 650 });
     await el.updateComplete;
     expect(info(el)).toBeNull();

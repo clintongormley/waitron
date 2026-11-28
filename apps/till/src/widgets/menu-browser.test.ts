@@ -223,9 +223,13 @@ async function tap(el: TillMenuBrowser, button: HTMLElement): Promise<void> {
   await el.updateComplete;
 }
 
+/** Each step by its name: Home's is its label, since it shows only an icon. */
 function breadcrumb(el: TillMenuBrowser): string {
   return [...root(el).querySelectorAll("nav.breadcrumb li")]
-    .map((item) => item.querySelector("wt-button, [aria-current]")!.textContent!.trim())
+    .map((item) => {
+      const step = item.querySelector("wt-button, [aria-current]")!;
+      return step.getAttribute("aria-label") ?? step.textContent!.trim();
+    })
     .join(" › ");
 }
 
@@ -579,6 +583,69 @@ describe("till-menu-browser", () => {
       const { el } = await mount();
       expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
       expect(root(el).querySelector('[data-region="search"] wt-input')).not.toBeNull();
+    });
+
+    describe("the head: search, then the path", () => {
+      /** Opens Drinks in a short scroller, so its path is in the head, then scrolls the tiles. */
+      async function scrolled(pinned: boolean) {
+        const { el, host } = await mount();
+        el.toggleAttribute("pinned-head", pinned);
+        Object.assign(host.style, { width: "390px", height: "100px", overflow: "auto" });
+        await tap(el, entry(el, "structure", "Drinks (EN)"));
+        await measured();
+        const head = root(el).querySelector<HTMLElement>("[data-menu-head]")!;
+        expect(head.querySelector('[data-region="search"]')).not.toBeNull();
+        expect(head.querySelector("nav.breadcrumb")).not.toBeNull();
+        host.scrollTop = 0;
+        expect(host.scrollHeight - host.clientHeight).toBeGreaterThan(60);
+        host.scrollTop = 60;
+        await measured();
+        return { el, host, head };
+      }
+
+      it.each([
+        ["en-GB", "Search the menu"],
+        ["es-ES", "Buscar en la carta"],
+      ])("searches from an outlined field with a magnifier, saying %s's %s", async (lang, text) => {
+        setLocale(lang);
+        const { el } = await mount();
+        const field = root(el).querySelector<HTMLElement & { variant: string }>(
+          '[data-menu-head] [data-region="search"] wt-input',
+        )!;
+        await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(field.variant).toBe("outlined");
+        const icon = field.querySelector('wt-icon[slot="start"]')!;
+        expect(icon.getAttribute("name")).toBe("search");
+        expect(icon.getBoundingClientRect().width).toBeGreaterThan(0);
+        const input = field.shadowRoot!.querySelector("input")!;
+        expect(input.placeholder).toBe(text);
+        expect(field.shadowRoot!.querySelector(".field")!.getBoundingClientRect().height).toBe(44);
+      });
+
+      it("stays at the top of the scroller with the page colour behind it while the tiles scroll, when pinned", async () => {
+        const { el, host, head } = await scrolled(true);
+        expect(el.pinnedHead).toBe(true);
+        expect(host.scrollTop).toBe(60);
+        expect(
+          Math.abs(head.getBoundingClientRect().top - host.getBoundingClientRect().top),
+        ).toBeLessThanOrEqual(1);
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--wt-color-bg)";
+        host.append(probe);
+        expect(getComputedStyle(head).backgroundColor).toBe(
+          getComputedStyle(probe).backgroundColor,
+        );
+        probe.remove();
+      });
+
+      it("scrolls away with the tiles when not pinned", async () => {
+        const { el, host, head } = await scrolled(false);
+        expect(el.pinnedHead).toBe(false);
+        expect(host.scrollTop).toBe(60);
+        expect(head.getBoundingClientRect().top).toBeLessThan(
+          host.getBoundingClientRect().top - 50,
+        );
+      });
     });
 
     it("shows the menu's shortcuts, in their order", async () => {

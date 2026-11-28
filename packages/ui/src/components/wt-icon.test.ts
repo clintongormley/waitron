@@ -77,6 +77,21 @@ it.each(["search", "card", "cash", "undo"])("registers the shared %s icon", asyn
   expect(icon.shadowRoot!.querySelector("svg path")?.getAttribute("d")).toMatch(/^M/);
 });
 
+it("draws the home icon: walls and roof inked, the door left open", async () => {
+  const icon = await mount(`<wt-icon name="home"></wt-icon>`);
+  const d = icon.shadowRoot!.querySelector("svg path")?.getAttribute("d") ?? "";
+  expect(d).toMatch(/^M/);
+  const ink = await inkAt48(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="48" height="48"><path d="${d}"/></svg>`,
+  );
+  // 16-grid points times 3: the left wall, the roof's peak, the door's middle.
+  const alphaAt = (x: number, y: number) =>
+    ink[(Math.round(y * 3) * 48 + Math.round(x * 3)) * 4 + 3]!;
+  expect(alphaAt(3.3, 10)).toBeGreaterThan(127);
+  expect(alphaAt(8, 2.8)).toBeGreaterThan(127);
+  expect(alphaAt(8, 12)).toBeLessThan(128);
+});
+
 // The stroke icons in the till redesign's frames (docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md §12),
 // on the 24 grid; each shared icon is a filled-in copy on the 16 grid, compared by its ink at 48px.
 const FRAME_DRAWINGS: Record<string, string> = {
