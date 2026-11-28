@@ -4,7 +4,7 @@ import {
   published,
   publishedSections,
 } from "@waitron/customer-menu/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { MenuStatus } from "@waitron/shared";
 import { DashboardApi } from "../api/client.js";
@@ -226,7 +226,9 @@ describe("the customer menu Online preview", () => {
   });
 
   it("shows a phone list and a computer grid with dish declarations and a set-menu summary", async () => {
-    await page.viewport(1200, 800);
+    const viewport = [innerWidth, innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(1440, 800);
     await open(() => Response.json(published()));
     await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
     await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
@@ -280,15 +282,11 @@ describe("the customer menu Online preview", () => {
     expect(price.getBoundingClientRect().top).toBeGreaterThan(
       dish.querySelector(".description")!.getBoundingClientRect().bottom,
     );
-    try {
-      await page.viewport(360, 800);
-      const priceBox = setPrice.getBoundingClientRect();
-      const summaryBox = summary.getBoundingClientRect();
-      expect(priceBox.left).toBeGreaterThanOrEqual(summaryBox.right);
-      expect(priceBox.top).toBeLessThan(summaryBox.bottom);
-    } finally {
-      await page.viewport(1200, 800);
-    }
+    await page.viewport(360, 800);
+    const priceBox = setPrice.getBoundingClientRect();
+    const summaryBox = summary.getBoundingClientRect();
+    expect(priceBox.left).toBeGreaterThanOrEqual(summaryBox.right);
+    expect(priceBox.top).toBeLessThan(summaryBox.bottom);
   });
 
   it.each([
