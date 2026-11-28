@@ -1,7 +1,8 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { formatInvoiceNumber } from "@waitron/core";
+import { correctionTargetFor, formatInvoiceNumber } from "@waitron/core";
 import {
+  devices,
   invoiceDeliveries,
   invoiceSeries,
   isReceiptPrinter,
@@ -15,6 +16,7 @@ import {
   centsToDecimal,
   isUuid,
   isValidEmail,
+  saleId as brandSaleId,
   type DocumentOffers,
 } from "@waitron/shared";
 import type { DeviceBinding } from "./device-session.js";
@@ -82,22 +84,22 @@ export type CorrectiveDelivery =
 /**
  * The way a corrective full invoice of the invoice `targetId` goes when nobody chooses: by email to
  * the address that invoice went to (for a replacement that never went out, the invoice it replaced)
- * when this box can email the invoice now (`emailSource`, `emailAvailable`); on `cfg`'s device's
- * own A4 printer when that way was A4 and the device has one; otherwise on the device's receipt
- * printer when its profile may print receipts. Null when none of these is there.
+ * when this box can email the invoice now (`emailSource`, `emailAvailable`, asked only then); on
+ * `cfg`'s device's own A4 printer when that way was A4 and the device has one; otherwise on the
+ * device's receipt printer when its profile may print receipts. Null when none of these is there.
  */
 async function defaultCorrectiveWay(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   targetId: string,
   emailSource: InvoiceEmailContactSource,
-  emailAvailable: boolean,
+  emailAvailable: () => Promise<boolean>,
 ): Promise<CorrectiveWay | null> {
   const way = await readWayOf(tx, targetId);
   if (
     way?.medium === "email" &&
     way.recipient !== null &&
-    (await canEmailInvoice(tx, emailSource, emailAvailable))
+    (await canEmailInvoice(tx, emailSource, await emailAvailable()))
   )
     return { medium: "email", recipient: way.recipient };
   if (way?.medium === "a4") {
@@ -129,12 +131,25 @@ export interface CorrectiveChoice {
   emailAvailable: boolean;
 }
 
-/** What `device` may choose among for a corrective of `originalSaleId`. */
+/** Whether this box can send invoice email now; a failed read counts as no, so that it fails only
+ * a give-back that chooses email. */
+async function emailTransportNow(
+  tx: Transaction,
+  deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
+): Promise<boolean> {
+  try {
+    return (await deps.invoiceEmailAvailable?.(tx)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** What `device` may choose among for a corrective whose email contact `contactSaleId` gives. */
 async function readCorrectiveOffers(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
-  device: DeviceBinding,
-  originalSaleId: string,
+  device: Pick<DeviceBinding, "deviceId" | "deviceProfileId">,
+  contactSaleId: string,
 ): Promise<{ mayPrint: boolean; printers: DocumentOffers["printers"]; emailAvailable: boolean }> {
   const mayPrint = await deviceMayPrintReceipts(tx, device.deviceId);
   if (!mayPrint) return { mayPrint, printers: [], emailAvailable: false };
@@ -148,8 +163,8 @@ async function readCorrectiveOffers(
     printers: offered.printers,
     emailAvailable: await canEmailInvoice(
       tx,
-      { kind: "sale", saleId: originalSaleId },
-      (await deps.invoiceEmailAvailable?.(tx)) === true,
+      { kind: "sale", saleId: contactSaleId },
+      await emailTransportNow(tx, deps),
     ),
   };
 }
@@ -166,9 +181,9 @@ export async function readCorrectiveChoice(
   const way = await defaultCorrectiveWay(
     tx,
     cfg,
-    originalSaleId,
+    await correctionTargetFor(tx, brandSaleId(originalSaleId)),
     { kind: "sale", saleId: originalSaleId },
-    (await deps.invoiceEmailAvailable?.(tx)) === true,
+    () => emailTransportNow(tx, deps),
   );
   const first = way !== null && way.medium !== "email" ? way.printerId : null;
   return {
@@ -202,15 +217,16 @@ export function parseCorrectiveDelivery(value: unknown): CorrectiveDelivery {
   return { medium: "email", recipient: given.recipient.trim() };
 }
 
-/** Refuses `chosen` unless `device` is offered it now for a corrective of `originalSaleId`. */
+/** Refuses `chosen` unless `device` is offered it now for a corrective whose email contact
+ * `contactSaleId` gives. */
 export async function checkCorrectiveDelivery(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
-  device: DeviceBinding,
-  originalSaleId: string,
+  device: Pick<DeviceBinding, "deviceId" | "deviceProfileId">,
+  contactSaleId: string,
   chosen: CorrectiveDelivery,
 ): Promise<void> {
-  const offers = await readCorrectiveOffers(tx, deps, device, originalSaleId);
+  const offers = await readCorrectiveOffers(tx, deps, device, contactSaleId);
   if (chosen.medium === "email") {
     if (!offers.emailAvailable)
       throw new AppError("invoice_delivery.email_unavailable", {
@@ -250,7 +266,8 @@ function receiptPrinterLookup(tx: Transaction, cfg: DeviceRequestConfig, printer
 
 /**
  * Sends the corrective full invoice `correctiveSaleId` (request key `corrective:<correction id>`),
- * under the person who opened the correction: the way `chosen` on the give-back form, else the
+ * under the person who opened the correction: the way `chosen` on the give-back form while `cfg`'s
+ * device is still offered it ({@link checkCorrectiveDelivery}), else nothing; with no choice, the
  * way {@link defaultCorrectiveWay} gives. A failure to send leaves the filing as it is.
  */
 export async function sendFiledCorrective(
@@ -265,9 +282,15 @@ export async function sendFiledCorrective(
     const requestKey = correctiveRequestKey(correction.id);
     const personId = correction.requestedBy;
     let way: CorrectiveWay | { medium: "receipt"; printerId: string | null } | null;
+    if (chosen !== undefined) {
+      const [device] = await tx
+        .select({ deviceId: devices.id, deviceProfileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, cfg.origin.deviceId));
+      await checkCorrectiveDelivery(tx, deps, device!, correctiveSaleId, chosen);
+    }
     if (chosen?.medium === "email") way = chosen;
     else if (chosen?.medium === "print") {
-      // Either kind: the chosen printer's kind decides whether it goes on A4 or the receipt path.
       const [printer] = await tx
         .select({ kind: printers.kind, name: printers.name })
         .from(printers)
@@ -286,9 +309,8 @@ export async function sendFiledCorrective(
         cfg,
         corrective!.corrects!,
         { kind: "sale", saleId: correctiveSaleId },
-        (await deps.invoiceEmailAvailable?.(tx)) === true,
+        async () => (await deps.invoiceEmailAvailable?.(tx)) === true,
       );
-      // The device's own receipt printer, resolved as the receipt path resolves it.
       if (way?.medium === "receipt") way = { medium: "receipt", printerId: null };
     }
     if (way === null) return;
@@ -320,7 +342,7 @@ export async function sendFiledCorrective(
         requestKey,
         ...(way.printerId === null
           ? {}
-          : { printers: receiptPrinterLookup(tx, cfg, way.printerId) }),
+          : { printers: receiptPrinterLookup(tx, cfg, way.printerId), printerChosen: true }),
       },
     );
   });
@@ -335,8 +357,8 @@ export interface SentCorrective {
   amount: string;
   /** How it is being sent, in the till's delivery-status shape; null when nothing was sent. */
   delivery: InvoiceDeliveryAttempt | null;
-  /** The invoice it corrects went on A4, and the box's own send when it was filed put it on the
-   * receipt printer instead. */
+  /** The invoice it corrects went on A4, and the send recorded when it was filed put it on the
+   * till's receipt printer without staff choosing that printer. */
   printedOnReceiptNotA4: boolean;
 }
 
@@ -348,8 +370,6 @@ export async function readSentCorrective(
   cfg: DeviceRequestConfig,
   correctionId: string,
   correctiveSaleId: string,
-  /** The way staff chose on the give-back form, if they chose one. */
-  chosen?: CorrectiveDelivery,
 ): Promise<SentCorrective | null> {
   const [sale] = await tx
     .select({
@@ -369,7 +389,7 @@ export async function readSentCorrective(
   });
   const delivery = status?.current ?? null;
   const [sentWhenFiled] = await tx
-    .select({ medium: invoiceDeliveries.medium })
+    .select({ medium: invoiceDeliveries.medium, printerChosen: invoiceDeliveries.printerChosen })
     .from(invoiceDeliveries)
     .where(
       and(
@@ -384,8 +404,8 @@ export async function readSentCorrective(
     amount: centsToDecimal(-sale.total),
     delivery,
     printedOnReceiptNotA4:
-      chosen === undefined &&
       sentWhenFiled?.medium === "receipt" &&
+      !sentWhenFiled.printerChosen &&
       (await readCorrectedWay(tx, correctiveSaleId))?.medium === "a4",
   };
 }

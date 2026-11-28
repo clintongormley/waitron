@@ -262,7 +262,7 @@ export async function outcomeOf(
         correctiveSaleId === null
           ? null
           : await optionalDocument(tx, "readSentCorrective", correctiveSaleId, () =>
-              readSentCorrective(tx, cfg, row.id, correctiveSaleId, ask.request.correctiveDelivery),
+              readSentCorrective(tx, cfg, row.id, correctiveSaleId),
             );
       answer.push({
         kind: "correction",

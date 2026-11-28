@@ -31,13 +31,22 @@ let officeId: string;
 let backOfficeId: string;
 let mailApp: Hono;
 
-/** With `refuseOnce`, the next automatic filing throws, leaving its correction open. */
-const automaticFiling = vi.hoisted(() => ({ refuseOnce: false }));
+/** With `refuseOnce`, the next automatic filing throws, leaving its correction open; `before`
+ * runs once, just ahead of the next automatic filing. */
+const automaticFiling = vi.hoisted(() => ({
+  refuseOnce: false,
+  before: null as (() => Promise<void>) | null,
+}));
 vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
   const real = await importOriginal<typeof import("./invoice-correction-alerts.js")>();
   return {
     ...real,
-    fileCorrectionAutomatically: (...args: Parameters<typeof real.fileCorrectionAutomatically>) => {
+    fileCorrectionAutomatically: async (
+      ...args: Parameters<typeof real.fileCorrectionAutomatically>
+    ) => {
+      const before = automaticFiling.before;
+      automaticFiling.before = null;
+      if (before !== null) await before();
       if (!automaticFiling.refuseOnce) return real.fileCorrectionAutomatically(...args);
       automaticFiling.refuseOnce = false;
       return Promise.reject(new Error("automatic filing refused"));
@@ -295,6 +304,44 @@ describe("a give-back sends the corrective full invoice the way staff chose", ()
     expect(await jobsOf(r1)).toHaveLength(1);
   });
 
+  it("still says it did not fall back from A4 when the same press is sent again without the choice", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await delivered(saleId, { medium: "a4", pagePrinterId: officeId });
+    await useOwnA4();
+    const body = await pressBody(saleId, {
+      correctiveDelivery: { medium: "print", printerId: receiptPrinterId() },
+    });
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const r1 = await filedR1(answer);
+    const bare: Record<string, unknown> = { ...body };
+    delete bare.correctiveDelivery;
+    const again = await give(saleId, bare);
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    const resent = (again.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!;
+    expect(resent.corrective?.printedOnReceiptNotA4).toBe(false);
+    expect(await jobsOf(r1)).toHaveLength(1);
+  });
+
+  it("still says it fell back from A4 when the same press is sent again naming the receipt printer", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await delivered(saleId, { medium: "a4", pagePrinterId: officeId });
+    const body = await pressBody(saleId);
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const r1 = await filedR1(answer);
+    const part = (answer.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!;
+    expect(part.corrective?.printedOnReceiptNotA4).toBe(true);
+    const again = await give(saleId, {
+      ...body,
+      correctiveDelivery: { medium: "print", printerId: receiptPrinterId() },
+    });
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    const resent = (again.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!;
+    expect(resent.corrective?.printedOnReceiptNotA4).toBe(true);
+    expect(await jobsOf(r1)).toHaveLength(1);
+  });
+
   it("files a hand-keyed card's R1 after the press the way staff chose", async () => {
     const { saleId } = await fixture.fullInvoice(venue, { card: "37.00" });
     const way = fixture.tenderOf(venue, saleId, "card");
@@ -395,6 +442,142 @@ describe("a give-back refuses a corrective way that is no longer there, before a
       params: { field: "correctiveDelivery" },
     });
     expect(await writtenOn(saleId)).toEqual(NOTHING);
+  });
+});
+
+describe("a way chosen at the press that is gone when a reader's refund is filed sends nothing, keeping the money and the filing", () => {
+  /** Gives back on a reader-paid full invoice choosing `chosen`, running `meanwhile` after the
+   * reader refunded and before the R1 is filed; checks the send was refused with the press check's
+   * `code`, and answers the filed R1. */
+  async function readerPress(
+    chosen: object,
+    code: string,
+    meanwhile: () => Promise<void>,
+    app: Hono = mailApp,
+  ) {
+    const { saleId } = await fixture.fullInvoice(venue, { reader: "37.00" });
+    const way = fixture.tenderOf(venue, saleId, "card");
+    const body = await pressBody(saleId, { way, correctiveDelivery: chosen as never }, app);
+    automaticFiling.before = meanwhile;
+    onTestFinished(() => {
+      automaticFiling.before = null;
+    });
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    onTestFinished(() => warned.mockRestore());
+    const answer = await give(saleId, body, app);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(automaticFiling.before).toBeNull();
+    const r1 = await filedR1(answer);
+    expect(warned).toHaveBeenCalledWith("receipt.optional_document_failed", {
+      operation: "sendFiledCorrective",
+      saleId: r1,
+      code,
+    });
+    expect(
+      await venue.db
+        .select({ state: refunds.state })
+        .from(refunds)
+        .where(eq(refunds.saleId, saleId)),
+    ).toEqual([{ state: "completed" }]);
+    return r1;
+  }
+
+  it("sends nothing to a printer taken off this till's list meanwhile, though it is still on", async () => {
+    const [device] = await venue.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, venue.deviceId));
+    const r1 = await readerPress(
+      { medium: "print", printerId: officeId },
+      "invoice_delivery.printer_invalid",
+      async () => {
+        await inTx(venue, (tx) =>
+          setPrinterListsForTest(tx, device!.profileId, {
+            invoice: { ids: [receiptPrinterId()], defaultId: null },
+          }),
+        );
+        onTestFinished(async () => {
+          await inTx(venue, (tx) =>
+            setPrinterListsForTest(tx, device!.profileId, {
+              invoice: { ids: [officeId, receiptPrinterId()], defaultId: null },
+            }),
+          );
+        });
+      },
+    );
+    expect(await deliveriesOf(r1)).toEqual([]);
+    expect(await jobsOf(r1)).toEqual([]);
+  });
+
+  it("sends nothing to a receipt printer switched off meanwhile", async () => {
+    const receipt = receiptPrinterId();
+    const r1 = await readerPress(
+      { medium: "print", printerId: receipt },
+      "invoice_delivery.printer_invalid",
+      async () => {
+        await venue.db.update(printers).set({ active: false }).where(eq(printers.id, receipt));
+        onTestFinished(async () => {
+          await venue.db.update(printers).set({ active: true }).where(eq(printers.id, receipt));
+        });
+      },
+    );
+    expect(await deliveriesOf(r1)).toEqual([]);
+    expect(await jobsOf(r1)).toEqual([]);
+  });
+
+  it("sends nothing by email when this box stopped being able to send it meanwhile", async () => {
+    let mailUp = true;
+    const app = venue.appWith({ invoiceEmailAvailable: () => Promise.resolve(mailUp) });
+    const r1 = await readerPress(
+      { medium: "email", recipient: "ana@example.com" },
+      "invoice_delivery.email_unavailable",
+      () => {
+        mailUp = false;
+        return Promise.resolve();
+      },
+      app,
+    );
+    expect(await deliveriesOf(r1)).toEqual([]);
+    expect(await jobsOf(r1)).toEqual([]);
+  });
+});
+
+describe("a box that cannot read whether it can send email offers no email", () => {
+  const brokenMail = () =>
+    venue.appWith({
+      invoiceEmailAvailable: () => Promise.reject(new Error("email settings unreadable")),
+    });
+
+  it("refuses an email choice as email that cannot be sent, writing nothing", async () => {
+    const app = brokenMail();
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    const body = await pressBody(saleId, {}, app);
+    const answer = await give(
+      saleId,
+      { ...body, correctiveDelivery: { medium: "email", recipient: "ana@example.com" } },
+      app,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toEqual({
+      code: "invoice_delivery.email_unavailable",
+      params: { field: "correctiveDelivery.recipient" },
+    });
+    expect(await writtenOn(saleId)).toEqual(NOTHING);
+  });
+
+  it("prints it on the A4 printer staff chose", async () => {
+    const app = brokenMail();
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    const body = await pressBody(
+      saleId,
+      { correctiveDelivery: { medium: "print", printerId: officeId } },
+      app,
+    );
+    const answer = await give(saleId, body, app);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await deliveriesOf(await filedR1(answer))).toEqual([
+      { medium: "a4", recipient: null, printerId: officeId },
+    ]);
   });
 });
 
