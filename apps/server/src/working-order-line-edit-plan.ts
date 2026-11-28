@@ -81,7 +81,7 @@ export interface PreparedLineEdit {
   optionSnapshots: OptionSnapshot[];
   kept: { child: EditableLine; perDish: number }[];
   removedChildren: EditableLine[];
-  /** Index into `pricing` of the line carrying this line's added extras, if any. */
+  /** Index of this edit's added-extras group in the priced result. */
   addedAt: number | null;
   /** Whether the note, options answer or extras change, not only the quantity. */
   modified: boolean;
@@ -495,7 +495,7 @@ export async function prepareLineEdits(
 
   // Raising a line the kitchen does not have sells more of it at its stored price, so the dish and
   // its extras must still be offered and sellable: priced with the rest, and the price discarded.
-  // Last, so `addedAt` still indexes the groups below.
+  // Append these checks so they do not shift the added-extras groups that `addedAt` points to.
   for (const line of raised) {
     pricing.push(line);
     pricedAs.push({ kind: "check" });

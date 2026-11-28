@@ -983,6 +983,10 @@ the items stay on their own bill with their 3.00 share.
 
 ## PR 5 — A changed dish keeps its discount (`feat/a1621-5-changed-dish`)
 
+**28 November line-edit split.** Find `addedApart` and pricing in `working-order-line-edit-plan.ts`.
+Find the extra rewrites and `endRepricedDishDiscounts` call inside `applyLineEdits` in
+`working-order-line-edits.ts`. Both files use the standard 1,000-line limit.
+
 **What lands.** A held-order save that swaps a dish's variant, or rewrites an extra, keeps its
 discounts (D18); an amount on a swapped dish is asked about. Dormant. Owner lands.
 
