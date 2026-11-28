@@ -59,8 +59,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
       const products: TillProduct[] = [
         "Pollo asado con patatas y verduras",
         "Extraordinariamenteextralargapalabra",
-        // Measure centring on words that wrap without a browser-inserted hyphen.
-        "Zumo de naranja recién hecho",
+        // Measure centring on words that wrap without a browser-inserted hyphen, in two lines no
+        // tested width cuts: Chromium leaves a shortened cut line off centre.
+        "Zumo de naranja",
       ].map((name, index) => ({
         id: `p${index}`,
         productId: `p${index}`,

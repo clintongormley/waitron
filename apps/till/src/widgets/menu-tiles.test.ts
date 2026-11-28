@@ -287,7 +287,7 @@ describe("menu tiles", () => {
     },
   );
 
-  it("gives an uncounted long name the tile's whole inner width", async () => {
+  it("gives an uncounted long name the tile's whole inner width, its uncut line centred with equal room each side", async () => {
     const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
     const { el } = await mount(390, {
       menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
@@ -296,9 +296,23 @@ describe("menu tiles", () => {
     });
     const plain = tile(el, full);
     const name = plain.querySelector<HTMLElement>(".name")!;
-    const look = getComputedStyle(name);
-    expect(look.paddingInlineStart).toBe("0px");
-    expect(look.paddingInlineEnd).toBe("0px");
+    const own = name.getBoundingClientRect();
+    const outer = plain.getBoundingClientRect();
+    const words = document.createRange();
+    words.selectNodeContents(name);
+    const shown = [...words.getClientRects()].filter((line) => line.top < own.bottom);
+    expect(new Set(shown.map((line) => Math.round(line.top))).size).toBe(2);
+    for (const line of shown) {
+      expect(line.left).toBeGreaterThanOrEqual(own.left);
+      expect(line.right).toBeLessThanOrEqual(own.right);
+    }
+    // The first line is never cut, so it shows the room the name keeps on each side.
+    const first = shown[0]!;
+    expect(Math.abs(first.left - own.left - (own.right - first.right))).toBeLessThan(1);
+    expect(Math.abs((first.left + first.right) / 2 - (outer.left + outer.right) / 2)).toBeLessThan(
+      1,
+    );
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
     const inner = getComputedStyle(face(plain));
     expect(name.getBoundingClientRect().width).toBeCloseTo(
       face(plain).clientWidth - parseFloat(inner.paddingLeft) - parseFloat(inner.paddingRight),

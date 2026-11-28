@@ -80,14 +80,26 @@ export const menuTileStyles: CSSResult = css`
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
+    --name-ellipsis-room: calc(var(--wt-font-size-md) / 2);
+    padding-inline-start: var(--name-ellipsis-room);
     font-size: var(--wt-font-size-md);
     font-weight: var(--wt-font-weight-bold);
+  }
+
+  /* Chromium centres a cut line without its "…", which then reaches up to half its width past the
+     line; this strip and the start padding keep it inside (end padding would count as overflow). */
+  .name::before {
+    content: "";
+    float: inline-end;
+    width: var(--name-ellipsis-room);
+    height: 100vh;
   }
 
   /* The count's reach into the tile (its width less the part drawn outside), on both sides so the
      name stays centred. */
   .tile[data-in-order] .name {
-    padding-inline: calc(var(--wt-space-5) - var(--wt-space-3) / 2);
+    --name-count-room: calc(var(--wt-space-5) - var(--wt-space-3) / 2);
+    padding-inline: calc(var(--name-count-room) + var(--name-ellipsis-room)) var(--name-count-room);
   }
 
   .name[lang] {
