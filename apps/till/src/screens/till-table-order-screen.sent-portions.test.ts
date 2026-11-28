@@ -437,6 +437,15 @@ it("A803 portion grouping: a part-served row's window is headed with the row's c
   expect(text(q(served, "[data-sent-line-dialog] .move-dish"))).toBe("Steak ×3");
 });
 
+it("A803 portion grouping: a part-served row's Serve window is headed with the row's count", async () => {
+  const el = await openPartServed();
+  await userEvent.click(q(el, "[data-sent-line-serve]"));
+  await el.updateComplete;
+  expect(text(q(el, "[data-serve-dialog] .move-dish"))).toBe("Steak ×3");
+  expect(text(q(el, "[data-serve-dialog] .serve-so-far"))).toBe("1 of 3 served");
+  expect(text(q(el, "[data-serve-count]"))).toBe("2");
+});
+
 it("A803 portion grouping: a part-served row takes back only its served portion and serves only what is left", async () => {
   const el = await openPartServed();
   const undos = capture(el, "unserve-lines");

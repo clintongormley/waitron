@@ -63,7 +63,7 @@ import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
 import { byFiringOrder, sentPanel, type SentSlice, waitsForFire } from "../state/sent-panel.js";
-import { sentWindowShare } from "../state/sent-window.js";
+import { type SentWindowCount, partlyServed, sentWindowShare } from "../state/sent-window.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -1555,6 +1555,8 @@ export class TillTableOrderScreen extends LitElement {
     undo: boolean;
     count: Decimal;
     members?: readonly CurrentOrderRow[];
+    /** The portions its heading speaks for: the row's, as the dish window counts them. */
+    shown: SentWindowCount;
   } | null = null;
 
   #serveAuthority?: {
@@ -3544,7 +3546,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#askSentChangeLeave(() => this.#serveFromSentLine(pending, undo, true));
       return;
     }
-    const members = undo ? this.#sentTakeBack() : this.#sentLineMembers();
+    const own = this.#sentLineMembers();
+    const joined = this.#sentTakeBack(own);
+    const members = undo ? joined : own;
     if (
       members === undefined ||
       members.some(
@@ -3560,6 +3564,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#requestServe(
       members[0]!.row,
       undo,
+      sentWindowShare(own!, joined),
       members.length === 1 ? undefined : members.map((member) => member.row),
     );
   }
@@ -3943,10 +3948,7 @@ export class TillTableOrderScreen extends LitElement {
                 member.lineId === row.lineId && member.workingOrderId === row.workingOrderId,
             ),
           );
-    const partlyServed =
-      share !== undefined &&
-      compareDecimal(share.served, decimal("0")) > 0 &&
-      compareDecimal(share.served, share.quantity) < 0;
+    const servedInPart = share !== undefined && partlyServed(share);
     const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
     const changeLines =
       pending === null || members === undefined ? undefined : this.#sentChangeLines(members);
@@ -4048,7 +4050,7 @@ export class TillTableOrderScreen extends LitElement {
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>
               ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
-              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(share!)}</p>` : nothing}
+              ${servedInPart ? html`<p data-sent-line-served>${this.#servedOf(share!)}</p>` : nothing}
               ${
                 priceMoves
                   ? nothing
@@ -5593,7 +5595,12 @@ export class TillTableOrderScreen extends LitElement {
 
   /** More than one whole unit, a grouped row's portions included, asks how many; anything else, a
    * weighed dish included, goes whole. */
-  #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
+  #requestServe(
+    row: CurrentOrderRow,
+    undo: boolean,
+    shown: SentWindowCount,
+    members?: readonly CurrentOrderRow[],
+  ): void {
     if (this.#serveRefused()) return;
     if (undo && !this.#sentBillOpen(row)) return;
     this.#takeServeAuthority();
@@ -5608,6 +5615,7 @@ export class TillTableOrderScreen extends LitElement {
         row,
         undo,
         count: most,
+        shown,
         ...(members === undefined ? {} : { members }),
       });
       return;
@@ -5762,15 +5770,11 @@ export class TillTableOrderScreen extends LitElement {
         pending === null
           ? nothing
           : html`<p class="move-dish">
-                ${pending.row.name}
-                ×${pending.members === undefined ? quantityText(pending.row.quantity) : pending.members.length}
+                ${pending.row.name} ×${quantityText(pending.shown.quantity)}
               </p>
               ${
-                pending.members === undefined &&
-                compareDecimal(decimal(pending.row.servedQuantity), decimal("0")) > 0
-                  ? html`<p class="serve-so-far">
-                      ${this.#servedOf({ served: pending.row.servedQuantity, quantity: pending.row.quantity })}
-                    </p>`
+                partlyServed(pending.shown)
+                  ? html`<p class="serve-so-far">${this.#servedOf(pending.shown)}</p>`
                   : nothing
               }
               <div class="split-stepper">

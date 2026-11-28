@@ -1183,6 +1183,35 @@ it.each([
   },
 );
 
+it("heads the Serve window of a dish served and cancelled in part on one line for its row", async () => {
+  const el = await openRow(
+    {
+      currentOrders: current({
+        ungrouped: [
+          row("l-patatas", "Bravas", "4.000", {
+            servedQuantity: "1.000",
+            cancelledQuantity: "1.000",
+            netAmount: "12.00",
+            extras: [],
+          }),
+        ],
+      }),
+    },
+    "l-patatas",
+    null,
+  );
+  const events: unknown[] = [];
+  el.addEventListener("serve-lines", (event) => events.push((event as CustomEvent).detail));
+  await userEvent.click(q(el, "[data-sent-line-serve]")!);
+  await el.updateComplete;
+  const words = (selector: string) => q(el, selector)!.textContent!.replace(/\s+/g, " ").trim();
+  expect(words("[data-serve-dialog] .move-dish")).toBe("Bravas ×3");
+  expect(words("[data-serve-dialog] .serve-so-far")).toBe("1 of 3 served");
+  expect(words("[data-serve-count]")).toBe("2");
+  await userEvent.click(q(el, "[data-serve-confirm]")!);
+  expect(events).toEqual([{ items: [{ lineId: "l-patatas", quantity: "2" }] }]);
+});
+
 it.each([
   ["an odd cent split in half", "2.000", "1.000", 0, "11.25", [], "€11.25"],
   ["a weighed half", "1.000", "0.500", 3, "7.49", [], "€7.49"],

@@ -2,6 +2,7 @@ import {
   type Decimal,
   MONEY_SCALE,
   addDecimal,
+  compareDecimal,
   decimal,
   divideDecimal,
   multiplyDecimal,
@@ -11,9 +12,16 @@ import {
 import type { CurrentOrderRow } from "../api/kitchen-api.js";
 import type { SentSlice } from "./sent-panel.js";
 
-export interface SentWindowShare {
+export interface SentWindowCount {
   quantity: Decimal;
   served: Decimal;
+}
+
+/** Whether a row's "n of m served" applies: some of it served, not all. */
+export const partlyServed = ({ served, quantity }: SentWindowCount): boolean =>
+  compareDecimal(served, decimal("0")) > 0 && compareDecimal(served, quantity) < 0;
+
+export interface SentWindowShare extends SentWindowCount {
   /** What the row charges for these portions. */
   amount: Decimal;
   /** A whole line's `value`, for the part of each line these portions take. */
