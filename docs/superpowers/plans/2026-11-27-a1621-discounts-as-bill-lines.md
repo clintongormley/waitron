@@ -329,7 +329,7 @@ Recommendations, each with why. None changes what the owner decided, except wher
 - **D13. Totals computed in SQL** (the floor's tab total, the held-orders list, the counter's waiting
   list, the party bills, the orders list, Find bill, which also sorts and pages by total in SQL,
   `find-bill-bills.ts:70`, `:139`, `:232-234` (†)): the box works out, in code, what pending discounts take
-  off each open bill that holds one, and hands the result to the query as a JSON table (`json_each`),
+  off each open bill that holds one, and hands the result to the query as a JSON object keyed by bill id,
   so totals, sorting and paging stay exact and in SQL. Only bills with a pending row are worked out.
 - **D14. A comp that brings the bill to zero still issues the invoice at once** (the comp route's
   `closeZero`, `adjustments-api.ts:252` (†); guide `table-service.md:16`), crystallising first; the
@@ -883,7 +883,7 @@ expected total).
 **The change.**
 1. `apps/server/src/bill-discounts-off-sql.ts` (new): the bills with no sale holding pending rows, open or
    placed (D23; the counter's waiting list shows placed Counter orders, `working-order-counter.ts:441-442`,
-   its total `:460`), worked out once per read, as a SQL `json_each` table; each SQL site above
+   its total `:460`), worked out once per read, as a JSON object keyed by bill id, looked up per row; each SQL site above
    subtracts it (one or two lines each; `orders-list.ts` has 4 lines of room).
 2. `discounts` (each discount, its target, action, value, what it takes off now, whether it holds,
    its origin and reason name) on `PartyBill` (`parties.ts`), the held order read
