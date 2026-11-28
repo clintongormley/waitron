@@ -248,6 +248,12 @@ export const en = {
   "give_back.print_later_invoice": "Its corrective invoice can be printed from Find a bill.",
   "give_back.printing_on_receipt_not_a4":
     "Its corrective invoice is printing on the receipt printer, not on A4.",
+  "give_back.corrective_done_printing":
+    "A corrective invoice for {customer} (−{amount}) is printing.",
+  "give_back.corrective_done_emailing":
+    "A corrective invoice for {customer} (−{amount}) is being emailed to {email}.",
+  "give_back.corrective_done_emailed":
+    "A corrective invoice for {customer} (−{amount}) has been emailed to {email}.",
   "give_back.pending": "{amount} is waiting for the card company's answer.",
   "give_back.rest": "{amount} is not refunded yet: it follows when the card company answers.",
   "give_back.check_again": "Check again",
@@ -2760,6 +2766,12 @@ export const es: Record<StringKey, string> = {
     "Su factura rectificativa se puede imprimir desde Buscar cuenta.",
   "give_back.printing_on_receipt_not_a4":
     "Su factura rectificativa se está imprimiendo en la impresora de tickets, no en A4.",
+  "give_back.corrective_done_printing":
+    "Se está imprimiendo una factura rectificativa para {customer} (−{amount}).",
+  "give_back.corrective_done_emailing":
+    "Se está enviando por correo a {email} una factura rectificativa para {customer} (−{amount}).",
+  "give_back.corrective_done_emailed":
+    "Se ha enviado por correo a {email} una factura rectificativa para {customer} (−{amount}).",
   "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
   "give_back.rest":
     "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",

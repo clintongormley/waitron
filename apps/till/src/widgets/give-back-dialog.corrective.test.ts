@@ -2,10 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { es } from "../i18n/strings.js";
-import type { CorrectiveChoice, GiveBackPreview, GiveBackRequest } from "../api/give-back-types.js";
+import { en, es } from "../i18n/strings.js";
+import { formatMoney } from "@waitron/shared";
+import type {
+  CorrectiveChoice,
+  GiveBackPreview,
+  GiveBackRequest,
+  GiveBackWrite,
+  SentCorrective,
+} from "../api/give-back-types.js";
 import { GiveBackSession } from "../state/give-back.js";
-import { SCOPE, fakeGiveBackApi, previewFor, refundsOn } from "./give-back-dialog.test-helpers.js";
+import {
+  SCOPE,
+  completedFor,
+  fakeGiveBackApi,
+  previewFor,
+  refundsOn,
+  sentCorrective,
+} from "./give-back-dialog.test-helpers.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
@@ -375,6 +389,94 @@ describe("Change", () => {
   });
 });
 
+describe("the sheet", () => {
+  const emailValue = (el: TillGiveBackDialog) =>
+    inSheet<HTMLElement & { value: string }>(el, "wt-input[name=email]")!.value;
+  const changeFocused = (el: TillGiveBackDialog) =>
+    choiceRoot(el)!.activeElement?.hasAttribute("data-corrective-change") === true;
+
+  it("starts the address from the original's after a printer was chosen", async () => {
+    const { el } = await mount(answering(EMAILED));
+    await openSheet(el);
+    await chooseWay(el, "print:bar");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await openSheet(el);
+    await chooseWay(el, "email");
+    expect(emailValue(el)).toBe("ana@example.com");
+  });
+
+  it("starts the address from the last one chosen, after a printer was chosen", async () => {
+    const { el } = await mount(answering(EMAILED));
+    await openSheet(el);
+    await typeEmail(el, "luis@example.com");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await openSheet(el);
+    await chooseWay(el, "print:bar");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await openSheet(el);
+    await chooseWay(el, "email");
+    expect(emailValue(el)).toBe("luis@example.com");
+  });
+
+  it("gives focus back to Change after Done", async () => {
+    const { el } = await mount();
+    await openSheet(el);
+    await chooseWay(el, "print:bar");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await vi.waitFor(() => expect(changeFocused(el)).toBe(true));
+  });
+
+  it("gives focus back to Change after Cancel", async () => {
+    const { el } = await mount();
+    await openSheet(el);
+    inSheet(el, "[data-corrective-cancel]")!.click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await vi.waitFor(() => expect(changeFocused(el)).toBe(true));
+  });
+
+  it("gives focus back to Change after Escape", async () => {
+    const { el } = await mount();
+    await openSheet(el);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    await vi.waitFor(() => expect(changeFocused(el)).toBe(true));
+    expect(root(el).querySelector("[data-summary]")).not.toBeNull();
+  });
+
+  it("draws Done quiet and disabled until the way changes, and again once it is changed back", async () => {
+    const { el } = await mount();
+    await openSheet(el);
+    const doneButton = () =>
+      inSheet<HTMLElement & { disabled: boolean; variant: string }>(el, "[data-corrective-done]")!;
+    expect(doneButton().disabled).toBe(true);
+    expect(doneButton().variant).toBe("secondary");
+    doneButton().click();
+    await sheet(el)!.updateComplete;
+    expect(sheet(el)).not.toBeNull();
+    await chooseWay(el, "print:bar");
+    expect(doneButton().disabled).toBe(false);
+    expect(doneButton().variant).toBe("primary");
+    await chooseWay(el, "print:office");
+    expect(doneButton().disabled).toBe(true);
+    expect(doneButton().variant).toBe("secondary");
+  });
+
+  it("draws Done ready at once when the invoice would not be sent, so the first printer can be chosen", async () => {
+    const { el, api } = await mount(answering({ ...A4, default: null }));
+    await openSheet(el);
+    expect(done(el).disabled).toBe(false);
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    expect(line(el)).toBe("Corrective invoice: printed on A4 · Office");
+    await press(el, api);
+    expect(asked(api)[0]!.correctiveDelivery).toEqual({ medium: "print", printerId: "office" });
+  });
+});
+
 describe("a refusal of the chosen way", () => {
   it("shows a printer no longer offered beside the line, and a new choice is sent", async () => {
     const api = answering(A4);
@@ -486,7 +588,7 @@ describe("a refused address, then another way", () => {
 });
 
 describe("a chosen printer a later preview no longer offers", () => {
-  it("falls back to the way the invoice goes anyway, and the press sends no choice", async () => {
+  it("keeps the choice and its name, says beside the line that it is no longer offered, and the press carries it", async () => {
     const api = answering(A4);
     const { el } = await mount(api);
     await openSheet(el);
@@ -494,6 +596,7 @@ describe("a chosen printer a later preview no longer offers", () => {
     done(el).click();
     await vi.waitFor(() => expect(sheet(el)).toBeNull());
     expect(line(el)).toBe("Corrective invoice: printed on the receipt printer · Bar");
+    expect(lineError(el)).toBe("");
     api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
       ...previewFor(request),
       corrective: { ...A4, printers: [PRINTERS[0]!] },
@@ -506,7 +609,60 @@ describe("a chosen printer a later preview no longer offers", () => {
         expect.objectContaining({ amount: "4.00" }),
       ),
     );
-    await vi.waitFor(() => expect(line(el)).toBe("Corrective invoice: printed on A4 · Office"));
+    await vi.waitFor(() =>
+      expect(lineError(el)).toBe("That printer is no longer available. Choose another."),
+    );
+    expect(line(el)).toBe("Corrective invoice: printed on the receipt printer · Bar");
+    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect(
+      root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-submit]")!.disabled,
+    ).toBe(false);
+    await press(el, api);
+    expect(asked(api)[0]!.correctiveDelivery).toEqual({ medium: "print", printerId: "bar" });
+  });
+
+  it("says email is no longer offered when a later preview cannot send it", async () => {
+    const api = answering(EMAILED);
+    const { el } = await mount(api);
+    await openSheet(el);
+    await typeEmail(el, "luis@example.com");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
+      ...previewFor(request),
+      corrective: { ...A4, emailAvailable: false },
+    }));
+    const amount = root(el).querySelector("wt-price-input[name=amount]")!;
+    await userEvent.fill(page.elementLocator(amount.shadowRoot!.querySelector("input")!), "4");
+    await vi.waitFor(() =>
+      expect(lineError(el)).toBe("Email cannot be sent now. Choose a printer."),
+    );
+    expect(line(el)).toBe("Corrective invoice: emailed to luis@example.com");
+  });
+
+  it("opens the sheet on the way the invoice goes anyway, and choosing it clears the message", async () => {
+    const api = answering(A4);
+    const { el } = await mount(api);
+    await openSheet(el);
+    await chooseWay(el, "print:bar");
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
+      ...previewFor(request),
+      corrective: { ...A4, printers: [PRINTERS[0]!] },
+    }));
+    const amount = root(el).querySelector("wt-price-input[name=amount]")!;
+    await userEvent.fill(page.elementLocator(amount.shadowRoot!.querySelector("input")!), "4");
+    await vi.waitFor(() => expect(lineError(el)).not.toBe(""));
+    await openSheet(el);
+    expect(inSheet<HTMLElement & { value: string }>(el, "wt-combobox[name=delivery]")!.value).toBe(
+      "print:office",
+    );
+    expect(done(el).disabled).toBe(false);
+    done(el).click();
+    await vi.waitFor(() => expect(sheet(el)).toBeNull());
+    expect(lineError(el)).toBe("");
+    expect(line(el)).toBe("Corrective invoice: printed on A4 · Office");
     await press(el, api);
     expect(asked(api)[0]).not.toHaveProperty("correctiveDelivery");
   });
@@ -526,5 +682,116 @@ describe("a press whose answer was lost", () => {
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(2));
     expect(asked(api)[1]!.correctiveDelivery).toEqual({ medium: "print", printerId: "bar" });
+  });
+});
+
+describe("the end screen", () => {
+  const filed = sentCorrective;
+  /** A goodwill correction of €5.00, filed with `corrective`. */
+  function correcting(corrective: SentCorrective) {
+    const api = answering(A4);
+    api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
+      ...previewFor(request),
+      parts: [{ kind: "correction", amount: request.amount, way: request.way, lineIds: [] }],
+      corrective: A4,
+    }));
+    api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => {
+      const outcome = completedFor(body);
+      return { ...outcome, parts: outcome.parts.map((part) => ({ ...part, corrective })) };
+    });
+    return api;
+  }
+  const outcome = (el: TillGiveBackDialog) =>
+    [...root(el).querySelectorAll("[data-outcome] p")].map((node) => text(node));
+  const said = (key: keyof typeof en, words: Record<string, string>, money: string, email = "") =>
+    words[key]
+      .replace("{customer}", "Acme SL")
+      .replace("{amount}", money)
+      .replace("{email}", email)
+      .replace(/\s+/g, " ");
+  async function ended(corrective: SentCorrective) {
+    const api = correcting(corrective);
+    const { el } = await mount(api);
+    await press(el, api);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-outcome]")).not.toBeNull());
+    return el;
+  }
+
+  it.each([
+    ["on A4", { medium: "a4" as const, printerName: "Office" }],
+    ["on the receipt printer", { medium: "receipt" as const, id: null }],
+  ])("says it is printing %s, for whom and its own amount", async (_case, delivery) => {
+    const el = await ended(filed(delivery));
+    expect(outcome(el)).toContain("A corrective invoice for Acme SL (−€4.50) is printing.");
+  });
+
+  it("says it is being emailed, to which address", async () => {
+    const el = await ended(filed({ invoiceRecipientEmail: "ana@example.com" }));
+    expect(outcome(el)).toContain(
+      "A corrective invoice for Acme SL (−€4.50) is being emailed to ana@example.com.",
+    );
+  });
+
+  it("says it is being emailed while it is sending", async () => {
+    const el = await ended(filed({ status: "sending", invoiceRecipientEmail: "ana@example.com" }));
+    expect(outcome(el)).toContain(
+      "A corrective invoice for Acme SL (−€4.50) is being emailed to ana@example.com.",
+    );
+  });
+
+  it("says it has been emailed once it was sent", async () => {
+    const el = await ended(filed({ status: "sent", invoiceRecipientEmail: "ana@example.com" }));
+    expect(outcome(el)).toContain(
+      "A corrective invoice for Acme SL (−€4.50) has been emailed to ana@example.com.",
+    );
+  });
+
+  it("in Spanish, says each way in Spanish", async () => {
+    setLocale("es-ES");
+    const money = formatMoney("4.50", "es-ES");
+    const printing = await ended(filed({ medium: "a4" }));
+    expect(outcome(printing)).toContain(said("give_back.corrective_done_printing", es, money));
+    cleanupWidgets();
+    localStorage.clear();
+    const queued = await ended(filed({ invoiceRecipientEmail: "ana@example.com" }));
+    expect(outcome(queued)).toContain(
+      said("give_back.corrective_done_emailing", es, money, "ana@example.com"),
+    );
+    cleanupWidgets();
+    localStorage.clear();
+    const sentEmail = await ended(
+      filed({ status: "sent", invoiceRecipientEmail: "ana@example.com" }),
+    );
+    expect(outcome(sentEmail)).toContain(
+      said("give_back.corrective_done_emailed", es, money, "ana@example.com"),
+    );
+  });
+
+  it("says nothing of the way when nothing was sent", async () => {
+    const el = await ended(filed(null));
+    expect(outcome(el).some((shown) => shown.startsWith("A corrective invoice for"))).toBe(false);
+  });
+
+  it.each([["failed" as const], ["unknown" as const]])(
+    "says nothing of the way when its send %s",
+    async (status) => {
+      const el = await ended(filed({ status, invoiceRecipientEmail: "ana@example.com" }));
+      expect(outcome(el).some((shown) => shown.startsWith("A corrective invoice for"))).toBe(false);
+    },
+  );
+
+  it("says nothing of an email whose address the box does not show this device", async () => {
+    const el = await ended(filed({}));
+    expect(outcome(el).some((shown) => shown.startsWith("A corrective invoice for"))).toBe(false);
+  });
+
+  it("says it is printing, and on the receipt printer instead of A4, without contradiction", async () => {
+    const el = await ended({ ...filed({ medium: "receipt" }), printedOnReceiptNotA4: true });
+    expect(outcome(el)).toEqual(
+      expect.arrayContaining([
+        "A corrective invoice for Acme SL (−€4.50) is printing.",
+        en["give_back.printing_on_receipt_not_a4"],
+      ]),
+    );
   });
 });

@@ -1,4 +1,5 @@
 import type { InvoiceCorrectionView } from "./invoice-correction-types.js";
+import type { InvoiceDeliveryAttempt } from "./invoice-delivery-api.js";
 
 /** The code (and params) the write would answer for a choice, line or payment that must wait. */
 export interface GiveBackWaitReason {
@@ -126,6 +127,22 @@ export interface GiveBackWrite extends GiveBackAsk {
   override?: { personId: string; pin: string };
 }
 
+/** A filed corrective full invoice as a give-back's answer shows it (`SentCorrective`,
+ * `apps/server/src/corrective-delivery.ts`). */
+export interface SentCorrective {
+  saleId: string;
+  invoiceNumber: string;
+  customerName: string | null;
+  /** The money it takes off the invoice, as a positive amount. */
+  amount: string;
+  /** Null when the box sent nothing. The address is there only for a device that may print
+   * receipts. */
+  delivery: InvoiceDeliveryAttempt | null;
+  /** The invoice it corrects went on A4, and the box's own send when it was filed put this one on
+   * the receipt printer instead. */
+  printedOnReceiptNotA4: boolean;
+}
+
 export interface GiveBackOutcome {
   parts: {
     kind: GiveBackPart["kind"];
@@ -133,10 +150,7 @@ export interface GiveBackOutcome {
     state: "completed" | "pending" | "failed" | "not_started";
     refundId?: string;
     correctionId?: string;
-    /** A filed corrective full invoice; `delivery` is null when the box sent nothing.
-     * `printedOnReceiptNotA4`: the invoice it corrects went on A4, and the box's own send when it
-     * was filed put this one on the receipt printer instead. */
-    corrective?: { delivery: object | null; printedOnReceiptNotA4?: boolean };
+    corrective?: SentCorrective;
   }[];
   /** A later part refused after an earlier one moved money. */
   refusal: { code: string; params: Record<string, unknown> } | null;

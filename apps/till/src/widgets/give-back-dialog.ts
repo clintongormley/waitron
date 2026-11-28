@@ -57,8 +57,9 @@ import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import type { TenderRefundSession } from "../state/tender-refund.js";
 import {
   chosenDelivery,
+  correctiveError,
   correctiveLine,
-  correctiveRefusal,
+  correctiveMemory,
   withCorrective,
 } from "./corrective-choice.js";
 import "./give-back-under-way.js";
@@ -150,6 +151,7 @@ export class TillGiveBackDialog extends LitElement {
   #filled = false;
   /** The dishes the window opened ticked; the cancel's ids go only with exactly these. */
   #filledLines: string[] = [];
+  readonly #corrective = correctiveMemory();
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason) =>
@@ -728,11 +730,11 @@ export class TillGiveBackDialog extends LitElement {
     const refusal = this.#refusal();
     const sent = this.sendRefusal;
     const onAmount = (shown: Refusal | null) => shown !== null && AMOUNT_REFUSALS.has(shown.code);
-    const onCorrective = correctiveRefusal(sent);
+    const answer = this.#answer();
+    const onCorrective = correctiveError(answer?.corrective, this.draft.corrective, sent);
     if (onAmount(sent)) errors.set("amount", this.#sendRefusalText(sent!));
     else if (onAmount(refusal))
       errors.set("amount", this.#refusalText(refusal!, "give_back.preview_failed"));
-    const answer = this.#answer();
     const way = this.#way();
     const amount = typedMoney(this.draft.amount);
     const total =
@@ -809,8 +811,13 @@ export class TillGiveBackDialog extends LitElement {
         answer === null
           ? nothing
           : summaryOf(answer, way!, moneyPlus(typedMoney(this.draft.amount)!, this.#extra()))
-      }${correctiveLine(answer?.corrective, this.draft.corrective, onCorrective, (delivery) =>
-        this.#set({ corrective: chosenDelivery(answer?.corrective, delivery) ?? null }),
+      }${correctiveLine(
+        answer?.corrective,
+        this.draft.corrective,
+        this.#corrective,
+        onCorrective,
+        (delivery) =>
+          this.#set({ corrective: chosenDelivery(answer?.corrective, delivery) ?? null }),
       )}
       <wt-form-actions
         .error=${[

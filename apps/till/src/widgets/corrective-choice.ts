@@ -2,8 +2,14 @@ import { LitElement, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { isValidEmail } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
-import type { WtDialog } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -28,18 +34,21 @@ const offered = (choice: CorrectiveChoice, chosen: CorrectiveDelivery) =>
     ? choice.emailAvailable
     : choice.printers.some((printer) => printer.id === chosen.printerId);
 
-/** What a press sends for staff's choice: nothing when it is the way the invoice goes anyway, or a
- * way the latest preview no longer offers. */
+/** What the give-back form remembers across previews: each printer it was offered, so a chosen
+ * one a later preview no longer offers is still named, and the last address chosen. */
+export interface CorrectiveMemory {
+  printers: Map<string, CorrectiveChoice["printers"][number]>;
+  email: string | null;
+}
+export const correctiveMemory = (): CorrectiveMemory => ({ printers: new Map(), email: null });
+
+/** What a press sends for staff's choice: nothing when it is the way the invoice goes anyway. A way
+ * the latest preview no longer offers is still sent, so the box's refusal is shown. */
 export function chosenDelivery(
   choice: CorrectiveChoice | undefined,
   chosen: CorrectiveDelivery | null,
 ): CorrectiveDelivery | undefined {
-  if (
-    choice === undefined ||
-    chosen === null ||
-    !offered(choice, chosen) ||
-    same(chosen, defaultDelivery(choice))
-  )
+  if (choice === undefined || chosen === null || same(chosen, defaultDelivery(choice)))
     return undefined;
   return chosen;
 }
@@ -55,13 +64,30 @@ export function withCorrective<T extends object>(
 }
 
 /** A refusal the box gave for the chosen way, worded for the line it stands beside. */
-export function correctiveRefusal(refusal: { code: string; field?: string } | null): string {
+function correctiveRefusal(refusal: { code: string; field?: string } | null): string {
   if (refusal === null || !refusal.field?.startsWith("correctiveDelivery")) return "";
   if (refusal.code === "invoice_delivery.printer_invalid")
     return t("give_back.corrective_printer_invalid");
   if (refusal.code === "invoice_delivery.email_unavailable")
     return t("give_back.corrective_email_unavailable");
   return t("give_back.corrective_invalid");
+}
+
+/** What the line says under it: the box's refusal of the chosen way, or that the latest preview no
+ * longer offers it, worded as the box's refusal of a press would be. */
+export function correctiveError(
+  choice: CorrectiveChoice | undefined,
+  chosen: CorrectiveDelivery | null,
+  refusal: { code: string; field?: string } | null,
+): string {
+  const refused = correctiveRefusal(refusal);
+  const way = chosenDelivery(choice, chosen);
+  if (refused !== "" || way === undefined || offered(choice!, way)) return refused;
+  return t(
+    way.medium === "email"
+      ? "give_back.corrective_email_unavailable"
+      : "give_back.corrective_printer_invalid",
+  );
 }
 
 function printedOn(printer: { name: string; kind: "a4" | "receipt" }): string {
@@ -74,11 +100,14 @@ function printedOn(printer: { name: string; kind: "a4" | "receipt" }): string {
   ).replace("{printer}", () => printer.name);
 }
 
-function wayText(choice: CorrectiveChoice, chosen: CorrectiveDelivery | null): string {
+function wayText(
+  choice: CorrectiveChoice,
+  chosen: CorrectiveDelivery | null,
+  memory: CorrectiveMemory,
+): string {
   if (chosen?.medium === "email")
     return t("give_back.corrective_emailed").replace("{address}", () => chosen.recipient);
-  if (chosen?.medium === "print")
-    return printedOn(choice.printers.find((row) => row.id === chosen.printerId)!);
+  if (chosen?.medium === "print") return printedOn(memory.printers.get(chosen.printerId)!);
   const way = choice.default;
   if (way === null) return t("give_back.corrective_not_sent");
   if (way.medium !== "email") return printedOn({ name: way.printerName, kind: way.medium });
@@ -91,13 +120,16 @@ function wayText(choice: CorrectiveChoice, chosen: CorrectiveDelivery | null): s
 export function correctiveLine(
   choice: CorrectiveChoice | undefined,
   chosen: CorrectiveDelivery | null,
+  memory: CorrectiveMemory,
   error: string,
   onChoose: (delivery: CorrectiveDelivery) => void,
 ) {
   if (choice === undefined) return nothing;
+  for (const printer of choice.printers) memory.printers.set(printer.id, printer);
   return html`<till-corrective-choice
     .choice=${choice}
     .chosen=${chosenDelivery(choice, chosen) ?? null}
+    .memory=${memory}
     .error=${error}
     @corrective-choice=${(event: CustomEvent<{ delivery: CorrectiveDelivery }>) => {
       event.stopPropagation();
@@ -136,24 +168,29 @@ export class TillCorrectiveChoice extends LitElement {
   ];
   @property({ attribute: false }) choice!: CorrectiveChoice;
   @property({ attribute: false }) chosen: CorrectiveDelivery | null = null;
-  /** The box's refusal of the chosen way, if it gave one. */
+  @property({ attribute: false }) memory: CorrectiveMemory = correctiveMemory();
+  /** The box's refusal of the chosen way, or that the latest preview no longer offers it. */
   @property() error = "";
   @state() private open = false;
 
   #chose(event: CustomEvent<{ delivery: CorrectiveDelivery }>): void {
     event.stopPropagation();
-    this.open = false;
+    const { delivery } = event.detail;
+    if (delivery.medium === "email") this.memory.email = delivery.recipient;
+    void this.#closeSheet();
     this.dispatchEvent(
-      new CustomEvent("corrective-choice", {
-        detail: { delivery: event.detail.delivery },
-        bubbles: true,
-        composed: true,
-      }),
+      new CustomEvent("corrective-choice", { detail: { delivery }, bubbles: true, composed: true }),
     );
+  }
+  /** Closes the sheet and gives focus back to Change, which opened it. */
+  async #closeSheet(): Promise<void> {
+    this.open = false;
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>("[data-corrective-change]")?.focus();
   }
   override render() {
     const choosable = this.choice.printers.length > 0 || this.choice.emailAvailable;
-    return html`<p data-corrective-way>${wayText(this.choice, this.chosen)}</p>
+    return html`<p data-corrective-way>${wayText(this.choice, this.chosen, this.memory)}</p>
       ${
         choosable
           ? html`<wt-button
@@ -174,11 +211,12 @@ export class TillCorrectiveChoice extends LitElement {
           ? html`<till-corrective-sheet
               .choice=${this.choice}
               .chosen=${this.chosen}
+              .email=${this.memory.email}
               @corrective-sheet-done=${(event: CustomEvent<{ delivery: CorrectiveDelivery }>) =>
                 this.#chose(event)}
               @corrective-sheet-cancel=${(event: Event) => {
                 event.stopPropagation();
-                this.open = false;
+                void this.#closeSheet();
               }}
             ></till-corrective-sheet>`
           : nothing
@@ -210,23 +248,65 @@ export class TillCorrectiveSheet extends LitElement {
   @property({ attribute: false }) choice!: CorrectiveChoice;
   /** Staff's earlier choice on this form; null for the default way. */
   @property({ attribute: false }) chosen: CorrectiveDelivery | null = null;
+  /** The last address staff chose on this form, if any. */
+  @property({ attribute: false }) email: string | null = null;
   @state() private draft: SheetDraft = { way: "", email: "" };
   @state() private attempted = false;
   @state() private active = true;
+  /** What the sheet opened on; the draft scope's baseline. */
+  #opened?: SheetDraft;
+  /** The sheet opened on a way other than the one the line shows, so Done chooses it as it is. */
+  #savableAtOpen = false;
+  #scope?: DraftScope<SheetDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
 
   override connectedCallback(): void {
     super.connectedCallback();
-    const current = this.chosen ?? defaultDelivery(this.choice);
+    this.requestUpdate();
+    if (this.#opened !== undefined) return;
+    const kept = this.chosen !== null && offered(this.choice, this.chosen) ? this.chosen : null;
+    const current = kept ?? defaultDelivery(this.choice);
     const fallback = this.choice.printers[0] ? `print:${this.choice.printers[0].id}` : "email";
-    this.draft = {
+    const defaultWay = this.choice.default;
+    this.#savableAtOpen = current === null || kept !== this.chosen;
+    this.#opened = {
       way:
         current === null
           ? fallback
           : current.medium === "email"
             ? "email"
             : `print:${current.printerId}`,
-      email: current?.medium === "email" ? current.recipient : "",
+      email:
+        (current?.medium === "email" ? current.recipient : null) ??
+        this.email ??
+        (defaultWay?.medium === "email" ? defaultWay.recipient : null) ??
+        "",
     };
+    this.draft = { ...this.#opened };
+  }
+  override willUpdate(): void {
+    if (!this.isConnected || !this.active || this.#scope) return;
+    const { coordinator, scope } = draftScopeFor<SheetDraft>(this, {
+      id: this,
+      current: () => this.draft,
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => a.way === b.way && (a.way !== "email" || a.email.trim() === b.email.trim()),
+      restore: (value) => (this.draft = { ...value }),
+    });
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#opened!);
+  }
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+  #doneState() {
+    return saveActionState(this.#scope, { savableAtOpen: this.#savableAtOpen });
   }
   #deliveryOf(draft: SheetDraft): CorrectiveDelivery {
     return draft.way === "email"
@@ -238,9 +318,10 @@ export class TillCorrectiveSheet extends LitElement {
   }
   #set(change: Partial<SheetDraft>): void {
     this.draft = { ...this.draft, ...change };
+    this.#scope?.changed();
   }
   async #done(): Promise<void> {
-    if (!this.active) return;
+    if (!this.active || this.#doneState().unchanged) return;
     this.attempted = true;
     if (this.#invalid()) {
       await this.updateComplete;
@@ -259,6 +340,8 @@ export class TillCorrectiveSheet extends LitElement {
     event.stopPropagation();
     if (event.target !== event.currentTarget || !this.active) return;
     this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
     this.dispatchEvent(
       new CustomEvent("corrective-sheet-cancel", { bubbles: true, composed: true }),
     );
@@ -279,9 +362,11 @@ export class TillCorrectiveSheet extends LitElement {
   }
   override render() {
     const error = this.attempted && this.#invalid() ? t("invoice.email_invalid") : "";
+    const doneState = this.#doneState();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       .heading=${t("give_back.corrective_heading")}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
@@ -334,8 +419,8 @@ export class TillCorrectiveSheet extends LitElement {
           >
           <wt-button
             data-corrective-done
-            variant="primary"
-            ?disabled=${error !== ""}
+            variant=${doneState.variant}
+            ?disabled=${doneState.unchanged || error !== ""}
             @click=${() => void this.#done()}
             >${t("give_back.done")}</wt-button
           >

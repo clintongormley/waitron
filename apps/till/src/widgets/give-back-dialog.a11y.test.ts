@@ -8,6 +8,7 @@ import {
   VIEW,
   completedFor,
   fakeGiveBackApi,
+  previewFor,
   refundsOn,
 } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
@@ -187,6 +188,113 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     await choose(el, "extra");
     await expectNoA11yViolations(host);
   });
+  /** The goodwill form for €5.00 with a reason, its preview saying the corrective invoice goes on
+   * A4, and its line drawn. */
+  async function correcting(api = fakeGiveBackApi()) {
+    api.previewGiveBack.mockImplementation(async (_saleId, request) => ({
+      ...previewFor(request),
+      corrective: {
+        default: { medium: "a4", printerId: "office", printerName: "Oficina" },
+        printers: [
+          { id: "office", name: "Oficina", kind: "a4" },
+          { id: "bar", name: "Barra", kind: "receipt" },
+        ],
+        emailAvailable: true,
+      },
+    }));
+    const mounted = await mount(api);
+    const { el } = mounted;
+    await choose(el, "goodwill");
+    el.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "complaint" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const field = el
+      .shadowRoot!.querySelector("wt-price-input[name=amount]")!
+      .shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(field), "5");
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("till-corrective-choice")
+          ?.shadowRoot?.querySelector("[data-corrective-change]"),
+      ).toBeTruthy(),
+    );
+    return { ...mounted, api };
+  }
+  const choiceOf = (el: TillGiveBackDialog) =>
+    el.shadowRoot!.querySelector("till-corrective-choice")!;
+  async function openSheet(el: TillGiveBackDialog) {
+    choiceOf(el).shadowRoot!.querySelector<HTMLElement>("[data-corrective-change]")!.click();
+    await vi.waitFor(() =>
+      expect(choiceOf(el).shadowRoot!.querySelector("till-corrective-sheet")).not.toBeNull(),
+    );
+    const sheet = choiceOf(el).shadowRoot!.querySelector("till-corrective-sheet")!;
+    await sheet.updateComplete;
+    return sheet;
+  }
+
+  it("has no violations on the form showing the corrective invoice's line", async () => {
+    const { host } = await correcting();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the corrective invoice's line showing a refusal", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({
+      code: "invoice_delivery.printer_invalid",
+      field: "correctiveDelivery.printerId",
+      status: 409,
+    });
+    const { el, host } = await correcting(api);
+    const sheet = await openSheet(el);
+    sheet.shadowRoot!.querySelector("wt-combobox[name=delivery]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "print:bar" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await sheet.updateComplete;
+    sheet.shadowRoot!.querySelector<HTMLElement>("[data-corrective-done]")!.click();
+    await vi.waitFor(() =>
+      expect(choiceOf(el).shadowRoot!.querySelector("till-corrective-sheet")).toBeNull(),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+    await vi.waitFor(() =>
+      expect(choiceOf(el).shadowRoot!.querySelector("[data-corrective-error]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the corrective invoice's sheet open on a printer", async () => {
+    const { el, host } = await correcting();
+    await openSheet(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the corrective invoice's sheet on email, with an address that is not one after Done", async () => {
+    const { el, host } = await correcting();
+    const sheet = await openSheet(el);
+    sheet
+      .shadowRoot!.querySelector("wt-combobox[name=delivery]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "email" }, bubbles: true, composed: true }),
+      );
+    await sheet.updateComplete;
+    const email =
+      sheet.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!;
+    await email.updateComplete;
+    await userEvent.fill(page.elementLocator(email.shadowRoot!.querySelector("input")!), "ana@");
+    await sheet.updateComplete;
+    sheet.shadowRoot!.querySelector<HTMLElement>("[data-corrective-done]")!.click();
+    await vi.waitFor(() => expect(email.error).not.toBe(""));
+    await expectNoA11yViolations(host);
+  });
+
   const ask = {
     request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "card-1" },
     reasonId: "complaint",

@@ -1,6 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 import type {
@@ -12,6 +13,7 @@ import type {
   GiveBackView,
   GiveBackWaitReason,
   GiveBackWay,
+  SentCorrective,
 } from "../api/give-back-types.js";
 import type { TenderRefundView } from "../api/tender-refund-types.js";
 import {
@@ -196,6 +198,27 @@ const cardBack = (amount: string, card: string) =>
         .replace("{amount}", () => amount)
         .replace("{card}", () => card);
 
+/** Where the box's answer says a filed corrective full invoice went; null when it names no way to
+ * tell: nothing sent, a send that failed or ended unknown, or an address this device is not shown. */
+function correctiveWent(corrective: SentCorrective | undefined): string | null {
+  const delivery = corrective?.delivery ?? null;
+  const customer = corrective?.customerName ?? null;
+  if (delivery === null || customer === null) return null;
+  if (delivery.status === "failed" || delivery.status === "unknown") return null;
+  const email = delivery.invoiceRecipientEmail;
+  if (delivery.medium === "email" && email === undefined) return null;
+  const key: StringKey =
+    delivery.medium !== "email"
+      ? "give_back.corrective_done_printing"
+      : delivery.status === "sent"
+        ? "give_back.corrective_done_emailed"
+        : "give_back.corrective_done_emailing";
+  return t(key)
+    .replace("{customer}", () => customer)
+    .replace("{amount}", () => money(corrective!.amount))
+    .replace("{email}", () => email ?? "");
+}
+
 /** What went back, what waits, and why anything did not, from the write's answer. A cash
  * correction prints its own receipt; any other says where to print it (D14), unless the box is
  * already sending its corrective invoice. */
@@ -234,6 +257,10 @@ function outcomeLines(
     !corrected.some((part) => (part.corrective?.delivery ?? null) !== null)
   )
     lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
+  for (const part of corrected) {
+    const went = correctiveWent(part.corrective);
+    if (went !== null) lines.push(went);
+  }
   if (corrected.some((part) => part.corrective?.printedOnReceiptNotA4 === true))
     lines.push(t("give_back.printing_on_receipt_not_a4"));
   if (positive(pending))
