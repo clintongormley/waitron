@@ -219,9 +219,9 @@ function correctiveWent(corrective: SentCorrective | undefined): string | null {
     .replace("{email}", () => email ?? "");
 }
 
-/** What went back, what waits, and why anything did not, from the write's answer. A cash
+/** What went back, what waits, and why anything did not, from the write's answer. A receipt's cash
  * correction prints its own receipt; any other says where to print it (D14), unless the box is
- * already sending its corrective invoice. */
+ * sending or has sent its corrective invoice. */
 function outcomeLines(
   outcome: GiveBackOutcome,
   way: GiveBackWay | undefined,
@@ -251,10 +251,12 @@ function outcomeLines(
   const corrected = outcome.parts.filter(
     (part) => part.kind === "correction" && part.state === "completed",
   );
+  const goingOut = (delivery: SentCorrective["delivery"] | undefined) =>
+    delivery != null && delivery.status !== "failed" && delivery.status !== "unknown";
   if (
-    way?.way !== "cash" &&
+    (way?.way !== "cash" || fullInvoice) &&
     corrected.length > 0 &&
-    !corrected.some((part) => (part.corrective?.delivery ?? null) !== null)
+    !corrected.some((part) => goingOut(part.corrective?.delivery))
   )
     lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
   for (const part of corrected) {

@@ -810,16 +810,26 @@ describe("the end screen", () => {
     );
   });
 
-  it("says nothing of the way when nothing was sent", async () => {
+  it("says nothing of the way when nothing was sent, and that it can be printed from Find a bill", async () => {
     const el = await ended(filed(null));
     expect(outcome(el).some((shown) => shown.startsWith("A corrective invoice for"))).toBe(false);
+    expect(outcome(el)).toContain(en["give_back.print_later_invoice"]);
   });
 
+  it.each([["queued" as const], ["sending" as const], ["sent" as const]])(
+    "does not say it can be printed from Find a bill when its send is %s",
+    async (status) => {
+      const el = await ended(filed({ status, invoiceRecipientEmail: "ana@example.com" }));
+      expect(outcome(el)).not.toContain(en["give_back.print_later_invoice"]);
+    },
+  );
+
   it.each([["failed" as const], ["unknown" as const]])(
-    "says nothing of the way when its send %s",
+    "says nothing of the way when its send %s, and that it can be printed from Find a bill",
     async (status) => {
       const el = await ended(filed({ status, invoiceRecipientEmail: "ana@example.com" }));
       expect(outcome(el).some((shown) => shown.startsWith("A corrective invoice for"))).toBe(false);
+      expect(outcome(el)).toContain(en["give_back.print_later_invoice"]);
     },
   );
 
