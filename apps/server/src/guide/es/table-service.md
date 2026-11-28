@@ -874,20 +874,13 @@ Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuent
 **⋮** y elige **Mover platos**. Está disponible en una cuenta de mesa que sigue abierta, aunque
 parte de ella ya esté pagada.
 
-El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, muestra los platos
-de la cuenta, cada uno con sus extras bajo el nombre, y un plato al peso con su peso, por ejemplo
-**Jamón ibérico ×0,32**. Marca un plato para moverlo; sus extras van con él. Los platos iguales comparten una
-fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, o tantos como permitan los pagos de la cuenta, y **−** y **+**
-fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero.
+Usa **+** y **−** para elegir cuántos platos de cada tipo quieres mover. Los platos iguales
+comparten una fila con la cantidad que hay en la cuenta debajo del nombre. Un plato al peso pasa
+entero y sus extras van con él. Si la cuenta tiene pagos, solo puedes mover los platos que esos
+pagos no necesitan cubrir.
 
-Algunas casillas salen en gris, con el motivo debajo del plato:
-
-- **Los pagos retienen 40,00 € en esta cuenta: mueve menos platos**: elige menos platos para que
-  la cuenta conserve lo necesario para sus pagos, incluidos los que siguen en curso. Los demás
-  platos sí pueden pasar.
-
-En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
-nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
+En **Mover a**, elige otra cuenta abierta de la mesa o **Cuenta nueva**. El botón de abajo te
+dice cuántos platos vas a mover y a qué cuenta van. Púlsalo para moverlos.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
 pantalla. Cada plato conserva su orden del plato y sigue enviado, marchado o servido como estaba. Si mueves
 platos de una cuenta pagada en parte hasta que sus pagos cubren lo que queda, la cuenta queda

@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-stepper.js";
 import { MONEY_SCALE, decimal, multiplyDecimal, toScale } from "@waitron/shared";
 import type { TabLine } from "../api/kitchen-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -16,6 +17,7 @@ import {
   type Picks,
 } from "../state/portion-selection.js";
 import { trimQuantity } from "./dish-format.js";
+import { optionAnswers } from "./option-snapshot.js";
 
 /** The picker's ticks: the bill header beside a row of them draws the same box. */
 export const tickStyles = css`
@@ -72,6 +74,22 @@ export class TillPortionPicker extends LitElement {
       .row {
         display: grid;
         gap: var(--wt-space-1);
+      }
+      .quantity-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
+        background: var(--wt-color-surface);
+      }
+      .quantity-row.selected {
+        background: var(--wt-color-surface-lifted);
+      }
+      .quantity-row .reason {
+        grid-column: 1 / -1;
+        margin-inline-start: 0;
       }
       label {
         display: flex;
@@ -142,6 +160,7 @@ export class TillPortionPicker extends LitElement {
   ];
   @property({ attribute: false }) rows: readonly PickRow[] = [];
   @property({ attribute: false }) picks: Picks = new Set();
+  @property() mode: "check" | "quantity" = "check";
   /** The whole bill is chosen: every row draws ticked with no stepper, whatever `picks` holds, and
    * unticking a row emits the other rows' members. */
   @property({ type: Boolean }) whole = false;
@@ -285,8 +304,46 @@ export class TillPortionPicker extends LitElement {
     </div>`;
   }
 
+  #quantityRow(row: PickRow): TemplateResult {
+    const line = row.members[0]!;
+    const count = pickedCount(row, this.picks);
+    const name = this.#what(line);
+    const mark = this.markOf(line);
+    const reason = this.#reason(row);
+    const details = [
+      ...optionAnswers(line.optionSnapshots, { reads: "staff" }),
+      ...row.extras.map((extra) => this.#what(extra)),
+      line.sentAt === null ? "" : t("table.sent_title"),
+      fill(t("table.pick_on_bill"), { n: String(row.members.length) }),
+    ].filter(Boolean);
+    return html`<div
+      class="quantity-row row ${count > 0 ? "selected" : ""}"
+      data-pick-row=${line.id}
+    >
+      <div class="name">
+        ${name}${mark === "" ? nothing : html`<span class="mark" data-pick-mark=${line.id}>${mark}</span>`}
+        <span class="extra">${details.join(" · ")}</span>
+      </div>
+      <wt-stepper
+        data-pick=${line.id}
+        .label=${[name, ...details].join(", ")}
+        .value=${live(count)}
+        .max=${row.limit}
+        .decreaseLabel=${(dish: string) => `${t("basket.decrease")} ${dish}`}
+        .increaseLabel=${(dish: string) => `${t("basket.increase")} ${dish}`}
+        @wt-change=${(event: CustomEvent<{ value: number }>) => {
+          event.stopPropagation();
+          this.#emit(setCount(row, event.detail.value, this.picks));
+        }}
+      ></wt-stepper>
+      ${reason === "" ? nothing : html`<p class="reason">${reason}</p>`}
+    </div>`;
+  }
+
   override render() {
     if (this.rows.length === 0) return html`<p class="empty">${t("table.move_dishes_none")}</p>`;
+    if (this.mode === "quantity")
+      return html`<div>${this.rows.map((row) => this.#quantityRow(row))}</div>`;
     return html`<div class="rows">${this.rows.map((row) => this.#row(row))}</div>`;
   }
 }

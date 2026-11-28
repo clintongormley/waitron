@@ -1142,36 +1142,6 @@ describe("Table and bill actions", () => {
       }
     });
 
-    it.each([
-      ["the ⋮", "[data-table-menu]"],
-      ["the bill switcher", "[data-bill-switcher]"],
-    ])(
-      "Escape in Move dishes while %s is open closes only that list; the next Escape closes the step",
-      async (_name, selector) => {
-        const el = await mountScreen();
-        await userEvent.click(menu(el));
-        await userEvent.click(item(el, '[data-action="move-dishes"]')!);
-        await el.updateComplete;
-        const list = el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(selector)!;
-        const popup = list.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        list.show();
-        el.shadowRoot!.querySelector<HTMLElement>(
-          "[data-action-panel] :is(h2, [data-action-heading])",
-        )!.focus();
-        expect(popup.matches(":popover-open")).toBe(true);
-        expect(focusOnStep(el)).toBe(true);
-
-        await userEvent.keyboard("{Escape}");
-        await el.updateComplete;
-        expect(popup.matches(":popover-open")).toBe(false);
-        expect(el.shadowRoot!.querySelector("[data-action-panel]")).not.toBeNull();
-
-        await userEvent.keyboard("{Escape}");
-        await el.updateComplete;
-        expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
-      },
-    );
-
     it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
       const el = await mountScreen({ bills: three });
       el.personId = "me";
@@ -1207,17 +1177,17 @@ describe("Table and bill actions", () => {
       expect(el.shadowRoot!.activeElement).toBe(switcher);
     });
 
-    it("Move dishes closed while focus is elsewhere leaves focus there", async () => {
+    it("Move dishes keeps focus out of the bill switcher and returns it to the opener on a bill change", async () => {
       const el = await mountScreen();
       await userEvent.click(menu(el));
       await userEvent.click(item(el, '[data-action="move-dishes"]')!);
-      await el.updateComplete;
-      const switcher = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
-      switcher.focus();
+      await expect.poll(() => focusOnStep(el)).toBe(true);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!.focus();
+      expect(focusOnStep(el)).toBe(true);
       el.orderId = "wo-1";
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
-      expect(el.shadowRoot!.activeElement).toBe(switcher);
+      expect(focusOnMenu(el)).toBe(true);
     });
   });
 

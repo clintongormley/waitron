@@ -209,16 +209,19 @@ export class WtStepper extends LitElement {
     this.#focused = (this.renderRoot as ShadowRoot).activeElement;
   }
 
-  // − and the bin are different buttons, so the one holding focus can be drawn away. Focus goes to
-  // +, never to the bin, where a held Enter would remove; with + disabled, to the group meanwhile.
+  // A limit can disable the focused button or replace − with a bin. Never hand focus to the bin:
+  // a held Enter would remove. The group receives focus if neither step is available.
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
     const focused = this.#focused;
     this.#focused = null;
-    if (focused === null || focused.isConnected) return;
-    const plus = this.renderRoot.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
-    if (!plus.disabled) {
-      plus.focus();
+    if (!(focused instanceof HTMLButtonElement) || (focused.isConnected && !focused.disabled))
+      return;
+    if (focused.isConnected && this.disabled) return;
+    const step = focused.dataset.step === "1" ? "-1" : "1";
+    const other = this.renderRoot.querySelector<HTMLButtonElement>(`button[data-step="${step}"]`);
+    if (other !== null && !other.disabled) {
+      other.focus();
       return;
     }
     const group = this.renderRoot.querySelector<HTMLElement>('[role="group"]')!;

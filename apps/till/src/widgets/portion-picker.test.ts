@@ -96,6 +96,33 @@ const disabled = (button: HTMLElement | null) => button?.hasAttribute("disabled"
 afterEach(cleanupWidgets);
 
 describe("till-portion-picker", () => {
+  it("keeps the quantity buttons usable at both limits and shows picks corrected by a fresh read", async () => {
+    const { el, last } = await picker(BEERS.slice(0, 2));
+    el.setAttribute("mode", "quantity");
+    await el.updateComplete;
+    const stepper = el.shadowRoot!.querySelector("wt-stepper");
+    expect(stepper?.value).toBe(0);
+    const minus = stepper!.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="-1"]')!;
+    const plus = stepper!.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!;
+    expect(minus.disabled).toBe(true);
+    plus.focus();
+    await userEvent.keyboard("{Enter}{Enter}");
+    expect(last()).toEqual(["c1", "c2"]);
+    expect(plus.disabled).toBe(true);
+    expect(stepper!.shadowRoot!.activeElement).toBe(minus);
+    await userEvent.keyboard("{Enter}{Enter}");
+    expect(last()).toEqual([]);
+    expect(minus.disabled).toBe(true);
+    expect(stepper!.shadowRoot!.activeElement).toBe(plus);
+    await userEvent.keyboard("{Enter}{Enter}");
+    el.picks = new Set(["c1"]);
+    el.rows = rowsOf(BEERS.slice(0, 2), balance("10.00", "5.00"), el.picks);
+    await el.updateComplete;
+    await stepper!.updateComplete;
+    expect(stepper!.value).toBe(1);
+    expect(plus.disabled).toBe(true);
+    expect(el.shadowRoot!.textContent).toContain("Payments keep");
+  });
   it("registers as a custom element", () => {
     expect(customElements.get("till-portion-picker")).toBe(TillPortionPicker);
   });

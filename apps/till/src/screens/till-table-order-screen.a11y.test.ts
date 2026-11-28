@@ -24,6 +24,7 @@ import {
   expectNoA11yViolations,
   mountWidget,
   servedMenus,
+  quantityButton,
 } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -781,7 +782,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       "[data-move-dishes] till-portion-picker",
     )!;
     await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>("[data-pick]")!.click();
+    quantityButton(picker.shadowRoot!.querySelector("wt-stepper")!).click();
     target.click();
     await el.updateComplete;
     await picker.updateComplete;
@@ -1013,16 +1014,22 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       "[data-move-dishes] till-portion-picker",
     )!;
     await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="portion-1"]')!.click();
-    await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick-dec="portion-1"]')!.click();
-    await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="jamon"]')!.click();
+    const grouped =
+      picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-stepper"]>(
+        '[data-pick="portion-1"]',
+      )!;
+    const plus = quantityButton(grouped);
+    plus.click();
     await el.updateComplete;
     await picker.updateComplete;
-    expect(picker.shadowRoot!.querySelector('[data-pick-count="portion-1"]')!.textContent).toBe(
-      "2 of 3",
-    );
+    plus.click();
+    await el.updateComplete;
+    await picker.updateComplete;
+    quantityButton(picker.shadowRoot!.querySelector('[data-pick="jamon"]')!).click();
+    await el.updateComplete;
+    await picker.updateComplete;
+    expect(grouped.value).toBe(2);
+    expect(grouped.max).toBe(3);
     await expectNoA11yViolations(host);
   });
 });

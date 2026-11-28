@@ -772,10 +772,8 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its List card (the A797
   slice 1 look, `g-details-window1-390-light-es.png` and `h-list-dining-390-light-es.png` in
   `~/waitron-campaign-c/a797-1-shots/`).
-- **A1290. Bill actions that open low.** Move dishes and the remaining 14d actions still need
-  the new layout. In Move dishes, Back and its action can sit below the window and "+ New bill"
-  touches Back
-  ([detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)).
+- **A1290. Bill actions that open low.** The five 14d actions still need the panel layout.
+  [Detail](#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back).
 
 ## Bundle: Table screen panels that do not fit
 
@@ -2186,6 +2184,8 @@ Refund (A802) does not issue. Once something does, offer it from the ⋮ for a p
 quiet and explain on tap", that needs a new sentence in English and Spanish first.
 
 ## A1290. The table screen's action panel can put Back and its action half below the window, and "+ New bill" touches Back
+
+The 14c Move dishes panel resolves the observations below. The five 14d actions remain open.
 
 **A1290. The table screen's action panel can put Back and its action half below the window, and
 "+ New bill" touches Back (seen in A803 slice 4a's LOOK).** At 1280×900 Move dishes… opens at the

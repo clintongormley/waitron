@@ -857,24 +857,6 @@ export class TillTableOrderScreen extends LitElement {
         min-width: 0;
       }
 
-      .action-panel {
-        flex: 0 0 var(--wt-till-ticket-column-width);
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-4);
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        --wt-form-actions-surface: var(--wt-color-surface);
-      }
-
-      .action-panel h2 {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       /* Three buttons do not fit on one line of the dialog at phone width, so they wrap rather than
          squeeze their labels onto two lines each. */
       .cancel-actions {
@@ -1077,12 +1059,6 @@ export class TillTableOrderScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
-      }
-
-      /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
-      .move-dishes-to {
-        min-width: var(--wt-tap-min);
-        text-align: start;
       }
 
       [data-move-price-preview] p {
@@ -1338,16 +1314,6 @@ export class TillTableOrderScreen extends LitElement {
         scroll-margin-block-end: calc(
           var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
         );
-      }
-
-      .action-panel {
-        scroll-margin-block-end: var(--order-dock-size, 0px);
-      }
-
-      /* The dock comes later in the screen and is held at the same foot, so it would cover the row. */
-      .action-panel wt-form-actions {
-        scroll-margin-block-end: var(--order-dock-size, 0px);
-        bottom: var(--order-dock-size, 0px);
       }
     `,
     segmentedOptionStyles,
@@ -2596,10 +2562,6 @@ export class TillTableOrderScreen extends LitElement {
     trigger?.focus();
   }
 
-  /** A step the ⋮ opens is drawn in the side panel, which can be below the order: focus and scroll
-   * go to its heading. A step replaced or closed while focus is in the panel would drop focus to the
-   * page, so it goes to the next step's heading, or back to the ⋮. Read while the old step is
-   * still on the page. */
   #noteStepFocus(): void {
     if (this.actionStep === this.#drawnStep) return;
     const panel = this.renderRoot.querySelector("[data-action-panel]");
@@ -2628,24 +2590,16 @@ export class TillTableOrderScreen extends LitElement {
       return;
     }
     if (focus !== "step") return;
-    const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
-    if (panel === null) return;
-    if (panel.hasAttribute("data-table-action-dialog")) {
-      if (!this.#tableActionCanOpen) {
-        this.#stepFocus = "step";
-        return;
-      }
-      const dialog = panel as WtDialog;
-      void dialog.updateComplete.then(() => {
-        if (dialog.open && dialog.isConnected)
-          dialog
-            .querySelector<HTMLElement>("[data-action-heading]")
-            ?.focus({ preventScroll: true });
-      });
+    const dialog = this.renderRoot.querySelector<WtDialog>("[data-action-panel]");
+    if (dialog === null) return;
+    if (!this.#tableActionCanOpen) {
+      this.#stepFocus = "step";
       return;
     }
-    panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
-    void this.#scrollIntoViewOnceDrawn(panel);
+    void dialog.updateComplete.then(() => {
+      if (dialog.open && dialog.isConnected)
+        dialog.querySelector<HTMLElement>("[data-action-heading]")?.focus({ preventScroll: true });
+    });
   }
 
   /** The step's buttons draw after the screen does, and only then does the panel have its height. */
@@ -6783,64 +6737,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#closeActions();
   }
 
-  #actionBack(event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
-    if (this.splitAsking) {
-      this.#leaveSplitQuestion();
-      void this.#focusOnceDrawn("[data-split-confirm]");
-      return;
-    }
-    if (!this.#actionScope) {
-      this.#actionBackNow();
-      return;
-    }
-    const opening = this.#actionOpening;
-    const step = this.actionStep;
-    void this.#actionLeave!.request({
-      scopes: [this.#actionId],
-      reason: "navigation",
-      proceed: () => {
-        if (
-          !this.isConnected ||
-          this.busy ||
-          opening !== this.#actionOpening ||
-          step !== this.actionStep
-        )
-          return;
-        this.#actionBackNow();
-        this.#actionScope?.changed();
-        this.#watchActions();
-      },
-    });
-  }
-
-  #actionBackNow(): void {
-    switch (this.actionStep) {
-      case "pick":
-        this.#closeActions();
-        break;
-      case "move-dishes":
-      case "split-table":
-        this.#closeActions();
-        break;
-      case "split-table-pick":
-        this.splitTableId = null;
-        this.#resetSplitPick();
-        this.actionStep = "split-table";
-        this.#moveActionBaseline();
-        break;
-    }
-  }
-
-  /** A popover is open anywhere in the screen, shadow trees included. Escape belongs to it, and
-   * the browser closes it only while the keydown is not cancelled. */
-  #layerOpen(root: ShadowRoot = this.shadowRoot!): boolean {
-    if (root.querySelectorAll(":popover-open").length > 0) return true;
-    return [...root.querySelectorAll("*")].some(
-      (element) => element.shadowRoot !== null && this.#layerOpen(element.shadowRoot),
-    );
-  }
-
   @state() private relocationRefusal = "";
 
   readonly #beforeTableActionClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -6870,7 +6766,10 @@ export class TillTableOrderScreen extends LitElement {
     this.#relocationPrompt = null;
     this.relocationRefusal = "";
     if (step !== "split-table-pick") return true;
-    this.#actionBackNow();
+    this.splitTableId = null;
+    this.#resetSplitPick();
+    this.actionStep = "split-table";
+    this.#moveActionBaseline();
     this.#actionScope?.changed();
     this.#watchActions();
     return false;
@@ -6878,33 +6777,23 @@ export class TillTableOrderScreen extends LitElement {
 
   #actionPanel(): TemplateResult | typeof nothing {
     if (this.actionStep === "closed") return nothing;
-    if (this.actionStep !== "move-dishes") {
-      const bill = this.actionVerb === "merge" || this.actionVerb === "move-bill";
-      return tableActionPanel(
-        this.#tableActionCanOpen,
-        this.#beforeTableActionClose,
-        (event) => {
-          if (event.target !== event.currentTarget) return;
-          event.stopPropagation();
-          this.#closeActions();
-          this.#stepFocus = "menu";
-        },
-        this.#actionSection(),
-        t(bill ? "table.bill_actions" : "table.actions_title"),
-      );
-    }
-    return html`<aside
-      class="action-panel"
-      data-action-panel
-      aria-label=${t("table.actions_title")}
-      @keydown=${(event: KeyboardEvent) => {
-        if (event.key !== "Escape" || event.defaultPrevented || this.#layerOpen()) return;
-        event.preventDefault();
-        this.#actionBack(event);
-      }}
-    >
-      ${this.#actionSection()}
-    </aside>`;
+    const bill = this.actionVerb === "merge" || this.actionVerb === "move-bill";
+    const label =
+      this.actionVerb === "move-dishes"
+        ? t("table.action_move_dishes")
+        : t(bill ? "table.bill_actions" : "table.actions_title");
+    return tableActionPanel(
+      this.#tableActionCanOpen,
+      this.#beforeTableActionClose,
+      (event) => {
+        if (event.target !== event.currentTarget) return;
+        event.stopPropagation();
+        this.#closeActions();
+        this.#stepFocus = "menu";
+      },
+      this.#actionSection(),
+      label,
+    );
   }
 
   #actionSection(): TemplateResult | typeof nothing {
@@ -7353,30 +7242,42 @@ export class TillTableOrderScreen extends LitElement {
     const chosen = this.#moveDishesChosen();
     const blocker = this.#moveDishesBlocker(chosen, sources.setMenus, lineIds);
     const canMove = lineIds.length > 0 && chosen !== undefined && !blocker.blocked;
-    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    const bills = this.#otherOpenBills();
+    const source = this.#shownBillLabel();
+    const inText = (bill: string) => (currentLocale() === "es-ES" ? billLabelInText(bill) : bill);
+    const toBill = bills.find((bill) => bill.workingOrderId === chosen);
+    const to =
+      toBill === undefined
+        ? t("table.move_dishes_new_destination")
+        : fill(t("table.move_dishes_destination"), { bill: inText(billNumberLabel(toBill)) });
+    const picksMenu = sources.setMenus?.setMenus.some(({ lineId }) =>
+      this.moveDishesPicks.has(lineId),
+    );
+    const count = picksMenu
+      ? countText(lineIds.length, "order_counts.items", "order_counts.items_one")
+      : countText(lineIds.length, "table.move_dishes_count", "table.move_dishes_count_one");
+    const heading = {
+      title: t("table.action_move_dishes"),
+      subtitle:
+        source === undefined ? "" : fill(t("table.move_dishes_heading"), { bill: inText(source) }),
+      label: t("table.move_dishes_how_many"),
+      showLabel: true,
+    };
     const destination = (key: string, label: string, to: string | null) =>
-      html`<button
-        type="button"
-        class="option move-dishes-to"
+      html`<wt-choice-tile
+        variant="pill"
         data-move-dishes-to=${key}
-        aria-pressed=${chosen === to}
+        .label=${label}
+        .selected=${chosen === to}
+        ?disabled=${this.busy}
         @click=${(event: Event) => {
           if (!this.#actionControlCurrent(event)) return;
           this.moveDishesTo = to;
           this.#actionScope?.changed();
         }}
-      >
-        ${label}
-      </button>`;
-    return html`<section class="actions" data-move-dishes>
-      <h2 tabindex="-1">
-        ${
-          shown === undefined
-            ? t("table.actions_title")
-            : fill(t("table.move_dishes_heading"), { bill: billLabel(shown) })
-        }
-      </h2>
-      <till-portion-picker
+      ></wt-choice-tile>`;
+    const body = html`<till-portion-picker
+        mode="quantity"
         .rows=${rows}
         .picks=${this.moveDishesPicks}
         .nameOf=${(line: TabLine) => this.#nameForLine(line)}
@@ -7389,28 +7290,31 @@ export class TillTableOrderScreen extends LitElement {
           this.#actionScope?.changed();
         }}
       ></till-portion-picker>
-      <h3 id="move-dishes-to-heading" data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
-      <div role="status" data-move-price-preview>
+      <h2 class="table-action-list-label" id="move-dishes-to-heading" data-move-dishes-to-heading>
+        ${t("table.move_dishes_to")}
+      </h2>
+      <div class="move-dishes-destinations" role="group" aria-labelledby="move-dishes-to-heading">
+        ${bills.map((bill) => destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId))}
+        ${destination("new", t("table.new_bill_menu"), null)}
+      </div>`;
+    const footer = html`<div class="table-action-message" role="status" data-move-price-preview>
         ${blocker.message === undefined ? nothing : html`<p>${blocker.message}</p>`}
       </div>
-      <div class="action-options" role="group" aria-labelledby="move-dishes-to-heading">
-        ${this.#otherOpenBills().map((bill) =>
-          destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
-        )}
-        ${destination("new", t("table.new_bill"), null)}
-      </div>
-      <wt-form-actions>
-        ${this.#backButton("cancel")}
+      <wt-foot-button-bar>
         <wt-button
           data-move-dishes-confirm
           variant=${canMove ? "primary" : "secondary"}
-          ?disabled=${!canMove}
+          ?disabled=${!canMove || this.busy}
           @click=${(event: Event) => this.#confirmMoveDishes(event)}
         >
-          ${t("table.move_dishes_confirm")}
+          ${
+            lineIds.length === 0 || chosen === undefined
+              ? t("table.move_dishes_confirm")
+              : fill(t("table.move_dishes_action"), { count, to })
+          }
         </wt-button>
-      </wt-form-actions>
-    </section>`;
+      </wt-foot-button-bar>`;
+    return tableActionStep("move-dishes", heading, body, this.busy, footer);
   }
 
   #confirmMoveDishes(event: Event): void {
@@ -7435,18 +7339,6 @@ export class TillTableOrderScreen extends LitElement {
       this.#watchActions();
     };
     this.#dispatch("move-dishes", { lineIds, toBillId, review });
-  }
-
-  #backButton(slot?: string): TemplateResult {
-    return html`<wt-button
-      slot=${slot ?? nothing}
-      class="action-back"
-      data-action-back
-      variant="secondary"
-      @click=${(event: Event) => this.#actionBack(event)}
-    >
-      ${t("action.back")}
-    </wt-button>`;
   }
 }
 

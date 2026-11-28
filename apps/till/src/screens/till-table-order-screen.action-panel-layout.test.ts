@@ -90,12 +90,13 @@ async function openAction(action: string) {
   return { root, trigger };
 }
 
-it("at 1024 px Move dishes goes under the order without squeezing the menu", async () => {
+it("at 1024 px Move dishes covers the order without squeezing the menu", async () => {
   await pageAt(1024, 900);
   const { root } = await openAction("move-dishes");
-  const ordering = root.querySelector(".ordering")!;
-  const panel = root.querySelector("[data-action-panel]")!;
-  expect(box(panel).top).toBeGreaterThanOrEqual(box(ordering).bottom);
+  const panel = root.querySelector("[data-action-panel]")!.shadowRoot!.querySelector("dialog")!;
+  const left = box(root.querySelector("[data-draft-pane]")!).left;
+  expect(Math.abs(box(panel).left - left)).toBeLessThanOrEqual(1);
+  expect(box(panel).top).toBe(0);
   const browser = root.querySelector("till-menu-browser")!;
   const picker = box(browser.querySelector("till-menu-switcher")!);
   const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);

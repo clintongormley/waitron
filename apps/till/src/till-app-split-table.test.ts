@@ -10,7 +10,7 @@ import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { formatMoney } from "@waitron/shared";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillApp } from "./till-app.js";
-import { panelBackButton, cleanupWidgets } from "./widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets, quantityButton } from "./widgets/test-helpers.js";
 import type { TillSplitPicker } from "./widgets/split-picker.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import {
@@ -2391,16 +2391,15 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     }
 
     async function pickMoveDish(el: TillApp): Promise<void> {
-      q(el, "[data-move-dishes] till-portion-picker")!
-        .shadowRoot!.querySelector<HTMLInputElement>("[data-pick]")!
-        .click();
+      quantityButton(
+        q(el, "[data-move-dishes] till-portion-picker")!.shadowRoot!.querySelector("wt-stepper")!,
+      ).click();
       await flush(el);
     }
 
     const movePicked = (el: TillApp) =>
-      q(el, "[data-move-dishes] till-portion-picker")!.shadowRoot!.querySelector<HTMLInputElement>(
-        "[data-pick]",
-      )!.checked;
+      q(el, "[data-move-dishes] till-portion-picker")!.shadowRoot!.querySelector("wt-stepper")!
+        .value > 0;
 
     const unsavedQuestion = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import { panelBackButton, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  panelBackButton,
+  cleanupWidgets,
+  mountWidget,
+  quantityButton,
+} from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { PartyBill, TableParty, TableState } from "../api/floor-api.js";
 import type { TabLine } from "../api/kitchen-api.js";
@@ -348,7 +354,7 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   const { app, screen } = await mount();
   await pickDish(screen);
   const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
-  const oldTick = picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!;
+  const oldStep = quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!);
   const oldTarget = screen.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="other"]')!;
   const oldConfirm = screen.shadowRoot!.querySelector<HTMLElement>("[data-move-dishes-confirm]")!;
   const oldBack = panelBackButton(
@@ -358,7 +364,7 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   await pickDish(screen, "line-2");
-  oldTick.click();
+  oldStep.click();
   oldTarget.click();
   await screen.updateComplete;
   expect(picked(screen, 1)).toBe("false");
@@ -378,13 +384,13 @@ it("a departed destination and tick cannot alter a replacement flow", async () =
   const oldTarget = screen.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="other"]')!;
   await click(screen, '[data-move-dishes-to="other"]');
   const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
-  const oldTick = picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!;
+  const oldStep = quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!);
   await pickDish(screen, "line-2");
   await click(screen, "[data-move-dishes-confirm]");
   await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   oldTarget.click();
-  oldTick.click();
+  oldStep.click();
   await screen.updateComplete;
   expect(moveOpen(screen)).toBe(true);
   expect(unload()).toBe(false);
@@ -395,10 +401,8 @@ it("a pick's notification cancels unload before the next render", async () => {
   await pickDish(screen);
   await pickDish(screen);
   expect(unload()).toBe(false);
-  screen
-    .shadowRoot!.querySelector("till-portion-picker")!
-    .shadowRoot!.querySelector<HTMLElement>('[data-pick="line-2"]')!
-    .click();
+  const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
+  quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-2"]')!).click();
   expect(unload()).toBe(true);
   expect(app.commands).toEqual([]);
 });
@@ -565,7 +569,8 @@ it("A803 switcher: an old Discard answer from the switcher does not replace a st
 async function pickDish(screen: TillTableOrderScreen, id = "line-1") {
   const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
   await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLInputElement>(`[data-pick="${id}"]`)!.click();
+  const stepper = picker.shadowRoot!.querySelector(`[data-pick="${id}"]`)!;
+  quantityButton(stepper, picker.picks.has(id) ? -1 : 1).click();
   await screen.updateComplete;
   await picker.updateComplete;
 }
@@ -573,14 +578,24 @@ const movePicks = (screen: TillTableOrderScreen) =>
   screen.shadowRoot!.querySelector("till-portion-picker")!.picks;
 const pressedTo = (screen: TillTableOrderScreen) =>
   [...screen.shadowRoot!.querySelectorAll<HTMLElement>("[data-move-dishes-to]")]
-    .filter((choice) => choice.getAttribute("aria-pressed") === "true")
+    .filter(
+      (choice) =>
+        choice.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed") === "true",
+    )
     .map((choice) => choice.dataset.moveDishesTo);
 const moveOpen = (screen: TillTableOrderScreen) =>
   screen.shadowRoot!.querySelector("[data-move-dishes]") !== null;
+async function backUntilClosed(screen: TillTableOrderScreen) {
+  const dialog = screen.shadowRoot!.querySelector("wt-dialog[data-action-panel]")!;
+  const closed = new Promise((resolve) =>
+    dialog.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await click(screen, "[data-action-back]");
+  await closed;
+  await screen.updateComplete;
+}
 async function escape(screen: TillTableOrderScreen) {
-  screen
-    .shadowRoot!.querySelector("[data-move-dishes] h2")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+  await userEvent.keyboard("{Escape}");
   await screen.updateComplete;
 }
 
@@ -664,14 +679,14 @@ it("A803 move dishes unsaved: a destination no longer offered is not unsaved wor
   screen.bills = bills.filter((bill) => bill.workingOrderId !== "other");
   await screen.updateComplete;
   expect(unload()).toBe(false);
-  await click(screen, "[data-action-back]");
+  await backUntilClosed(screen);
   expect(moveOpen(screen)).toBe(false);
   expect((await question(app)).open).toBe(false);
 });
 it("A803 move dishes unsaved: with nothing picked, Back and switching bill ask nothing", async () => {
   const { app, screen } = await mount("move-dishes");
   expect(unload()).toBe(false);
-  await click(screen, "[data-action-back]");
+  await backUntilClosed(screen);
   expect(moveOpen(screen)).toBe(false);
   expect((await question(app)).open).toBe(false);
   await click(screen, "[data-table-menu]");
