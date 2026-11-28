@@ -141,7 +141,7 @@ it("paints the sent mark from tokens, in plain upright letters", async () => {
 });
 
 describe("laying out a title, the mark and an action", () => {
-  const title = "Sharing plates · marchado hace 8 min";
+  const title = "Sharing plates · fired\u00a08\u00a0minutes\u00a0ago";
   const rect = (el: Element) => el.getBoundingClientRect();
   const titleBox = (el: Element) => heading(el).querySelector<HTMLElement>(".title")!;
   const parts = (el: Element) => {
@@ -174,7 +174,7 @@ describe("laying out a title, the mark and an action", () => {
   }
   async function laidOut(width: number, words = title) {
     const el = await mount(
-      `<wt-course-heading mark="sent" mark-label="Enviado" style="width: ${width}px">${words}<wt-button slot="end">Servir todo</wt-button></wt-course-heading>`,
+      `<wt-course-heading mark="sent" mark-label="Ordered" style="width: ${width}px">${words}<wt-button slot="end">Serve course</wt-button></wt-course-heading>`,
     );
     await (el.querySelector("wt-button") as HTMLElement & { updateComplete: Promise<unknown> })
       .updateComplete;
@@ -284,7 +284,7 @@ describe("laying out a title, the mark and an action", () => {
 
   describe.each([
     "Drinks\u00a0· Fired\u00a05\u00a0min\u00a0ago",
-    "Drinks\u00a0· Marchado\u00a0hace\u00a06\u00a0min",
+    "Drinks\u00a0· Fired\u00a06\u00a0minutes\u00a0ago",
   ])("with a time phrase that cannot break, %j", (words) => {
     it.each(Array.from({ length: 26 }, (_, step) => 250 + step * 10))(
       "draws the title's letters clear of the mark and the action, inside the heading, at %ipx",
