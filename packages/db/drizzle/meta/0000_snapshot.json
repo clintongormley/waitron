@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "49fba495-2db6-4913-9e8e-5652cbb00a19",
+  "id": "71864a55-e019-476c-962b-0e2a443aca6a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4140,20 +4140,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "set_menu_reserved_line_id": {
-          "name": "set_menu_reserved_line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "set_menu_reserved_place": {
-          "name": "set_menu_reserved_place",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -4268,10 +4254,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "order_draft_lines_set_menu_ck": {
-          "name": "order_draft_lines_set_menu_ck",
-          "value": "(\"order_draft_lines\".\"set_menu_reserved_line_id\" is null and \"order_draft_lines\".\"set_menu_reserved_place\" is null)\n        or (\"order_draft_lines\".\"set_menu_id\" is not null and \"order_draft_lines\".\"set_menu_reserved_line_id\" is not null\n          and \"order_draft_lines\".\"set_menu_reserved_place\" is not null)"
-        },
         "order_draft_lines_quantity_ck": {
           "name": "order_draft_lines_quantity_ck",
           "value": "\"order_draft_lines\".\"quantity\" > 0"

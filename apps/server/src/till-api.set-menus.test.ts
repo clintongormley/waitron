@@ -181,8 +181,6 @@ it("saves a dish tapped in a set-menu folder at its a la carte price without sen
         menuVersionId: setMenus.recorded[copy.menuId],
         setMenuId: copy.menuId,
         quantity: "1",
-        setMenuReservedLineId: setMenus.setMenus[0].lineId,
-        setMenuReservedPlace: 0,
       },
     ],
   });
@@ -464,6 +462,43 @@ it("prices a held eat-in Counter order's dead-end check as stored, whatever dini
   });
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(409);
   expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+});
+
+it("saves and reads a set-menu draft offer without reservation fields", async () => {
+  const { venue, copy } = fixture;
+  const { partyId, tabId } = await seated();
+  const versionId = await inTx(venue, (tx) => publishWorkingMenu(tx, copy.fullMenuId));
+  const bill = await request("GET", `/api/working-orders/${tabId}`);
+  expect(bill.status).toBe(200);
+  const { expectedEdit } = await bill.json();
+  const offer = {
+    menuItemId: copy.menuItemId,
+    menuVersionId: versionId,
+    setMenuId: copy.menuId,
+    quantity: "1",
+  };
+  const path = `/api/parties/${partyId}/drafts`;
+  const saved = await request("PUT", path, {
+    billId: tabId,
+    draftId: null,
+    revision: 0,
+    expectedEdit,
+    lines: [{ ...offer, setMenuReservedLineId: null, setMenuReservedPlace: null }],
+  });
+  expect(saved.status, JSON.stringify(await saved.clone().json())).toBe(200);
+  const { draft } = await saved.json();
+  const savedOffer = { ...offer, quantity: "1.000" };
+  expect(draft.lines).toMatchObject([{ ...savedOffer, id: expect.any(String) }]);
+  const reopened = await request("GET", path);
+  expect(reopened.status).toBe(200);
+  const { drafts } = await reopened.json();
+  expect(drafts).toMatchObject([
+    { id: draft.id, lines: [{ ...savedOffer, id: draft.lines[0].id }] },
+  ]);
+  for (const line of [draft.lines[0], drafts[0].lines[0]]) {
+    expect(line).not.toHaveProperty("setMenuReservedLineId");
+    expect(line).not.toHaveProperty("setMenuReservedPlace");
+  }
 });
 
 it("answers the dead-end check for a table draft line tapped in a set-menu folder", async () => {

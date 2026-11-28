@@ -8,9 +8,7 @@ import { seedMenuItem, seedPerson, seedVenue, seedWorkingOrder } from "../testin
 import { useVenueDb } from "../testing/venue-db.js";
 import { menus } from "./menus.js";
 import { menuItems } from "./menu/menu.js";
-import { orderDraftLines, orderDrafts } from "./order-drafts.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { parties } from "./parties.js";
 
 const MENU = "set-menu";
 const VERSION = "full-menu-copy";
@@ -235,45 +233,6 @@ describe("set menu storage on a bill", () => {
       where line.id = ${SET_LINE} and line.working_order_id = ${receiver}
     `),
     ).toEqual([{ line_version: VERSION, line_total: 1800, bill_version: newerCopy }]);
-  });
-
-  it("requires both parts of a draft reservation, and only with its set menu", async () => {
-    const db = suite.db;
-    const [party] = await db.insert(parties).values({ openedBy: personId }).returning();
-    const [draft] = await db
-      .insert(orderDrafts)
-      .values({ partyId: party.id, ownerId: personId })
-      .returning();
-    const [line] = await db
-      .insert(orderDraftLines)
-      .values({
-        draftId: draft.id,
-        position: 1,
-        menuItemId,
-        options: [],
-        extras: [],
-        quantity: 1000,
-      })
-      .returning({ id: orderDraftLines.id });
-    const reserve = (menuId: string | null, setLine: string | null, place: number | null) =>
-      db.execute(sql`update order_draft_lines set set_menu_id = ${menuId},
-        set_menu_reserved_line_id = ${setLine}, set_menu_reserved_place = ${place}
-        where id = ${line.id}`);
-    for (const [menuId, setLine, place] of [
-      [null, SET_LINE, 1],
-      [MENU, SET_LINE, null],
-      [MENU, null, 1],
-    ] as const) {
-      await expectCheck(() => reserve(menuId, setLine, place), "order_draft_lines_set_menu_ck");
-    }
-    await reserve(MENU, null, null);
-    await reserve(MENU, SET_LINE, 1);
-    expect(
-      await db.all(sql`select set_menu_id, set_menu_reserved_line_id, set_menu_reserved_place
-      from order_draft_lines where id = ${line.id}`),
-    ).toEqual([
-      { set_menu_id: MENU, set_menu_reserved_line_id: SET_LINE, set_menu_reserved_place: 1 },
-    ]);
   });
 
   it("keeps each set-menu column fixed when recording service on a placed bill", async () => {

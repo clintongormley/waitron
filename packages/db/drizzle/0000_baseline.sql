@@ -623,8 +623,6 @@ CREATE TABLE `order_draft_lines` (
 	`after_group_id` text,
 	`no_merge` integer DEFAULT false NOT NULL,
 	`set_menu_id` text,
-	`set_menu_reserved_line_id` text,
-	`set_menu_reserved_place` integer,
 	FOREIGN KEY (`draft_id`) REFERENCES `order_drafts`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
@@ -632,9 +630,6 @@ CREATE TABLE `order_draft_lines` (
 	FOREIGN KEY (`join_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`after_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_draft_lines_set_menu_ck" CHECK(("order_draft_lines"."set_menu_reserved_line_id" is null and "order_draft_lines"."set_menu_reserved_place" is null)
-        or ("order_draft_lines"."set_menu_id" is not null and "order_draft_lines"."set_menu_reserved_line_id" is not null
-          and "order_draft_lines"."set_menu_reserved_place" is not null)),
 	CONSTRAINT "order_draft_lines_quantity_ck" CHECK("order_draft_lines"."quantity" > 0),
 	CONSTRAINT "order_draft_lines_slot_ck" CHECK("order_draft_lines"."slot" >= 0),
 	CONSTRAINT "order_draft_lines_place_ck" CHECK("order_draft_lines"."join_group_id" is null or "order_draft_lines"."slot" = 0),

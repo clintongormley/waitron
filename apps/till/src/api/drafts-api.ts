@@ -38,8 +38,6 @@ export interface SubmittedGroups {
 
 export interface FreshDraftLine {
   setMenuId?: string;
-  setMenuReservedLineId?: string | null;
-  setMenuReservedPlace?: number | null;
   sourceLineId: null;
   source: null;
   id: string;

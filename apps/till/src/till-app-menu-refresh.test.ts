@@ -4068,8 +4068,6 @@ it("shows a drafted dish from the older of a bill's two versions of Daily its ow
       menuItemId: "menu-hake",
       menuVersionId,
       setMenuId: "daily",
-      setMenuReservedLineId: null,
-      setMenuReservedPlace: null,
       quantity: "1",
       variantId: null,
       courseId: null,
@@ -4540,8 +4538,6 @@ it.each(["recorded", "live"] as const)(
           menuItemId: "menu-hake",
           menuVersionId: recorded ? "retired" : "v1",
           setMenuId: "daily",
-          setMenuReservedLineId: null,
-          setMenuReservedPlace: null,
           quantity: "1",
           variantId: null,
           courseId: null,
@@ -4563,8 +4559,6 @@ it.each(["recorded", "live"] as const)(
         menuItemId: "offer-lemonade",
         menuVersionId: "v1",
         setMenuId: undefined,
-        setMenuReservedLineId: undefined,
-        setMenuReservedPlace: undefined,
       };
       drafts.drafts[0]!.lines.push(other);
     }

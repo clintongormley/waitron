@@ -764,8 +764,7 @@ _2026-11-27: The owner replaced rule C (the note below): a discount is held on t
 _2026-11-26: Every discount is an amount, on the whole bill, one dish or one set menu; a percentage is worked out as an amount when it is given (owner, rule C). A discount goes with its dish or set menu when that is cancelled or moved, and comes off with a notice offering to give it again when the dish's price changes or its set menu breaks up. PR 4 is no longer needed ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md), D45–D59). PR 3b (3b1 and 3b2) is done: a dish's own comp or discount now comes off (its share only) when its extras or variant change, and a set menu's when one of its dishes changes variant or it breaks up, and each open bill answers a notice of what came off and where to give it again (a set menu's notice names no place and stays until the bill closes). Left: a whole-bill discount as the set menus change (3c), and piece 4 (A1515-4), whose till draws the notice and counts a discounted set menu as going with its last chosen dish (D51)._
 
 _2026-11-27: A1515-4 still needs the Courses and Bill views with the unsent preview, Pay for items'
-price for the selected dishes on their own bill, and removal of the unused draft reservation
-fields and columns ([plan](../superpowers/plans/2026-11-27-a1515-4-till-set-menus.md))._
+price for the selected dishes on their own bill ([plan](../superpowers/plans/2026-11-27-a1515-4-till-set-menus.md))._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes were ordered,
@@ -795,6 +794,10 @@ place reservation on the old bill. The till API returns the bill's saved copies 
 is republished. The till restores saved set-menu dishes from the bill's copy, follows sold-out
 changes and explains refusals in English and Spanish. At a seated table the till orders from the
 bill's folders and moves a set menu with its dishes.
+
+_2026-11-28: D22 removed the draft reservation fields and columns. Draft splits still carry the
+dish's menu offer._
+
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price and inclusion

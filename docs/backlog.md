@@ -500,8 +500,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
 - **Set menus on the till (A1515-4).** The remaining pieces are the Courses and Bill views with
-  the unsent price preview, the price of a bill for selected dishes, and removal of the unused
-  draft reservation fields and columns. [Detail](backlog/menu.md#a1515-set-menus)
+  the unsent price preview and the price of a bill for selected dishes. [Detail](backlog/menu.md#a1515-set-menus)
 
 - **Remaining actions on measured dishes** (adjustments, part payment and set-menu replacements).
   [Detail](backlog/menu.md#remaining-actions-on-measured-dishes)
