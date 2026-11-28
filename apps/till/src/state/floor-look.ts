@@ -246,7 +246,7 @@ const compactMinutes = (m: number) => t("floor.cue_minutes").replace("{m}", Stri
 function timedJob(text: string, compact: string, since: number, now: number): FloorMapJob {
   if (!Number.isFinite(since)) return { text, compact };
   const minutes = elapsedMinutes(since, now);
-  return { text, time: minuteWords(minutes), compact: `${compact} ${compactMinutes(minutes)}` };
+  return { text, time: minuteWords(minutes), compact, compactTime: compactMinutes(minutes) };
 }
 
 function oldestSignal(members: readonly TableState[], kind: "bill_requested" | "needs_clearing") {
@@ -256,6 +256,13 @@ function oldestSignal(members: readonly TableState[], kind: "bill_requested" | "
       return stamp(signal?.kind === "bill_requested" ? signal.requestedAt : signal?.since);
     }),
   );
+}
+
+function oldestLateDish(tables: readonly TableState[], kind: "forgotten" | "overdue" | "waiting") {
+  const band = kind === "waiting" ? "warm" : kind;
+  return tables
+    .filter((table) => table.timingBand === band && table.waitingSince !== undefined)
+    .sort((a, b) => stamp(a.waitingSince) - stamp(b.waitingSince))[0];
 }
 
 function mapJob(
@@ -280,10 +287,7 @@ function mapJob(
     case "forgotten":
     case "overdue":
     case "waiting": {
-      const band = kind === "waiting" ? "warm" : kind;
-      const dish = members
-        .filter((table) => table.timingBand === band && table.waitingSince !== undefined)
-        .sort((a, b) => stamp(a.waitingSince) - stamp(b.waitingSince))[0];
+      const dish = oldestLateDish(members, kind);
       const station = dish?.waitingStationName;
       const text =
         kind === "forgotten"
@@ -321,10 +325,20 @@ function mapJob(
     case "step": {
       const step = latestStep(members, now);
       const minutes = elapsedMinutes(stamp(step.dueAt), now);
-      return { text: step.name, time: minuteWords(minutes), compact: compactMinutes(minutes) };
+      return {
+        text: step.name,
+        time: minuteWords(minutes),
+        compact: t("floor.job_step_short"),
+        compactTime: compactMinutes(minutes),
+      };
     }
     case "fire":
-      return { text: t("floor.job_fire"), time: t("floor.job_now"), compact: t("floor.cue_fire") };
+      return {
+        text: t("floor.job_fire"),
+        time: t("floor.job_now"),
+        compact: t("floor.cue_fire"),
+        compactTime: t("floor.job_now"),
+      };
     case "held": {
       const { dueAt } = soonestHeld(members, now);
       const text = t("floor.job_held");
@@ -333,7 +347,8 @@ function mapJob(
         : {
             text,
             time: t("floor.job_fire_in").replace("{m}", String(minutesToFire(dueAt, now))),
-            compact: `${text} ${compactMinutes(minutesToFire(dueAt, now))}`,
+            compact: text,
+            compactTime: compactMinutes(minutesToFire(dueAt, now)),
           };
     }
     case "reserved": {
@@ -351,20 +366,29 @@ function mapJob(
   }
 }
 
-function minuteStarts(table: TableState, now: number): number[] {
-  return [
-    stamp(oldestStation([table])?.oldestReadyAt),
-    stamp(table.waitingSince),
-    oldestSignal([table], "bill_requested"),
-    oldestSignal([table], "needs_clearing"),
-    stamp(currentStep(table.signals, now)?.dueAt),
-  ].filter(Number.isFinite);
+function jobMinuteStart(table: TableState, now: number): number {
+  const kind = mapKinds(table, now)[0];
+  switch (kind) {
+    case "ready":
+      return stamp(oldestStation([table])?.oldestReadyAt);
+    case "forgotten":
+    case "overdue":
+    case "waiting":
+      return stamp(oldestLateDish([table], kind)?.waitingSince);
+    case "bill":
+      return oldestSignal([table], "bill_requested");
+    case "clearing":
+      return oldestSignal([table], "needs_clearing");
+    case "step":
+      return stamp(currentStep(table.signals, now)?.dueAt);
+    default:
+      return Number.POSITIVE_INFINITY;
+  }
 }
 
 export function nextMapJobMinute(table: TableState, now: number): number {
-  return Math.min(
-    ...minuteStarts(table, now).map((since) => since + (elapsedMinutes(since, now) + 1) * 60_000),
-  );
+  const start = jobMinuteStart(table, now);
+  return start + (elapsedMinutes(start, now) + 1) * 60_000;
 }
 
 function fillOf(kinds: readonly MapKind[], members: readonly TableState[]): FloorMapFill {
@@ -478,9 +502,8 @@ export function reminderClock(tables: readonly TableState[], now: number): strin
       const step = currentStep(table.signals, now);
       if (step !== null)
         parts.push(`${table.id}:step:${step.stepId}:${stepWaitMinutes(step, now) ?? ""}`);
-      const minutes = minuteStarts(table, now);
-      if (minutes.length > 0)
-        parts.push(`${table.id}:${minutes.map((since) => elapsedMinutes(since, now)).join(":")}`);
+      const start = jobMinuteStart(table, now);
+      if (Number.isFinite(start)) parts.push(`${table.id}:${elapsedMinutes(start, now)}`);
       return parts;
     })
     .join(",");

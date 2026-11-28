@@ -999,6 +999,7 @@ export class WtFloorMap extends LitElement {
     if (this.placeholders.length > 0) return renderFloorPlaceholders(this.placeholders, view);
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
     return html`<span class="name-probe" part="name-probe" aria-hidden="true"></span>
+      <span class="job-probe" aria-hidden="true"></span>
       <div class="map-content">
         <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
           ${view === null ? nothing : this.#renderGroups(view, still)}

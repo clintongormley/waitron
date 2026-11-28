@@ -12,6 +12,7 @@ import {
   kindWords,
   mapKinds,
   mapLook,
+  nextMapJobMinute,
   pinLook,
   readyText,
   reminderClock,
@@ -161,7 +162,7 @@ describe("mapLook", () => {
       top: "ready",
       fill: "danger",
       pulse: "forgotten",
-      job: { text: "Collect from Bar", time: "9 min", compact: "Bar 9′" },
+      job: { text: "Collect from Bar", time: "9 min", compact: "Bar", compactTime: "9′" },
     });
     expect(pinLook(members, now)).toEqual({
       fill: "danger",
@@ -200,6 +201,41 @@ describe("mapLook", () => {
     expect(reminderClock([billTable], now + 29_999)).not.toBe(
       reminderClock([billTable], now + 30_000),
     );
+  });
+
+  it("gives a newly due step a word as well as minutes on a small table", () => {
+    const tbl = table({ signals: [dueStepSignal("Take order", inMinutes(0))] });
+    expect(mapLook([tbl], now).job).toMatchObject({
+      text: "Take order",
+      time: "0 min",
+      compact: "Step",
+      compactTime: "0′",
+    });
+  });
+
+  it("does not redraw for the bill's minute when collection is the top job", () => {
+    const billTime = new Date(now - 59_000).toISOString();
+    const readyTime = new Date(now - 30_000).toISOString();
+    const tbl = table({
+      signals: [
+        { kind: "bill_requested", requestedAt: billTime },
+        {
+          kind: "ready",
+          byStation: [
+            {
+              stationId: "bar",
+              stationName: "Bar",
+              count: 1,
+              oldestReadyAt: readyTime,
+              readyWarningAfterMinutes: 3,
+            },
+          ],
+        },
+      ],
+    });
+    expect(nextMapJobMinute(tbl, now)).toBe(now + 30_000);
+    expect(reminderClock([tbl], now)).toBe(reminderClock([tbl], now + 1_000));
+    expect(reminderClock([tbl], now)).not.toBe(reminderClock([tbl], now + 30_000));
   });
 
   it("adds Waiting's outline five minutes after a step, retaining its blue fill and bell", () => {

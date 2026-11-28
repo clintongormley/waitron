@@ -20,6 +20,7 @@ export interface FloorMapJob {
   text: string;
   time?: string;
   compact: string;
+  compactTime?: string;
 }
 
 export interface FloorMapCue {

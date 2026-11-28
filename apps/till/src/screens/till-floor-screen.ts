@@ -1107,8 +1107,6 @@ export class TillFloorScreen extends LitElement {
     return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
   }
 
-  /** The server's floor does not change when a reminder falls due, a held countdown's minutes
-   * change, or the Ready bar's minutes or warning change, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;

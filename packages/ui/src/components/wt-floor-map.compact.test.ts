@@ -75,6 +75,60 @@ it("uses the short name only when the full name cannot fit, and keeps the name s
   expect(button(map, "large").querySelector('[part="name"]')?.textContent).toBe("Riverside 14");
 });
 
+it("keeps today's name if the saved fallback is wider", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("near", 5, 7),
+      name: "Window 12",
+      label: "Riverside table 12",
+      shortName: "Riverside table 12",
+    },
+    table("far", 25, 7),
+  ]);
+  expect(button(map, "near").querySelector('[part="name"]')?.textContent).toBe("Window 12");
+});
+
+it("uses the compact job when the whole action would take more than two lines", async () => {
+  await page.viewport(390, 700);
+  const job = {
+    text: "Collect from the upstairs cocktail station beside the very far end of the terrace",
+    time: "9 min",
+    compact: "Bar 9′",
+  };
+  const { map } = await compactMap(250, 210, [
+    {
+      ...table("T12", 2, 2, 8),
+      cue: { icon: "floor-ready", text: "2" },
+      job,
+    },
+  ]);
+  const target = button(map, "T12");
+  expect(target.getBoundingClientRect().width).toBeGreaterThan(90);
+  expect(target.querySelector('[part="cue"]')?.textContent?.trim()).toBe("Bar 9′");
+  expect(target.getAttribute("aria-label")).toBe(`T12, ${job.text}, 9 min, Free`);
+});
+
+it("keeps the wait visible when the compact job label itself needs clipping", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("T1", 5, 7),
+      cue: { icon: "floor-timer", text: "Overdue" },
+      job: { text: "Running late", time: "11 min", compact: "Overdue", compactTime: "11′" },
+    },
+    table("T2", 25, 7),
+  ]);
+  const target = button(map, "T1");
+  const cue = target.querySelector<HTMLElement>('[part="cue"]')!;
+  const time = cue.querySelector<HTMLElement>(".cue-time");
+  expect(time?.textContent).toBe("11′");
+  expect(time!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    target.getBoundingClientRect().right,
+  );
+  expect(time!.scrollWidth).toBeLessThanOrEqual(time!.clientWidth);
+});
+
 it("fits a landscape floor by its height and leaves room at its edges", async () => {
   await page.viewport(700, 390);
   const { map } = await compactMap(400, 200, [table("Near", 5, 7, 4), table("Far", 13, 13, 4)]);

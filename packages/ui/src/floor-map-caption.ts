@@ -26,6 +26,15 @@ export const captionStyles = css`
     max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
   }
 
+  [part="table"]:has(> [part="allergy"]) > [part="caption"] {
+    margin-block-start: var(--wt-space-3);
+    max-block-size: calc(100% - var(--wt-space-3));
+  }
+
+  [part="caption"][data-compact] {
+    line-height: 1.05;
+  }
+
   [part="cue"] {
     display: flex;
     align-items: center;
@@ -42,6 +51,10 @@ export const captionStyles = css`
     text-overflow: ellipsis;
   }
 
+  .cue-time {
+    flex: none;
+  }
+
   [part="cue"] wt-icon {
     flex: none;
     color: inherit;
@@ -54,12 +67,14 @@ export const captionStyles = css`
     border-radius: var(--wt-radius-sm);
   }
 
-  .name-probe {
+  .name-probe,
+  .job-probe {
     position: absolute;
     visibility: hidden;
   }
 
-  [part="job"] {
+  [part="job"],
+  .job-probe {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -72,12 +87,13 @@ export const captionStyles = css`
   [part="time"] {
     font-size: var(--wt-font-size-sm);
     font-weight: var(--wt-font-weight-bold);
-    white-space: nowrap;
+    text-wrap: nowrap;
   }
 `;
 
 export interface CaptionMetrics {
   widthOf: (text: string) => number;
+  fitsJob: (text: string, width: number) => boolean;
   nameSize: number;
   inset: number;
 }
@@ -85,14 +101,31 @@ export interface CaptionMetrics {
 let measuring: CanvasRenderingContext2D | null = null;
 
 export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMetrics | undefined {
-  const probe = root.querySelector(".name-probe");
-  if (probe === null) return undefined;
+  const name = root.querySelector(".name-probe");
+  const job = root.querySelector(".job-probe");
+  if (name === null || job === null) return undefined;
   measuring ??= document.createElement("canvas").getContext("2d");
-  if (measuring === null) return undefined;
-  const styles = getComputedStyle(probe);
-  measuring.font = `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+  const canvas = measuring;
+  if (canvas === null) return undefined;
+  const styles = getComputedStyle(name);
+  const fontFor = ({ fontWeight, fontSize, fontFamily }: CSSStyleDeclaration) =>
+    `${fontWeight} ${fontSize} ${fontFamily}`;
+  const nameFont = fontFor(styles);
+  const jobFont = fontFor(getComputedStyle(job));
   return {
-    widthOf: (text) => measuring!.measureText(text).width,
+    widthOf: (text) => {
+      canvas.font = nameFont;
+      return canvas.measureText(text).width;
+    },
+    fitsJob: (text, width) => {
+      canvas.font = jobFont;
+      if (canvas.measureText(text).width <= width) return true;
+      for (const { index, 0: gap } of text.matchAll(/\s+/g)) {
+        if (canvas.measureText(text.slice(0, index)).width > width) return false;
+        if (canvas.measureText(text.slice(index + gap.length)).width <= width) return true;
+      }
+      return false;
+    },
     nameSize: Number.parseFloat(styles.fontSize),
     inset: Number.parseFloat(styles.getPropertyValue("--wt-space-1")) || 0,
   };
@@ -121,16 +154,26 @@ export function renderCaption({
 }) {
   const inset = metrics?.inset ?? 0;
   const space = width - (outlined ? 2 * (inset + 1) : 0) - (fill === undefined ? 0 : 2 * inset);
+  const fullWidth = shortLabel === undefined ? 0 : (metrics?.widthOf(label) ?? 0);
   const name =
-    shortLabel !== undefined && metrics !== undefined && metrics.widthOf(label) > space
+    shortLabel !== undefined &&
+    metrics !== undefined &&
+    fullWidth > space &&
+    metrics.widthOf(shortLabel) < fullWidth
       ? shortLabel
       : label;
   if (cue === null) return html`<span part="name" data-fill=${fill ?? nothing}>${name}</span>`;
   const full =
-    job !== null && (metrics === undefined || Math.min(width, height) >= metrics.nameSize * 4);
+    job !== null &&
+    (metrics === undefined || (height >= metrics.nameSize * 4 && metrics.fitsJob(job.text, space)));
   const compact = job?.compact ?? cue.text;
-  return html`<span part="caption" data-fill=${fill ?? nothing}>
+  const compactTime = job?.compactTime;
+  return html`<span
+    part="caption"
+    data-fill=${fill ?? nothing}
+    ?data-compact=${job !== null && !full}
+  >
     <span part="name">${name}</span>
-    ${full ? html`<span part="job">${job.text}</span>${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}` : html`<span part="cue">${cue.icon === null || job !== null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${compact === "" ? nothing : html`<span class="cue-text">${compact}</span>`}</span>`}
+    ${full ? html`<span part="job">${job.text}</span>${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}` : html`<span part="cue">${cue.icon === null || job !== null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${compact === "" ? nothing : html`<span class="cue-text">${compact}</span>`}${compactTime === undefined ? nothing : html` <span class="cue-time">${compactTime}</span>`}</span>`}
   </span>`;
 }
