@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
@@ -17,17 +17,22 @@ export class WtDishPickRow extends LitElement {
         inline-size: 100%;
       }
 
-      label {
+      .row {
         position: relative;
         display: grid;
         grid-template-columns: auto minmax(var(--wt-space-5), auto) minmax(0, 1fr) auto;
         align-items: center;
         gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
         min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
-        padding: var(--wt-space-2) calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2)
+          calc(var(--wt-space-3) + var(--wt-space-1) / 2);
         border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
         font-size: calc(var(--wt-font-size-md) + var(--wt-field-line-width));
+        line-height: 1.35;
+      }
+
+      label.row {
         cursor: pointer;
       }
 
@@ -51,7 +56,16 @@ export class WtDishPickRow extends LitElement {
       }
 
       label:has(input:disabled) {
+        cursor: not-allowed;
+      }
+
+      label:has(input:disabled)
+        :is([part="mark"], #dish-quantity, #dish-label, #dish-description, #dish-amount) {
         ${disabledStyles}
+      }
+
+      div.row [part="mark"] {
+        visibility: hidden;
       }
 
       [part="mark"] {
@@ -59,7 +73,7 @@ export class WtDishPickRow extends LitElement {
         place-items: center;
         inline-size: var(--wt-space-5);
         block-size: var(--wt-space-5);
-        border: var(--wt-field-line-width-active) solid var(--wt-color-border);
+        border: var(--wt-field-line-width-active) solid var(--wt-color-field-line);
         border-radius: calc(var(--wt-radius-sm) + var(--wt-field-line-width-active));
         color: var(--wt-color-on-primary);
       }
@@ -89,10 +103,35 @@ export class WtDishPickRow extends LitElement {
         border-block-start: var(--wt-field-line-width-active) solid var(--wt-color-primary);
       }
 
-      #dish-description {
+      #dish-description,
+      #dish-details {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: calc(var(--wt-font-size-sm) + var(--wt-field-line-width));
+      }
+
+      ::slotted([slot="details"]) {
+        margin: 0;
+      }
+
+      [part="portion"] {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
+        padding: var(--wt-space-1) calc(var(--wt-space-3) + var(--wt-space-1) / 2) var(--wt-space-2)
+          calc(var(--wt-space-5) * 2);
+        border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
+        background: var(--wt-color-surface-lifted);
+        color: var(--wt-color-text-muted);
+        font-size: calc(var(--wt-font-size-sm) + var(--wt-field-line-width));
+      }
+
+      .portion-amount {
+        margin-inline-start: auto;
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+        font-variant-numeric: tabular-nums;
       }
 
       .words {
@@ -114,6 +153,9 @@ export class WtDishPickRow extends LitElement {
           border-color: Highlight;
           color: Highlight;
         }
+        input:indeterminate + [part="mark"]::before {
+          border-block-start-color: Highlight;
+        }
       }
     `,
   ];
@@ -123,6 +165,9 @@ export class WtDishPickRow extends LitElement {
   @property() quantity = "";
   @property() description = "";
   @property() amount = "";
+  @property({ attribute: "portion-label" }) portionLabel = "";
+  @property({ attribute: "portion-amount" }) portionAmount = "";
+  @property({ type: Boolean, attribute: "display-only" }) displayOnly = false;
   @property({ type: Boolean }) checked = false;
   @property({ type: Boolean }) indeterminate = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
@@ -135,25 +180,38 @@ export class WtDishPickRow extends LitElement {
   }
 
   override render() {
-    return html`<label>
-      <input
-        type="checkbox"
-        name=${this.name}
-        aria-labelledby="dish-quantity dish-label"
-        aria-describedby="dish-description dish-amount"
-        .checked=${live(this.checked)}
-        .indeterminate=${live(this.indeterminate)}
-        ?disabled=${this.disabled}
-        @input=${this.toggle}
-      />
-      <span part="mark" aria-hidden="true"><wt-icon name="choice-check"></wt-icon></span>
+    const content = html` <span part="mark" aria-hidden="true"
+        ><wt-icon name="choice-check"></wt-icon
+      ></span>
       <span id="dish-quantity">${this.quantity}</span>
       <span class="words">
         <span id="dish-label">${this.label}</span>
         <span id="dish-description" part="description">${this.description}</span>
+        <span id="dish-details"><slot name="details"></slot></span>
       </span>
-      <span id="dish-amount">${this.amount}</span>
-    </label>`;
+      <span id="dish-amount">${this.amount}</span>`;
+    if (this.displayOnly) return html`<div class="row">${content}</div>`;
+    return html` <label class="row">
+        <input
+          type="checkbox"
+          name=${this.name}
+          aria-labelledby="dish-quantity dish-label"
+          aria-describedby="dish-description dish-details dish-amount"
+          .checked=${live(this.checked && !this.indeterminate)}
+          .indeterminate=${live(this.indeterminate)}
+          ?disabled=${this.disabled}
+          @input=${this.toggle}
+        />
+        ${content}
+      </label>
+      ${
+        this.portionLabel
+          ? html`<div part="portion">
+              ${this.portionLabel}<slot name="stepper"></slot>
+              <span class="portion-amount">${this.portionAmount}</span>
+            </div>`
+          : nothing
+      }`;
   }
 }
 

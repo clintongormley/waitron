@@ -1028,12 +1028,14 @@ Set `--wt-menu-row-gap` to change the space between the label and trailing conte
 
 Use `wt-dish-pick-row` for a dish that staff can tick. Give it a checkbox `name`, the dish
 `label`, and the formatted `quantity` and `amount`. Optional `description` sits below the
-name. Set `checked` for a whole-row pick or `indeterminate` for a partial pick.
-Set `disabled` when the dish cannot be picked. The row covers the checkbox's tap area. Listen
-for `wt-change` carrying `{ checked: boolean }`.
+name. Use the `details` slot for extra lines under the name. Set `checked` for a whole-row
+pick or `indeterminate` for a partial pick. Set `disabled` when the dish cannot be picked
+and `display-only` when it needs no checkbox. The row covers the checkbox's tap area.
+Listen for `wt-change` carrying `{ checked: boolean }`. For a part of one row, supply
+`portion-label`, `portion-amount` and a stepper in the `stepper` slot.
 
 Use `wt-stepper variant="portion"` below a row where staff can choose a count out of `max`.
-The outline is 36 px and the buttons keep their full tap targets. Pass a translated
+The outline is 36 px and the control reserves 44 px in the layout for its tap targets. Pass a translated
 `formatCount(value, max)` for the label between the buttons.
 
 A `wt-combobox` panel opens below its field when it fits. Otherwise it uses the side with more

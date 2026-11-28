@@ -49,18 +49,6 @@ export const giveBackStyles = css`
   .unavailable .hint {
     font-size: var(--wt-font-size-sm);
   }
-  .lines {
-    display: grid;
-    justify-items: start;
-    gap: var(--wt-space-2);
-  }
-  .extra-of {
-    padding-inline-start: var(--wt-space-6);
-  }
-  .free {
-    display: flex;
-    flex-direction: column;
-  }
   .option {
     display: flex;
     align-items: center;

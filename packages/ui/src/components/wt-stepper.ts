@@ -99,10 +99,16 @@ export class WtStepper extends LitElement {
         align-items: center;
         height: calc(var(--wt-space-6) + var(--wt-space-1));
         border-radius: calc((var(--wt-space-6) + var(--wt-space-1)) / 2);
+        background-color: transparent;
       }
 
       .portion button {
         border-radius: inherit;
+      }
+
+      .portion button :is(.mark, wt-icon),
+      .portion .count {
+        color: var(--wt-color-text-muted);
       }
 
       .portion .count {

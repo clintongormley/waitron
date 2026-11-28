@@ -43,43 +43,39 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
   const extrasOf = (dish: GiveBackLine) =>
     view.lines
       .filter((extra) => extra.partOf === dish.id)
-      .map(
-        (extra) => html`<p class="muted extra-of" data-extra-of=${dish.id}>${dishText(extra)}</p>`,
-      );
+      .map((extra) => html`<p slot="details" data-extra-of=${dish.id}>${dishText(extra)}</p>`);
   return html`<fieldset>
     <legend data-which>${t("give_back.which")}</legend>
     <div class="lines">
       ${view.lines
         .filter((line) => line.partOf === null)
-        .map((line) =>
-          line.givenFree
-            ? html`<div class="free" data-free=${line.id}>
-                  <span>${dishText(line)}</span>
-                  <span class="muted">${t("give_back.given_free")}</span>
-                </div>
-                ${extrasOf(line)}`
-            : html`<wt-dish-pick-row
-                  name="dish"
-                  data-line=${line.id}
-                  .label=${lineName(line.descriptions, options.namesLocale)}
-                  .quantity=${quantityText(line.quantity)}
-                  .amount=${formatMoney(line.gross, currentLocale())}
-                  .description=${cancelledLabel(line)}
-                  .checked=${options.ticked.includes(line.id)}
-                  .disabled=${!line.available}
-                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                    event.stopPropagation();
-                    options.onTick(line, event.detail.checked);
-                  }}
-                ></wt-dish-pick-row>
-                ${
-                  !line.available && line.reason !== null
-                    ? html`<p class="reason" data-line-reason=${line.id}>
-                        ${options.reasonText(line.reason)}
-                      </p>`
-                    : nothing
-                }
-                ${extrasOf(line)}`,
+        .map(
+          (line) =>
+            html`<wt-dish-pick-row
+              name="dish"
+              data-line=${line.givenFree ? nothing : line.id}
+              data-free=${line.givenFree ? line.id : nothing}
+              .label=${lineName(line.descriptions, options.namesLocale)}
+              .quantity=${quantityText(line.quantity)}
+              .amount=${formatMoney(line.gross, currentLocale())}
+              .description=${line.givenFree ? t("give_back.given_free") : cancelledLabel(line)}
+              .displayOnly=${line.givenFree}
+              .checked=${options.ticked.includes(line.id)}
+              .disabled=${line.givenFree || !line.available}
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                event.stopPropagation();
+                options.onTick(line, event.detail.checked);
+              }}
+            >
+              ${extrasOf(line)}
+              ${
+                !line.givenFree && !line.available && line.reason !== null
+                  ? html`<p slot="details" data-line-reason=${line.id}>
+                      ${options.reasonText(line.reason)}
+                    </p>`
+                  : nothing
+              }
+            </wt-dish-pick-row>`,
         )}
     </div>
   </fieldset>`;

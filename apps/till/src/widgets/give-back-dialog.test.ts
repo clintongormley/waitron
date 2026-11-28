@@ -86,6 +86,8 @@ async function choose(el: TillGiveBackDialog, purpose: string) {
 }
 const dish = (el: TillGiveBackDialog, id: string) =>
   root(el).querySelector<HTMLElementTagNameMap["wt-dish-pick-row"]>(`[data-line="${id}"]`);
+const freeDish = (el: TillGiveBackDialog, id: string) =>
+  root(el).querySelector<HTMLElementTagNameMap["wt-dish-pick-row"]>(`[data-free="${id}"]`)!;
 async function tick(el: TillGiveBackDialog, id: string) {
   dish(el, id)!.shadowRoot!.querySelector("input")!.click();
   await el.updateComplete;
@@ -281,10 +283,20 @@ describe("A dish", () => {
       ["1", "Paella", "Cancelled, not served", "€18.50"],
       ["1", "Salad", "Cancelled, refunded", "€9.50"],
     ]);
-    expect(text(root(el).querySelector("[data-extra-of=paella]"))).toBe("Aioli · €1.50");
+    const croquetas = dish(el, "croquetas")!;
+    const paella = dish(el, "paella")!;
+    expect(paella.getBoundingClientRect().top).toBe(croquetas.getBoundingClientRect().bottom);
+    expect(text(paella.querySelector("[data-extra-of=paella]"))).toBe("Aioli · €1.50");
     expect(dish(el, "aioli")).toBeNull();
     expect(dish(el, "cake")).toBeNull();
-    expect(text(root(el).querySelector("[data-free=cake]"))).toContain("Given free");
+    const cake = freeDish(el, "cake");
+    expect([cake.quantity, cake.label, cake.amount, cake.description]).toEqual([
+      "1",
+      "Cake",
+      "€0.00",
+      "Given free",
+    ]);
+    expect(cake.shadowRoot!.querySelector("input")).toBeNull();
     expect(
       [...root(el).querySelectorAll("wt-dish-pick-row")].map((row) => row.description),
     ).not.toContain("Served");
@@ -396,7 +408,7 @@ describe("A dish", () => {
       }),
     );
     await choose(el, "dishes");
-    expect(text(root(el).querySelector("[data-extra-of=cake]"))).toBe("Cream · €1.50");
+    expect(text(freeDish(el, "cake").querySelector("[data-extra-of=cake]"))).toBe("Cream · €1.50");
   });
 });
 
@@ -1055,9 +1067,7 @@ describe("in Spanish", () => {
     expect(text(root(el).querySelector("[data-which]"))).toBe(said("give_back.which"));
     expect(dish(el, "paella")!.description).toBe(said("give_back.cancelled_owed"));
     expect(dish(el, "salad")!.description).toBe(said("give_back.cancelled_back"));
-    expect(text(root(el).querySelector("[data-free=cake]"))).toContain(
-      said("give_back.given_free"),
-    );
+    expect(freeDish(el, "cake").description).toBe(said("give_back.given_free"));
     expect(amountField(el).label).toBe(said("give_back.amount"));
     expect(text(way(el, "cash")!.closest("label"))).toBe(said("give_back.way_cash", "30.00"));
     way(el, "card-1")!.click();

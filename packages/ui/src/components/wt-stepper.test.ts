@@ -44,6 +44,11 @@ test("the portion stepper shows the selected count out of the maximum as it chan
     '<wt-stepper variant="portion" label="Burger" value="1" max="3"></wt-stepper>',
   )) as Stepper;
   const { count, plus, minus, group } = parts(el);
+  el.style.setProperty("--wt-color-text-muted", "rgb(70, 85, 100)");
+  expect(getComputedStyle(group).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(count).color).toBe("rgb(70, 85, 100)");
+  for (const button of [minus, plus])
+    expect(getComputedStyle(button.querySelector("[data-mark]")!).color).toBe("rgb(70, 85, 100)");
   expect(count.textContent?.trim()).toBe("1 of 3");
   expect(group.getBoundingClientRect().height).toBe(36);
   const target = minus.getBoundingClientRect();
