@@ -1,5 +1,10 @@
 # O4: the device sheet (lane O, TILL-REDESIGN-PAY-2)
 
+**Cleared by the watcher at 03:48 on 28 November** (lane O `questions.md`), with its five
+recommendations taken: frame `r` 3 goes to O5; receipt and slip rows are hidden on a profile without
+`print-receipt`; lane I's icon stays, listed as a difference; ☰ Equipment gets the same drawer rule
+in O4b; and the work is cut into O4a, O4b and O4c.
+
 What staff get, once the three PRs land:
 - On Pay, the top-right button opens a sheet with the camera already on. A table or a Counter, a
   phone or a till: all the same.
