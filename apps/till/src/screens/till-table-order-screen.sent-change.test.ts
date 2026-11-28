@@ -1253,6 +1253,40 @@ it.each([
   },
 );
 
+it("adds up a dish's to-serve row's window to its Total, the rest cancelled but charged, with an odd-cent extra", async () => {
+  const el = await openRow(
+    {
+      currentOrders: current({
+        ungrouped: [
+          row("l-patatas", "Bravas", "2.000", {
+            cancelledQuantity: "1.000",
+            netAmount: "13.27",
+            extras: [
+              {
+                lineId: "extra-0",
+                name: "Aioli",
+                quantity: "1.000",
+                netAmount: "2.01",
+                unitPriceGross: "2.01",
+                priceQuantity: "1.000",
+              },
+            ],
+          }),
+        ],
+      }),
+    },
+    "l-patatas",
+    null,
+  );
+  const sheet = q(el, "[data-sent-line-dialog]")!;
+  const words = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+  // The row takes €6.63 of €13.27, and the extra €1.01 of €2.01; the dish is the rest.
+  expect(words(sheet.querySelector("[data-sent-line-amount]")!)).toBe("€5.62");
+  expect(words(sheet.querySelector("[data-sent-extra] .amount")!)).toBe("€1.01");
+  const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+  expect([...last.children].map(words)).toEqual(["Total", "€6.63"]);
+});
+
 it("localises the sent dish, extras and served quantity", async () => {
   setLocale("es-ES");
   const el = await openRow(
