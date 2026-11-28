@@ -485,7 +485,7 @@ describe("crystalliseBillDiscounts", () => {
       lines: await linesOf(tx, billId),
     }));
     expect(first.pending).toEqual([]);
-    expect(first.written.length).toBeGreaterThanOrEqual(3);
+    expect(first.written).toHaveLength(3);
     await inTx(venue, (tx) => crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true }));
     const second = await inTx(venue, async (tx) => ({
       written: await adjustmentsOn(tx, billId),
@@ -992,6 +992,7 @@ describe("a split line's pending discounts", () => {
       expect(before.discounts.map(({ holds }) => holds)).toEqual(["yes", "yes"]);
       expect(after.discounts.map(({ holds }) => holds)).toEqual(after.discounts.map(() => "yes"));
       expect(after.takes).toBe(before.takes);
+      await inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId));
     },
   );
 
@@ -1010,6 +1011,10 @@ describe("a split line's pending discounts", () => {
     expect(before.discounts.map(({ holds }) => holds)).toEqual(["yes", "cut_down"]);
     expect(after.discounts.map(({ holds }) => holds)).toContain("cut_down");
     expect(after.takes).toBe(before.takes);
+    await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
+      code: "adjustment.no_longer_applies",
+      params: { discounts: [expect.objectContaining({ why: "cut_down", amount: "1.08" })] },
+    });
     const amounts = await inTx(venue, (tx) =>
       tx
         .select({ amount: billDiscounts.amount })
