@@ -26,6 +26,7 @@ import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format
 import { guideHref } from "../help-guide.js";
 import "./upgrade-settings-dialog.js";
 import { renderShutdownPauseActions } from "./box-shutdown-actions.js";
+import { renderShutdownStatus } from "./box-shutdown-status.js";
 import { wifiRequestError } from "./box-wifi-dialog.js";
 import {
   boxStatusRows,
@@ -1124,29 +1125,7 @@ export class BoxStatusScreen extends LitElement {
     const file = typeof this.shutdownConfirmation === "object" ? this.shutdownConfirmation : null;
     return html`<section class="box-restart">
       <h2>${t("box_status.shutdown.title")}</h2>
-      <p role="status" data-test="box-shutdown-status">
-        ${
-          phase === "ready" && status.checked === false
-            ? t("box_status.shutdown.unchecked")
-            : phase === "idle"
-              ? ""
-              : t(
-                  phase === "checking" && status.paired
-                    ? "box_status.shutdown.checking_pair"
-                    : phase === "checking" && status.directBucket
-                      ? "box_status.shutdown.checking_bucket"
-                      : `box_status.shutdown.${phase}`,
-                )
-        }
-        ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
-        ${
-          phase === "paused" && status.failedDestination !== undefined
-            ? fill("box_status.shutdown.failed_destination", {
-                destination: status.failedDestination,
-              })
-            : nothing
-        }
-      </p>
+      ${renderShutdownStatus(status)}
       ${
         phase === "idle"
           ? html`<wt-button
@@ -1252,6 +1231,7 @@ export class BoxStatusScreen extends LitElement {
                   }
                   <p>${t("box_status.shutdown.password_reason")}</p>`
         }
+        <p>${t("box_status.shutdown.may_disconnect")}</p>
         <wt-form-actions slot="footer" .error=${this.shutdownError}>
           <wt-button
             slot="cancel"

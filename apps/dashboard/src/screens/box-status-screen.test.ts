@@ -174,6 +174,9 @@ it("shows that the box can be switched off only when the shutdown check is ready
   expect(text(confirm.closest("wt-dialog"))).toContain(
     "If you haven’t set a password, set one in Account settings before you continue.",
   );
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "This page may lose its connection if the box switches off automatically.",
+  );
   const ready = t("box_status.shutdown.ready");
   expect(text(el.shadowRoot as unknown as Element)).not.toContain(ready);
   await userEvent.click(confirm);
@@ -183,6 +186,38 @@ it("shows that the box can be switched off only when the shutdown check is ready
   await vi.waitFor(() => expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(ready));
   expect(q(el, '[data-test="box-shutdown-cancel"]')).toBeNull();
 });
+
+it.each([
+  [
+    "requesting",
+    "Waitron is asking the box to switch off. If the box stays on, switch it off manually.",
+  ],
+  [
+    "requested",
+    "Waitron asked the box to switch off. If the box stays on, switch it off manually.",
+  ],
+  [
+    "unconfirmed",
+    "Waitron could not confirm automatic power-off. If the box stays on, switch it off manually.",
+  ],
+] as const)(
+  "shows the %s power-off status and keeps it after a lost health read",
+  async (powerOff, message) => {
+    const getBoxHealth = vi
+      .fn()
+      .mockResolvedValue(health({ shutdown: { phase: "ready", available: true, powerOff } }));
+    const api = stubApi({ getBoxHealth });
+    const { el } = await mount(api);
+    el.canCheckClock = true;
+    await el.updateComplete;
+    const status = () => text(q(el, '[data-test="box-shutdown-status"]'));
+    expect(status()).toBe(message);
+    getBoxHealth.mockRejectedValue(new TypeError("Connection lost"));
+    api.liveData.refresh();
+    await expect.poll(() => text(q(el, 'p.error[role="alert"]'))).toBe(t("box_status.read_error"));
+    expect(status()).toBe(message);
+  },
+);
 
 it("requires confirmation before switching off with an unchecked backup", async () => {
   const paused = health({
@@ -201,7 +236,8 @@ it("requires confirmation before switching off with an unchecked backup", async 
       return unchecked.shutdown;
     })
     .mockRejectedValueOnce({ code: "management.request_invalid" });
-  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  const api = stubApi({ getBoxHealth, resolveBoxShutdown });
+  const { el } = await mount(api);
   el.canCheckClock = true;
   await el.updateComplete;
 
@@ -235,6 +271,17 @@ it("requires confirmation before switching off with an unchecked backup", async 
     ),
   );
   expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
+  getBoxHealth.mockResolvedValue(
+    health({
+      shutdown: { phase: "ready", available: true, checked: false, powerOff: "requested" },
+    }),
+  );
+  api.liveData.refresh();
+  await expect
+    .poll(() => text(q(el, '[data-test="box-shutdown-status"]')))
+    .toContain(
+      "Waitron asked the box to switch off. If the box stays on, switch it off manually. A restore may need an older backup.",
+    );
 });
 
 it("offers Keep waiting while an upload is stalled", async () => {

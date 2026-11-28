@@ -460,6 +460,7 @@ install_box_service() {
     && { [ "$socket_changed" = no ] || as_root systemctl restart waitron-box.socket; }; then
     env_set WAITRON_BOX_SOCKET_DIR /run/waitron-box
     echo "waitron.sh: installed the box's clock service, so Waitron can set this machine's clock from a confirmed time"
+    echo "waitron.sh: on versions with automatic power-off, Shut down this box can switch off this machine"
     if ! node="$(storage_node)"; then
       env_unset WAITRON_BOX_DRIVES_MOUNT
       echo "waitron.sh: found no Node.js where the box's host service looks for one (systemd's service path, or $WAITRON_HOST_DIR/node-v26.7.0), so Waitron cannot see USB drives plugged into this machine; running waitron.sh install again once the box is running makes a checked upgrade, which keeps Node.js for the module" >&2

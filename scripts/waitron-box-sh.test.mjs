@@ -104,6 +104,7 @@ case "$1" in
       exit "$(cat "$WB_MONITOR_DIR/finish.$count")"
     fi
     [ "\${WB_START_FAIL}" = 1 ] && exit 1 ;;
+  poweroff) exit "\${WB_POWEROFF_EXIT:-0}" ;;
   restart) [ "\${WB_RESTART_FAIL}" = "\${2}" ] && exit 1 ;;
   stop) [ -n "\${WB_UPTIME_AFTER_STOP}" ] && printf '%s 1.00\\n' "\${WB_UPTIME_AFTER_STOP}" > "\${WAITRON_TEST_HOST_ROOT}/proc/uptime" ;;
 esac
@@ -302,6 +303,28 @@ describe("waitron-box.sh clock.status", () => {
     rmSync(sb.paths.synchronized);
     expect(answer(sb, "clock.status").lastSyncAt).toBeNull();
   });
+});
+
+it.each([
+  ["0", { ok: true }],
+  ["1", { ok: false, reason: "host_failed" }],
+])("asks systemd for a nonblocking power-off and reports its exit %s", (exit, expected) => {
+  const sb = sandbox({ WB_POWEROFF_EXIT: exit });
+  const actor = '{"source":"person","person":"00000000-0000-4000-8000-000000000111"}';
+  expect(answer(sb, `poweroff ${actor}`)).toEqual(expected);
+  expect(sb.calls()).toEqual([
+    ["logger", "-t", "waitron-box", `poweroff requester=${actor}`],
+    ["systemctl", "poweroff", "--no-block"],
+  ]);
+});
+
+it("refuses a malformed power-off requester without calling systemd", () => {
+  const sb = sandbox();
+  expect(answer(sb, 'poweroff {"source":"per	son"}')).toEqual({
+    ok: false,
+    reason: "requester_invalid",
+  });
+  expect(sb.calls()).toEqual([]);
 });
 
 describe("waitron-box.sh clock.set refusals", () => {

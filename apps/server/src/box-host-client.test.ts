@@ -58,6 +58,35 @@ const STATUS = {
   nowMs: 1793425411088,
 };
 
+describe("boxHostClient().powerOff", () => {
+  const actor = { source: "person", person: "00000000-0000-4000-8000-000000000111" } as const;
+
+  it("sends one power-off request carrying the administrator's id", async () => {
+    const h = await host(answer({ ok: true }));
+    expect(await boxHostClient({ socketPath: h.path }).powerOff(actor)).toEqual({
+      available: true,
+    });
+    expect(h.lines).toEqual([
+      'poweroff {"source":"person","person":"00000000-0000-4000-8000-000000000111"}',
+    ]);
+  });
+
+  it.each([
+    ['{"ok":false,"reason":"unknown_request"}\n', "refused"],
+    ["invalid\n", "malformed"],
+    ["", "lost"],
+    [null, "timeout"],
+  ] as const)("preserves the host's %s outcome as %s", async (reply, reason) => {
+    const h = await host((_line, socket) => {
+      if (reply !== null) socket.end(reply);
+    });
+    const result = await boxHostClient({ socketPath: h.path, statusMs: 60 }).powerOff(actor);
+    expect(result).toMatchObject({ available: false, reason });
+    if (reason === "refused") expect(result).toHaveProperty("refusal", "unknown_request");
+    expect(h.lines).toHaveLength(1);
+  });
+});
+
 describe("boxHostClient().lastOfferedUpgrade", () => {
   const result = {
     attemptId: "attempt-1",

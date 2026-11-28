@@ -10,6 +10,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { SHUTDOWN_PATH, type AdminShutdown } from "./admin-shutdown.js";
+import type { PersonActor } from "./box-host-client.js";
 import { streamShutdownDownload } from "./admin-shutdown-download.js";
 import type { readShutdownStaff } from "./admin-shutdown-duties.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
@@ -118,7 +119,7 @@ export type BoxStatusDeps = {
     AdminShutdown,
     "status" | "resolvePaused" | "cancel" | "beginDownload" | "confirmDownload"
   > & {
-    start(): Promise<void> | void;
+    start(actor: PersonActor): Promise<void> | void;
     available(): Promise<boolean>;
     readStaff: () => ReturnType<typeof readShutdownStaff>;
   };
@@ -150,12 +151,13 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
     const authorize = async (c: Context, fresh = false) => {
       c.header("Cache-Control", "no-store");
       const token = requireManagementSession(c);
-      await authorizeManager(deps.db, {
+      const { authorizedBy } = await authorizeManager(deps.db, {
         managementSessionId: token,
         permission: "node.manage",
         touch: false,
       });
       if (fresh) await requireFreshManagementSignIn(deps.db, token, { passwordOnly: true });
+      return authorizedBy;
     };
     app.get(SHUTDOWN_PATH, (c) =>
       run(c, log, async () => {
@@ -168,8 +170,8 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
     app.post(SHUTDOWN_PATH, (c) =>
       run(c, log, async () => {
         requireNodeOperationHttps(c);
-        await authorize(c, true);
-        await shutdown.start();
+        const person = await authorize(c, true);
+        await shutdown.start({ source: "person", person });
         return c.json(shutdown.status(), 202);
       }),
     );
