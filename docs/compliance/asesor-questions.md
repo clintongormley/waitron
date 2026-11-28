@@ -1,5 +1,7 @@
 # Questions for the asesor
 
+**2026-11-28, corrections by substitution:** The owner decided how Waitron corrects an invoice ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md)). A correction that leaves an invoice above zero becomes a corrective by substitution naming the latest version, one that takes it to zero stays by differences, and a full invoice for a past ticket credits the ticket with a negative F2 and issues an F1, with no F3. None of it is built yet: today Waitron still corrects by differences, except Q37's replacement of a refused ticket. Question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md) asks the adviser to confirm it and carries Q64, reworded. Q5(d), Q17, Q31, Q64 and Q65 carry dated banners; the question texts below are unchanged. No enquiry has been sent.
+
 **2026-11-18, answers:** The owner answered the [meeting sheet](2026-11-19-adviser-meeting.md)'s questions, S18 and S19 among them; the answers are the owner's own, quoted under each question there with a summary in its header, and the adviser will come back with more details. Several are still to be confirmed.
 
 **2026-11-15, answers:** The adviser answered [the shortened list](#the-shortened-list-2026-10-09)'s S1 to S16 and R1 to R6 in a draft of 15 November (his 1.1 to 1.16 and 2.1 to 2.6). S17 to S19 are unanswered. What each answer changes, and the owner's decisions it needs, are in [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md); the follow-ups are questions 3, 4 and 15 to 22 of the [meeting sheet](2026-11-19-adviser-meeting.md). The question texts below are unchanged.
@@ -1200,6 +1202,10 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > modalidad no verificable a mitad de año si otros TPV del mismo NIF ya operan en VERI\*FACTU?
 
 ### Q5. Series requirements — the part we could not source
+
+> **(d)(i) no longer arises, 2026-11-28.** Waitron will issue no F3: a full invoice for a past ticket
+> credits the ticket with a negative F2 and issues an F1 ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9). (d)(i) was
+> answered by answer 1.14 in any case, and (d)(ii) stands as answered there. Do not ask (d).
 
 > **(b) CLOSED on primary source, 2026-07-31.** RD 1619/2012 art. 6.1.a) makes a specific series
 > for rectificativas obligatory *«en todo caso»* — read twice from the BOE. **(c) partly answered**:
@@ -2720,6 +2726,8 @@ only what is settled on primary source.
 
 ### Q17. F3 *canje* — recipient identity, series, and cross-SIF substitution (added 2026-08-26)
 
+_2026-11-28: (b) to (d) no longer arise. Waitron will issue no F3: a full invoice for a past ticket credits the ticket with a negative F2 and issues an F1, and the F3 code is to be removed from `main` ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9). (b) and (c) were answered (answers 1.14 and 2.4); (d) is not asked. (a)'s customer block is the F1's too and stands as corrected below. Question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md) asks about the new route._
+
 **2026-10-29 correction to (a), A963.** The refusal described below is historical. The shared
 `buildDestinatarios` now accepts a Spanish NIF independently of the postal country, or an explicit
 document with its type and issuing country. The document types map to `IDOtro` values 02–06;
@@ -2981,6 +2989,8 @@ This records a question; no enquiry has been sent.
 ---
 
 ### Q31. Correcting an issued ticket — by differences, or by substitution? (added 2026-09-30)
+
+_2026-11-28: decided; not to be sent as written. The 2026-10-09 research found the method is the business's choice and repeated corrections are allowed ([verifactu-findings.md](verifactu-findings.md) §17). The owner chose substitution for a correction that leaves the invoice above zero, each naming the latest version, and differences for one that takes it to zero ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 to D3). Not built yet. Question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md) asks the adviser to confirm._
 
 **Why it matters.** The fiscal core can file a corrective invoice (R5) against a simplified invoice
 (`recordCorrection`, `packages/core/src/record-correction.ts`). The Veri\*Factu backend files it
@@ -4117,6 +4127,8 @@ exception for unintelligible data would not apply? Removed as a paid question by
 
 ### Q64. A date fix for a receipt that already has a refund on it (added 2026-11-27)
 
+_2026-11-28: moved, reworded, into question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md) (its last point); send that, not the text below. Under the owner's decisions of that day ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 and D2), still to be built, the 5.00 refund that leaves 45.00 is itself a corrective by substitution (R5, type S), not by differences, and the date fix is a further substitution naming that latest version. So (a) becomes whether a substitution may follow a substitution; (b) follows from the decisions as we read them (the date fix carries 45.00 and the refund is not issued again), and question 15 asks what it states as replaced; (c) is asked as before._
+
 **Why we ask.** A table's 50.00 receipt prints at 23:58 on 31 March while the box's clock runs a day
 ahead, so it is dated 1 April. Before AEAT's refusal (dated in the future, error 1112) comes back, the
 guest is given 5.00 back: Waitron issues a corrective by difference (R5, type I) naming the receipt.
@@ -4167,6 +4179,8 @@ Until A1619 part 2 lands, a refund on a receipt refused for its date is filed at
 corrective by difference, and the date fix (Q64) is then refused (`sale.replacement_not_first`);
 the guide tells an administrator to send the date fix first. Part 2 allows the date fix after a
 refund.
+
+_2026-11-28: under the owner's decisions of that day ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 and D3), still to be built, a refund that leaves the receipt above zero, like Q64's 5.00, is a corrective by substitution, not by difference; one that gives everything back stays by difference. (b)'s interim state is otherwise unchanged, and Q64's reworded form is in question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md)._
 
 > Desde el 27 de noviembre de 2026, el sistema emite una rectificativa (una corrección, una
 > devolución o un abono) en cuanto el personal la hace, sea cual sea la respuesta de la AEAT sobre la

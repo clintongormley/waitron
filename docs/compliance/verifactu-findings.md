@@ -712,6 +712,12 @@ Two consequences:
 
 ### 10.2 F3 — the "make me a proper invoice" case, which we do not model
 
+> **Dated pointer, 2026-11-28:** F3 is no longer Waitron's route. For a past ticket the owner chose
+> to credit it with a negative F2 and issue an ordinary F1, which AEAT's FAQ provides for (§17's
+> "A ticket credited with a negative F2 is replaced by an F1, not an F3"), and the F3 code is to be
+> removed from `main` ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9). The AEAT rules below still describe an F3
+> correctly; they no longer describe what Waitron will do.
+
 A customer who received a simplified invoice and then asks for a full one with their tax details
 does **not** trigger a rectificativa. The correct document is a **factura de canje, `TipoFactura`
 F3**, and AEAT is explicit that it is a different animal:
@@ -735,6 +741,9 @@ The rules that fall out of AEAT's worked examples:
 
 Rectifying a *simplified* invoice, by contrast, is `TipoFactura` **R5** with `TipoRectificativa` `I`
 (por diferencias) and a negative `ImporteTotal`, followed by a fresh F3 if the customer had one.
+*(2026-11-28: in Waitron, once built, no F3 follows: a correction that leaves the ticket above zero
+is an R5 with `TipoRectificativa` `S` naming the latest version, and a ticket made into a full
+invoice is credited and replaced by an F1 ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1, D2 and D6).)*
 *(2026-11-14: a simplified invoice AEAT refused is instead replaced, R5 with `TipoRectificativa`
 `S` — Q37 in [asesor-questions.md](asesor-questions.md).)*
 

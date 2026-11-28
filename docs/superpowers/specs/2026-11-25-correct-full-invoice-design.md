@@ -110,6 +110,11 @@ I recommend the amount of the change (AEAT's *por diferencias*, `TipoRectificati
 negative figures: it is what Waitron's ticket correctives already do, the writer and the paper
 already work that way, and several give-backs on one invoice each stand alone.
 
+_2026-11-28: superseded for a give-back that leaves the invoice above zero, which becomes an R1 by
+substitution naming the latest version ([corrections by substitution](2026-11-28-corrections-by-substitution-design.md), D1 and D2); one that
+takes it to zero stays by differences (D3). Until that plan lands, PR 2a's R1 by differences is what
+runs._
+
 **The customer on it.** AEAT refuses an R1 without a customer block: «1189 = Si TipoFactura es F1 o
 F3 o R1 o R2 o R3 o R4 el bloque Destinatarios tiene que estar cumplimentado.» (AEAT's validations
 list, quoted in `docs/compliance/research/2026-10-09-vat-and-corrections.md`). The record copies the
@@ -263,11 +268,19 @@ the plan's sections 1, 5 and 6):
 
 - Cancelling a placed order or splitting a printed bill when its invoice is a full invoice: they
   stay refused as today (they credit an invoice nobody paid; the right type is a separate question).
+  _2026-11-28: to be built as an R4 by differences to zero naming the same customer, then new bills
+  that start as full invoices for that customer (best guess; [corrections by substitution](2026-11-28-corrections-by-substitution-design.md),
+  D4)._
 - The dashboard's fix for a full invoice AEAT refused: unchanged (A1407's R4).
 
 - A full invoice made later from tickets (AEAT's F3): no till route issues one today
   (`docs/backlog/fiscal.md`, A1e: "no route calls `recordSubstitution`").
+  _2026-11-28: no F3 will be issued; a past ticket is credited with a negative F2 and an F1 issued
+  ([corrections by substitution](2026-11-28-corrections-by-substitution-design.md), D6)._
 - Changing a customer's details on an issued invoice: a different corrective (R4 by substitution),
   not money back.
+  _2026-11-28: decided ([corrections by substitution](2026-11-28-corrections-by-substitution-design.md), D5, best guesses): wrong details, an R4
+  by substitution with the same amounts; details and amounts together, one R1 by substitution; a
+  different customer, an R4 by differences to zero and a new F1._
 - Tickets' cancelled-dish correctives (question 2): unchanged here. _2026-11-25: still so, by answer 2.
   Receipts' correctives do change in one way: the two blank columns of answer 4._

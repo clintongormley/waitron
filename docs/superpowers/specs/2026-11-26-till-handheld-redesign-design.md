@@ -617,6 +617,11 @@ full-width actions, each with a hint at its right end, plus a fourth (below):
    invoicing app has it, and any simplified receipt may be replaced. The adviser's open question
    Q5(d) is asked for confirmation rather than waited on (owner, 2026-11-26: "let's build it and ask
    for confirmation instead of waiting"). A receipt already replaced cannot be replaced again.
+   _2026-11-28: replaced by [corrections by substitution](2026-11-28-corrections-by-substitution-design.md), D6, D7, D9 and D10: no F3. The
+   receipt is credited with a negative F2 at its current value, and an ordinary F1 naming the
+   customer is issued for the same lines, both carrying the receipt's date of operation; one receipt
+   becomes one full invoice, and later corrections go on the F1. The adviser is asked in question 15
+   of `docs/compliance/2026-11-19-adviser-meeting.md`, not Q5(d)._
 3. **Refund**, hint "up to €80.52".
 4. **Change how it was paid** (below).
 
@@ -1326,6 +1331,9 @@ counter order delivered to a table; dropped for now, §9.8).
   route yet; it needs lookup, the recipient, a refusal of a second exchange, delivery and report
   tests. A fiscal change: it lands only with the owner's approval. The adviser is asked Q5(d) for
   confirmation in parallel.
+  _2026-11-28: no longer the F3 build. The receipt is credited and an F1 issued (§7.12 item 2's
+  note); the work is the lane A plan in [corrections by substitution](2026-11-28-corrections-by-substitution-design.md) §4, which reuses the F3
+  plan's screens and removes the F3 code from `main`._
 - (pass 3) **Change how it was paid** is new: a recorded, any-staff change of a payment's way (cash ↔
   other card machine) until its drawer is closed, reflected in the drawer's expected cash and on a
   reprint; never on a reader payment, never on the tax record.

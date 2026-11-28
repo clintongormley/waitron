@@ -272,7 +272,9 @@ A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full
 `standard` and `corrective`, provisions its series, and makes core require it for F1 and F3.
 Table bill payments, unpaid departures and Counter bills paid through the shared Pay window can issue F1; no route calls `recordSubstitution`. The separate-series
 basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-findings.md).
-**Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) remains open for F3 and R5.
+**Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) was answered
+by answer 1.14 on 15 November, and its F3 half no longer arises: Waitron will issue no F3
+(2026-11-28, [design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9).
 _2026-11-23: every box has a fourth series, `full_corrective` (default code `FR`), for correctives of
 full invoices. A replacement takes it when the invoice it replaces names a customer and `corrective`
 otherwise, and core refuses the wrong series before a number is taken
@@ -281,6 +283,10 @@ otherwise, and core refuses the wrong series before a number is taken
 [the answers](../compliance/2026-11-15-adviser-answers.md))._
 _2026-11-26: Give money back files a correction by differences against a full invoice (an R1) on
 `full_corrective` (CORRECT-FULL-INVOICE PR 2a)._
+_2026-11-28: planned, not built ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 to D3): a correction that leaves an invoice above
+zero becomes a substitution (`TipoRectificativa` "S") naming the latest version, R5 for a ticket
+and R1 for a full invoice; one that takes it to zero stays by differences. Today's code still
+corrects by differences._
 
 <a id="a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06"></a>
 
@@ -302,7 +308,9 @@ status and retry, staff handover confirmation, invoice lookup, and reporting. Pa
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
 F2/absent-domicile controls remain. Refund on an F1 files an R1 by differences (CORRECT-FULL-INVOICE
 PR 2a), and a dish's money given back with Cancel and refund goes on that R1 too (PR 2b); cancelling a
-whole F1 and reopening one to split it are still refused.
+whole F1 and reopening one to split it are still refused. (2026-11-28, [design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md): the R1 becomes
+by substitution when it leaves the invoice above zero (D1), and cancelling or splitting a printed F1
+is to be built as an R4 by differences to zero (D4).)
 
 The owner approved the historical-export fixture's current artifact
 refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
@@ -320,8 +328,9 @@ the existing recipient checks and F1 series selection remain in place.
 
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
-Future structured B2B integration has its own entry above. F3 conversion remains a separate
-decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a, PR 2b
+Future structured B2B integration has its own entry above. F3 conversion is decided against
+(2026-11-28, [design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6): a full invoice for a past ticket credits the ticket with a negative
+F2 and issues an F1, in the design's lane A plan. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a, PR 2b
 (a cancelled dish's money goes on the corrective) and PR 3 (a line given back in part prints with no quantity and no
 unit price) are built, and with PR 4a the corrective goes out once, when it is filed, from the
 filing till: by email to the address the invoice went to, when the box can send invoice email then;
@@ -1033,6 +1042,10 @@ From **The product editor and menu (#345, #379, #387) — what is left open.**
 
 ## A556. A full invoice that later replaces a bill's simplified one would not be delivered through the bill.
 
+_2026-11-28: superseded by [the design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9: Waitron will issue no F3, so no replacing
+F3 will exist; delivering the F1 issued for a past ticket belongs to the design's lane A plan (§4).
+This entry is deleted when that code lands._
+
 The dashboard's order detail reaches a bill's invoice as the sale carrying that bill's
 id; a replacing full invoice (an F3) is a separate sale, and whether it would carry the bill's id
 was not checked (A231q's review, read, not run). Nothing issues an F3 today: no route calls
@@ -1449,6 +1462,8 @@ the same customer, with the same rectified amounts, real day and VAT period (Q37
 carried over by the plan's default 4; not confirmed by the owner). It is built but
 switched off (`FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts`) until
 adviser question S14 is answered and AEAT's test service has accepted one._
+_2026-11-28: S14 was answered on 15 November (answer 1.14), so the remaining condition is AEAT's test
+service accepting one, as the 2026-11-23 note below says._
 _2026-11-21: since the corrections report's PR 1, a replacement made after its real day's period
 has ended leaves that period's VAT return as it was and is on the corrections workbook of the period
 it is made in (pinned by "B: a replacement naming an earlier quarter leaves that quarter as it was"

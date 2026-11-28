@@ -73,6 +73,9 @@ and line behind each claim are in the [evidence table](#evidence) at the end.
 - **Full invoices and their exchanges share a series (answer 1.14, first half).** Full invoices (F1)
   and full invoices issued in exchange for tickets (F3) may share a numbering series. In Waitron they
   do.
+  _2026-11-28: Waitron will issue no F3: a full invoice for a past ticket credits the ticket with a
+  negative F2 and issues an F1 ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D9), so this half of answer 1.14 stops
+  mattering once that is built._
 - **Restoring an old backup (answer 1.16).** If the venue's server is restored from an old backup, it
   might reuse invoice numbers already issued. Our approach (a new installation number and new series
   before trading again, keep every record and AEAT reply, cancel nothing automatically) is
@@ -94,6 +97,8 @@ and line behind each claim are in the [evidence table](#evidence) at the end.
   may be issued from another server of the same company. A tourist with no Spanish tax number is
   identified by passport (AEAT's document type 03); which codes AEAT accepts is set by AEAT's
   technical rules, not by law. As we have it.
+  _2026-11-28: the F3 half no longer arises, since Waitron will issue no F3 ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and
+  D9); the corrective half stands._
 - **New hardware, same database (answer 2.5).** Moving the same database and software to new hardware
   keeps the installation number; when in doubt, a new number is always safe. Nothing is reported to
   AEAT when a chain of records ends. A full invoice sent by email in exchange for a ticket is an
@@ -553,6 +558,10 @@ reductions go on the corrections report too, as above.*
 - **A full invoice in exchange for a ticket (F3; backlog A556). Not built.** When it is built, it
   shows the date of the sale when that differs from its own date (answer 1.4). Sent by email, it is an
   original, not a duplicate (answer 2.5).
+  _2026-11-28: no F3 will be built. The owner chose to credit the ticket with a negative F2 and issue
+  an ordinary F1 for the same lines, both carrying the ticket's date of operation (a best guess)
+  ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D6 and D10); question 15 of the
+  [meeting sheet](2026-11-19-adviser-meeting.md) asks the adviser to confirm._
 - **A refund to a card when the customer isn't present (answer 1.7).** Issue the corrective anyway and
   keep it linked to the evidence of the refund; the risk of not having delivered it remains.
   Waitron's "Correct invoice" already makes the link.
