@@ -26,11 +26,22 @@ describe("till-table-order-screen while loading", () => {
       },
     ];
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const { el } = await mount({ loading: true, printProblems: problems });
+    const { el, host } = await mount({ loading: true, printProblems: problems });
+    host.style.width = "390px";
     expect(shown(el, "[data-loading]")?.textContent?.trim()).toBe("");
     expect(shown(el, "wt-placeholder")).toBeNull();
     await vi.advanceTimersByTimeAsync(300);
-    expect(shown(el, "wt-placeholder")).toBeTruthy();
+    const root = el.shadowRoot!;
+    const widths = [...root.querySelectorAll(".loading-order-row wt-placeholder:nth-child(2)")].map(
+      (bar) => bar.getBoundingClientRect().width,
+    );
+    expect(widths).toEqual([170, 120, 200, 140]);
+    const row = root.querySelector(".loading-order-row")!;
+    const quantity = row.querySelector("wt-placeholder")!;
+    expect(quantity.getBoundingClientRect().left - row.getBoundingClientRect().left).toBe(16);
+    const menu = root.querySelector("footer wt-button");
+    expect(menu?.textContent?.trim()).toBe("Menu");
+    expect(menu?.disabled).toBe(true);
     expect(shown(el, "section.screen")?.getAttribute("aria-busy")).toBe("true");
     expect(shown(el, "[data-back]")).not.toBeNull();
     expect(shown(el, "[data-draft-pane]")).toBeNull();
@@ -68,6 +79,15 @@ describe("till-table-order-screen while loading", () => {
     const { el, host } = await mount({ loading: true });
     host.style.width = "1280px";
     await resized(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    el.serviceVisit++;
+    await el.updateComplete;
+    await vi.advanceTimersByTimeAsync(300);
+    const menu = shown(el, ".first-menu-read")?.getBoundingClientRect();
+    const order = shown(el, ".loading-order-row")?.getBoundingClientRect();
+    expect(menu?.width ?? 0).toBeGreaterThan(0);
+    expect(menu!.right).toBeLessThanOrEqual(order!.left);
+    vi.useRealTimers();
     el.loading = false;
     await resized(el);
     const sideBySide = () => shown(el, "[data-draft-pane]")?.checkVisibility() ?? false;

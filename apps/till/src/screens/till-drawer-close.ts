@@ -52,6 +52,12 @@ export class TillDrawerClose extends LitElement {
       .first-content-read {
         min-inline-size: min(calc(var(--wt-tap-min) * 6), calc(100dvw - var(--wt-space-6) * 2));
       }
+      .first-content-read:has([data-stage="unreachable"]) {
+        min-block-size: 0;
+      }
+      .first-content-read [data-stage="unreachable"] {
+        position: static;
+      }
       .bank {
         margin-block-start: var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
@@ -291,12 +297,9 @@ export class TillDrawerClose extends LitElement {
               ? nothing
               : html`<div class="first-content-read">
                   ${
-                    firstRead === "quiet"
-                      ? nothing
-                      : html`
-                          <wt-placeholder></wt-placeholder>
-                          <wt-placeholder></wt-placeholder>
-                        `
+                    firstRead === "placeholder" || firstRead === "waiting"
+                      ? html`<wt-placeholder></wt-placeholder><wt-placeholder></wt-placeholder>`
+                      : nothing
                   }
                   ${firstReadNotice(firstRead, false, () => {
                     if (this.firstRead === "unreachable") void this.#load();

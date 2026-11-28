@@ -6,7 +6,11 @@ import {
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { watchFirstRead, type FirstReadView } from "../state/first-read.js";
-import { firstOrderRead, firstReadNoticeStyles } from "../widgets/first-read-notice.js";
+import {
+  firstMenuRead,
+  firstOrderRead,
+  firstReadNoticeStyles,
+} from "../widgets/first-read-notice.js";
 import "../widgets/set-menu-summary.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import {
@@ -786,6 +790,35 @@ export class TillTableOrderScreen extends LitElement {
         .screen {
           padding-inline: 0;
         }
+      }
+
+      .loading-screen {
+        box-sizing: border-box;
+      }
+
+      .loading-screen:not([data-embedded]) {
+        min-block-size: 100dvh;
+      }
+
+      .loading-screen > :is(.head, .head-actions) {
+        padding-inline: var(--wt-space-4);
+      }
+
+      .loading-foot {
+        margin-block-start: auto;
+        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-space-4)
+          max(calc(var(--wt-space-5) + var(--wt-space-1) / 2), env(safe-area-inset-bottom));
+        border-block-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface);
+      }
+
+      .loading-foot wt-button {
+        display: block;
+      }
+
+      .loading-foot wt-button::part(button) {
+        inline-size: 100%;
+        min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
       }
 
       .head {
@@ -3162,9 +3195,24 @@ export class TillTableOrderScreen extends LitElement {
   #loadingScreen(): TemplateResult {
     const table = this.openingTable;
     const guests = table?.party?.guestCount;
+    const menuRead = this.menuFirstRead;
+    const menu =
+      menuRead === undefined
+        ? firstMenuRead(this.orderRead === "quiet" ? "quiet" : "placeholder", this.menuReadOnPhone)
+        : html`<till-menu-browser
+            data-loading
+            .firstRead=${menuRead}
+            .retryFirstRead=${this.retryMenuRead}
+            .handheld=${this.menuReadOnPhone}
+          ></till-menu-browser>`;
+    const order = firstOrderRead(
+      menuRead === undefined || this.orderRead === "quiet" ? this.orderRead : "placeholder",
+      this.menuReadOnPhone,
+    );
     return html`
       <section
-        class="screen"
+        class="screen loading-screen"
+        ?data-embedded=${this.embedded}
         data-order-id=${this.orderId ?? nothing}
         aria-label=${t("table.title")}
         aria-busy=${this.menuFirstRead === undefined && (this.orderRead === "quiet" || this.orderRead === "placeholder") ? "true" : nothing}
@@ -3188,14 +3236,15 @@ export class TillTableOrderScreen extends LitElement {
           }
         </div>
         ${
-          this.menuFirstRead === undefined
-            ? firstOrderRead(this.orderRead, this.menuReadOnPhone)
-            : html`<till-menu-browser
-                data-loading
-                .firstRead=${this.menuFirstRead}
-                .retryFirstRead=${this.retryMenuRead}
-                .handheld=${this.menuReadOnPhone}
-              ></till-menu-browser>`
+          this.wide
+            ? html`<div class="ordering side-by-side">
+                <div class="browsing">${menu}</div>
+                <div class="draft-pane">${order}</div>
+              </div>`
+            : html`${menuRead === undefined ? order : menu}
+                <footer class="loading-foot">
+                  <wt-button variant="secondary" disabled>${t("table.view_menu")}</wt-button>
+                </footer>`
         }
       </section>
     `;

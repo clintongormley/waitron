@@ -1005,7 +1005,7 @@ export class WtFloorMap extends LitElement {
     const { width, height } = this.#size;
     const fitted = fitScale(crop, this.#size);
     const { scale, minimum, inset } =
-      this.compact && width > 0 && height > 0
+      this.compact && this.placeholders.length === 0 && width > 0 && height > 0
         ? compactFloor.fit(crop, this.#size, this.#smallestTableEdge, getComputedStyle(this))
         : { scale: fitted, minimum: fitted * MIN_ZOOM, inset: 0 };
     this.#fittedToDrag = this.#dragCrop !== null;

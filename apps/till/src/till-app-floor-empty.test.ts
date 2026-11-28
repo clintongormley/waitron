@@ -432,13 +432,24 @@ it("opens the Floor frame as soon as the PIN is accepted while device zones wait
   expect(drawn(el, "t1")).toBeNull();
 });
 
-it("keeps a fixed till's frame neutral until its starting zone answers", async () => {
+it("keeps a fixed till's frame neutral until its starting zone answers", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(resetPage);
+  await pageAt(700, 390);
   let answer!: (zones: ReturnType<typeof deviceZonesFixture>) => void;
   const getDeviceZones = vi.fn(() => new Promise((resolve) => (answer = resolve)));
   const el = await signIn(stubApi({ getDeviceZones }, true));
   const shell = () => el.shadowRoot!.querySelector("till-shell");
   expect(shell()?.activeScreen).toBeUndefined();
   expect(floorOf(el)).toBeNull();
+  await vi.waitFor(() => {
+    const body = shell()!.shadowRoot!.querySelector("main")!.getBoundingClientRect();
+    const grey = shell()!.querySelector("wt-placeholder")?.getBoundingClientRect();
+    expect(grey?.height ?? 0).toBeGreaterThan(body.height / 2);
+    const footer = shell()!.shadowRoot!.querySelector("footer")?.getBoundingClientRect();
+    expect(footer?.top).toBeGreaterThanOrEqual(body.bottom);
+  });
   answer(deviceZonesFixture(undefined, ["z1"]));
   await vi.waitFor(() => expect(shell()?.activeScreen).toBe("counter"));
 });
@@ -483,10 +494,21 @@ it("shows the known Floor zone and keeps the view control quiet until tables arr
   expect(view?.disabled).toBe(true);
 });
 
-it("remembers only the table shapes for this device's next Floor read", async () => {
+it("shows the last Floor zone and its untappable table shapes before the box answers", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(resetPage);
+  await pageAt(390, 844);
   const deviceId = "device-with-a-saved-floor";
-  const memoryKey = `waitron.floor-plan.${JSON.stringify([location.origin, deviceId])}`;
-  localStorage.removeItem(memoryKey);
+  const memoryKeys = ["floor-plan", "floor-zone"].map(
+    (name) => `waitron.${name}.${JSON.stringify([location.origin, deviceId])}`,
+  );
+  const [memoryKey] = memoryKeys;
+  for (const key of memoryKeys) localStorage.removeItem(key);
+  const phone = async (api: ReturnType<typeof stubApi>) => {
+    api.getTill.mockResolvedValue({ ...(await api.getTill()), formFactor: "phone-portrait" });
+    return api;
+  };
   const getDeviceIdentity = vi.fn().mockResolvedValue({
     deviceId,
     name: "Till",
@@ -497,6 +519,7 @@ it("remembers only the table shapes for this device's next Floor read", async ()
     ...freeTable,
     id: `table-${x}`,
     label,
+    zoneId: "terrace",
     today: {
       placement: { x, y: 2, width: 4, height: 4, shape: "round", rotation: 0 },
       seats: 4,
@@ -509,18 +532,38 @@ it("remembers only the table shapes for this device's next Floor read", async ()
   });
   try {
     const first = await onFloor(
-      stubApi({
-        getDeviceIdentity,
-        getTablesState: vi.fn().mockResolvedValue([placed(1, "Window"), placed(9, "Wall")]),
-      }),
+      await phone(
+        stubApi({
+          getDeviceIdentity,
+          getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1", "terrace"])),
+          listZones: vi
+            .fn()
+            .mockResolvedValue([
+              room,
+              { ...room, id: "terrace", name: "Terrace", displayOrder: 1 },
+            ]),
+          getTablesState: vi.fn().mockResolvedValue([placed(1, "Window"), placed(9, "Wall")]),
+        }),
+      ),
     );
+    const firstShell = first.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+    const terrace = () =>
+      firstShell.querySelector<HTMLButtonElement>('[data-floor-zone="terrace"]');
+    await vi.waitFor(() => expect(terrace()).toBeTruthy());
+    terrace()!.click();
+    await vi.waitFor(() => expect(location.pathname).toMatch(/\/zone\/terrace$/u));
     first.remove();
+    history.replaceState(null, "", initialUrl);
     const el = await signIn(
-      stubApi({ getDeviceIdentity, getTablesState: vi.fn(() => new Promise(() => {})) }),
+      await phone(
+        stubApi({ getDeviceIdentity, getDeviceZones: vi.fn(() => new Promise(() => {})) }),
+      ),
     );
     const map = () => floorOf(el)?.shadowRoot?.querySelector("wt-floor-map");
     const shapes = () => [...(map()?.shadowRoot?.querySelectorAll("wt-placeholder") ?? [])];
     await vi.waitFor(() => expect(shapes()).toHaveLength(2));
+    const shell = el.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+    expect(shell.querySelector("[data-floor-zone-chooser]")?.getAttribute("label")).toBe("Terrace");
 
     await vi.waitFor(() => {
       const [left, right] = shapes().map((shape) => shape.getBoundingClientRect());
@@ -531,9 +574,9 @@ it("remembers only the table shapes for this device's next Floor read", async ()
     });
     expect(map()?.shadowRoot?.querySelector("button")).toBeNull();
     expect(map()?.shadowRoot?.textContent).not.toContain("Window");
-    expect(localStorage.getItem(memoryKey)).not.toContain("Window");
+    expect(localStorage.getItem(memoryKey!)).not.toContain("Window");
   } finally {
-    localStorage.removeItem(memoryKey);
+    for (const key of memoryKeys) localStorage.removeItem(key);
   }
 });
 

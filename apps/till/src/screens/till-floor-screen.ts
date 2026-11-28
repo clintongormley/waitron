@@ -861,6 +861,7 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) firstRead?: FirstReadView;
   @property({ attribute: false }) rememberedPlan?: ReadonlyMap<string, PlanRect[]>;
   @property({ attribute: false }) knownZones?: readonly Pick<FloorZone, "id" | "name">[];
+  @property({ attribute: false }) onZoneShown?: (zone: Pick<FloorZone, "id" | "name">) => void;
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -1052,6 +1053,7 @@ export class TillFloorScreen extends LitElement {
 
   @property({ attribute: false }) useFloorFooter = false;
   #footerZone?: ZoneOnScreen;
+  #shownZone?: FloorZone;
 
   override updated(changed: PropertyValues<this>): void {
     if (
@@ -1060,6 +1062,11 @@ export class TillFloorScreen extends LitElement {
     )
       this.dispatchEvent(new Event("floor-footer-update", { bubbles: true }));
     this.#footerZone = this.useFloorFooter ? this.#zone : undefined;
+    if (this.onZoneShown !== undefined && this.firstRead === undefined && this.tablesAnswered) {
+      const zone = this.zones.find(({ id }) => id === this.#zone.activeKey);
+      if (zone !== this.#shownZone && zone !== undefined) this.onZoneShown(zone);
+      this.#shownZone = zone;
+    }
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();

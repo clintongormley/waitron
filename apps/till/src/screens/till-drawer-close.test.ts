@@ -275,6 +275,10 @@ it("retries a silent first drawer read before opening the drawer", async ({ onTe
   await vi.advanceTimersByTimeAsync(14_700);
   vi.useRealTimers();
   expect(retry()).toBeTruthy();
+  expect(el.shadowRoot!.querySelector("wt-placeholder")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-first-read-status]")?.textContent).toContain(
+    "esta caja está conectada",
+  );
   const body = el
     .shadowRoot!.querySelector("wt-dialog")!
     .shadowRoot!.querySelector('[part="body"]')!;

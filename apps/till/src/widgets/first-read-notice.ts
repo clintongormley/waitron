@@ -18,14 +18,18 @@ export const firstReadNoticeStyles = css`
     margin-inline: 0;
   }
 
-  .first-floor-read:has(wt-placeholder, .map) {
-    background: var(--wt-color-surface);
-    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
-    outline: 1px solid var(--wt-color-border);
-    outline-offset: -1px;
+  .first-floor-read[data-starting] {
+    box-sizing: border-box;
+    min-block-size: 100%;
   }
 
-  .first-floor-read wt-placeholder {
+  .first-floor-read:has(> wt-placeholder, > .map) {
+    background: var(--wt-color-surface);
+    border: 1px solid var(--wt-color-border);
+    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+  }
+
+  .first-floor-read > wt-placeholder {
     flex: 1;
     margin: var(--wt-space-2);
   }
@@ -43,8 +47,15 @@ export const firstReadNoticeStyles = css`
   }
 
   .first-menu-read {
-    grid-template-columns: repeat(auto-fill, minmax(calc(var(--wt-tap-min) * 2), 1fr));
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(max(calc(var(--wt-tap-min) * 2), calc((100% - var(--wt-space-2) * 5) / 6)), 1fr)
+    );
     padding: var(--wt-space-3);
+  }
+
+  .first-menu-read:has(wt-placeholder) {
+    background: var(--wt-color-surface);
   }
 
   .first-menu-read wt-placeholder {
@@ -55,6 +66,26 @@ export const firstReadNoticeStyles = css`
     inset-inline: var(--wt-space-3);
   }
 
+  .first-order-read {
+    gap: 0;
+  }
+
+  .loading-order-heading,
+  .loading-order-row {
+    background: var(--wt-color-surface);
+    padding-inline: var(--wt-space-4);
+  }
+
+  .loading-order-heading {
+    padding-block: calc(var(--wt-space-3) + var(--wt-space-1) / 2)
+      calc(var(--wt-space-2) - var(--wt-space-1) / 2);
+  }
+
+  .loading-order-heading wt-placeholder {
+    inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-1) / 2);
+    min-block-size: var(--wt-space-3);
+  }
+
   .loading-order-row {
     display: grid;
     grid-template-columns:
@@ -62,8 +93,28 @@ export const firstReadNoticeStyles = css`
       calc(var(--wt-space-6) + var(--wt-space-5) - var(--wt-space-1));
     align-items: center;
     gap: var(--wt-space-3);
-    min-block-size: var(--wt-tap-min);
-    border-block-end: 1px solid var(--wt-color-border);
+    padding-block: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    border-block-start: 1px solid var(--wt-color-border);
+  }
+
+  .loading-order-row:nth-of-type(2) {
+    --name-bar-width: calc(var(--wt-space-5) * 7 + var(--wt-space-1) / 2);
+  }
+
+  .loading-order-row:nth-of-type(3) {
+    --name-bar-width: calc(var(--wt-space-5) * 5);
+  }
+
+  .loading-order-row:nth-of-type(4) {
+    --name-bar-width: calc(var(--wt-space-5) * 8 + var(--wt-space-2));
+  }
+
+  .loading-order-row:nth-of-type(5) {
+    --name-bar-width: calc(var(--wt-space-5) * 6 - var(--wt-space-1));
+  }
+
+  .loading-order-row wt-placeholder:nth-child(2) {
+    max-inline-size: var(--name-bar-width);
   }
 
   .loading-order-row wt-placeholder {
@@ -190,18 +241,32 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry?:
   </div>`;
 }
 
+export function firstMenuRead(stage: FirstReadView, handheld: boolean, retry?: () => void) {
+  return html`<div class="first-content-read first-menu-read">
+    ${stage === "quiet" ? nothing : Array.from({ length: 12 }, () => html`<wt-placeholder></wt-placeholder>`)}
+    ${firstReadNotice(stage, handheld, retry)}
+  </div>`;
+}
+
 export function firstOrderRead(stage: FirstReadView, handheld: boolean) {
-  return html`<div class="first-content-read" data-loading>
+  return html`<div class="first-content-read first-order-read" data-loading>
     ${
       stage === "quiet"
         ? nothing
-        : [1, 2, 3].map(
-            () =>
-              html` <div class="loading-order-row" aria-hidden="true">
-                <wt-placeholder></wt-placeholder><wt-placeholder></wt-placeholder
-                ><wt-placeholder></wt-placeholder>
-              </div>`,
-          )
+        : html`
+            <div class="loading-order-heading" aria-hidden="true">
+              <wt-placeholder></wt-placeholder>
+            </div>
+            ${Array.from(
+              { length: 4 },
+              () =>
+                html`<div class="loading-order-row" aria-hidden="true">
+                  <wt-placeholder></wt-placeholder>
+                  <wt-placeholder></wt-placeholder>
+                  <wt-placeholder></wt-placeholder>
+                </div>`,
+            )}
+          `
     }
     ${firstReadNotice(stage, handheld)}
   </div>`;
@@ -212,8 +277,9 @@ export function firstFloorRead(
   handheld: boolean,
   retry: () => void,
   map?: TemplateResult,
+  starting = false,
 ) {
-  return html`<div class="first-floor-read">
+  return html`<div class="first-floor-read" ?data-starting=${starting}>
     ${stage === "quiet" ? nothing : (map ?? html`<wt-placeholder></wt-placeholder>`)}
     ${firstReadNotice(stage, handheld, retry)}
   </div>`;

@@ -1,5 +1,5 @@
 import type { FirstReadView } from "../state/first-read.js";
-import { firstReadNotice, firstReadNoticeStyles } from "./first-read-notice.js";
+import { firstMenuRead, firstReadNoticeStyles } from "./first-read-notice.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
@@ -1146,10 +1146,7 @@ export class TillMenuBrowser extends LitElement {
     }
     const showContent = view !== nothing;
     if (!showContent && stage !== undefined) {
-      return html`<div class="first-content-read first-menu-read">
-        ${stage === "quiet" ? nothing : Array.from({ length: 6 }, () => html`<wt-placeholder></wt-placeholder>`)}
-        ${firstReadNotice(stage, this.handheld, () => this.retryFirstRead?.())}
-      </div>`;
+      return firstMenuRead(stage, this.handheld, this.retryFirstRead);
     }
     if (!showContent && !this.hasMenuPicker) return nothing;
     return html`

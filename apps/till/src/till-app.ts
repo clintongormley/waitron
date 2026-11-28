@@ -45,7 +45,12 @@ import {
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import { menusMoved, ZoneOfferIndex } from "./state/zone-offer-index.js";
 import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
-import { rememberedFloorPlan, rememberFloorPlan } from "./state/floor-plan-memory.js";
+import {
+  rememberedFloorPlan,
+  rememberedFloorZone,
+  rememberFloorPlan,
+  rememberFloorZone,
+} from "./state/floor-plan-memory.js";
 import { startFirstRead, type FirstReadView } from "./state/first-read.js";
 import { firstFloorRead, firstReadNoticeStyles } from "./widgets/first-read-notice.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
@@ -12544,6 +12549,12 @@ export class TillApp extends LitElement {
     if (this.tablesAnswered) this.floorReadFailed = false;
   }
 
+  #rememberShownFloorZone = (zone: Pick<FloorZone, "id" | "name">): void => {
+    if (this.deviceId !== undefined && this.#deviceNavigation()?.floorZoneIds.includes(zone.id)) {
+      rememberFloorZone({ origin: this.#serverOrigin(), deviceId: this.deviceId }, zone);
+    }
+  };
+
   #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
     if (this.signInReadView !== undefined) {
       if (poll !== true) this.#signInRead?.retry();
@@ -23653,6 +23664,13 @@ export class TillApp extends LitElement {
       const navigation = this.#deviceNavigation();
       const signingIn = this.signInReadView !== undefined;
       const firstRead = this.signInReadView ?? this.firstFloorView;
+      const memory =
+        firstRead === undefined || this.deviceId === undefined
+          ? undefined
+          : { origin: this.#serverOrigin(), deviceId: this.deviceId };
+      const knownZones = this.deviceZoneSelection?.zones.filter(({ id }) =>
+        navigation?.floorZoneIds.includes(id),
+      );
       return html`<till-floor-screen
         .live=${this.#live}
         .zones=${
@@ -23678,12 +23696,9 @@ export class TillApp extends LitElement {
         .tablesAnswered=${!signingIn && this.tablesAnswered}
         .floorReadFailed=${!signingIn && this.floorReadFailed}
         .firstRead=${firstRead}
-        .rememberedPlan=${
-          firstRead === undefined || this.deviceId === undefined || navigation === null
-            ? undefined
-            : rememberedFloorPlan({ origin: this.#serverOrigin(), deviceId: this.deviceId })
-        }
-        .knownZones=${firstRead === undefined ? undefined : this.deviceZoneSelection?.zones.filter(({ id }) => navigation?.floorZoneIds.includes(id))}
+        .rememberedPlan=${memory === undefined ? undefined : rememberedFloorPlan(memory)}
+        .knownZones=${memory === undefined ? undefined : (knownZones ?? rememberedFloorZone(memory))}
+        .onZoneShown=${this.#rememberShownFloorZone}
         .offerJoinConflicts=${this.#offerFloorJoinConflicts}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}
@@ -23866,7 +23881,13 @@ export class TillApp extends LitElement {
     const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
     if (this.signInReadView !== undefined) {
       if (openingScreen === undefined)
-        return firstFloorRead(this.signInReadView, handheld, () => this.#signInRead?.retry());
+        return firstFloorRead(
+          this.signInReadView,
+          handheld,
+          () => this.#signInRead?.retry(),
+          undefined,
+          true,
+        );
       return openingScreen === "counter"
         ? html`<till-menu-browser
             .firstRead=${this.signInReadView}
@@ -25075,6 +25096,7 @@ export class TillApp extends LitElement {
                         html`<till-shell
                           .formFactor=${shellFormFactor}
                           .activeScreen=${signingIn ? openingScreen : this.activeTabKey}
+                          .starting=${signingIn && openingScreen === undefined}
                           @floor-controls-resized=${(event: CustomEvent<number>) => {
                             this.style.setProperty(
                               "--wt-floor-controls-height",
