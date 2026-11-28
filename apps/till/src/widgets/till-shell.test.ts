@@ -2818,3 +2818,29 @@ it.each([false, true])(
     }
   },
 );
+
+it("a tablet's More shows the hours waiting for approval and opens them", async () => {
+  const locale = currentLocale();
+  setLocale("en-GB");
+  try {
+    await atViewport(1024, async () => {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        operatorName: "Ana",
+        hoursApprovalCount: 2,
+      });
+      const menu = el.shadowRoot!.querySelector<WtRowActions>(
+        'header:not(.phone) wt-row-actions[data-test="more-menu"]',
+      )!;
+      await menu.updateComplete;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const entry = menu.querySelector<HTMLElement>(".hours-approval")!;
+      expect(entry.textContent?.trim()).toBe("To approve · 2");
+      const opened = vi.fn();
+      el.addEventListener("hours-approval", opened);
+      await userEvent.click(entry);
+      expect(opened).toHaveBeenCalledTimes(1);
+    });
+  } finally {
+    setLocale(locale);
+  }
+});

@@ -10,7 +10,12 @@ import { attendanceEntry, attendanceItem } from "../test/attendance-fixtures.js"
 import { clockApp, clockState, deferred, shellAction, signIn, working } from "../test/clock-app.js";
 import type { TillApp } from "./till-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  pageAt,
+  resetPage,
+} from "./widgets/test-helpers.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -109,6 +114,7 @@ async function manager(
   return {
     ...f,
     getAttendanceManagerQueue,
+    getAttendanceManagerLookups,
     getAttendanceManagerDay,
     approveAttendanceDays,
     sendAttendanceManagerCommand,
@@ -412,4 +418,235 @@ it("reads the current queue when browser Back reopens the approval screen", asyn
   await vi.waitFor(() =>
     expect(root.textContent).toContain("No hours are waiting for your approval."),
   );
+});
+
+const lockScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-lock-screen");
+const alertText = (el: TillApp) =>
+  screen(el)?.shadowRoot?.querySelector('[role="alert"]')?.textContent?.trim();
+const buttonLabelled = (el: TillApp, label: string) =>
+  [...screen(el)!.shadowRoot!.querySelectorAll("wt-button")].find(
+    (button) => button.textContent?.trim() === label,
+  )!;
+
+it.each([
+  { refusal: { code: "management.request_invalid" }, message: "Check the form and try again" },
+  { refusal: new Error("Server down"), message: "Could not read the hours to approve. Try again." },
+])(
+  "shows a refused queue read ($message) above phone width and reads it again on Retry",
+  async ({ refusal, message }) => {
+    await pageAt(1024, 768);
+    try {
+      const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+      f.getAttendanceManagerQueue.mockRejectedValue(refusal);
+      await vi.waitFor(() => expect(menuEntry(f.el)).not.toBeNull());
+      await shellAction(f.el, ".hours-approval");
+      await vi.waitFor(() => expect(alertText(f.el)).toContain(message));
+      expect(screen(f.el)!.shadowRoot!.querySelector("[data-finished-days]")).toBeNull();
+      expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
+      f.getAttendanceManagerQueue.mockResolvedValue({
+        items: [],
+        finishedDays: [{ ...other, times: [...times] }],
+      });
+      await userEvent.click(buttonLabelled(f.el, "Retry"));
+      await vi.waitFor(() =>
+        expect(screen(f.el)!.shadowRoot!.textContent).toContain("Javier Torres"),
+      );
+      expect(alertText(f.el)).toBeUndefined();
+      expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
+    } finally {
+      await resetPage();
+    }
+  },
+);
+
+it("refuses a queue whose lookups belong to another operator", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  f.getAttendanceManagerLookups.mockResolvedValue({
+    viewer: { personId: "someone-else", canSelfApprove: false },
+    people: [{ personId: "worker", displayName: "Javier Torres" }],
+  });
+  await vi.waitFor(() => expect(menuEntry(f.el)).not.toBeNull());
+  await shellAction(f.el, ".hours-approval");
+  await vi.waitFor(() =>
+    expect(alertText(f.el)).toBe("Could not read the hours to approve. Try again."),
+  );
+  expect(screen(f.el)!.shadowRoot!.textContent).not.toContain("Javier Torres");
+});
+
+it("does not count a correction that waits for the worker", async () => {
+  const f = await manager({
+    items: [{ ...requested, status: "waiting-worker", readyToApply: true }],
+    finishedDays: [],
+  });
+  await open(f.el);
+  const root = screen(f.el)!.shadowRoot!;
+  expect(root.querySelector("[data-approve-request]")).toBeNull();
+  await userEvent.click(root.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!);
+  await openMore(f.el);
+  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
+});
+
+it("reads the queue once when More reopens while the first read is still running", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  const held = deferred<AttendanceManagerQueue>();
+  f.getAttendanceManagerQueue.mockReturnValue(held.promise);
+  await openMore(f.el);
+  await vi.waitFor(() => expect(f.getAttendanceManagerQueue).toHaveBeenCalledTimes(1));
+  await userEvent.keyboard("{Escape}");
+  await openMore(f.el);
+  await f.el.updateComplete;
+  expect(f.getAttendanceManagerQueue).toHaveBeenCalledTimes(1);
+  held.resolve({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
+});
+
+it("sends nothing and re-reads the queue when the day no longer holds the request", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  f.getAttendanceManagerDay.mockResolvedValue({ ...view, items: [] });
+  await open(f.el);
+  f.getAttendanceManagerQueue.mockClear().mockResolvedValue({ items: [], finishedDays: [] });
+  await userEvent.click(buttonLabelled(f.el, "Approve"));
+  await vi.waitFor(() =>
+    expect(alertText(f.el)).toBe("These hours changed. Check the latest times before continuing."),
+  );
+  await vi.waitFor(() => expect(f.getAttendanceManagerQueue).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() =>
+    expect(screen(f.el)!.shadowRoot!.textContent).toContain(
+      "No hours are waiting for your approval.",
+    ),
+  );
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("refuses a day read that answers for another day", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  f.getAttendanceManagerDay.mockResolvedValue({ ...view, date: "2026-10-14" });
+  await open(f.el);
+  await userEvent.click(buttonLabelled(f.el, "Approve"));
+  await vi.waitFor(() => expect(alertText(f.el)).toBe("Could not confirm the change. Try again."));
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("explains a decision the signed-in person may not make", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  f.sendAttendanceManagerCommand.mockRejectedValueOnce({ code: "authorization.not_permitted" });
+  await open(f.el);
+  await userEvent.click(buttonLabelled(f.el, "Decline"));
+  await vi.waitFor(() =>
+    expect(alertText(f.el)).toBe(
+      "You cannot approve hours from this till. Check your sign-in or use the dashboard.",
+    ),
+  );
+  expect(
+    [...screen(f.el)!.shadowRoot!.querySelectorAll("wt-button")].map((button) =>
+      button.textContent?.trim(),
+    ),
+  ).not.toContain("Retry response");
+});
+
+it("offers Retry response when the answer names another command", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  f.sendAttendanceManagerCommand.mockResolvedValueOnce({
+    commandId: "someone-elses",
+    entryIds: [],
+    replayed: false,
+  });
+  await open(f.el);
+  await userEvent.click(buttonLabelled(f.el, "Approve"));
+  await vi.waitFor(() => expect(alertText(f.el)).toBe("Could not confirm the change. Try again."));
+  expect(buttonLabelled(f.el, "Retry response")).toBeDefined();
+});
+
+it("returns to the lock screen when the manager's sign-in has ended", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  f.sendAttendanceManagerCommand.mockRejectedValueOnce({ code: "session.required" });
+  await open(f.el);
+  await userEvent.click(buttonLabelled(f.el, "Approve"));
+  await vi.waitFor(() => expect(lockScreen(f.el)).not.toBeNull());
+});
+
+it("sends no decision when the manager signs out above phone width while the day is being read", async () => {
+  await pageAt(1024, 768);
+  try {
+    const f = await manager({ items: [requested], finishedDays: [] });
+    const held = deferred<AttendanceDayView>();
+    f.getAttendanceManagerDay.mockReturnValue(held.promise);
+    await open(f.el);
+    await userEvent.click(buttonLabelled(f.el, "Approve"));
+    await vi.waitFor(() => expect(f.getAttendanceManagerDay).toHaveBeenCalledTimes(1));
+    await shellAction(f.el, ".logout");
+    await vi.waitFor(() => expect(lockScreen(f.el)).not.toBeNull());
+    held.resolve({ ...view, items: [requested] });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+  } finally {
+    await resetPage();
+  }
+});
+
+it("cancels a decision in flight when the manager signs out above phone width and ignores its later answer", async () => {
+  await pageAt(1024, 768);
+  try {
+    const f = await manager({ items: [requested], finishedDays: [] });
+    const held = deferred<{ commandId: string; entryIds: string[]; replayed: boolean }>();
+    f.sendAttendanceManagerCommand.mockImplementationOnce(() => held.promise);
+    await open(f.el);
+    await userEvent.click(buttonLabelled(f.el, "Approve"));
+    await vi.waitFor(() => expect(f.sendAttendanceManagerCommand).toHaveBeenCalledTimes(1));
+    const [command, options] = f.sendAttendanceManagerCommand.mock.calls[0] as unknown as [
+      AttendanceCommand,
+      { signal: AbortSignal },
+    ];
+    expect(options.signal.aborted).toBe(false);
+    await shellAction(f.el, ".logout");
+    await vi.waitFor(() => expect(lockScreen(f.el)).not.toBeNull());
+    expect(options.signal.aborted).toBe(true);
+    const reads = f.getAttendanceManagerQueue.mock.calls.length;
+    held.resolve({ commandId: command.commandId, entryIds: ["answer"], replayed: false });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(f.getAttendanceManagerQueue).toHaveBeenCalledTimes(reads);
+  } finally {
+    await resetPage();
+  }
+});
+
+it("sends no decision when browser Back leaves the screen while the day is being read", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  const held = deferred<AttendanceDayView>();
+  f.getAttendanceManagerDay.mockReturnValue(held.promise);
+  await open(f.el);
+  await userEvent.click(buttonLabelled(f.el, "Approve"));
+  await vi.waitFor(() => expect(f.getAttendanceManagerDay).toHaveBeenCalledTimes(1));
+  history.back();
+  await vi.waitFor(() => expect(screen(f.el)?.active).toBe(false));
+  held.resolve({ ...view, items: [requested] });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("a phone's floor More shows the approval count and opens the queue", async () => {
+  await pageAt(390, 844);
+  try {
+    const f = await manager({ items: [requested], finishedDays: [] });
+    Object.assign(f.el, { formFactor: "phone-portrait" });
+    await f.el.updateComplete;
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!;
+    const menu = await vi.waitFor(() => {
+      const menu = shell.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("[data-floor-bar] [data-test=more-menu]");
+      expect(menu?.querySelector(".hours-approval")).toBeTruthy();
+      return menu!;
+    });
+    await menu.updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    const entry = () => menu.querySelector<HTMLElement>(".hours-approval")!;
+    await vi.waitFor(() => expect(entry().shadowRoot?.textContent).toContain("To approve · 1"));
+    await userEvent.click(entry());
+    await vi.waitFor(() =>
+      expect(screen(f.el)?.shadowRoot?.textContent).toContain("Asked to change"),
+    );
+  } finally {
+    await resetPage();
+  }
 });
