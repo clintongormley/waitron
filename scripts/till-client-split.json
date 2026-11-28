@@ -497,7 +497,6 @@
             "getHours",
             "getAttendanceDay",
             "getAttendanceCommand",
-            "listAttendanceApprovers",
             "sendAttendanceCommand",
             "clockIn",
             "clockOut",
