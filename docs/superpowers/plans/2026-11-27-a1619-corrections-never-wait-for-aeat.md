@@ -246,3 +246,123 @@ lands first, its new `filing_*` cases change here like the others.
   hence D1 and D2. `docs/backlog.md:1101` (A1407, full invoices) says "a record refused for a future
   date should get its corrective at once, naming the refused invoice": the date-fixing corrective
   sent promptly, which argues against a wait for a person (options 1–2).
+
+
+## PR 2 — a date fix after an earlier refund (cleared by the watcher 2026-11-27 17:10, lane B questions.md; read against main 4698ac9341)
+
+### What lands
+
+A receipt AEAT (the Spanish tax agency) refused as dated in the future (`1112`), on which a guest
+was already given money back by a corrective "by difference" (an R5 of type I: a new invoice that
+takes an amount off), can still be put right from Fiscal filing's **Send the replacement**: Waitron
+files the replacement (an R5 of type S, which takes the receipt's place) naming the refused
+receipt, at the receipt's whole amount. The earlier refund keeps counting, so the next refund can
+give back only what is left (45.00 of a 50.00 receipt after 5.00). Refunds after the replacement
+already name it (`correction-target.ts:12-17`).
+
+### Today (read, not run, unless said)
+
+1. **The refusal.** `recordReplacement` counts every sale that corrects the receipt
+   (`record-replacement.ts:68`) and refuses `sale.replacement_not_first` if there is any
+   (`:116-120`), because "an earlier corrective's change would then be counted beside it". It also
+   refuses a cancelled receipt (`:77-83`), one exchanged for a full invoice (`:85-91`) and a
+   corrective (`:93-95`). A second replacement is also stopped by the unique index
+   `sales_one_replacement_uq` (`packages/db/src/schema/sales.ts:145-147`).
+2. **What it builds.** The receipt's own total, VAT split and lines (`record-replacement.ts:160-164,
+   191-202, 218-223`); copied lines keep their line numbers and get new ids with no link back
+   (`:195-200`). The record builder files type S (`backend.ts:658`), `FacturasRectificadas` naming
+   the receipt's number and date (`:659-669`) and `ImporteRectificacion` 0.00 / 0.00 (`:670-673`),
+   allowed only when every record under the receipt's own number was refused, none with `3000`
+   (`:624-627, 376-395`). That check reads the receipt's number only, so the earlier R5 (its own
+   number) does not affect it. **No change to the builders, the hash (`computeHuella`), the chain
+   or numbering is needed.**
+3. **History after a replacement.** Correct invoice's preview reads the replacement
+   (`correction-history.ts:121`) and counts only sales that correct the replacement (`:194, 250-262`),
+   so a refund given before it vanishes: 50.00 more could be given back (55.00 in all). The writer
+   repeats this: what is left (`record-correction.ts:186, 252-265`), Cancel and credit's "whole
+   invoice, first correction" check (`:187, 494`) and the line history (`:314-328`) all read the
+   replacement's own correctives. Its earlier refund's lines name the receipt's line ids, which are
+   not on the replacement. Give money back already maps a receipt's lines onto its replacement's by
+   line number (`apps/server/src/give-back-read.ts:338-349`).
+4. **Reports already count it right.** `correctivesOf` (`packages/db/src/correctives-of.ts:16-20`)
+   takes the receipt's correctives except the replacement, plus the replacement's: 50.00 − 5.00 =
+   45.00. The guard `scripts/corrective-sums.test.ts` lets core read correctives directly on the
+   stated ground that the target "has no replacement" (`:69-73, 126-150`), which PR 2 makes false.
+5. **VAT day (read, not run).** The VAT report places a refund of the receipt on the receipt's own
+   (wrong) day (`packages/reporting/src/vat-movements.ts:148-165`), while the replacement moves the
+   sale itself to the real day (`:174-182`); a refund of the replacement takes the real day
+   (`:150`). In the 31 March / 1 April case the 5.00 lands in a different quarter from the sale (D11).
+
+### The change
+
+1. `record-replacement.ts`: refuse `sale.replacement_not_first` only when a replacement exists
+   (`replaces_original = 1`), not for any corrective; the replacement stays at the whole amount.
+2. Core: one helper beside `correctionTargetFor` that reads the earlier correctives through
+   `correctivesOf` of the replaced receipt and maps their lines onto the replacement by line number.
+   `correction-history.ts` (`readStored`, `readHistory`, set-menu parts at `:322-327`) and
+   `record-correction.ts` (`:186-187, 314-328`) use it. Drop the five allowlist entries the guard
+   no longer needs.
+3. Dashboard words (`packages/fiscal-verifactu/src/dashboard/strings.ts:330,733`): the code now
+   means "already replaced": EN "This invoice has already been replaced, so nothing was sent. The
+   case stays open." and the Spanish twin. No till words change; no guide words this refusal.
+4. Docs: Q64's dated line; `docs/backlog.md:1129` ("cannot take its R4 (`sale.replacement_not_first`)")
+   goes stale.
+
+### Tests (each fails first)
+
+- Core `record-replacement.test.ts:622-656` flips: after a 6.05 refund the replacement files at the
+  receipt's total. New: a second replacement → `sale.replacement_not_first`, no number used.
+- Core `correction-history.test.ts` / `record-correction.test.ts`, 50.00 receipt, 5.00 refund,
+  replacement: preview left 45.00 and that line's remainder; 45.01 → `sale.correction_exceeds_total`;
+  a whole credit → `sale.correction_not_whole`.
+- `record-remedy-replacement.test.ts:536-565` flips: R5 "S", `ImporteRectificacion` 0.00/0.00,
+  `ImporteTotal` 50.00, naming the receipt; the earlier R5's stored record and hash unchanged.
+- PR 1's pinned server case (Send the replacement after a credit refuses) flips; Give money back
+  then offers 45.00. Reporting: the period nets 45.00 (D11 decides the day). Untouched: golden hash,
+  `inmutabilidad`.
+- **AEAT test service, before the build lands.** No run has ever sent a type-S R5 (the probe at
+  `docs/backlog.md:360-366` is still open) and `1112` itself has never been observed (only the
+  published rules, `docs/compliance/2026-11-06-adviser-questions.md:599`). Runs are new modes of
+  `scripts/live-aeat.mjs` in the `verifactu` repo, dispatched through `live-aeat.yml` on its `main`
+  (`:8-36, 70-72`), as run 37286368370 (`rejected-invoice-credit`, `live-aeat.mjs:3324-3355`) and
+  run 39560851006 (findings §18) were; a new mode needs the owner's approval (`backlog.md:364-365`).
+  Mode `replacement-after-credit`: an F2 50.00 dated tomorrow, an R5 "I" −5.00 dated today naming
+  it, an R5 "S" 50.00 (0.00/0.00, real day as `FechaOperacion`) naming it, chained in that order;
+  once in one request, once in three; controls: the R5 "S" with no credit (the open probe) and a
+  today-dated F2 with its credit; then a consulta of each number. Expected: F2 `Incorrecto` `1112`,
+  both R5s `Correcto`. The failing case prints `Incorrecto` with a code on either R5.
+
+### Decisions
+
+- **D8 — the amount.** (a) Replace at 50.00 and keep the 5.00 counting: AEAT holds −5.00 + 50.00 =
+  45.00, what was kept, and `correctivesOf` already agrees. (b) Replace at 45.00: AEAT nets 40.00
+  unless the first refund is withdrawn, and the writer copies the whole receipt (`:160-164`).
+  (c) Re-issue the 5.00 against the replacement: the first refund cannot be withdrawn (a
+  cancellation says an invoice should never have existed, FAQ §17 2.d), so 40.00 again.
+  **Recommend (a).** Q64 (b) asks the adviser exactly this. The owner's "a refund correction
+  pointing to the date-fix replacement" is how every refund after the replacement is filed; read as
+  re-issuing an earlier refund it is (c), so confirm.
+- **D9:** keep `sale.replacement_not_first` for an existing replacement, reworded. Recommended.
+- **D10:** an earlier refund written under the same wrong clock is itself refused `1112`, and a
+  corrective has no fix (`record-replacement.ts:93-95`; `docs/backlog/self-service-refusals.md:233`). Out of
+  PR 2. Recommended.
+- **D11:** move an earlier refund's VAT day to the replacement's real day, as for later refunds
+  (`vat-movements.ts:150`). Recommended in PR 2, with a test first; a VAT figure, not read further.
+- **D12:** a full invoice (R1 then R4 "S") follows the same core change but stays off
+  (`put-right.ts:30`). Recommended.
+
+### Size and files
+
+About 90 production lines: `packages/core/src/{record-replacement,correction-target,
+correction-history,record-correction}.ts`, `packages/reporting/src/vat-movements.ts` (D11), dashboard
+`strings.ts`, `scripts/corrective-sums.test.ts` (smaller). About 250 test lines in core,
+fiscal-verifactu, server and reporting. The `verifactu` mode is a separate PR of about 150 lines.
+No schema change. Full review with two Codex angles; the owner lands it.
+
+**Cleared (watcher, 2026-11-27 17:10):** D8 (a): replace at the whole 50.00; the earlier 5.00 refund keeps
+counting against the original (AEAT nets 45.00). D9 reworded "already replaced". D10: the same-clock earlier
+refund stays out of PR 2, named in the PR body as a known limit, plus one line on the adviser's confirmation
+list. D11 and D12 as written. **AEAT test service:** run 46070947073 (verifactu b979412f9f, mode
+`replacement-after-credit`) accepted it: each receipt dated tomorrow refused `1112`; the 5.00 refund (R5 I) and
+the date fix (R5 S, 0.00/0.00) both `Correcto`, in one request and in three; the date fix alone `Correcto`; the
+owner's order (date fix, then a refund naming it) `Correcto`; the today control `Correcto`. Test service only.
