@@ -63,6 +63,7 @@ import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
 import { byFiringOrder, sentPanel, type SentSlice, waitsForFire } from "../state/sent-panel.js";
+import { sentWindowShare } from "../state/sent-window.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -3893,16 +3894,13 @@ export class TillTableOrderScreen extends LitElement {
     row: CurrentOrderRow,
     amount: Decimal,
     extra?: CurrentOrderRow["extras"][number],
-    count = 1,
+    part: (value: Decimal) => Decimal = (value) => value,
   ): TemplateResult {
     const line = this.#sentBillLine(row, extra);
     const before =
       line?.listUnitPriceGross === undefined
         ? amount
-        : multiplyDecimal(
-            listedGross({ ...line, quantity: extra?.quantity ?? row.quantity }),
-            decimal(String(count)),
-          );
+        : part(listedGross({ ...line, quantity: extra?.quantity ?? row.quantity }));
     return lineTotal(before, amount);
   }
 
@@ -3930,14 +3928,8 @@ export class TillTableOrderScreen extends LitElement {
     const slice = members?.[0];
     const row = slice?.row;
     const count = members?.length ?? 1;
-    // A line served in part already counts whole in `count`; only other served lines add to it.
-    const joined = this.#sentTakeBack(members)?.filter(
-      (served) => !members!.some((member) => member.row === served.row),
-    );
-    // Members and the served lines their row joins are identical portions, so the first one's
-    // amounts, times the row's count, are the row's; the window's actions take `count` of them.
-    const rowCount = count + (joined?.length ?? 0);
-    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(rowCount)));
+    // The window speaks for its row's portions; its actions take only `members`.
+    const share = members && sentWindowShare(members, this.#sentTakeBack(members));
     const shownQuantity =
       row === undefined ? "0" : multiplyDecimal(decimal(row.quantity), decimal(String(count)));
     const disabled = this.busy || this.groupCommandBusy;
@@ -3951,9 +3943,9 @@ export class TillTableOrderScreen extends LitElement {
             ),
           );
     const partlyServed =
-      row !== undefined &&
-      row.servedAt === null &&
-      compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
+      share !== undefined &&
+      compareDecimal(share.served, decimal("0")) > 0 &&
+      compareDecimal(share.served, share.quantity) < 0;
     const extraTotal =
       row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
       decimal("0");
@@ -4000,7 +3992,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)}${priceMoves || row === undefined ? nothing : ` ×${quantityText(times(decimal(row.quantity)))}`}
+                ${row.name}${this.#nutrition(row)}${priceMoves || share === undefined ? nothing : ` ×${quantityText(share.quantity)}`}
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
@@ -4048,23 +4040,23 @@ export class TillTableOrderScreen extends LitElement {
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, rowCount)}</span
+                  >${this.#sentPrice(row, share!.of(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, share!.of)}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, rowCount)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, share!.of(decimal(extra.netAmount)), extra, share!.of)}</span></div>`)}
               ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>
               ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
-              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
+              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(share!)}</p>` : nothing}
               ${
                 priceMoves
                   ? nothing
                   : html`<div class="total-row">
                       <span>${t("label.total")}</span
-                      ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
+                      ><span class="amount">${this.#money(share!.amount)}</span>
                     </div>`
               }
             `
@@ -5567,10 +5559,16 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-fired-ago .firedAt=${kitchen.firedAt} .now=${this.now}></till-fired-ago>`;
   }
 
-  #servedOf(row: CurrentOrderRow): string {
+  #servedOf({
+    served,
+    quantity,
+  }: {
+    served: Decimal | string;
+    quantity: Decimal | string;
+  }): string {
     return t("table.row_served_of")
-      .replace("{served}", quantityText(row.servedQuantity))
-      .replace("{quantity}", quantityText(row.quantity));
+      .replace("{served}", quantityText(served))
+      .replace("{quantity}", quantityText(quantity));
   }
 
   /** The most a press can mark served (what is left), or take back (what is served). */
@@ -5772,7 +5770,9 @@ export class TillTableOrderScreen extends LitElement {
               ${
                 pending.members === undefined &&
                 compareDecimal(decimal(pending.row.servedQuantity), decimal("0")) > 0
-                  ? html`<p class="serve-so-far">${this.#servedOf(pending.row)}</p>`
+                  ? html`<p class="serve-so-far">
+                      ${this.#servedOf({ served: pending.row.servedQuantity, quantity: pending.row.quantity })}
+                    </p>`
                   : nothing
               }
               <div class="split-stepper">

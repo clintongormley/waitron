@@ -430,6 +430,7 @@ it("A803 portion grouping: a part-served row's window is headed with the row's c
   expect(cells(sheet.querySelector('[data-sent-extra="s-2-lime"]')!)).toEqual(["Lime ×2", "€3.00"]);
   expect(cells([...sheet.querySelectorAll(".total-row")].at(-1)!)).toEqual(["Total", rowPrice]);
   expect(rowPrice).toBe("€31.50");
+  expect(text(sheet.querySelector("[data-sent-line-served]")!)).toBe("1 of 3 served");
   cleanupWidgets();
 
   const served = await openGrouped("served", {}, 3);

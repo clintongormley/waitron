@@ -1152,6 +1152,37 @@ it("moves focus to the count when Change dish is pressed with a lower one", asyn
   await expect.poll(() => picker.shadowRoot!.activeElement).toBe(field);
 });
 
+it.each([
+  ["to serve", null, "Bravas ×3", "€9.00", "1 of 3 served"],
+  ["cancelled", "served", "Bravas ×1", "€3.00", null],
+] as const)(
+  "speaks in a dish's %s row's window, the dish served and cancelled in part, for that row alone",
+  async (_row, fold, heading, total, served) => {
+    const el = await openRow(
+      {
+        currentOrders: current({
+          ungrouped: [
+            row("l-patatas", "Bravas", "4.000", {
+              servedQuantity: "1.000",
+              cancelledQuantity: "1.000",
+              netAmount: "12.00",
+              extras: [],
+            }),
+          ],
+        }),
+      },
+      "l-patatas",
+      fold,
+    );
+    const sheet = q(el, "[data-sent-line-dialog]")!;
+    const words = (node: Element | null) => node?.textContent!.replace(/\s+/g, " ").trim() ?? null;
+    expect(words(sheet.querySelector(".move-dish"))).toBe(heading);
+    const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+    expect([...last.children].map(words)).toEqual(["Total", total]);
+    expect(words(sheet.querySelector("[data-sent-line-served]"))).toBe(served);
+  },
+);
+
 it("localises the sent dish, extras and served quantity", async () => {
   setLocale("es-ES");
   const el = await openRow(
