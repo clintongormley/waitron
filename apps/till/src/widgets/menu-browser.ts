@@ -161,8 +161,21 @@ export class TillMenuBrowser extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      /* The picker takes a line of its own, but a wrapping row still sums the two for its natural
+         width, so a screen sizing the menu from that width gives it room for both side by side. */
+      .menu-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      ::slotted([slot="menu-picker"]) {
+        flex: 1 0 100%;
+      }
+
       [data-region="search"] {
         display: flex;
+        flex: 1 1 auto;
         gap: var(--wt-space-2);
         align-items: center;
         min-inline-size: 0;
@@ -897,28 +910,30 @@ export class TillMenuBrowser extends LitElement {
         menu === undefined && !this.hasMenuPicker
           ? nothing
           : html`<div data-menu-head>
-              <slot name="menu-picker"></slot>
-              ${
-                menu === undefined
-                  ? nothing
-                  : html`<div data-region="search" ?inert=${this.locked}>
-                      <wt-input
-                        type="search"
-                        name="menu-search"
-                        variant="outlined"
-                        label=${t("menu.search")}
-                        placeholder=${t("menu.search_placeholder")}
-                        .value=${this.query}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-                        ><wt-icon slot="start" name="search"></wt-icon>${helpBadge(
-                          "help.menu.dishes",
-                          t("menu.search"),
-                          { guide: "products.nutrition-at-the-till", slot: "help" },
-                        )}</wt-input
-                      >
-                      <slot name="filters"></slot>
-                    </div>`
-              }
+              <div class="menu-tools">
+                <slot name="menu-picker"></slot>
+                ${
+                  menu === undefined
+                    ? nothing
+                    : html`<div data-region="search" ?inert=${this.locked}>
+                        <wt-input
+                          type="search"
+                          name="menu-search"
+                          variant="outlined"
+                          label=${t("menu.search")}
+                          placeholder=${t("menu.search_placeholder")}
+                          .value=${this.query}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
+                          ><wt-icon slot="start" name="search"></wt-icon>${helpBadge(
+                            "help.menu.dishes",
+                            t("menu.search"),
+                            { guide: "products.nutrition-at-the-till", slot: "help" },
+                          )}</wt-input
+                        >
+                        <slot name="filters"></slot>
+                      </div>`
+                }
+              </div>
               ${pathShown ? this.#path(this.#trailShown) : nothing}
             </div>`
       }

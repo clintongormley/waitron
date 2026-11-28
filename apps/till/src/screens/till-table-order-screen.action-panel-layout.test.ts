@@ -99,9 +99,21 @@ it("at 1024 px Move dishes covers the order without squeezing the menu", async (
   expect(box(panel).top).toBe(0);
   const browser = root.querySelector("till-menu-browser")!;
   const picker = box(browser.querySelector("till-menu-switcher")!);
-  const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);
-  expect(Math.abs(picker.bottom - search.bottom)).toBeLessThanOrEqual(1);
-  expect(picker.right).toBeLessThanOrEqual(search.left);
+  const searchRow = browser.shadowRoot!.querySelector('[data-region="search"]')!;
+  const search = box(searchRow);
+  expect(picker.bottom).toBeLessThanOrEqual(search.top);
+  expect(Math.abs(picker.left - search.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(picker.right - search.right)).toBeLessThanOrEqual(1);
+  const input = box(searchRow.querySelector("wt-input")!);
+  const filter = box(
+    browser.querySelector("till-diet-filter")!.shadowRoot!.querySelector("[data-filter-open]")!,
+  );
+  expect(filter.width).toBe(44);
+  expect(filter.height).toBe(44);
+  expect(Math.abs(filter.top - input.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(filter.bottom - input.bottom)).toBeLessThanOrEqual(1);
+  expect(filter.left).toBeGreaterThanOrEqual(input.right);
+  expect(filter.right).toBeLessThanOrEqual(search.right + 1);
 });
 
 it.each(["merge", "move-bill"])(
@@ -121,8 +133,9 @@ it.each(["merge", "move-bill"])(
     const browser = root.querySelector("till-menu-browser")!;
     const picker = box(browser.querySelector("till-menu-switcher")!);
     const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);
-    expect(Math.abs(picker.bottom - search.bottom)).toBeLessThanOrEqual(1);
-    expect(picker.right).toBeLessThanOrEqual(search.left);
+    expect(picker.bottom).toBeLessThanOrEqual(search.top);
+    expect(Math.abs(picker.left - search.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(picker.right - search.right)).toBeLessThanOrEqual(1);
 
     const body = panel
       .querySelector("wt-full-screen-panel")!

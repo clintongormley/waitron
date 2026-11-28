@@ -142,7 +142,7 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("keeps the first counter menu choice focused in one handheld row", async () => {
+it("keeps the first counter menu choice focused, on its own line above Search with Filter beside Search, on a handheld", async () => {
   await pageAt(390, 844);
   try {
     const menus = servedMenus(
@@ -182,13 +182,21 @@ it("keeps the first counter menu choice focused in one handheld row", async () =
     expect(browser.menu?.id).toBe("lunch");
     const search = browser.shadowRoot!.querySelector("wt-input")!;
     const filter = browser.querySelector("till-diet-filter")!;
-    const bounds = [trigger, search, filter].map((each) => each.getBoundingClientRect());
-    expect(Math.max(...bounds.map((box) => box.top))).toBeLessThan(
-      Math.min(...bounds.map((box) => box.bottom)),
-    );
-    expect(bounds[0]!.right).toBeLessThanOrEqual(bounds[1]!.left);
-    expect(bounds[1]!.right).toBeLessThanOrEqual(bounds[2]!.left);
-    expect(Math.abs(bounds[0]!.width - bounds[1]!.width)).toBeLessThanOrEqual(1);
+    const pickerBox = field.getBoundingClientRect();
+    const searchBox = browser
+      .shadowRoot!.querySelector("[data-region=search]")!
+      .getBoundingClientRect();
+    expect(pickerBox.bottom).toBeLessThanOrEqual(searchBox.top);
+    expect(Math.abs(pickerBox.left - searchBox.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(pickerBox.right - searchBox.right)).toBeLessThanOrEqual(1);
+    const input = search.getBoundingClientRect();
+    const button = filter.shadowRoot!.querySelector("[data-filter-open]")!.getBoundingClientRect();
+    expect(button.width).toBe(44);
+    expect(button.height).toBe(44);
+    expect(Math.abs(button.top - input.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(button.bottom - input.bottom)).toBeLessThanOrEqual(1);
+    expect(button.left).toBeGreaterThanOrEqual(input.right);
+    expect(button.right).toBeLessThanOrEqual(searchBox.right + 1);
 
     el.menus = [menus[0]!];
     await el.updateComplete;
