@@ -357,7 +357,7 @@ Remaining Stripe qualification and maintenance.
   The waiting SumUp checkout
   can be stopped from Pay. The original payment confirms whether the guest was charged.
   A796 (#1921) carries the phone's last-chosen reader and receipt printer, folded away on a
-  presented bill, the confirmation step and the Cash and Other card machine step; the folded row
+  presented bill, on Pay's confirmation step and on a Counter bill's own pay window; the folded row
   has a scan button. On a phone's Pay, the device sheet keeps the camera scanning and lists each
   device the payment uses. Background NFC pick-up updates the open form. Tap-to-Pay and the
   physical box-address checks above remain open.
