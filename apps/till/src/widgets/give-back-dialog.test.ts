@@ -284,6 +284,7 @@ describe("A dish", () => {
     expect(dish(el, "paella")!.shadowRoot!.querySelector("input")!.disabled).toBe(true);
     expect(text(root(el).querySelector("[role=status]"))).toContain("all portions");
     await type(el, "5.00");
+    expect(dish(el, "croquetas")!.portionAmount).toBe("€5.00");
     await reason(el, "complaint");
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();

@@ -736,6 +736,7 @@ export class TillGiveBackDialog extends LitElement {
               namesLocale: this.namesLocale,
               ticked: this.draft.lineIds,
               portionCount: this.draft.portionCount,
+              portionAmount: amount === null ? "" : this.#money(amount),
               onTick: (line, checked) =>
                 this.#set(tickDish(view.lines, this.draft, line, checked, this.amountTyped)),
               onPortions: (amounts, count) => this.#pickPortions(amounts, count),

@@ -654,12 +654,14 @@ describe("readGiveBack: the lines", () => {
     const b = await tab([["Croquetas", "2"], "Bread"]);
     const saleId = await pay(b, [{ cash: "10.00" }]);
     await cancel(b, "Croquetas", "1", true);
-    expect(lineOf(await read(saleId), "Croquetas").cancelled).toEqual({
+    const line = lineOf(await read(saleId), "Croquetas");
+    expect(line.cancelled).toEqual({
       quantity: "1.000",
       owed: "4.00",
       back: "0.00",
       waiting: "0.00",
     });
+    expect(line.portionAmounts).toBeUndefined();
   });
 
   it("shows no cancel for one made without Refund ticked", async () => {
@@ -667,6 +669,15 @@ describe("readGiveBack: the lines", () => {
     const saleId = await pay(b, [{ cash: "20.50" }]);
     await cancel(b, "Paella", "1", false);
     expect(lineOf(await read(saleId), "Paella").cancelled).toBeNull();
+  });
+
+  it("lets the grouped dish use a count while its priced extra stays an amount", async () => {
+    const b = await tab([["Paella", "2"]], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "43.00" }]);
+    const view = await read(saleId);
+    expect(lineOf(view, "Paella").portionAmounts).toEqual(["18.50", "18.50"]);
+    expect(aioliOf(view)).toMatchObject({ available: true, left: "6.00" });
+    expect(aioliOf(view).portionAmounts).toBeUndefined();
   });
 
   it("marks a dish given free", async () => {

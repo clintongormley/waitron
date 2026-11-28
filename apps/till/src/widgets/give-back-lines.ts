@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dish-pick-row.js";
 import "@waitron/ui/src/components/wt-stepper.js";
@@ -31,6 +31,7 @@ export interface DishLinesOptions {
   namesLocale: string;
   ticked: readonly string[];
   portionCount: number | null;
+  portionAmount: string;
   onPortions: (amounts: readonly string[], count: number) => void;
   onTick: (line: GiveBackLine, checked: boolean) => void;
   reasonText: (reason: NonNullable<GiveBackLine["reason"]>) => string;
@@ -72,7 +73,7 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
             .indeterminate=${partial}
             .disabled=${line.givenFree || !line.available || (options.portionCount !== null && !checked)}
             .portionLabel=${amounts === undefined ? "" : t("give_back.refunding_portions")}
-            .portionAmount=${amounts === undefined ? "" : formatMoney(sumDecimals(amounts.slice(0, count).map(decimal)), currentLocale())}
+            .portionAmount=${amounts === undefined ? "" : options.portionAmount}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
               options.onTick(line, !partial && event.detail.checked);
