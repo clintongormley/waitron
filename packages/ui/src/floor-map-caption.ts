@@ -44,7 +44,7 @@ export const captionStyles = css`
     max-width: calc(100% - 2 * (var(--wt-space-2) + var(--wt-space-1) / 2));
   }
 
-  [part="caption"][data-compact] {
+  :is([part="caption"][data-compact], .name-probe, .job-probe) {
     line-height: 1.05;
   }
 
@@ -58,7 +58,6 @@ export const captionStyles = css`
     overflow: hidden;
   }
 
-  /* A flex container cuts no text itself: its text's own box carries the ellipsis. */
   [part="cue"] .cue-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -80,6 +79,7 @@ export const captionStyles = css`
   .job-probe {
     position: absolute;
     visibility: hidden;
+    inline-size: var(--wt-font-size-sm);
   }
 
   [part="cue"].whole-cue,
@@ -108,6 +108,7 @@ export interface CaptionMetrics {
   jobWidthOf: (text: string) => number;
   fitsJob: (text: string, width: number) => boolean;
   nameSize: number;
+  compactHeight: number;
   badgeSpace: number;
   inset: number;
   jobInset: number;
@@ -127,7 +128,8 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
   const fontFor = ({ fontWeight, fontSize, fontFamily }: CSSStyleDeclaration) =>
     `${fontWeight} ${fontSize} ${fontFamily}`;
   const nameFont = fontFor(styles);
-  const jobFont = fontFor(getComputedStyle(job));
+  const jobStyle = getComputedStyle(job);
+  const jobFont = fontFor(jobStyle);
   const jobWidthOf = (text: string) => {
     canvas.font = jobFont;
     return canvas.measureText(text).width;
@@ -148,10 +150,11 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
       return false;
     },
     nameSize: Number.parseFloat(styles.fontSize),
+    compactHeight: Number.parseFloat(styles.lineHeight) + Number.parseFloat(jobStyle.lineHeight),
     badgeSpace: Number.parseFloat(styles.getPropertyValue("--wt-space-3")) || 0,
     inset,
     jobInset: (Number.parseFloat(styles.getPropertyValue("--wt-space-2")) || 0) + inset / 2,
-    cueIconSpace: (Number.parseFloat(styles.getPropertyValue("--wt-font-size-sm")) || 0) + inset,
+    cueIconSpace: Number.parseFloat(jobStyle.inlineSize) + inset,
   };
 }
 
@@ -193,7 +196,7 @@ export function renderCaption({
   const showCompact =
     compact !== undefined &&
     (metrics === undefined ||
-      (captionHeight >= metrics.nameSize * 2.4 && metrics.jobWidthOf(compact) <= jobSpace));
+      (captionHeight >= metrics.compactHeight && metrics.jobWidthOf(compact) <= jobSpace));
   const nameSpace = cue !== null && (full || showCompact) ? jobSpace : space;
   const fullWidth = shortLabel === undefined ? 0 : (metrics?.widthOf(label) ?? 0);
   const name =

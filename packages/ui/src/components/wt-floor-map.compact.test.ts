@@ -148,22 +148,25 @@ it("shows a whole short job with its wait or leaves the narrow table in its job 
     },
     table("T3", 25, 7),
   ]);
+  map.style.fontSize = "20px";
+  map.requestUpdate();
+  await map.updateComplete;
   const narrow = button(map, "T1");
   expect(narrow.querySelector('[part="cue"]')).toBeNull();
   expect(narrow.getAttribute("aria-label")).toContain("Chase the downstairs kitchen, 11 min");
   expect(narrow.querySelector('[part="shape"]')?.getAttribute("data-fill")).toBe("danger");
 
-  const cue = button(map, "T2").querySelector<HTMLElement>('[part="cue"]')!;
-  expect(cue.textContent?.trim()).toBe("Bar 9′");
-  expect(cue.scrollWidth).toBeLessThanOrEqual(cue.clientWidth);
-  expect(getComputedStyle(cue).fontWeight).toBe("600");
+  const cue = button(map, "T2").querySelector<HTMLElement>('[part="cue"]');
+  expect(cue?.textContent?.trim()).toBe("Bar 9′");
+  expect(cue!.scrollWidth).toBeLessThanOrEqual(cue!.clientWidth);
+  expect(getComputedStyle(cue!).fontWeight).toBe("600");
 });
 
 it("leaves the delivery icon on a table too small for the whole delivery label", async () => {
   await page.viewport(390, 700);
   const delivery = { icon: "floor-step", text: "2 to deliver", keepTextWhole: true } as const;
   const { map } = await compactMap(260, 340, [
-    { ...table("T1", 5, 7), cue: delivery },
+    { ...table("T1", 5, 7, 3.8, 2), cue: delivery },
     { ...table("T2", 11, 7, 6, 2), cue: delivery },
     table("T3", 25, 7),
   ]);

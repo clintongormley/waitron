@@ -743,7 +743,7 @@ describe("mapLook", () => {
     expect(mapKinds(delivery, now)).toEqual(["delivery"]);
     expect(mapLook([delivery], now)).toMatchObject({
       fill: "seated",
-      cue: { icon: "floor-step", text: "2 to deliver", keepTextWhole: true },
+      cue: { icon: "floor-step", text: "2 to deliver" },
       description: "2 to deliver",
     });
   });
@@ -755,7 +755,7 @@ describe("mapLook", () => {
     ];
     const words = `3 ${en["floor.pending_delivery"]}`;
     expect(mapLook(merged, now)).toMatchObject({
-      cue: { icon: "floor-step", text: words, keepTextWhole: true },
+      cue: { icon: "floor-step", text: words },
       description: words,
     });
   });
