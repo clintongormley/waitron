@@ -60,6 +60,7 @@ export const ENVIRONMENT_VARIABLES = {
     default: "the bundled drizzle directory",
   }),
   WAITRON_TILL_APP_DIR: variable("image", "path", server, unset),
+  WAITRON_CUSTOMER_MENU_APP_DIR: variable("image", "path", server, unset),
   WAITRON_DASHBOARD_APP_DIR: variable("image", "path", server, unset),
   WAITRON_SETUP_APP_DIR: variable("image", "path", server, unset),
   WAITRON_DEMO_MEDIA_SOURCE: variable("image", "path", server, unset),
@@ -105,6 +106,7 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_TUNNEL_CONTROL_DIR: variable("compose", "path", server, unset),
   WAITRON_LOCAL_BACKUPS_DIR: variable("compose", "path", server, unset),
   WAITRON_TUNNEL_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
+  WAITRON_CUSTOMER_MENU_SOCKET: variable("compose", "path", server, unset),
   WAITRON_STAFF_SOCKET: variable("compose", "path", server, unset),
   WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: variable("compose", "url", server, {
     rule: "HTTPS, outside production only",

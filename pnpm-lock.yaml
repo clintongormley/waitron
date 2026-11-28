@@ -259,6 +259,9 @@ importers:
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
+      '@waitron/customer-menu':
+        specifier: workspace:*
+        version: link:../customer-menu
       '@waitron/db':
         specifier: workspace:*
         version: link:../../packages/db

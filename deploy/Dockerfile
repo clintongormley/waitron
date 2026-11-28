@@ -41,11 +41,12 @@ RUN set -eux; \
 ARG WAITRON_RELEASE_VERSION
 # `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
 # four operator CLIs, dist/drizzle/ and dist/node_modules/@waitron/ui-core/ (copy-migrations.mjs);
-# the three web apps emit dist/ via vite.
+# The web apps emit dist/ via Vite.
 RUN pnpm --filter @waitron/server build \
   && pnpm --filter @waitron/till build \
   && pnpm --filter @waitron/dashboard build \
   && pnpm --filter @waitron/setup build \
+  && pnpm --filter @waitron/customer-menu build \
   && pnpm --filter @waitron/print-agent-app build
 
 # sharp stays out of every server bundle (`--external:sharp`): its native addon and the libvips
@@ -262,6 +263,7 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/dr
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
+COPY --from=build --chown=waitron:waitron /src/apps/customer-menu/dist/ /app/web/customer-menu/
 COPY --from=build --chown=waitron:waitron /src/packages/country-es/demo-media/ /app/demo-media/
 COPY --from=build --chown=waitron:waitron /sharp-runtime/node_modules/ /app/node_modules/
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/node_modules/@waitron/ /app/node_modules/@waitron/
@@ -280,6 +282,7 @@ COPY --from=build --chown=waitron:waitron \
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/setup/THIRD-PARTY-NOTICES.txt
+COPY --from=build --chown=waitron:waitron /src/apps/customer-menu/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/customer-menu/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party/libvips/
 # Copying the root rather than the folder lets a build that is not a release copy nothing.
 COPY --from=declaration --chown=waitron:waitron /release-root/ /app/
@@ -326,6 +329,7 @@ ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \
   WAITRON_MIGRATIONS_DIR=/app/drizzle \
   WAITRON_TILL_APP_DIR=/app/web/till \
+  WAITRON_CUSTOMER_MENU_APP_DIR=/app/web/customer-menu \
   WAITRON_DASHBOARD_APP_DIR=/app/web/dashboard \
   WAITRON_SETUP_APP_DIR=/app/web/setup \
   WAITRON_HTTP_PORT=443 \

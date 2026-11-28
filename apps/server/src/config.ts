@@ -35,6 +35,7 @@ export interface ServerConfig {
   /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
   fiscalTestSubmissions: boolean;
   httpPort: number;
+  customerMenu?: { root: string; socketPath: string };
   staff?: { host: string; port: number } | { socketPath: string };
   /**
    * The plain-HTTP trust/landing listener's port; `0` disables it. A phone meets the browser's
@@ -464,6 +465,15 @@ export function loadConfig(
   const tillAppDir = readVariable(env, "WAITRON_TILL_APP_DIR");
   const dashboardAppDir = readVariable(env, "WAITRON_DASHBOARD_APP_DIR");
   const setupAppDir = readVariable(env, "WAITRON_SETUP_APP_DIR");
+  const customerMenuRoot = readVariable(env, "WAITRON_CUSTOMER_MENU_APP_DIR");
+  const customerMenuSocket = readVariable(env, "WAITRON_CUSTOMER_MENU_SOCKET");
+  const customerMenu =
+    environment === "preproduction" &&
+    !isUnset(customerMenuRoot) &&
+    !isUnset(customerMenuSocket) &&
+    (isUnset(staffSocket) || resolve(staffSocket) !== resolve(customerMenuSocket))
+      ? { root: customerMenuRoot, socketPath: customerMenuSocket }
+      : undefined;
   const staff: ServerConfig["staff"] =
     environment === "production"
       ? undefined
@@ -483,6 +493,7 @@ export function loadConfig(
       onboardingIntent(env, environment) ?? (environment === "production" ? "live" : undefined),
     fiscalTestSubmissions: fiscalTestSubmissions(env),
     httpPort,
+    ...(customerMenu === undefined ? {} : { customerMenu }),
     landingPort,
     spareStorePort,
     spareStoreLoopbackPort,

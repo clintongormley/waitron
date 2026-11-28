@@ -1,3 +1,7 @@
+import * as media from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
+import { createPublicMenuView } from "./customer-menu-public-view.js";
+import { moduleCoreServices } from "./parties.js";
 import { addShortcut, editMenuHome } from "@waitron/menu/test/menu-home-fixture.js";
 import {
   seedPerson,
@@ -50,6 +54,7 @@ import {
   optionLabels,
   queueMenuPublication,
   requireMenuRoot,
+  saveCustomerMenuOnlineSettings,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -351,6 +356,76 @@ async function written(): Promise<{ sales: number; records: number; orders: numb
       (select cast(count(*) as integer) from working_orders) as orders`);
   return rows.rows[0]!;
 }
+
+it("files a till sale and serves its photo while public photo requests wait for their renderer", async () => {
+  const v = await setupLunch();
+  const prepared = await samplePreparedImage({ width: 24 });
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await media.uploadImage(tx, { image: prepared, names: { es: "Lemonade" } });
+    await updateProduct(tx, v.lemonade.productId, { image: image.filename });
+  });
+  const version = await publish(v.menuId);
+  await withTransaction(suite.db, (tx) =>
+    saveCustomerMenuOnlineSettings(tx, v.menuId, {
+      enabled: true,
+      address: "lunch",
+      photos: "small",
+    }),
+  );
+  media.MEDIA_MODULE.routes!.mount(
+    v.app,
+    {
+      db: suite.db,
+      cfg: { contentDefaultLanguage: "es" },
+      core: moduleCoreServices(v.cfg, [], () => new Date()),
+    },
+    () => {},
+  );
+  const view = createPublicMenuView(suite.db, LOCALE);
+  const source = prepared.filename;
+  const photoPath = `/_customer-menu/photos/v1/${source}/square/5000-5000-100.webp`;
+  let markRendering!: () => void, releaseRender!: () => void;
+  const rendering = new Promise<void>((resolve) => {
+    markRendering = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    releaseRender = resolve;
+  });
+  const render = media.renderRendition;
+  const worker = vi.spyOn(media, "renderRendition").mockImplementationOnce(async (...args) => {
+    markRendering();
+    await held;
+    return render(...args);
+  });
+  const publicReads = Promise.all(Array.from({ length: 12 }, () => view.readPhoto(photoPath)));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      rendering,
+      publicReads.then(() => {
+        throw new Error("Public photos finished before the worker was held");
+      }),
+    ]);
+    const tillRead = v.app.request(`/media/renditions/v1/${source}/till/5000-5000-100.webp`);
+    const staff = Promise.all([pay(v, [lemonadeLine(v, version)]), tillRead]);
+    const [sale, photo] = await Promise.race([
+      staff,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Till waited behind public photos")), 8000);
+      }),
+    ]);
+    expect(sale.status).toBe(200);
+    expect(await written()).toMatchObject({ sales: 1, records: 1 });
+    expect(photo.status).toBe(200);
+    expect(photo.headers.get("content-type")).toBe("image/webp");
+  } finally {
+    clearTimeout(timer);
+    releaseRender();
+    await publicReads;
+    worker.mockRestore();
+    view.close();
+  }
+});
 
 describe("a basket that spans a publish (Review Focus 2)", () => {
   it("refuses a stale version with nothing written, files the live price, and passes an unrelated republish", async () => {

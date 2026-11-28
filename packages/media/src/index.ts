@@ -7,6 +7,7 @@ export * from "./logo.js";
 export * from "./framing.js";
 export * from "./image-edits.js";
 export * from "./renditions.js";
-export { readPresentations, renditionUrl } from "./presentation.js";
+export { parseRendition, readPresentations, renditionUrl } from "./presentation.js";
 
 export { MEDIA_BACKUP_VERIFICATION } from "./backup-verification.js";
+export { RenditionCache } from "./rendition-cache.js";

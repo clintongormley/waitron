@@ -44,6 +44,7 @@
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/credentials": "workspace:*",
+    "@waitron/customer-menu": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
