@@ -84,11 +84,12 @@ export function tableChoice(
   hint: string,
   pick: (event: Event) => void,
   disabled = false,
+  label = shownName(table),
 ): TemplateResult {
   return html`<wt-choice-tile
     check-position="none"
     data-target=${table.id}
-    .label=${shownName(table)}
+    .label=${label}
     .hint=${hint}
     .disabled=${disabled}
     @click=${(event: Event) => {
@@ -106,6 +107,7 @@ export function tableTarget(
   pick: (table: TableState) => void,
   useTile = false,
   zoneClosed = false,
+  label?: string,
 ): TemplateResult {
   const blocked =
     table.condition === "needs_clearing"
@@ -126,7 +128,7 @@ export function tableTarget(
   return html`<div class="table-target">
     ${
       useTile
-        ? tableChoice(table, state, () => pick(table), blocked !== null)
+        ? tableChoice(table, state, () => pick(table), blocked !== null, label)
         : html`<wt-button
             class="target"
             data-target=${table.id}

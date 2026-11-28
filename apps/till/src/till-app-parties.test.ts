@@ -11817,9 +11817,12 @@ describe("till-app: table relocation editing observations", () => {
     const order = await openPartyTable(el);
     await relocationPrompt(el, "move-bill");
     await flush(el, 6);
-    expect(order.shadowRoot!.querySelector("[data-action-panel]")?.textContent).toContain(
-      t("table.reread_failed"),
-    );
+    const panel = order.shadowRoot!.querySelector("[data-action-panel]")!;
+    await expect
+      .element(page.elementLocator(panel).getByRole("alert"))
+      .toHaveTextContent(
+        "Could not read the destination's bills. Choose a destination to try again.",
+      );
     expect(api.moveBill).not.toHaveBeenCalled();
   });
 

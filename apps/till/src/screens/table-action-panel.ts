@@ -14,6 +14,15 @@ export const tableActionPanelStyles = css`
     padding: var(--wt-space-4);
   }
 
+  .table-action-list-label {
+    margin: 0;
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+    font-weight: var(--wt-font-weight-bold);
+    letter-spacing: var(--wt-letter-spacing-caps);
+    text-transform: uppercase;
+  }
+
   .table-action-message {
     padding-inline: var(--wt-space-4);
   }
@@ -42,7 +51,7 @@ export function tableActionPanel(
 
 export function tableActionStep(
   kind: "target" | "split-table" | "split-pick",
-  heading: { title: string; subtitle: string; label: string },
+  heading: { title: string; subtitle: string; label: string; showLabel?: boolean },
   body: TemplateResult,
   busy: boolean,
   footer: TemplateResult | typeof nothing = nothing,
@@ -65,7 +74,10 @@ export function tableActionStep(
         >
       </section>`,
     )}
-    <div class="table-action-body">${body}</div>
+    <div class="table-action-body">
+      ${heading.showLabel ? html`<h2 class="table-action-list-label">${heading.label}</h2>` : nothing}
+      ${body}
+    </div>
     ${footer === nothing ? nothing : html`<div slot="footer">${footer}</div>`}
   </wt-full-screen-panel>`;
 }

@@ -3956,10 +3956,16 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
       }
-      const scope = t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2");
 
       it("lists The counter and every other table with its condition, under the bill it moves", async () => {
-        const { el } = await mount(onCheck());
+        const fixture = onCheck();
+        const { el } = await mount({
+          ...fixture,
+          tables: fixture.tables.map((table) => ({
+            ...table,
+            label: table.label.replace(/^Table /, ""),
+          })),
+        });
         await toMenu(el);
         expect(
           el
@@ -3969,7 +3975,14 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
-        expect(targetHeading(el)).toBe(t("table.move_bill_heading").replace("{bill}", scope));
+        const heading = t("table.move_bill_heading").replace("{bill}", "Bill 2");
+        expect(targetHeading(el)).toBe(heading);
+        expect(el.shadowRoot!.querySelector("[data-target-picker]")?.textContent).toContain(
+          heading,
+        );
+        expect(target(el, "t9")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+          "Table 9",
+        );
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
         expect(
           target(el, "counter")!.shadowRoot!.querySelector("[part=label]")!.textContent,
@@ -4035,7 +4048,7 @@ describe("till-table-order-screen", () => {
         await toMoveBill(el);
 
         expect(targetHeading(el)).toBe(
-          t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
+          t("table.move_bill_heading").replace("{bill}", () => "Bill 2 · {into}"),
         );
       });
 
@@ -5184,9 +5197,12 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetIds(el)).toEqual(["wo-check"]);
-      expect(
-        target(el, "wo-check")!.shadowRoot!.querySelector("[part=label]")!.textContent,
-      ).toContain(t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"));
+      expect(target(el, "wo-check")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+        "Bill 2",
+      );
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")?.textContent).toContain(
+        t("table.merge_into").replace("{bill}", "Bill 1"),
+      );
       let captured: CustomEvent | undefined;
       el.addEventListener("merge-bills", (e) => (captured = e as CustomEvent));
       click(el, '[data-target="wo-check"]');
@@ -5223,10 +5239,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetHeading(el)).toBe(
-        t("table.merge_into").replace(
-          "{bill}",
-          t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
-        ),
+        t("table.merge_into").replace("{bill}", t("floor.unsent_bill").replace("{n}", "2")),
       );
     });
 
