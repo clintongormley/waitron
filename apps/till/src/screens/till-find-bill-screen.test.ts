@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
@@ -13,6 +12,7 @@ import {
   transactionRow,
 } from "../../test/find-bill-fixtures.js";
 import type { TillApi } from "../api/client.js";
+import type { TransactionRow } from "../api/find-bill-types.js";
 const modules = import.meta.glob("./till-find-bill-screen.ts");
 type Screen = HTMLElement & {
   api: TillApi;
@@ -25,7 +25,7 @@ const locale = currentLocale();
 afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
-  sessionStorage.removeItem("waitron.find-bill.transactions");
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 async function mount(source = findBillApi()) {
@@ -39,23 +39,66 @@ async function mount(source = findBillApi()) {
   });
   return { ...mounted, ...source };
 }
-function table(el: Screen) {
-  return el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
-}
 function requests(fetcher: ReturnType<typeof findBillApi>["fetcher"], path = "/api/transactions") {
   return fetcher.mock.calls
     .map(([url]) => new URL(String(url), location.origin))
     .filter((url) => url.pathname === path);
 }
+const shown = (el: Screen) => [
+  ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("button[data-transaction]"),
+];
+const row = (el: Screen, id = "sale-1") =>
+  el.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-transaction="${id}"]`)!;
+const words = (node: Element | null | undefined) => node!.textContent!.replace(/\s+/g, " ").trim();
 async function ready(el: Screen) {
   await vi.waitFor(() => {
-    expect(table(el)?.loading).toBe(false);
-    expect(table(el)?.rows.length).toBeGreaterThan(0);
+    expect(el.shadowRoot!.querySelector("[data-list-loading]")).toBeNull();
+    expect(shown(el).length).toBeGreaterThan(0);
   });
-  await table(el).updateComplete;
-  return table(el);
+  return shown(el);
 }
+const topBar = (el: Screen) =>
+  el.shadowRoot!.querySelector<
+    HTMLElement & { heading: string; subtitle: string; backLabel: string }
+  >("wt-top-bar")!;
+const backButton = (el: Screen) =>
+  topBar(el).shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!;
+const searchField = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+async function type(el: Screen, value: string) {
+  const field = searchField(el);
+  await (field as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+}
+const daysMenu = (el: Screen) =>
+  el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-row-actions[data-days]",
+  )!;
+async function choose(el: Screen, preset: string) {
+  const menu = daysMenu(el);
+  await menu.updateComplete;
+  await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>('[part="trigger"]')!);
+  await vi.waitFor(() =>
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+  );
+  await userEvent.click(menu.querySelector<HTMLElement>(`[data-preset="${preset}"]`)!);
+}
+const answering = (rows: TransactionRow[], total = rows.length) =>
+  findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage([])
+          : { ...listPage(rows, total), dates: resolvedDates },
+    ),
+  );
+
 it("formats both lists in the venue time zone even when the browser uses another day", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-15T09:45:00.000Z"));
   const at = "2026-10-15T09:30:00.000Z";
   const source = findBillApi(async (url) =>
     json(
@@ -67,128 +110,122 @@ it("formats both lists in the venue time zone even when the browser uses another
     ),
   );
   const { el } = await mount(source);
-  const transactions = await ready(el);
-  expect(transactions.shadowRoot!.textContent).toContain("14/10/2026, 23:30:00");
+  await ready(el);
+  expect(words(row(el).querySelector("[data-time]"))).toBe("23:30");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-owed]")?.textContent).toContain("14/10/2026"),
   );
+});
+it.each([
+  ["2026-10-15T20:58:00.000Z", "22:58"],
+  ["2026-10-13T20:58:00.000Z", "Tue"],
+  ["2026-10-09T20:58:00.000Z", "Fri"],
+  ["2026-10-08T20:58:00.000Z", "08/10"],
+])("a sale issued at %s shows %s as its time", async (issuedAt, time) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-15T21:30:00.000Z"));
+  const { el } = await mount(answering([transactionRow({ issuedAt })]));
+  await ready(el);
+  expect(words(row(el).querySelector("[data-time]"))).toBe(time);
 });
 it("a declined Back leaves the page active and able to search again", async () => {
   const { el, fetcher } = await mount();
   await ready(el);
   const backs = vi.fn();
   el.addEventListener("find-bill-back", backs);
-  await userEvent.click(el.shadowRoot!.querySelector("header wt-button")!);
+  await userEvent.click(backButton(el));
   expect(backs).toHaveBeenCalledTimes(1);
   expect(el.active).toBe(true);
-  table(el).dispatchEvent(
-    new CustomEvent("wt-query-change", {
-      detail: {
-        search: "after Stay",
-        sortKey: "when",
-        sortDirection: "descending",
-        filters: {},
-      },
-    }),
-  );
+  await type(el, "after Stay");
   await vi.waitFor(() =>
     expect(requests(fetcher).at(-1)?.searchParams.get("q")).toBe("after Stay"),
   );
 });
-it("restores the table query before its first request and maps column filters without an extra unfiltered read", async () => {
-  sessionStorage.setItem(
-    "waitron.find-bill.transactions",
-    JSON.stringify({
-      sortKey: "amount",
-      sortDirection: "ascending",
-      filters: { method: "card", staff: "staff-2", type: "full-invoice" },
-    }),
+it("debounces typed search once, preserves its trailing space and shows only that answer", async () => {
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage([])
+          : {
+              ...listPage(
+                url.searchParams.get("q")
+                  ? [transactionRow({ transactionId: "sale-9", tableName: "Matched" })]
+                  : [transactionRow()],
+                1,
+              ),
+              dates: resolvedDates,
+            },
+    ),
   );
-  const { el, fetcher } = await mount();
+  const { el, fetcher } = await mount(source);
   await ready(el);
-  expect(requests(fetcher).map((url) => Object.fromEntries(url.searchParams))).toEqual([
-    {
-      q: "",
-      page: "0",
-      sort: "amount",
-      direction: "ascending",
-      preset: "today",
-      method: "card",
-      staffId: "staff-2",
-      type: "full-invoice",
-    },
-  ]);
-  expect(table(el).querySelectorAll('[data-chip]:not([data-chip="dates"])')).toHaveLength(3);
-  table(el).chooseFilter("method", []);
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
-  expect(requests(fetcher)[1]!.searchParams.has("method")).toBe(false);
-  expect(requests(fetcher)[1]!.searchParams.get("staffId")).toBe("staff-2");
-});
-it("debounces typed search once, preserves its trailing space and uses only that server page", async () => {
-  const { el, fetcher } = await mount();
-  const grid = await ready(el);
-  const input = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
-  input.value = "0091 ";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await grid.updateComplete;
+  await type(el, "0");
+  await type(el, "0091 ");
+  await el.updateComplete;
   expect(requests(fetcher)).toHaveLength(1);
   await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
   expect(requests(fetcher)[1]!.searchParams.get("q")).toBe("0091 ");
+  await vi.waitFor(() => expect(shown(el).map((b) => b.dataset.transaction)).toEqual(["sale-9"]));
+  expect(topBar(el).subtitle).toBe("1 found");
+});
+it("opens on today's finished sales, newest first, under a top bar and a search band", async () => {
+  const { el, fetcher } = await mount();
   await ready(el);
-  expect(grid.rows).toHaveLength(1);
-  expect(grid.shadowRoot!.textContent).toContain("F/0012");
-});
-it("pages on the server and resets to the first page when a column filter changes", async () => {
-  const { el, fetcher } = await mount();
-  const grid = await ready(el);
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!);
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
-  expect(requests(fetcher)[1]!.searchParams.get("page")).toBe("1");
-  grid.chooseFilter("method", ["card"]);
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(3));
-  expect(requests(fetcher)[2]!.searchParams.get("page")).toBe("0");
-  expect(requests(fetcher)[2]!.searchParams.get("method")).toBe("card");
-});
-it("opens Transactions today with independent columns, card digits, dates and historical staff", async () => {
-  const { el, fetcher } = await mount();
-  const grid = await ready(el);
   expect(requests(fetcher).map((url) => Object.fromEntries(url.searchParams))).toEqual([
     { q: "", page: "0", sort: "when", direction: "descending", preset: "today" },
   ]);
-  expect(grid.viewKey).toBe("waitron.find-bill.transactions");
-  expect(grid.columns.map((c) => c.key)).toEqual([
-    "when",
-    "invoice",
-    "type",
-    "tableName",
-    "method",
-    "staff",
-    "amount",
-  ]);
-  expect(grid.shadowRoot!.textContent).toContain("0091");
-  expect(grid.shadowRoot!.textContent).toContain("F/0012");
-  expect(grid.columns.find((c) => c.key === "staff")!.filter!.options).toEqual([
-    { value: "staff-2", label: "Former worker" },
-  ]);
-  expect(grid.querySelector('[data-chip="dates"]')!.textContent).toContain("2026-10-15");
-  expect(grid.externalFilterCount).toBe(1);
-  expect(grid.shadowRoot!.querySelector('[aria-label="Filters 1"]')).not.toBeNull();
-  expect(grid.shadowRoot!.querySelector('[aria-label="Customise columns"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toContain("Find a bill");
+  expect(el.shadowRoot!.querySelector("wt-data-table")).toBeNull();
+  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector("wt-full-screen-panel > [slot='header'] wt-top-bar"),
+  ).not.toBeNull();
+  expect(topBar(el).heading).toBe("Find a bill");
+  expect(topBar(el).subtitle).toBe("Paid today");
+  const field = searchField(el);
+  expect(field.getAttribute("variant")).toBe("outlined");
+  expect(field.getAttribute("placeholder")).toBe("Number, table, name, card digits or amount");
+  expect(field.querySelector('wt-icon[slot="start"]')!.getAttribute("name")).toBe("search");
+  expect(words(daysMenu(el).querySelector('[slot="trigger"]'))).toBe("Today");
+  expect(words(el.shadowRoot!.querySelector("[data-order-label]"))).toBe("Newest first");
 });
-it.each(["yesterday", "business-day", "last-7-days", "this-month"])(
-  "requests %s through the shared date field",
-  async (preset) => {
-    const { el, fetcher } = await mount();
-    await ready(el);
-    const control = table(el).querySelector('wt-combobox[name="dates"]')!;
-    control.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: preset }, bubbles: true, composed: true }),
-    );
-    await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
-    expect(requests(fetcher)[1]!.searchParams.get("preset")).toBe(preset);
-  },
-);
+it.each([
+  ["yesterday", "Yesterday", "Paid yesterday"],
+  ["business-day", "This business day", "Paid this business day"],
+  ["last-7-days", "Last 7 days", "Paid in the last 7 days"],
+  ["this-month", "This month", "Paid this month"],
+  ["any", "Any date", "Paid on any date"],
+])("the Days sheet's %s reads the list again once", async (preset, chip, subtitle) => {
+  const { el, fetcher } = await mount();
+  await ready(el);
+  await choose(el, preset);
+  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
+  await ready(el);
+  expect(requests(fetcher)[1]!.searchParams.get("preset")).toBe(preset);
+  expect(words(daysMenu(el).querySelector('[slot="trigger"]'))).toBe(chip);
+  expect(topBar(el).subtitle).toBe(subtitle);
+  expect(daysMenu(el).shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  const rows = [...daysMenu(el).querySelectorAll<HTMLElement>("[data-preset]")];
+  expect(rows.map((r) => r.dataset.preset)).toEqual([
+    "today",
+    "yesterday",
+    "business-day",
+    "last-7-days",
+    "this-month",
+    "custom",
+    "any",
+  ]);
+  expect(rows.filter((r) => r.getAttribute("aria-checked") === "true")).toHaveLength(1);
+  const checked = rows.find((r) => r.dataset.preset === preset)!;
+  expect(checked.getAttribute("aria-checked")).toBe("true");
+  expect((checked.querySelector("wt-menu-row") as HTMLElement & { check: boolean }).check).toBe(
+    true,
+  );
+  await choose(el, preset);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(requests(fetcher)).toHaveLength(2);
+});
 it("aborts superseded reads and ignores answers delivered backwards", async () => {
   const pending: { resolve: (response: Response) => void; signal?: AbortSignal | null }[] = [];
   const source = findBillApi(async (url, signal) =>
@@ -198,16 +235,16 @@ it("aborts superseded reads and ignores answers delivered backwards", async () =
         ? json(listPage([]))
         : new Promise((resolve) => pending.push({ resolve, signal })),
   );
-  const page = (tableName: string) =>
+  const answer = (tableName: string) =>
     json({ ...listPage([transactionRow({ tableName })]), dates: resolvedDates });
   const { el } = await mount(source);
   await vi.waitFor(() => expect(pending).toHaveLength(1));
-  table(el).chooseFilter("method", ["card"]);
+  await choose(el, "yesterday");
   await vi.waitFor(() => expect(pending).toHaveLength(2));
   expect(pending[0]!.signal!.aborted).toBe(true);
-  pending[1]!.resolve(page("Newest answer"));
+  pending[1]!.resolve(answer("Newest answer"));
   await ready(el);
-  const obsolete = page("Obsolete answer");
+  const obsolete = answer("Obsolete answer");
   let consumed = false;
   const read = obsolete.text.bind(obsolete);
   vi.spyOn(obsolete, "text").mockImplementation(async () => {
@@ -219,9 +256,8 @@ it("aborts superseded reads and ignores answers delivered backwards", async () =
   await vi.waitFor(() => expect(consumed).toBe(true));
   el.requestUpdate();
   await el.updateComplete;
-  await table(el).updateComplete;
-  expect(table(el).shadowRoot!.textContent).toContain("Newest answer");
-  expect(table(el).shadowRoot!.textContent).not.toContain("Obsolete answer");
+  expect(el.shadowRoot!.textContent).toContain("Newest answer");
+  expect(el.shadowRoot!.textContent).not.toContain("Obsolete answer");
 });
 it("deactivation aborts reads and late responses cannot restore rows; a new visit reads afresh", async () => {
   let finish!: (response: Response) => void;
@@ -243,149 +279,64 @@ it("deactivation aborts reads and late responses cannot restore rows; a new visi
   expect(signal!.aborted).toBe(true);
   finish(json({ ...listPage([transactionRow()]), dates: resolvedDates }));
   await new Promise((resolve) => setTimeout(resolve, 30));
-  expect(table(el).rows).toHaveLength(0);
+  await el.updateComplete;
+  expect(shown(el)).toHaveLength(0);
   el.active = true;
   await el.updateComplete;
   await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
 });
 it("a row opens on a click only while the screen is active and not busy", async () => {
   const { el } = await mount();
-  const row = (await ready(el)).rows[0];
-  expect(table(el).rowActivation!(row)).toBe("click");
+  await ready(el);
+  const opened = vi.fn();
+  el.addEventListener("find-transaction-open", opened);
   el.busy = true;
   await el.updateComplete;
-  expect(table(el).rowActivation!(row)).toBe("none");
+  expect(row(el).disabled).toBe(true);
+  row(el).dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   el.busy = false;
   await el.updateComplete;
-  expect(table(el).rowActivation!(row)).toBe("click");
+  expect(row(el).disabled).toBe(false);
   el.active = false;
   await el.updateComplete;
-  expect(table(el).rowActivation!(row)).toBe("none");
+  expect(row(el)?.disabled ?? true).toBe(true);
+  expect(opened).not.toHaveBeenCalled();
 });
-it("custom dates mark each field, keep the panel available, and never query until a valid range is chosen", async () => {
+it("custom dates mark each field and never query until a valid range is chosen", async () => {
   const { el, fetcher } = await mount();
-  const grid = await ready(el);
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 1"]')!);
+  await ready(el);
+  await choose(el, "custom");
+  await el.updateComplete;
   const change = (name: string, value: string) =>
-    grid
-      .querySelector(`[name="${name}"]`)!
+    el
+      .shadowRoot!.querySelector(`wt-input[name="${name}"]`)!
       .dispatchEvent(
         new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
       );
-  change("dates", "custom");
-  await el.updateComplete;
-  const from = grid.querySelector<HTMLElement>('wt-input[name="from"]')!;
-  const to = grid.querySelector<HTMLElement>('wt-input[name="to"]')!;
+  const from = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="from"]')!;
+  const to = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="to"]')!;
   await (from as unknown as { updateComplete: Promise<unknown> }).updateComplete;
   expect(from.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
   expect(to.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(words(daysMenu(el).querySelector('[slot="trigger"]'))).toBe("From / To");
   change("from", "2026-10-25");
   change("to", "2026-10-01");
   await el.updateComplete;
   expect(requests(fetcher)).toHaveLength(1);
-  expect(
-    grid.shadowRoot!.querySelector('[aria-label="Filters 1"]')!.getAttribute("aria-expanded"),
-  ).toBe("true");
-  change("to", "2026-10-25");
+  expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+    "Choose valid dates, with From on or before To.",
+  );
+  change("to", "2026-10-26");
   await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
   expect(Object.fromEntries(requests(fetcher)[1]!.searchParams)).toMatchObject({
     preset: "custom",
     from: "2026-10-25",
-    to: "2026-10-25",
+    to: "2026-10-26",
     page: "0",
   });
+  expect(topBar(el).subtitle).toBe("Paid 25/10/2026 – 26/10/2026");
 });
-it("date chips never show resolved dates from an older query while the replacement is loading", async () => {
-  let finish!: (response: Response) => void;
-  const source = findBillApi(async (url) =>
-    url.pathname.endsWith("options")
-      ? json(billOptions)
-      : url.searchParams.get("preset") === "yesterday"
-        ? new Promise((resolve) => {
-            finish = resolve;
-          })
-        : json(
-            url.pathname === "/api/bills"
-              ? listPage()
-              : { ...listPage([transactionRow()]), dates: resolvedDates },
-          ),
-  );
-  const { el } = await mount(source);
-  const grid = await ready(el);
-  grid.querySelector('[name="dates"]')!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "yesterday" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-  await el.updateComplete;
-  expect(grid.querySelector('[data-chip="dates"]')!.textContent).toContain("Yesterday");
-  expect(grid.querySelector('[data-chip="dates"]')!.textContent).not.toContain("2026-10-15");
-  finish(
-    json({
-      ...listPage([transactionRow()]),
-      dates: { ...resolvedDates, from: "2026-10-14", to: "2026-10-14" },
-    }),
-  );
-  await ready(el);
-});
-it("removing one chip keeps other filters; Clear all removes the date filter with a single fresh request", async () => {
-  const { el, fetcher } = await mount();
-  const grid = await ready(el);
-  grid.chooseFilter("method", ["card"]);
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
-  await ready(el);
-  await userEvent.click(
-    grid.querySelector<HTMLElement>('[data-chip="dates"]')!.shadowRoot!.querySelector("button")!,
-  );
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(3));
-  expect(requests(fetcher)[2]!.searchParams.get("preset")).toBe("any");
-  expect(requests(fetcher)[2]!.searchParams.get("method")).toBe("card");
-  await ready(el);
-  grid
-    .querySelector('[name="dates"]')!
-    .dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "today" }, bubbles: true, composed: true }),
-    );
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(4));
-  await ready(el);
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 2"]')!);
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>(".filters-clear-all")!);
-  await vi.waitFor(() => expect(requests(fetcher).at(-1)!.searchParams.get("preset")).toBe("any"));
-  expect(requests(fetcher)).toHaveLength(5);
-  expect(requests(fetcher).at(-1)!.searchParams.has("method")).toBe(false);
-});
-it("a shrinking count requests the last valid page once and replaces rather than accumulating rows", async () => {
-  let calls = 0;
-  const source = findBillApi(async (url) =>
-    json(
-      url.pathname.endsWith("options")
-        ? billOptions
-        : url.pathname === "/api/bills"
-          ? listPage([])
-          : {
-              dates: resolvedDates,
-              ...(++calls === 1
-                ? listPage([transactionRow()], 125)
-                : calls === 2
-                  ? listPage([], 1, 1)
-                  : listPage([transactionRow({ tableName: "Only remaining bill" })], 1)),
-            },
-    ),
-  );
-  const { el, fetcher } = await mount(source);
-  const grid = await ready(el);
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!);
-  await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(3));
-  await ready(el);
-  expect(requests(fetcher).map((u) => u.searchParams.get("page"))).toEqual(["0", "1", "0"]);
-  expect(grid.serverPaging).toEqual({ page: 0, pageSize: 50, total: 1 });
-  expect(grid.shadowRoot!.textContent).toContain("Only remaining bill");
-  expect(grid.rows).toHaveLength(1);
-});
-it("an error leaves controls and Retry available and retries the same filters", async () => {
+it("an error keeps the search and Days chip and Retry reads the same days again", async () => {
   let calls = 0;
   const source = findBillApi(async (url) =>
     url.pathname.endsWith("options")
@@ -397,39 +348,38 @@ it("an error leaves controls and Retry available and retries the same filters", 
           : json({ ...listPage([transactionRow()]), dates: resolvedDates }),
   );
   const { el, fetcher } = await mount(source);
-  const grid = await ready(el);
-  grid.chooseFilter("method", ["card"]);
-  await vi.waitFor(() => expect(grid.errorMessage).toContain("could not be loaded"));
-  expect(grid.shadowRoot!.querySelector('[aria-label="Filters 2"]')).not.toBeNull();
-  const retry = Array.from(grid.querySelectorAll("wt-button")).find((b) =>
-    b.textContent?.includes("Retry"),
-  )!;
-  await userEvent.click(retry.shadowRoot!.querySelector("button")!);
+  await ready(el);
+  await choose(el, "yesterday");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-list-error] [role='alert']")?.textContent).toBe(
+      "The list could not be loaded. Try again.",
+    ),
+  );
+  expect(searchField(el)).not.toBeNull();
+  expect(daysMenu(el)).not.toBeNull();
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-list-retry]")!);
   await ready(el);
   expect(requests(fetcher)).toHaveLength(3);
-  expect(requests(fetcher)[2]!.searchParams.get("method")).toBe("card");
+  expect(requests(fetcher)[2]!.searchParams.get("preset")).toBe("yesterday");
+  expect(el.shadowRoot!.querySelector("[data-list-error]")).toBeNull();
 });
-it.each([390, 800, 1280, 2560])(
-  "row activation at %i emits the exact selected transaction once, and Back asks its parent to leave",
+it.each([390, 1280])(
+  "a tapped row at %i emits the exact transaction once, and Back asks its parent to leave",
   async (width) => {
     const previous = { width: innerWidth, height: innerHeight };
     await page.viewport(width, 844);
     try {
       const { el, host } = await mount();
-      const transactions = await ready(el);
+      await ready(el);
       const opened: unknown[] = [];
       host.addEventListener("find-transaction-open", (e) => opened.push((e as CustomEvent).detail));
-      await userEvent.click(
-        transactions.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
-      );
+      await userEvent.click(row(el));
       expect(opened).toEqual([{ row: transactionRow() }]);
       const back = vi.fn(() => {
         el.active = false;
       });
       host.addEventListener("find-bill-back", back);
-      await userEvent.click(
-        el.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,
-      );
+      await userEvent.click(backButton(el));
       expect(back).toHaveBeenCalledTimes(1);
       expect(el.active).toBe(false);
     } finally {
@@ -437,29 +387,18 @@ it.each([390, 800, 1280, 2560])(
     }
   },
 );
-it("changing the API context drops old rows/options and reads the new context even for an identical query", async () => {
+it("changing the API context drops old rows and reads the new context even for an identical query", async () => {
   const { el } = await mount();
   await ready(el);
-  const replacement = findBillApi(async (url) =>
-    json(
-      url.pathname.endsWith("options")
-        ? { ...billOptions, transactionStaff: [{ id: "new-staff", name: "New staff" }] }
-        : url.pathname === "/api/bills"
-          ? listPage([])
-          : {
-              ...listPage([transactionRow({ tableName: "New session bill" })], 1),
-              dates: resolvedDates,
-            },
-    ),
-  );
+  const replacement = answering([
+    transactionRow({ transactionId: "sale-new", tableName: "New session bill" }),
+  ]);
   el.api = replacement.api;
   await el.updateComplete;
-  await vi.waitFor(() => expect(table(el).shadowRoot!.textContent).toContain("New session bill"));
-  expect(table(el).shadowRoot!.textContent).not.toContain("T3");
-  expect(table(el).columns.find((c) => c.key === "staff")!.filter!.options).toEqual([
-    { value: "new-staff", label: "New staff" },
-  ]);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("New session bill"));
+  expect(row(el, "sale-1")).toBeNull();
   expect(requests(replacement.fetcher)).toHaveLength(1);
+  expect(requests(replacement.fetcher, "/api/find-bill/options")).toHaveLength(1);
 });
 it("reconnecting the retained page refreshes its rows without reloading its options", async () => {
   let calls = 0;
@@ -481,8 +420,8 @@ it("reconnecting the retained page refreshes its rows without reloading its opti
   await ready(el);
   el.remove();
   host.appendChild(el);
-  await vi.waitFor(() => expect(table(el).shadowRoot!.textContent).toContain("After returning"));
-  expect(table(el).shadowRoot!.textContent).not.toContain("Before leaving");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("After returning"));
+  expect(el.shadowRoot!.textContent).not.toContain("Before leaving");
   expect(requests(fetcher)).toHaveLength(2);
   expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(1);
 });
@@ -495,7 +434,7 @@ it("reconnecting during the options read requests fresh options and ignores the 
         ? new Promise((resolve) => {
             finishOld = resolve;
           })
-        : json({ ...billOptions, transactionStaff: [{ id: "new-staff", name: "Returned venue" }] })
+        : json(billOptions)
       : url.pathname === "/api/bills"
         ? json(listPage([]))
         : json({
@@ -511,68 +450,9 @@ it("reconnecting during the options read requests fresh options and ignores the 
   finishOld(json(billOptions));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
-  expect(table(el).shadowRoot!.textContent).toContain("Returned order");
-  expect(table(el).columns.find((column) => column.key === "staff")!.filter!.options).toEqual([
-    { value: "new-staff", label: "Returned venue" },
-  ]);
+  expect(el.shadowRoot!.textContent).toContain("Returned order");
   expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(2);
   expect(requests(fetcher)).toHaveLength(1);
-});
-it("names a filter chip by its drawn text, then what tapping it does", async () => {
-  const { el } = await mount();
-  await ready(el);
-  const grid = table(el);
-  grid.chooseFilter("method", ["card"]);
-  await el.updateComplete;
-  await ready(el);
-  await vi.waitFor(() =>
-    expect(
-      grid.querySelector('[data-chip="method"]')?.shadowRoot?.querySelector("button"),
-    ).toBeInstanceOf(HTMLButtonElement),
-  );
-  const chip = grid.querySelector('[data-chip="method"]')!;
-  const drawn = chip.textContent!.replace("×", "").trim();
-  expect(drawn).toMatch(/^Method: \S/);
-  await expect
-    .element(page.elementLocator(chip.shadowRoot!.querySelector("button")!))
-    .toHaveAccessibleName(`${drawn}, Remove Method filter`);
-});
-it("removing a sale's method chip keeps its type filter and the resulting query does not repeat", async () => {
-  const { el, fetcher } = await mount();
-  await ready(el);
-  const grid = table(el);
-  grid.chooseFilter("type", ["full-invoice"]);
-  grid.chooseFilter("method", ["card"]);
-  await el.updateComplete;
-  await ready(el);
-  await vi.waitFor(() =>
-    expect(
-      grid.querySelector('[data-chip="method"]')?.shadowRoot?.querySelector("button"),
-    ).toBeInstanceOf(HTMLButtonElement),
-  );
-  await userEvent.click(
-    grid.querySelector('[data-chip="method"]')!.shadowRoot!.querySelector("button")!,
-  );
-  await ready(el);
-  const query = requests(fetcher).at(-1)!.searchParams;
-  expect(query.get("type")).toBe("full-invoice");
-  expect(query.has("method")).toBe(false);
-  expect(grid.querySelector('[data-chip="type"]')).not.toBeNull();
-  expect(grid.querySelector('[data-chip="method"]')).toBeNull();
-  const count = requests(fetcher).length;
-  grid.dispatchEvent(
-    new CustomEvent("wt-query-change", {
-      detail: {
-        search: "",
-        sortKey: "when",
-        sortDirection: "descending",
-        filters: { type: "full-invoice" },
-      },
-    }),
-  );
-  await el.updateComplete;
-  expect(requests(fetcher)).toHaveLength(count);
-  expect(grid.shadowRoot!.textContent).toContain("F/0012");
 });
 it("removing the screen aborts options and a late options response cannot start a list request", async () => {
   let finish!: (response: Response) => void;
@@ -608,26 +488,24 @@ it("options can be retried without losing the full-page Back action", async () =
   );
   const { el } = await mount(source);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
-  const retry = Array.from(el.shadowRoot!.querySelectorAll("wt-button")).find((b) =>
-    b.textContent?.includes("Retry"),
-  )!;
-  await userEvent.click(retry.shadowRoot!.querySelector("button")!);
+  expect(topBar(el).backLabel).toBe("Back to counter");
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-options-retry]")!);
   await ready(el);
-  expect(el.shadowRoot!.querySelector("header wt-button")!.textContent).toContain(
-    "Back to counter",
-  );
+  expect(topBar(el).backLabel).toBe("Back to counter");
 });
 it.each([
   ["en-GB", "find_page.back", "Back to counter"],
   ["es-ES", "find_page.back", "Volver al mostrador"],
   ["en-GB", "action.back", "Back"],
   ["es-ES", "action.back", "Atrás"],
-] as const)("in %s, the back button given %s reads %s", async (language, backKey, words) => {
+] as const)("in %s, the back button given %s reads %s", async (language, backKey, text) => {
   const { el } = await mount();
   (el as Screen & { backKey: string }).backKey = backKey;
   setLocale(language);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("header wt-button")!.textContent!.trim()).toBe(words);
+  await (topBar(el) as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  expect(topBar(el).backLabel).toBe(text);
+  expect(words(topBar(el).shadowRoot!.querySelector('[part="back-label"]'))).toBe(text);
 });
 it("a late refused list cannot overwrite the successful replacement page", async () => {
   let rejectOld!: (response: Response) => void;
@@ -648,102 +526,225 @@ it("a late refused list cannot overwrite the successful replacement page", async
   );
   const { el } = await mount(source);
   await vi.waitFor(() => expect(rejectOld).toBeTypeOf("function"));
-  table(el).chooseFilter("method", ["card"]);
+  await choose(el, "yesterday");
   await ready(el);
   rejectOld(json({ error: { code: "server.internal" } }, 500));
   await new Promise((resolve) => setTimeout(resolve, 30));
-  expect(table(el).errorMessage).toBe("");
-  expect(table(el).shadowRoot!.textContent).toContain("Current bill");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-list-error]")).toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("Current bill");
 });
-
-it("filters actual completed refund rows without changing their identity, sign or original invoice", async () => {
+it("draws each part of a card sale's row", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-15T21:30:00.000Z"));
+  const { el } = await mount(
+    answering([
+      transactionRow({
+        type: "sale",
+        issuedAt: "2026-10-15T20:58:00.000Z",
+        tableName: "Table 4",
+        customerName: null,
+        methods: [{ method: "card", last4: "4821" }],
+        staff: { id: "staff-1", name: "Ana" },
+        amount: "80.52",
+        invoiceNumber: "T-0412",
+      }),
+    ]),
+  );
+  await ready(el);
+  const sale = row(el);
+  expect(sale.getAttribute("type")).toBe("button");
+  expect(words(sale.querySelector("[data-time]"))).toBe("22:58");
+  expect(words(sale.querySelector("[data-place]"))).toBe("Table 4");
+  expect(sale.querySelector("[data-way] wt-icon")!.getAttribute("name")).toBe("card");
+  expect(sale.querySelector("[data-way] wt-icon")!.getAttribute("size")).toBe("lg");
+  expect(sale.querySelector("[data-way] [data-tag]")).toBeNull();
+  expect(words(sale.querySelector("[data-way]"))).toBe("Card ··4821 · Ana");
+  expect(words(sale.querySelector("[data-amount]"))).toBe("€80.52");
+  expect(words(sale.querySelector("[data-number]"))).toBe("T-0412");
+  expect(sale.querySelector("[data-amount] .hl")).toBeNull();
+});
+it("names a counter sale by its zone and order number, and a cash payment by its way", async () => {
+  const { el } = await mount(
+    answering([
+      transactionRow({
+        type: "sale",
+        tableName: null,
+        customerName: null,
+        zoneName: "Bar",
+        orderNumber: 44,
+        methods: [{ method: "cash", last4: null }],
+        staff: { id: "staff-2", name: "Luis" },
+      }),
+    ]),
+  );
+  await ready(el);
+  expect(words(row(el).querySelector("[data-place]"))).toBe("Bar · No. 44");
+  expect(row(el).querySelector("[data-way] wt-icon")!.getAttribute("name")).toBe("cash");
+  expect(words(row(el).querySelector("[data-way]"))).toBe("Cash · Luis");
+});
+it("labels a full invoice and shows its customer", async () => {
+  const { el } = await mount(
+    answering([transactionRow({ tableName: "Table 2", customerName: "Garcia Lopez SL" })]),
+  );
+  await ready(el);
+  expect(words(row(el).querySelector("[data-place]"))).toBe("Table 2");
+  expect(words(row(el).querySelector("[data-way] [data-tag]"))).toBe("Full invoice");
+  expect(words(row(el).querySelector("[data-way]"))).toBe("Full invoice Garcia Lopez SL");
+});
+it("keeps a refund row's identity, sign and the sale's number, under a Refund label", async () => {
+  const refund = transactionRow({
+    transactionId: "refund:refund-1",
+    refundId: "refund-1",
+    type: "refund",
+    amount: "-13.75",
+  });
+  const { el } = await mount(answering([refund]));
+  await ready(el);
+  const drawn = row(el, "refund:refund-1");
+  expect(drawn.querySelector("[data-way] wt-icon")!.getAttribute("name")).toBe("undo");
+  expect(words(drawn.querySelector("[data-way] [data-tag]"))).toBe("Refund");
+  expect(words(drawn.querySelector("[data-amount]"))).toBe("-€13.75");
+  expect(words(drawn.querySelector("[data-number]"))).toBe("F/0012");
+  const opened = vi.fn();
+  el.addEventListener("find-transaction-open", opened);
+  await userEvent.click(drawn);
+  expect(opened.mock.calls[0]![0].detail).toEqual({ row: refund });
+});
+it.each([
+  ["en-GB", "Corrective receipt", "Replacement corrective receipt", "Corrective invoice"],
+  [
+    "es-ES",
+    t("find_page.correction", "es-ES"),
+    t("find_page.replacement", "es-ES"),
+    "Factura rectificativa",
+  ],
+] as const)(
+  "in %s, labels a corrective receipt %s, a replacement %s and a corrective invoice %s",
+  async (language, correction, replacement, invoice) => {
+    const { el } = await mount(
+      answering([
+        transactionRow({ transactionId: "c", type: "correction", amount: "-4.00" }),
+        transactionRow({ transactionId: "r", type: "replacement" }),
+        transactionRow({ transactionId: "f", type: "full-correction", amount: "-4.00" }),
+      ]),
+    );
+    setLocale(language);
+    await ready(el);
+    await el.updateComplete;
+    const tag = (id: string) => words(row(el, id).querySelector("[data-tag]"));
+    expect([tag("c"), tag("r"), tag("f")]).toEqual([correction, replacement, invoice]);
+  },
+);
+it("sets the amount alone on a lifted background when the row matched by its amount", async () => {
+  const source = answering([
+    transactionRow({ transactionId: "amount", amountMatch: "amount", amount: "80.52" }),
+    transactionRow({ transactionId: "payment", amountMatch: "payment", amount: "90.00" }),
+  ]);
+  const { el } = await mount(source);
+  await ready(el);
+  await type(el, "80.52");
+  await vi.waitFor(() => expect(requests(source.fetcher)).toHaveLength(2));
+  await ready(el);
+  const highlight = row(el, "amount").querySelectorAll(".hl");
+  expect(highlight).toHaveLength(1);
+  expect(highlight[0]!.closest("[data-amount]")).not.toBeNull();
+  expect(words(highlight[0]!)).toBe("€80.52");
+  expect(row(el, "payment").querySelector(".hl")).toBeNull();
+  const style = getComputedStyle(highlight[0]!);
+  const probe = document.createElement("div");
+  probe.style.background = "var(--wt-color-surface-lifted)";
+  el.shadowRoot!.appendChild(probe);
+  expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+  probe.remove();
+});
+it.each([
+  ["", [null], "Newest first"],
+  ["Ana", [null, "amount"], "Best match first"],
+  ["80.52", ["amount", null], "Matching the amount"],
+] as const)("with %j typed, heads the rows %s", async (search, matches, heading) => {
+  const { el, fetcher } = await mount(
+    answering(
+      matches.map((amountMatch, index) =>
+        transactionRow({ transactionId: `sale-${index}`, amountMatch }),
+      ),
+    ),
+  );
+  await ready(el);
+  if (search) {
+    await type(el, search);
+    await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
+    await ready(el);
+  }
+  expect(words(el.shadowRoot!.querySelector("[data-order-label]"))).toBe(heading);
+});
+it("hides the refunds under way and the owed bills while a search is typed", async () => {
+  const { el } = await mount(
+    findBillApi(
+      async (url) =>
+        json(
+          url.pathname.endsWith("options")
+            ? billOptions
+            : url.pathname === "/api/bills"
+              ? listPage([billRow({ partyId: "party-1" }), billRow({ workingOrderId: "c" })], 2)
+              : { ...listPage([transactionRow()], 1), dates: resolvedDates },
+        ),
+      [openCorrection()],
+    ),
+  );
+  await ready(el);
+  const sections = () =>
+    el.shadowRoot!.querySelectorAll("[data-corrections], [data-owed], [data-counter-orders]");
+  await vi.waitFor(() => expect(sections()).toHaveLength(3));
+  await type(el, "T3");
+  await el.updateComplete;
+  expect(sections()).toHaveLength(0);
+  await vi.waitFor(() => expect(topBar(el).subtitle).toBe("1 found"));
+  await type(el, "");
+  await el.updateComplete;
+  expect(sections()).toHaveLength(3);
+  await vi.waitFor(() => expect(topBar(el).subtitle).toBe("Paid today"));
+});
+it("Show more appends the next page once, leaving out a sale it already shows", async () => {
+  const first = Array.from({ length: 50 }, (_, index) =>
+    transactionRow({ transactionId: `sale-${index + 1}` }),
+  );
   const source = findBillApi(async (url) =>
     json(
       url.pathname.endsWith("options")
         ? billOptions
         : url.pathname === "/api/bills"
-          ? listPage()
+          ? listPage([])
           : {
-              ...listPage([
-                transactionRow({
-                  transactionId: "refund:refund-1",
-                  refundId: "refund-1",
-                  type: "refund",
-                  amount: "-13.75",
-                }),
-              ]),
+              ...(url.searchParams.get("page") === "0"
+                ? listPage(first, 52, 0)
+                : listPage([first[49]!, transactionRow({ transactionId: "sale-51" })], 52, 1)),
               dates: resolvedDates,
             },
     ),
   );
   const { el, fetcher } = await mount(source);
-  const grid = await ready(el);
-  expect(grid.columns.find((c) => c.key === "type")!.filter!.options).toContainEqual({
-    value: "refund",
-    label: "Refund",
-  });
-  grid.chooseFilter("type", ["refund"]);
-  await vi.waitFor(() => expect(requests(fetcher).at(-1)?.searchParams.get("type")).toBe("refund"));
-  await vi.waitFor(() => expect(grid.loading).toBe(false));
-  expect(grid.shadowRoot!.querySelector('[data-row-key="refund:refund-1"]')!.textContent).toContain(
-    "F/0012",
-  );
-  expect(grid.shadowRoot!.textContent).toContain("-€13.75");
+  await ready(el);
+  expect(shown(el)).toHaveLength(50);
+  const more = el.shadowRoot!.querySelector<HTMLElement>("[data-list-more]")!;
+  expect(words(more)).toBe("Show more");
+  await userEvent.click(more);
+  await vi.waitFor(() => expect(shown(el)).toHaveLength(51));
+  expect(shown(el).map((b) => b.dataset.transaction)).toEqual([
+    ...first.map((r) => r.transactionId),
+    "sale-51",
+  ]);
+  expect(requests(fetcher).map((url) => url.searchParams.get("page"))).toEqual(["0", "1"]);
+  expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
 });
-
-it.each([
-  ["en-GB", "Corrective receipt", "Replacement corrective receipt"],
-  ["es-ES", t("find_page.correction", "es-ES"), t("find_page.replacement", "es-ES")],
-] as const)(
-  "in %s, names a corrective receipt %s and a replacement %s",
-  async (language, correction, replacement) => {
-    const { el } = await mount(
-      findBillApi(async (url) =>
-        json(
-          url.pathname.endsWith("options")
-            ? billOptions
-            : url.pathname === "/api/bills"
-              ? listPage()
-              : { ...listPage([transactionRow()]), dates: resolvedDates },
-        ),
-      ),
-    );
-    setLocale(language);
-    const grid = await ready(el);
-    await el.updateComplete;
-    const options = grid.columns.find((c) => c.key === "type")!.filter!.options;
-    expect(options).toContainEqual({ value: "replacement", label: replacement });
-    expect(options).toContainEqual({ value: "correction", label: correction });
-    expect(options).toContainEqual({ value: "refund", label: t("find_page.refund", language) });
-    if (language === "en-GB") expect(t("find_page.refund", language)).toBe("Refund");
-  },
-);
-
-it.each([
-  ["en-GB", "Corrective invoice"],
-  ["es-ES", "Factura rectificativa"],
-] as const)("in %s, names a full invoice's corrective %s", async (language, label) => {
-  const { el } = await mount(
-    findBillApi(async (url) =>
-      json(
-        url.pathname.endsWith("options")
-          ? billOptions
-          : url.pathname === "/api/bills"
-            ? listPage()
-            : {
-                ...listPage([transactionRow({ type: "full-correction", amount: "-4.00" })]),
-                dates: resolvedDates,
-              },
-      ),
-    ),
+it("offers no Show more when every sale is shown, and says when nothing matches", async () => {
+  const { el } = await mount(answering([transactionRow()], 1));
+  await ready(el);
+  expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
+  const empty = await mount(answering([], 0));
+  await vi.waitFor(() =>
+    expect(words(empty.el.shadowRoot!.querySelector("[data-list-empty]"))).toBe("No results"),
   );
-  setLocale(language);
-  const grid = await ready(el);
-  await el.updateComplete;
-  await grid.updateComplete;
-  const options = grid.columns.find((c) => c.key === "type")!.filter!.options;
-  expect(options).toContainEqual({ value: "full-correction", label });
-  expect(grid.shadowRoot!.querySelector('[data-row-key="sale-1"]')!.textContent).toContain(label);
 });
 
 const openCorrection = (patch: Record<string, unknown> = {}) => ({
@@ -871,7 +872,7 @@ it("offers Retry when the corrections cannot be read, still loading the bills", 
   );
   const { el, fetcher } = await mount(source);
   const bills = await ready(el);
-  expect(bills.rows).toHaveLength(1);
+  expect(bills).toHaveLength(1);
   const section = () => el.shadowRoot!.querySelector("[data-corrections]")!;
   await vi.waitFor(() =>
     expect(section().querySelector('[role="alert"]')!.textContent).toBe(
@@ -930,7 +931,8 @@ it("shows one list of finished sales with no tabs, and reads unpaid bills and co
   const { el, fetcher } = await mount(owedSource([]));
   await ready(el);
   expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
-  expect(el.shadowRoot!.querySelectorAll("wt-data-table")).toHaveLength(1);
+  expect(el.shadowRoot!.querySelector("wt-data-table")).toBeNull();
+  expect(shown(el)).toHaveLength(1);
   await vi.waitFor(() => expect(requests(fetcher, "/api/bills")).toHaveLength(1));
   expect(Object.fromEntries(requests(fetcher, "/api/bills")[0]!.searchParams)).toEqual({
     q: "",
@@ -1028,7 +1030,7 @@ it.each([
     let fail = true;
     const { el, fetcher } = await mount(owedSource([departed, counterRow("held")], () => fail));
     setLocale(language);
-    expect((await ready(el)).rows).toHaveLength(1);
+    expect(await ready(el)).toHaveLength(1);
     const alerts = () => el.shadowRoot!.querySelectorAll('[data-owed-error] [role="alert"]');
     await vi.waitFor(() => expect(alerts()).toHaveLength(1));
     await el.updateComplete;

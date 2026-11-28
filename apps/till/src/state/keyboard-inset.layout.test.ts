@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "./working-order.js";
 import { watchKeyboardInsets, type VisibleArea } from "./keyboard-inset.js";
@@ -37,7 +36,6 @@ afterEach(async () => {
   stop = undefined;
   cleanupWidgets();
   setLocale(locale);
-  sessionStorage.removeItem("waitron.find-bill.transactions");
   document.documentElement.style.removeProperty("--wt-keyboard-inset");
   document.documentElement.style.removeProperty("--wt-keyboard-top");
   window.scrollTo(0, 0);
@@ -87,7 +85,7 @@ it("Find a bill's search moves to the top of what the keyboard leaves, with a sa
       url.pathname.endsWith("options")
         ? billOptions
         : url.pathname === "/api/bills"
-          ? listPage([])
+          ? listPage([], 0)
           : { ...listPage([transactionRow()]), dates: resolvedDates },
     ),
   );
@@ -95,15 +93,12 @@ it("Find a bill's search moves to the top of what the keyboard leaves, with a sa
     "till-find-bill-screen",
     { api: source.api, active: true },
   );
-  const table = await vi.waitFor(() => {
-    const found = el.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table");
-    expect(found?.loading).toBe(false);
-    expect(found?.rows.length).toBeGreaterThan(0);
+  const row = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<HTMLElement>("button[data-transaction]");
+    expect(found).not.toBeNull();
     return found!;
   });
-  await table.updateComplete;
-  const field = table.shadowRoot!.querySelector<HTMLInputElement>("input.table-search")!;
-  const row = table.shadowRoot!.querySelector<HTMLElement>("tbody tr")!;
+  const field = inner(el.shadowRoot!.querySelector('wt-input[name="search"]')!);
   field.focus();
   await openKeyboard();
   expectFieldAtTopWithRowBelow(field, row);
