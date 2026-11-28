@@ -209,6 +209,33 @@ describe("D65 a dish waiting for the pass ages on the floor", () => {
     });
   });
 
+  it("gives the floor the wait and station of a dish in the worst band", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const { venue } = await burgerAtGrill(false);
+    vi.setSystemTime(new Date(minutes(12)));
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ warmAfterMinutes: 2, overdueAfterMinutes: 4, forgottenAfterMinutes: 7 })
+        .where(eq(kitchenStations.id, venue.stations.fryer));
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            lines: [{ menuItemId: venue.tables.offerFor(venue.products.chips), quantity: "1" }],
+            release: "fire",
+          },
+        ],
+      });
+      vi.setSystemTime(new Date(minutes(20)));
+      expect(await floorRow(tx, venue)).toMatchObject({
+        timingBand: "forgotten",
+        waitingSince: "2026-03-14T12:12:00.000Z",
+        waitingStationName: "Fryer",
+      });
+    });
+  });
+
   it("marks the counter's tab list waiting long for a bill whose dish waits for the pass", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const { venue } = await burgerAtGrill(true);

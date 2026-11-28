@@ -63,6 +63,18 @@ it("keeps both ends of a wide floor within reach at the minimum touch size", asy
   expect(near.getBoundingClientRect().left).toBeCloseTo(plan(map).getBoundingClientRect().left);
 });
 
+it("uses the short name only when the full name cannot fit, and keeps the name spoken", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(340, 320, [
+    { ...table("small", 3, 4), label: "Riverside 12", shortName: "R12" },
+    { ...table("large", 5, 8, 8), label: "Riverside 14", shortName: "R14" },
+  ]);
+  const small = button(map, "small");
+  expect(small.querySelector('[part="name"]')?.textContent).toBe("R12");
+  expect(small.getAttribute("aria-label")).toBe("Riverside 12, Free");
+  expect(button(map, "large").querySelector('[part="name"]')?.textContent).toBe("Riverside 14");
+});
+
 it("fits a landscape floor by its height and leaves room at its edges", async () => {
   await page.viewport(700, 390);
   const { map } = await compactMap(400, 200, [table("Near", 5, 7, 4), table("Far", 13, 13, 4)]);

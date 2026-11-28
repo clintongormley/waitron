@@ -660,7 +660,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
     await onPhone(
       [
         seated("t1", "z1"),
-        seated("t3", "z3", { readyToServe: 2 }),
+        seated("t3", "z3", { timingBand: "overdue" }),
         seated("t6", "z6", { timingBand: "forgotten" }),
       ],
       async (el) => {
@@ -1096,7 +1096,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
       await onPhone(
         [
           seated("t1", "z1"),
-          seated("t2", "z2", barHasState ? { readyToServe: 2 } : {}),
+          seated("t2", "z2", barHasState ? { timingBand: "overdue" } : {}),
           seated("t3", "z3", { timingBand: "forgotten" }),
         ],
         async (el, host) => {
@@ -1393,7 +1393,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
 
   it("watches the new tabs when the zones grow", async () => {
     await onPhone(
-      [...urgentRight(), seated("t4", "z4", { readyToServe: 2 })],
+      [...urgentRight(), seated("t4", "z4", { timingBand: "overdue" })],
       async (el) => {
         // The observer has read the four tabs before the zones grow.
         await expect

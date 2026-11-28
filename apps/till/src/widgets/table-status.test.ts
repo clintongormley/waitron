@@ -216,7 +216,7 @@ describe("till-table-status", () => {
     expect(pin(el)!.textContent!.trim()).toBe("3 ready");
   });
 
-  it("the pin's icon is the top state's", async () => {
+  it("the pin shows the collection icon ahead of an overdue wait", async () => {
     const p = party();
     const overdue = { kind: "long_wait" as const, band: "overdue" as const };
     const { el } = await mount({
@@ -225,8 +225,8 @@ describe("till-table-status", () => {
     });
     const children = [...pin(el)!.children];
     expect(children.map((child) => child.localName)).toEqual(["span", "wt-icon"]);
-    expect(pin(el)!.querySelector('wt-icon[name="floor-timer"]')).not.toBeNull();
-    expect(pin(el)!.textContent!.trim()).toBe("Overdue");
+    expect(pin(el)!.querySelector('wt-icon[name="floor-ready"]')).not.toBeNull();
+    expect(pin(el)!.textContent!.trim()).toBe("2 ready");
   });
 
   it("flashes what the waiter must see when the order opens", async () => {
@@ -260,7 +260,7 @@ describe("till-table-status", () => {
     expect(pin(el)!.textContent!.trim()).toBe("2 listos");
   });
 
-  it("uses ready station counts in both its pin and its first flash", async () => {
+  it("names the ready station on the pin and counts its dishes in the first flash", async () => {
     const p = party();
     const { el } = await mount({
       party: p,
@@ -286,7 +286,7 @@ describe("till-table-status", () => {
     });
     await settled(el);
     expect(toast(el)!.message).toBe("1 ready");
-    expect(pin(el)!.textContent!.trim()).toBe("1 ready");
+    expect(pin(el)!.textContent!.trim()).toBe("Collect from Kitchen");
   });
 
   it("says one ready dish in Spanish", async () => {
@@ -430,10 +430,10 @@ for (const theme of ["light", "dark"] as const) {
   for (const [over, words, token] of [
     [{ signals: [billRequested] }, "Bill requested", "--wt-color-table-bill"],
     [{ signals: [], readyToServe: 2 }, "2 ready", "--wt-color-success"],
-    [{ signals: [billRequested], readyToServe: 2 }, "Bill requested", "--wt-color-table-bill"],
+    [{ signals: [billRequested], readyToServe: 2 }, "2 ready", "--wt-color-table-bill"],
     [
       { signals: [billRequested], readyToServe: 2, timingBand: "forgotten" },
-      "Forgotten",
+      "2 ready",
       "--wt-color-danger",
     ],
   ] as const) {

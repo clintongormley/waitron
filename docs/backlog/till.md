@@ -57,8 +57,6 @@ Left open by A429 slice 3.
   pointer's click to the gestures, so a screen reader whose activation sends a `click` with
   `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
   VoiceOver and TalkBack check.
-- A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
-  (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
 
 ## A474 — today's floor changes on the till: follow-ups
 
@@ -428,9 +426,7 @@ A508. Show the owner, on the running till:
     57.3 and 28.7 px). No table is under 28 px, so every name shows, but Terrace's tables are under
     the 36 px a cue needs, so there a table's state is its colour, its outline and its spoken words.
     Default: as built; measuring the owner's real floor once it is drawn is A937.
-  - **Waiting's cue on the map says "Waiting", not the minutes** picture 07 draws ("⏱ 6′"), because
-    the floor read sends only how late a table is, not its dishes' ages. Default: the word; sending
-    the oldest fired dish's age is A936.
+  - **Waiting's cue.** Review “Food on its way” and the elapsed minutes on the running floor.
   - **An outline on a filled table has a thin line of the background colour inside it**, which the
     pictures do not draw: without it a Waiting outline on a Bill requested table is all but
     invisible in light (1.01:1). Default: the line.
@@ -489,15 +485,6 @@ Two owner suggestions are open; settle them here:
 Once A893 settles the look, add the “What the colours mean” badge on the floor; A582 slice 4 left
 it, see its plan's decision 8
 ([2026-10-20-a582-4-till-help.md](../superpowers/plans/2026-10-20-a582-4-till-help.md)).
-
-## A936. Waiting's minutes on the map
-
-**A936 (left open by A757 slice 5).** Picture 07 draws a waiting table's cue on the floor map as
-"⏱ 6′", the minutes the order has waited; slice 5 draws the word "Waiting" («Esperando») instead,
-because the floor read sends a table only its timing band (`timingBand`, documented at
-`apps/till/src/api/floor-api.ts`, and the `long_wait` signal's `band`,
-`packages/shared/src/table-signals.ts`), not its dishes' ages. Showing the minutes means the floor
-read also carrying the oldest fired dish's age, and the map's cue counting up from it. Part of A893's review.
 
 ## A937. Measure the owner's real floor plan once it is drawn
 
@@ -568,15 +555,10 @@ Nothing compares the table with the layout due at the booking's time. Spec §11:
 warn, or the booking screen refuse. Left open by A504; part of the owner's redesign of the table
 screens.
 
-## A1101. Short names on the floor map where a full name does not fit, and on printed kitchen tickets.
+## A1101. Use short table names on printed kitchen tickets
 
-A797's design proposes both (§3.7, §9) as later choices for the owner; A797 builds
-neither. Today the map hides a table's name when the table's shorter side is drawn under 28 px
-(`NAME_MIN_PX` and `showsName`, `packages/ui/src/floor-plan-geometry.ts`), and the kitchen ticket
-prints the table's name as the floor shows it — its group's or its own name for today, else its
-full name — and never its short name (`tableLabel`, from `orderTableLabels` in
-`packages/db/src/party-table-labels.ts`). Part of the owner's redesign of the table screens.
-
+Use the same table names as the kitchen boards on printed tickets and move slips. See the separate
+[A1101 follow-up](../superpowers/plans/2026-11-28-till-map-jobs.md).
 
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
 
@@ -739,23 +721,18 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   expand/collapse the rows will be more useful but i'm going to have a big design session on this
   with impeccable. currently it is pretty bad". Seen on the same phone screens: a
   **Quantity** box beside **Change dish** in Dish details, and the Served toast over the totals.
-- **A893. Review every table state and its look (owner, 2026-10-18)**, with A936 (Waiting's minutes
-  on the map), A856 and A859 below.
+- **A893. Review every table state and its look (owner, 2026-10-18)**, including the new job wording.
   [Detail](till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
-- **A936. Waiting's minutes on the map.** The map's cue says "Waiting", not the minutes picture 07
-  draws. [Detail](till.md#a936-waitings-minutes-on-the-map)
-- **A856. A table that needs moving looks like one that needs clearing on the till's map.** It takes
-  the `clearing` fill; its words are on the list card, the Mark moved question and its accessible
-  name. A marker of its own needs a new token pair or badge in `@waitron/ui`. Left open by A504.
+- **A856. Moving and clearing share a dashed outline on the till map.** Their words say which action to take.
+  Settle the shared outline in the owner's look review.
 - **A859. Floor plans and the till's layout banner.** Five looks kept as built.
   [Detail](till.md#a859-floor-plans-and-the-tills-layout-banner-looks-left-to-the-owner)
 - **A561. A 2 × 2 table's name is cut short on the till map.** It shows "Cou…".
   [Detail](till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 - **A562. A 2 × 2 table shows no name in the floor plan editor.** It goes with A561.
   [Detail](till.md#a562-a-2--2-table-shows-no-name-in-the-floor-plan-editor)
-- **A1101. Short names on the floor map where a full name does not fit, and on printed kitchen
-  tickets.**
-  [Detail](till.md#a1101-short-names-on-the-floor-map-where-a-full-name-does-not-fit-and-on-printed-kitchen-tickets)
+- **A1101. Use short table names on printed kitchen tickets.**
+  [Detail](till.md#a1101-use-short-table-names-on-printed-kitchen-tickets)
 - **On a 390 px phone the floor map cuts table names short at every text size.**
   [Detail](till.md#on-a-390-px-phone-the-floor-map-cuts-table-names-short-at-every-text-size)
 - **A550. Making a booked table part of a joined table is not refused.**
@@ -767,11 +744,8 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   [Detail](till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 - **A1333. A table with no dishes left can still show "Another order?".**
   [Detail](till.md#a1333-a-table-with-no-dishes-left-can-still-show-another-order-left-open-by-a803-slice-4b)
-- **Wording on the floor and the order screen: A470 and A1107.** A470 also keeps an unmeasured
-  screen-reader activation ([detail](till.md#a470--the-tills-floor-map-follow-ups)). A1107: Spanish
-  calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its List card (the A797
-  slice 1 look, `g-details-window1-390-light-es.png` and `h-list-dining-390-light-es.png` in
-  `~/waitron-campaign-c/a797-1-shots/`).
+- **A470. Check screen-reader activation on the floor.**
+  [Detail](till.md#a470--the-tills-floor-map-follow-ups)
 - **A1290. Bill actions that open low.** The five 14d actions still need the panel layout.
   [Detail](#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back).
 

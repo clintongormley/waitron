@@ -294,6 +294,9 @@ export interface TableState {
    * fixed until the next `getTablesState` fetch.
    */
   timingBand: TimingBand;
+  /** The oldest dish in `timingBand`, when it is warmer than fresh. */
+  waitingSince?: string;
+  waitingStationName?: string;
   /**
    * The table's next imminent `booked` reservation today, or `null`. Only `time` (venue-local "HH:MM")
    * is projected, so the party size and contact name are deliberately kept off every till device.

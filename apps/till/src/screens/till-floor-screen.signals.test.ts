@@ -130,7 +130,7 @@ describe("till-floor-screen: the signals at a table", () => {
   it("shows ready drinks, time to fire and the bill request side by side on the card", async () => {
     const el = await mountFloor([table2]);
     const badges = card(el, "t2").querySelector(".badges")!;
-    expect(chips(badges)).toEqual(["Bill requested", "Bar: 3 ready"]);
+    expect(chips(badges)).toEqual(["Bar: 3 ready", "Bill requested"]);
     expect(badges.querySelector("[data-fire-due]")!.textContent!.trim()).toBe("Time to fire");
   });
 
@@ -141,7 +141,7 @@ describe("till-floor-screen: the signals at a table", () => {
       '[data-tray-table="t2"] wt-table-token',
     )!;
     await token.updateComplete;
-    expect(chips(token.shadowRoot!)).toEqual(["Bill requested", "Bar: 3 ready"]);
+    expect(chips(token.shadowRoot!)).toEqual(["Bar: 3 ready", "Bill requested"]);
   });
 
   it("names every station with dishes ready, each with its own count", async () => {
@@ -226,11 +226,11 @@ describe("till-floor-screen: the signals at a table", () => {
     ] as const;
     for (const key of keys) expect(es[key]).not.toBe(en[key]);
     expect(chips(card(el, "t2"))).toEqual([
+      es["signal.ready_at"].replace("{station}", "Bar").replace("{n}", "3"),
+      es["signal.ready_at_one"].replace("{station}", "Kitchen"),
       es["signal.wait_overdue"],
       es["signal.unavailable"].replace("{items}", "Steak"),
       es["signal.bill_requested"],
-      es["signal.ready_at"].replace("{station}", "Bar").replace("{n}", "3"),
-      es["signal.ready_at_one"].replace("{station}", "Kitchen"),
       "Take order",
     ]);
   });

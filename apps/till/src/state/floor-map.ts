@@ -1,17 +1,22 @@
 import type { FloorMapTable } from "@waitron/ui";
-import type { TableState } from "../api/floor-api.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
+import { t } from "../i18n/t.js";
 import { mapLook } from "./floor-look.js";
 import { onTodaysPlan } from "./floor-today.js";
 
-type Look = Pick<FloorMapTable, "fill" | "outline" | "pulse" | "cue" | "description" | "allergy">;
+type Look = Pick<
+  FloorMapTable,
+  "fill" | "outline" | "pulse" | "cue" | "job" | "description" | "allergy"
+>;
 
 function lookOf(members: readonly TableState[], now: number): Look {
-  const { fill, outline, pulse, cue, description } = mapLook(members, now);
+  const { fill, outline, pulse, cue, job, description } = mapLook(members, now);
   return {
     fill,
     outline,
     pulse,
     cue,
+    job,
     description,
     ...(members.some((member) => member.hasAllergy) ? { allergy: true } : {}),
   };
@@ -53,6 +58,7 @@ export function mapTables(zoneTables: readonly TableState[], now: number): Floor
     return {
       id: table.id,
       label: table.label,
+      shortName: table.shortName,
       placement: today.placement!,
       ...looks.get(lookKey(table))!,
       joinId: today.joinId,
@@ -89,4 +95,12 @@ export function totalSeats(counts: readonly (number | null)[]): number | null {
       counts.reduce<number>((sum, count) => sum + count!, 0),
     ),
   );
+}
+
+export function floorPartySummary(party: TableParty | null): string {
+  if (party === null) return "";
+  return [
+    ...(party.guestCount === null ? [] : [`${t("floor.guests")}: ${party.guestCount}`]),
+    ...(party.billCount > 1 ? [`${t("floor.bills")}: ${party.billCount}`] : []),
+  ].join(" · ");
 }

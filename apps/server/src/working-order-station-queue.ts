@@ -50,6 +50,7 @@ import type { TicketState } from "./kitchen-ticket-state.js";
 /** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
 interface UnservedLine {
   queuedAt: string;
+  stationName: string | null;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
