@@ -6,7 +6,7 @@ import { centsToDecimal } from "@waitron/shared";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import {
   readInvoiceDeliveries,
-  readInvoiceDeliveryState,
+  readOriginalWay,
   type InvoiceDeliveryAttempt,
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
@@ -22,25 +22,28 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 /**
  * Sends the corrective full invoice `correctiveSaleId` of `correction` (request key
- * `corrective:<id>`) the way its original went ({@link readInvoiceDeliveryState}'s `original`),
- * under the person who opened the correction: by email to the same address when this box can
- * email the invoice now; on `cfg`'s device's own A4 printer when the original went on A4 and that
- * device has one; otherwise on that device's receipt printer when its profile may print receipts.
- * A failure to send leaves the filing as it is.
+ * `corrective:<id>`) the way the invoice it corrects went ({@link readOriginalWay}), which is the
+ * replacement when the invoice given back on was replaced, under the person who opened the
+ * correction: by email to the same address when this box can email the invoice now; on `cfg`'s
+ * device's own A4 printer when that invoice went on A4 and that device has one; otherwise on that
+ * device's receipt printer when its profile may print receipts. A failure to send leaves the
+ * filing as it is.
  */
 export async function sendFiledCorrective(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "backend" | "invoiceEmailAvailable">,
   cfg: DeviceRequestConfig,
-  correction: { id: string; originalSaleId: string; requestedBy: string },
+  correction: { id: string; requestedBy: string },
   correctiveSaleId: string,
 ): Promise<void> {
   await optionalDocument(tx, "sendFiledCorrective", correctiveSaleId, async () => {
     const requestKey = `corrective:${correction.id}`;
     const personId = correction.requestedBy;
-    const way =
-      (await readInvoiceDeliveryState(tx, correction.originalSaleId, { emailAvailable: false }))
-        ?.original ?? null;
+    const [corrective] = await tx
+      .select({ correctsSaleId: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, correctiveSaleId));
+    const way = await readOriginalWay(tx, corrective!.correctsSaleId!);
     if (
       way?.medium === "email" &&
       way.recipient !== null &&

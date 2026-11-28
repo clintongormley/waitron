@@ -183,6 +183,22 @@ export async function readInvoiceDeliveryState(
 }
 
 /**
+ * How `saleId`'s original went out ({@link originalWent}), read also for a sale not delivered as a
+ * full invoice, so a replacement's emails and printed originals count. Null when there is no such
+ * sale or no attempt.
+ */
+export async function readOriginalWay(
+  tx: Transaction,
+  saleId: string,
+): Promise<OriginalWay | null> {
+  const states = await readStates(tx, [saleId], {
+    emailAvailable: false,
+    includeSimplifiedEmail: true,
+  });
+  return states.get(saleId)?.original ?? null;
+}
+
+/**
  * {@link readInvoiceDeliveries} for several sales in a fixed number of queries, whatever their
  * count. A sale that does not exist has no entry.
  */

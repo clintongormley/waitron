@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
+import { recordReplacement } from "@waitron/core";
 import {
   deviceProfiles,
   devices,
@@ -10,13 +11,18 @@ import {
   outgoingMail,
   printers,
   printJobs,
+  readLiveSeriesIdTx,
+  sales,
   taxpayer,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enqueuePrintJob } from "@waitron/printing";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { departments } from "@waitron/venue-service";
 import type { Hono } from "hono";
 import { refundProvidersOf } from "./bill-refunds.js";
@@ -110,6 +116,28 @@ async function deliveredOriginal(
         : { status: "failed", failureCode: "transport_failed" },
     )
     .where(eq(invoiceDeliveries.id, row.id));
+}
+
+/** Replaces `saleId`, a full invoice AEAT refused, with an R4 naming the same customer; its sale. */
+async function replacedByR4(saleId: string): Promise<string> {
+  return inTx(venue, async (tx) => {
+    await refusedByAeat(tx, saleId);
+    const session = await loginWithPin(tx, {
+      deviceId: venue.deviceId,
+      personId: venue.adminId,
+      pin: "1234",
+    });
+    const replaced = await recordReplacement(tx, venue.backend, {
+      operationDescription: "Restaurante",
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "full_corrective")),
+      correctsSaleId: brandSaleId(saleId),
+      authz: { sessionId: session.id },
+      clock: venue.clock,
+    });
+    return replaced.saleId as string;
+  });
 }
 
 /** The original printed on this till's receipt printer, with no delivery row tracking it. */
@@ -398,6 +426,29 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
   it("prints the R1 on paper when the original was printed on paper", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await printedOriginal(saleId);
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+  });
+
+  it("emails the R1 to the address its replacement went to, when the invoice given back on was replaced", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "old@harbour.example" });
+    const r4 = await replacedByR4(saleId);
+    await deliveredOriginal(r4, { medium: "email", recipient: "current@harbour.example" });
+    const { r1 } = await givenBackInCash(saleId);
+    const [filed] = await venue.db
+      .select({ corrects: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, r1));
+    expect(filed!.corrects).toBe(r4);
+    expect(await wayOf(r1)).toEqual({ ...EMAIL, recipient: "current@harbour.example" });
+  });
+
+  it("prints the R1 on paper when the replacement of the invoice given back on was printed on paper, though that invoice was emailed", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "old@harbour.example" });
+    const r4 = await replacedByR4(saleId);
+    await printedOriginal(r4);
     const { r1 } = await givenBackInCash(saleId);
     expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
   });
