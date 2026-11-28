@@ -155,10 +155,11 @@ test.runIf(process.platform === "darwin").each([false, true])(
 );
 
 test.each([
-  ["linux", null, null, "6GiB", "6GiB"],
+  ["linux", null, null, undefined, undefined],
   ["darwin", "EAGAIN", "Waiting for the Waitron typecheck slot", undefined, "8GiB"],
   ["darwin", "EPERM", "Running without the lock", "6GiB", "6GiB"],
   ["darwin", "EACCES", "Running without the lock", undefined, "8GiB"],
+  ["darwin", "EROFS", null, undefined, "8GiB"],
 ])(
   "returns the compiler status on %s when opening the slot gives %s",
   async (platform, refusal, message, override, memoryTarget) => {
@@ -173,7 +174,9 @@ test.each([
       );
       if (refusal)
         vi.mocked(open).mockRejectedValueOnce(Object.assign(new Error(refusal), { code: refusal }));
-      expect(await runTypecheck(["--noEmit"], { cwd, platform, lockFile })).toBe(23);
+      const check = runTypecheck(["--noEmit"], { cwd, platform, lockFile });
+      if (refusal === "EROFS") await expect(check).rejects.toMatchObject({ code: "EROFS" });
+      else expect(await check).toBe(23);
       if (message)
         expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(message));
       else expect(warning).not.toHaveBeenCalled();
