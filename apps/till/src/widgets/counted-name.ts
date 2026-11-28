@@ -168,7 +168,8 @@ class Placement {
  * `data-name-room` to the first of `none`, `end` and `both` that does neither; when none does,
  * `both` stays. Placed at the next frame, never while a ResizeObserver is delivering, and again
  * when the tile or the count changes size; a redraw keeps a room that still fits while the count's
- * width is unchanged.
+ * width and the name's text and language are unchanged, since a redraw can give the tile another
+ * dish.
  */
 class CountedName extends AsyncDirective {
   #start?: HTMLElement;
@@ -176,6 +177,8 @@ class CountedName extends AsyncDirective {
   #name?: HTMLElement;
   #tile?: HTMLElement;
   #count?: Element;
+  /** The name's language and text its room was chosen for. */
+  #placedFor?: string;
 
   render(): typeof nothing {
     return nothing;
@@ -197,7 +200,7 @@ class CountedName extends AsyncDirective {
       observer?.unobserve(element);
       watched.delete(element);
     }
-    this.#name = this.#tile = this.#count = undefined;
+    this.#name = this.#tile = this.#count = this.#placedFor = undefined;
   }
 
   protected override reconnected(): void {
@@ -224,11 +227,18 @@ class CountedName extends AsyncDirective {
     watched.set(count, { by: this, width: countBox.width, height: countBox.height });
     const current = (tile.getAttribute("data-name-room") ?? undefined) as Room;
     const countWidth = `${countBox.width}px`;
+    const placedFor = `${name.lang}\n${name.textContent}`;
     let rooms: Room[] = [...ROOMS];
-    if (keep && placed && name.style.getPropertyValue("--count-badge-width") === countWidth) {
+    if (
+      keep &&
+      placed &&
+      placedFor === this.#placedFor &&
+      name.style.getPropertyValue("--count-badge-width") === countWidth
+    ) {
       const rest = ROOMS.filter((room) => room !== current);
       rooms = current === "both" ? [current, ...rest, "both"] : [current, ...rest];
     }
+    this.#placedFor = placedFor;
     return new Placement(name, tile, countBox, countWidth, rooms);
   }
 }

@@ -574,6 +574,53 @@ describe("menu tiles", () => {
     }
   });
 
+  it("places a tile a redraw gives to another dish as a fresh draw places it", async () => {
+    const dishes = [
+      product("chickpeas", "Chickpeas with spinach"),
+      product("croq", "Croquettes"),
+      product("toast", "Cheese toast"),
+    ];
+    const rooms = async (el: TillMenuBrowser, text: string) => {
+      const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+      input.value = text;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      await placedAfterResize();
+      return [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-region="results"] wt-button.tile'),
+      ].map((each) => [
+        each.querySelector(".name")!.textContent!.trim(),
+        each.getAttribute("data-name-room"),
+      ]);
+    };
+    const draw = async () => {
+      const { el, host } = await inPhoneFont(
+        mountWidget<TillMenuBrowser>("till-menu-browser", {
+          menu: { ...menu, structure: { members: dishes.map((dish) => member(dish.id.slice(2))) } },
+          products: dishes,
+          store: new WorkingOrderStore(),
+          inOrder: new Map(dishes.map((dish) => [dish.id, 100])),
+        }),
+      );
+      host.style.width = "340px";
+      await placedAfterResize();
+      return el;
+    };
+    try {
+      await pageAt(844, 390);
+      const reused = await draw();
+      expect(await rooms(reused, "Chi")).toEqual([["Chickpeas with spinach", "both"]]);
+      const afterOther = await rooms(reused, "Cro");
+      cleanupWidgets();
+      const fresh = await rooms(await draw(), "Cro");
+      expect(fresh.length).toBeGreaterThan(0);
+      expect(afterOther).toEqual(fresh);
+    } finally {
+      cleanupWidgets();
+      await resetPage();
+    }
+  });
+
   it("keeps a counted name's room through a redraw that changes nothing, without rewriting the tile", async () => {
     try {
       await pageAt(844, 390);
