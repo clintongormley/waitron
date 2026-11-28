@@ -1,5 +1,10 @@
 import { compareDecimal, decimal } from "@waitron/shared";
-import type { GiveBackLine, GiveBackPurpose, GiveBackWay } from "../api/give-back-types.js";
+import type {
+  CorrectiveDelivery,
+  GiveBackLine,
+  GiveBackPurpose,
+  GiveBackWay,
+} from "../api/give-back-types.js";
 import { typedMoney } from "../state/bill-payment.js";
 
 export type Draft = {
@@ -9,6 +14,8 @@ export type Draft = {
   way: string;
   reasonId: string;
   note: string;
+  /** Where staff chose to send the corrective full invoice; null for the way it goes anyway. */
+  corrective: CorrectiveDelivery | null;
 };
 export type Field = "amount" | "reason" | "note";
 /** What Cancel and refund or Finish table hands on: the window opens on A dish with the dishes
@@ -25,6 +32,7 @@ export const blank = (): Draft => ({
   way: "",
   reasonId: "",
   note: "",
+  corrective: null,
 });
 export const PURPOSES: readonly GiveBackPurpose[] = ["dishes", "goodwill", "extra"];
 export const AMOUNT_REFUSALS = new Set([
@@ -49,5 +57,6 @@ export function comparable(value: Draft) {
     way: value.way,
     reasonId: value.reasonId,
     note: value.note.trim(),
+    corrective: value.corrective,
   };
 }

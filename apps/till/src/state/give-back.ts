@@ -75,9 +75,16 @@ export const PROVES_NOTHING = new Set([
   "advance.taken_off_final_invoice",
   "clock.unconfirmed",
   "sif.allocation_invalid",
-  "invoice_delivery.printer_invalid",
-  "invoice_delivery.email_unavailable",
 ]);
+/** A refusal of the corrective invoice's chosen way proves nothing on a first send, where the
+ * server checks the way before it writes; a resend of a press that left its correction open is
+ * checked after its first send wrote (`giveBack` in apps/server/src/give-back.ts). */
+const refusesChosenWay = (refusal: { code: string; params: Record<string, unknown> } | null) =>
+  refusal !== null &&
+  (refusal.code === "invoice_delivery.printer_invalid" ||
+    refusal.code === "invoice_delivery.email_unavailable" ||
+    (refusal.code === "management.request_invalid" &&
+      String(refusal.params.field).startsWith("correctiveDelivery")));
 /** Refusals a resend can meet too; on a first send they prove nothing, as the PIN and rights are
  * checked before anything is written. */
 const FIRST_SEND_REFUSALS = new Set([
@@ -192,7 +199,7 @@ export class GiveBackSession {
     } catch (error) {
       const refusal = refusalOf(error);
       const code = refusal?.code ?? "";
-      const proves = PROVES_NOTHING.has(code);
+      const proves = PROVES_NOTHING.has(code) || (firstSend && refusesChosenWay(refusal));
       const firstSendRefused = firstSend && FIRST_SEND_REFUSALS.has(code);
       const left = { ...saved, sent: proves ? null : { ...sent, firstSendRefused, refusal } };
       this.#settle(saleId, submissionIds.refund, proves && saved.rest === null ? null : left);

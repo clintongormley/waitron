@@ -765,6 +765,57 @@ it("keeps a lost press whose resend is refused before the server looks its ids u
   expect(sent(api, 2).submissionIds).toEqual(sent(api, 0).submissionIds);
 });
 
+describe("a refusal of the corrective invoice's way", () => {
+  const choice = {
+    ...ask,
+    request: { ...request, correctiveDelivery: { medium: "print" as const, printerId: "bar" } },
+  };
+  const refusals = [
+    { code: "invoice_delivery.printer_invalid", field: "correctiveDelivery.printerId" },
+    { code: "invoice_delivery.email_unavailable", field: "correctiveDelivery.recipient" },
+    { code: "management.request_invalid", field: "correctiveDelivery.recipient" },
+  ];
+
+  it.each(refusals)(
+    "forgets a first press refused with $code, so a changed press is sent",
+    async (refusal) => {
+      const api = fakeApi();
+      api.giveBack.mockRejectedValueOnce({ ...refusal, status: 409 });
+      const session = new GiveBackSession(scope, api);
+      await expect(session.submit("sale-1", choice)).rejects.toMatchObject(refusal);
+      expect(session.read("sale-1")).toBeNull();
+      await session.submit("sale-1", ask);
+      expect(sent(api, 1).request).not.toHaveProperty("correctiveDelivery");
+      expect(sent(api, 1).submissionIds).not.toEqual(sent(api, 0).submissionIds);
+    },
+  );
+
+  it.each(refusals)(
+    "keeps a press whose resend is refused with $code, as its first send may have written",
+    async (refusal) => {
+      const api = fakeApi();
+      api.giveBack.mockRejectedValueOnce(new TypeError("lost answer"));
+      api.giveBack.mockRejectedValueOnce({ ...refusal, status: 409 });
+      const session = new GiveBackSession(scope, api);
+      await expect(session.submit("sale-1", choice)).rejects.toThrow("lost answer");
+      await expect(session.resend("sale-1")).rejects.toMatchObject(refusal);
+      expect(session.read("sale-1")?.sent?.submissionIds).toEqual(sent(api, 0).submissionIds);
+    },
+  );
+
+  it("forgets a press refused with it once its PIN was given after a first PIN refusal", async () => {
+    const api = fakeApi();
+    api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+    api.giveBack.mockRejectedValueOnce({ ...refusals[0], status: 409 });
+    const session = new GiveBackSession(scope, api);
+    await expect(session.submit("sale-1", choice)).rejects.toMatchObject({ code: "pin.invalid" });
+    await expect(
+      session.submit("sale-1", choice, { personId: "boss", pin: "1234" }),
+    ).rejects.toMatchObject(refusals[0]!);
+    expect(session.read("sale-1")).toBeNull();
+  });
+});
+
 it("keeps a card refund left waiting with nothing to follow, and forgets it once it is through", async () => {
   const api = fakeApi();
   api.giveBack.mockResolvedValueOnce(

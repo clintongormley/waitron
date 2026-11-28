@@ -61,8 +61,7 @@ export interface GiveBackRequest {
   way: string;
   /** The cancels the window was opened filled in with. */
   fromCancel?: string[];
-  /** Where staff chose to send the corrective full invoice; never sent with a preview, which
-   * would refuse a printer or email no longer offered before the press. */
+  /** Where staff chose to send the corrective full invoice. */
   correctiveDelivery?: CorrectiveDelivery;
 }
 

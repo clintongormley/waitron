@@ -24,7 +24,6 @@ import type { TillApi } from "../api/client.js";
 import type { AdjustmentReason } from "../api/payments-api.js";
 import type { StaffMember } from "../api/device-session-api.js";
 import type {
-  CorrectiveDelivery,
   GiveBackAsk,
   GiveBackLine,
   GiveBackOutcome,
@@ -56,7 +55,12 @@ import type { GiveBackSession } from "../state/give-back.js";
 import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import type { TenderRefundSession } from "../state/tender-refund.js";
-import { correctiveLine, correctiveRefusal, withCorrective } from "./corrective-choice.js";
+import {
+  chosenDelivery,
+  correctiveLine,
+  correctiveRefusal,
+  withCorrective,
+} from "./corrective-choice.js";
 import "./give-back-under-way.js";
 import type { GiveBackUnderWayApi } from "./give-back-under-way.js";
 import "./supervisor-override-dialog.js";
@@ -140,8 +144,6 @@ export class TillGiveBackDialog extends LitElement {
   @state() private pinError: ApproverRefusal | null = null;
   /** The press waiting for an approver, from the read of who may approve. */
   @state() private approval?: Sending;
-  /** Where staff chose to send the corrective full invoice; null for the way it goes anyway. */
-  @state() private corrective: CorrectiveDelivery | null = null;
   #previewRequest = 0;
   #lastStep = "";
   #lastHeld = false;
@@ -287,7 +289,6 @@ export class TillGiveBackDialog extends LitElement {
   #choose(purpose: GiveBackPurpose, filled: Partial<Draft> = {}): void {
     const way = this.#offered(purpose).find(usable);
     this.purpose = purpose;
-    this.corrective = null;
     this.pendingStatus = "";
     this.amountTyped = false;
     this.attempted = false;
@@ -324,7 +325,8 @@ export class TillGiveBackDialog extends LitElement {
     this.draft = { ...this.draft, ...change };
     this.sendRefusal = null;
     this.#scope?.changed();
-    if (!("reasonId" in change) && !("note" in change)) void this.#preview();
+    if (!("reasonId" in change) && !("note" in change) && !("corrective" in change))
+      void this.#preview();
   }
   #tick(line: GiveBackLine, checked: boolean): void {
     const others = this.draft.lineIds.filter((id) => id !== line.id);
@@ -449,7 +451,7 @@ export class TillGiveBackDialog extends LitElement {
     const request = this.#request()!;
     const reason = this.reasons!.find((row) => row.id === this.draft.reasonId)!;
     const ask: GiveBackAsk = {
-      request: withCorrective(request, answer.corrective, this.corrective),
+      request: withCorrective(request, answer.corrective, this.draft.corrective),
       reasonId: reason.id,
       note: reason.noteRequired ? this.draft.note.trim() : null,
       expected: answer.parts,
@@ -807,10 +809,9 @@ export class TillGiveBackDialog extends LitElement {
         answer === null
           ? nothing
           : summaryOf(answer, way!, moneyPlus(typedMoney(this.draft.amount)!, this.#extra()))
-      }${correctiveLine(answer?.corrective, this.corrective, onCorrective, (delivery) => {
-        this.corrective = delivery;
-        this.sendRefusal = null;
-      })}
+      }${correctiveLine(answer?.corrective, this.draft.corrective, onCorrective, (delivery) =>
+        this.#set({ corrective: chosenDelivery(answer?.corrective, delivery) ?? null }),
+      )}
       <wt-form-actions
         .error=${[
           errors.size > 0 || onCorrective !== "" ? t("form.fix_fields") : "",

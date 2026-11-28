@@ -197,6 +197,8 @@ export const en = {
     "{amount} cannot be refunded this way: it stays under way for other payments.",
   "give_back.corrective_printed_a4": "Corrective invoice: printed on A4 · {printer}",
   "give_back.corrective_printed_receipt": "Corrective invoice: printed on the receipt printer",
+  "give_back.corrective_printed_receipt_on":
+    "Corrective invoice: printed on the receipt printer · {printer}",
   "give_back.corrective_emailed": "Corrective invoice: emailed to {address}",
   "give_back.corrective_emailed_customer": "Corrective invoice: emailed to the customer",
   "give_back.corrective_not_sent": "Corrective invoice: not sent; find it in Find a bill",
@@ -2706,6 +2708,8 @@ export const es: Record<StringKey, string> = {
   "give_back.corrective_printed_a4": "Factura rectificativa: se imprime en A4 · {printer}",
   "give_back.corrective_printed_receipt":
     "Factura rectificativa: se imprime en la impresora de tickets",
+  "give_back.corrective_printed_receipt_on":
+    "Factura rectificativa: se imprime en la impresora de tickets · {printer}",
   "give_back.corrective_emailed": "Factura rectificativa: se envía por correo a {address}",
   "give_back.corrective_emailed_customer": "Factura rectificativa: se envía por correo al cliente",
   "give_back.corrective_not_sent": "Factura rectificativa: no se envía; está en Buscar cuenta",

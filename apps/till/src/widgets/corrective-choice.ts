@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { isValidEmail } from "@waitron/shared";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -23,12 +23,23 @@ function defaultDelivery(choice: CorrectiveChoice): CorrectiveDelivery | null {
 const same = (a: CorrectiveDelivery | null, b: CorrectiveDelivery | null) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** What a press sends for staff's choice: nothing when it is the way the invoice goes anyway. */
+const offered = (choice: CorrectiveChoice, chosen: CorrectiveDelivery) =>
+  chosen.medium === "email"
+    ? choice.emailAvailable
+    : choice.printers.some((printer) => printer.id === chosen.printerId);
+
+/** What a press sends for staff's choice: nothing when it is the way the invoice goes anyway, or a
+ * way the latest preview no longer offers. */
 export function chosenDelivery(
   choice: CorrectiveChoice | undefined,
   chosen: CorrectiveDelivery | null,
 ): CorrectiveDelivery | undefined {
-  if (choice === undefined || chosen === null || same(chosen, defaultDelivery(choice)))
+  if (
+    choice === undefined ||
+    chosen === null ||
+    !offered(choice, chosen) ||
+    same(chosen, defaultDelivery(choice))
+  )
     return undefined;
   return chosen;
 }
@@ -53,16 +64,21 @@ export function correctiveRefusal(refusal: { code: string; field?: string } | nu
   return t("give_back.corrective_invalid");
 }
 
-function printedOn(printer: { name: string; kind: "a4" | "receipt" } | undefined): string {
-  if (printer?.kind === "receipt") return t("give_back.corrective_printed_receipt");
-  return t("give_back.corrective_printed_a4").replace("{printer}", () => printer?.name ?? "");
+function printedOn(printer: { name: string; kind: "a4" | "receipt" }): string {
+  if (printer.kind === "receipt" && printer.name === "")
+    return t("give_back.corrective_printed_receipt");
+  return t(
+    printer.kind === "receipt"
+      ? "give_back.corrective_printed_receipt_on"
+      : "give_back.corrective_printed_a4",
+  ).replace("{printer}", () => printer.name);
 }
 
 function wayText(choice: CorrectiveChoice, chosen: CorrectiveDelivery | null): string {
   if (chosen?.medium === "email")
     return t("give_back.corrective_emailed").replace("{address}", () => chosen.recipient);
   if (chosen?.medium === "print")
-    return printedOn(choice.printers.find((row) => row.id === chosen.printerId));
+    return printedOn(choice.printers.find((row) => row.id === chosen.printerId)!);
   const way = choice.default;
   if (way === null) return t("give_back.corrective_not_sent");
   if (way.medium !== "email") return printedOn({ name: way.printerName, kind: way.medium });
@@ -81,7 +97,7 @@ export function correctiveLine(
   if (choice === undefined) return nothing;
   return html`<till-corrective-choice
     .choice=${choice}
-    .chosen=${chosen}
+    .chosen=${chosenDelivery(choice, chosen) ?? null}
     .error=${error}
     @corrective-choice=${(event: CustomEvent<{ delivery: CorrectiveDelivery }>) => {
       event.stopPropagation();
@@ -195,7 +211,7 @@ export class TillCorrectiveSheet extends LitElement {
   /** Staff's earlier choice on this form; null for the default way. */
   @property({ attribute: false }) chosen: CorrectiveDelivery | null = null;
   @state() private draft: SheetDraft = { way: "", email: "" };
-  @state() private touched = false;
+  @state() private attempted = false;
   @state() private active = true;
 
   override connectedCallback(): void {
@@ -223,8 +239,14 @@ export class TillCorrectiveSheet extends LitElement {
   #set(change: Partial<SheetDraft>): void {
     this.draft = { ...this.draft, ...change };
   }
-  #done(): void {
-    if (!this.active || this.#invalid()) return;
+  async #done(): Promise<void> {
+    if (!this.active) return;
+    this.attempted = true;
+    if (this.#invalid()) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
     this.dispatchEvent(
       new CustomEvent<{ delivery: CorrectiveDelivery }>("corrective-sheet-done", {
         detail: { delivery: this.#deliveryOf(this.draft) },
@@ -256,7 +278,7 @@ export class TillCorrectiveSheet extends LitElement {
     ];
   }
   override render() {
-    const error = this.touched && this.#invalid() ? t("invoice.email_invalid") : "";
+    const error = this.attempted && this.#invalid() ? t("invoice.email_invalid") : "";
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -288,7 +310,6 @@ export class TillCorrectiveSheet extends LitElement {
                 .error=${error}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
-                  this.touched = true;
                   this.#set({ email: event.detail.value });
                 }}
                 @keydown=${(event: KeyboardEvent) => {
@@ -314,8 +335,8 @@ export class TillCorrectiveSheet extends LitElement {
           <wt-button
             data-corrective-done
             variant="primary"
-            ?disabled=${this.#invalid()}
-            @click=${() => this.#done()}
+            ?disabled=${error !== ""}
+            @click=${() => void this.#done()}
             >${t("give_back.done")}</wt-button
           >
         </wt-form-actions>
