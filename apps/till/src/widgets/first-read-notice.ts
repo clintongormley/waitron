@@ -1,4 +1,6 @@
-import { css, html, nothing } from "lit";
+import "@waitron/ui/src/components/wt-placeholder.js";
+import "@waitron/ui/src/components/wt-spinner.js";
+import { css, html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n/t.js";
 import type { FirstReadView } from "../state/first-read.js";
 
@@ -16,7 +18,7 @@ export const firstReadNoticeStyles = css`
     margin-inline: 0;
   }
 
-  .first-floor-read:has(wt-placeholder) {
+  .first-floor-read:has(wt-placeholder, .map) {
     background: var(--wt-color-surface);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
     outline: 1px solid var(--wt-color-border);
@@ -26,6 +28,50 @@ export const firstReadNoticeStyles = css`
   .first-floor-read wt-placeholder {
     flex: 1;
     margin: var(--wt-space-2);
+  }
+
+  .first-content-read {
+    position: relative;
+    display: grid;
+    gap: var(--wt-space-2);
+    min-block-size: calc(var(--wt-tap-min) * 4);
+    align-content: start;
+  }
+
+  .first-content-read wt-placeholder {
+    min-block-size: var(--wt-tap-min);
+  }
+
+  .first-menu-read {
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--wt-tap-min) * 2), 1fr));
+    padding: var(--wt-space-3);
+  }
+
+  .first-menu-read wt-placeholder {
+    min-block-size: calc(var(--wt-tap-min) * 2);
+  }
+
+  .first-menu-read .first-read-notice {
+    inset-inline: var(--wt-space-3);
+  }
+
+  .loading-order-row {
+    display: grid;
+    grid-template-columns:
+      calc(var(--wt-space-6) - var(--wt-space-1)) minmax(0, 1fr)
+      calc(var(--wt-space-6) + var(--wt-space-5) - var(--wt-space-1));
+    align-items: center;
+    gap: var(--wt-space-3);
+    min-block-size: var(--wt-tap-min);
+    border-block-end: 1px solid var(--wt-color-border);
+  }
+
+  .loading-order-row wt-placeholder {
+    min-block-size: var(--wt-space-4);
+  }
+
+  .loading-order-row wt-placeholder:first-child {
+    min-block-size: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
   }
 
   .read-failed {
@@ -99,7 +145,7 @@ export const firstReadNoticeStyles = css`
   }
 `;
 
-export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: () => void) {
+export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry?: () => void) {
   const waiting = stage === "waiting";
   const unreachable = stage === "unreachable";
   return html`<div class="first-read-notice" data-stage=${stage}>
@@ -134,17 +180,41 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: 
         }
       </div>
       ${
-        unreachable
-          ? html`<wt-button data-floor-retry @click=${retry}>${t("first_read.retry")}</wt-button>`
+        unreachable && retry !== undefined
+          ? html`<wt-button data-floor-retry data-first-read-retry @click=${retry}
+              >${t("first_read.retry")}</wt-button
+            >`
           : nothing
       }
     </div>
   </div>`;
 }
 
-export function firstFloorRead(stage: FirstReadView, handheld: boolean, retry: () => void) {
+export function firstOrderRead(stage: FirstReadView, handheld: boolean) {
+  return html`<div class="first-content-read" data-loading>
+    ${
+      stage === "quiet"
+        ? nothing
+        : [1, 2, 3].map(
+            () =>
+              html` <div class="loading-order-row" aria-hidden="true">
+                <wt-placeholder></wt-placeholder><wt-placeholder></wt-placeholder
+                ><wt-placeholder></wt-placeholder>
+              </div>`,
+          )
+    }
+    ${firstReadNotice(stage, handheld)}
+  </div>`;
+}
+
+export function firstFloorRead(
+  stage: FirstReadView,
+  handheld: boolean,
+  retry: () => void,
+  map?: TemplateResult,
+) {
   return html`<div class="first-floor-read">
-    ${stage === "quiet" ? nothing : html`<wt-placeholder></wt-placeholder>`}
+    ${stage === "quiet" ? nothing : (map ?? html`<wt-placeholder></wt-placeholder>`)}
     ${firstReadNotice(stage, handheld, retry)}
   </div>`;
 }

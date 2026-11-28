@@ -661,7 +661,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
     barButton(el, "t9").click();
     await flush(el);
-    expect(api.listZoneOffers).toHaveBeenLastCalledWith("z2");
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith("z2", { signal: expect.any(AbortSignal) });
     expect(selected(el)).toEqual(["T9"]);
 
     barButton(el, "t4").click();
@@ -686,7 +686,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
 
     barButton(el, "t9").click();
     await flush(el, 6);
-    expect(api.listZoneOffers).toHaveBeenLastCalledWith("z2");
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith("z2", { signal: expect.any(AbortSignal) });
     expect(tableOrder(el)?.checkVisibility()).toBe(true);
     expect(bar(el)).toEqual(["Floor", "[✎ T4]", "✎ T9"]);
 

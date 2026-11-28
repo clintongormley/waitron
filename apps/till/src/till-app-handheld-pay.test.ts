@@ -7499,6 +7499,6 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(api.takeBillPayment).toHaveBeenCalledTimes(1);
     await signInAgain(el);
-    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1", { signal: expect.any(AbortSignal) });
   });
 });

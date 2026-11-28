@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -7,13 +7,16 @@ import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  vi.useRealTimers();
+  cleanupWidgets();
+});
 
 const shown = (el: TillTableOrderScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("till-table-order-screen while loading", () => {
-  it("while loading it shows only Back and the loading line", async () => {
+  it("while loading it keeps Back and draws quiet rows after a short wait", async () => {
     const problems: PrintProblem[] = [
       {
         workingOrderId: "wo-4",
@@ -22,9 +25,12 @@ describe("till-table-order-screen while loading", () => {
         since: "2026-09-27T10:00:00Z",
       },
     ];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { el } = await mount({ loading: true, printProblems: problems });
-    expect(shown(el, "[data-loading]")?.textContent?.trim()).toBe("Loading…");
-    expect(shown(el, "[data-loading]")?.getAttribute("role")).toBe("status");
+    expect(shown(el, "[data-loading]")?.textContent?.trim()).toBe("");
+    expect(shown(el, "wt-placeholder")).toBeNull();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(shown(el, "wt-placeholder")).toBeTruthy();
     expect(shown(el, "section.screen")?.getAttribute("aria-busy")).toBe("true");
     expect(shown(el, "[data-back]")).not.toBeNull();
     expect(shown(el, "[data-draft-pane]")).toBeNull();

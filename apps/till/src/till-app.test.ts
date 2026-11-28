@@ -11021,7 +11021,9 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
 
-        expect(listZoneOffers).toHaveBeenCalledWith(floorZone.id);
+        expect(listZoneOffers).toHaveBeenCalledWith(floorZone.id, {
+          signal: expect.any(AbortSignal),
+        });
         expect(screen.products).toEqual([
           expect.objectContaining({
             id: "negroni",
@@ -16912,7 +16914,9 @@ describe("till-app", () => {
         await flush(el);
         emit(floor(el)!, "open-table", { tableId: terraceTable.id, seated: false });
         await flush(el);
-        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-dining");
+        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-dining", {
+          signal: expect.any(AbortSignal),
+        });
         expect(tableOrder(el)!.selectedMenuId).toBe("cat-cocktails");
         selectTab(el, "counter");
         await flush(el);

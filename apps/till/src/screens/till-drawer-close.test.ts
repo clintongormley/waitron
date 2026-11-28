@@ -1,13 +1,20 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  pageAt,
+  resetPage,
+} from "../widgets/test-helpers.js";
 import "../till-app.js";
 import { mountEquipmentApp, signIn } from "../../test/equipment-app.js";
 import type { TillDrawerClose } from "./till-drawer-close.js";
 
 const previousLocale = currentLocale();
 afterEach(() => {
+  vi.useRealTimers();
   cleanupWidgets();
   setLocale(previousLocale);
 });
@@ -243,6 +250,47 @@ it("does not kick the drawer when the dialog closed before its read answered", a
   expect(requests.openDrawer).not.toHaveBeenCalled();
 });
 
+it("retries a silent first drawer read before opening the drawer", async ({ onTestFinished }) => {
+  onTestFinished(resetPage);
+  await pageAt(390, 844);
+  setLocale("es-ES");
+  const requests = api();
+  let answer!: (value: unknown) => void;
+  const firstRead = new Promise((resolve) => (answer = resolve));
+  requests.readDrawerClose.mockReturnValueOnce(firstRead);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
+    api: requests,
+    printerId: "bar",
+    opensDrawer: true,
+  });
+
+  await vi.advanceTimersByTimeAsync(300);
+  expect(el.shadowRoot!.querySelector("wt-placeholder")).toBeTruthy();
+  expect(action(el, "count")).toBeNull();
+  expect(requests.openDrawer).not.toHaveBeenCalled();
+
+  // A fresh read can recover without waiting for the first request to answer.
+  const retry = () => el.shadowRoot!.querySelector<HTMLElement>("[data-first-read-retry]");
+  await vi.advanceTimersByTimeAsync(14_700);
+  vi.useRealTimers();
+  expect(retry()).toBeTruthy();
+  const body = el
+    .shadowRoot!.querySelector("wt-dialog")!
+    .shadowRoot!.querySelector('[part="body"]')!;
+  expect(retry()!.getBoundingClientRect().right).toBeLessThanOrEqual(
+    body.getBoundingClientRect().right,
+  );
+  await userEvent.click(page.elementLocator(retry()!));
+  await vi.waitFor(() => expect(action(el, "count")).toBeTruthy());
+
+  answer({ ...drawer, state: "new", startSequence: 6 });
+  await firstRead;
+  await el.updateComplete;
+  expect(requests.openDrawer).toHaveBeenCalledOnce();
+  expect(retry()).toBeNull();
+});
+
 it("asks to reopen when the read answers for another drawer", async () => {
   setLocale("en-GB");
   const requests = api();
@@ -256,7 +304,7 @@ it("asks to reopen when the read answers for another drawer", async () => {
   expect(el.shadowRoot?.querySelector("wt-input")).toBeNull();
 });
 
-it("says the drawer could not be read when the read fails for another reason", async () => {
+it("offers Retry when the read fails for another reason", async () => {
   setLocale("en-GB");
   const requests = api();
   requests.readDrawerClose.mockRejectedValue({ code: "server.unavailable" });
@@ -264,7 +312,11 @@ it("says the drawer could not be read when the read fails for another reason", a
     api: requests,
     printerId: "bar",
   });
-  await vi.waitFor(() => expect(footerError(el)).toContain("Could not read the drawer"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-first-read-retry]")?.textContent).toContain(
+      "Try again",
+    ),
+  );
   expect(action(el, "sign-in")).toBeNull();
   expect(action(el, "count")).toBeNull();
 });

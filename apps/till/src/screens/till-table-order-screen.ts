@@ -5,6 +5,8 @@ import {
   type OrderingCopy,
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
+import { watchFirstRead, type FirstReadView } from "../state/first-read.js";
+import { firstOrderRead, firstReadNoticeStyles } from "../widgets/first-read-notice.js";
 import "../widgets/set-menu-summary.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import {
@@ -696,6 +698,7 @@ export class TillTableOrderScreen extends LitElement {
     tablePartyMenuStyles,
     tableActionPanelStyles,
     billMoneyNoticeStyles,
+    firstReadNoticeStyles,
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
@@ -1401,6 +1404,21 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
   @property({ type: Boolean }) loading = false;
+  @property({ attribute: false }) openingTable?: TableState;
+  @property({ attribute: false }) menuFirstRead?: FirstReadView;
+  @property({ attribute: false }) retryMenuRead?: () => void;
+  @property({ type: Boolean }) menuReadOnPhone = false;
+  @state() private orderRead: FirstReadView = "quiet";
+  #stopOrderRead?: () => void;
+
+  #watchOrderRead(): void {
+    this.#stopOrderRead?.();
+    this.orderRead = "quiet";
+    this.#stopOrderRead =
+      this.loading && this.menuFirstRead === undefined
+        ? watchFirstRead((stage) => (this.orderRead = stage))
+        : undefined;
+  }
   @property({ attribute: false }) paymentConfirmation?: RetainedTender;
   /** A bill payment on the bill on screen is being sent or got no answer: a tap on a bill-payment
    * control reopens it rather than starting one. */
@@ -1959,7 +1977,10 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
     this.#watchDraft();
     this.#measure(this.getBoundingClientRect().width);
-    if (this.hasUpdated) this.#observeWidth();
+    if (this.hasUpdated) {
+      this.#observeWidth();
+      this.#watchOrderRead();
+    }
   }
 
   override firstUpdated(): void {
@@ -1977,6 +1998,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#stopOrderRead?.();
+    this.#stopOrderRead = undefined;
     this.removeEventListener("pointerdown", this.#pressDraft, true);
     this.removeEventListener("click", this.#draftClick, true);
     this.removeEventListener("keydown", this.#draftKey, true);
@@ -2424,6 +2447,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("loading") || changed.has("menuFirstRead")) this.#watchOrderRead();
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
     if (changed.has("changeRefusal")) this.#reopenRefusedChange();
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
@@ -3137,12 +3161,14 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #loadingScreen(): TemplateResult {
+    const table = this.openingTable;
+    const guests = table?.party?.guestCount;
     return html`
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}
         aria-label=${t("table.title")}
-        aria-busy="true"
+        aria-busy=${this.menuFirstRead === undefined && (this.orderRead === "quiet" || this.orderRead === "placeholder") ? "true" : nothing}
       >
         ${
           this.embedded
@@ -3151,8 +3177,27 @@ export class TillTableOrderScreen extends LitElement {
                 <h1 class="title">${t("table.title")}</h1>
               </header>`
         }
-        <div class="head-actions">${this.#floorBackButton()}</div>
-        <p role="status" data-loading>${t("table.loading")}</p>
+        <div class="head-actions">
+          ${this.#floorBackButton()}
+          ${
+            table === undefined
+              ? nothing
+              : html`<div data-opening-table>
+                  <strong>${detailsHeading(table, table.today?.joinName ?? null)}</strong>
+                  ${guests == null ? nothing : fill(t("table.menu_guests"), { n: String(guests) })}
+                </div>`
+          }
+        </div>
+        ${
+          this.menuFirstRead === undefined
+            ? firstOrderRead(this.orderRead, this.menuReadOnPhone)
+            : html`<till-menu-browser
+                data-loading
+                .firstRead=${this.menuFirstRead}
+                .retryFirstRead=${this.retryMenuRead}
+                .handheld=${this.menuReadOnPhone}
+              ></till-menu-browser>`
+        }
       </section>
     `;
   }

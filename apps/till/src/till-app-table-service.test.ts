@@ -444,7 +444,9 @@ describe("till-app table ordering: the table's menus", () => {
     });
     const screen = await toTableOrder(el);
 
-    expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id);
+    expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id, {
+      signal: expect.any(AbortSignal),
+    });
     expect(screen.menus).toEqual(diningOffers.menus);
     expect(screen.selectedMenuId).toBe("");
     const browser = screen.shadowRoot!.querySelector("till-menu-browser")!;

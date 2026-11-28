@@ -467,7 +467,7 @@ describe("A768 a held zone's menu", () => {
     await back(el);
     api.listZoneOffers.mockClear();
     await reopen(el, "t9");
-    expect(api.listZoneOffers).toHaveBeenCalledWith("z2");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z2", { signal: expect.any(AbortSignal) });
   });
 
   it("a server switch forgets every held menu", async () => {
@@ -477,7 +477,7 @@ describe("A768 a held zone's menu", () => {
     await switchServer();
     api.listZoneOffers.mockClear();
     await openTable(el, "t7");
-    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1", { signal: expect.any(AbortSignal) });
   });
 
   it("a server switch forgets a menu the old server answers after it", async () => {
@@ -497,7 +497,7 @@ describe("A768 a held zone's menu", () => {
     await flush(el);
     api.listZoneOffers.mockClear();
     await openTable(el, "t7");
-    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1", { signal: expect.any(AbortSignal) });
     expect(beer(el)!.unitPrice).toBe("5.00");
   });
 
@@ -509,7 +509,7 @@ describe("A768 a held zone's menu", () => {
     el.api = next as unknown as TillApi;
     await flush(el);
     await reopen(el, "t7");
-    expect(next.listZoneOffers).toHaveBeenCalledWith("z1");
+    expect(next.listZoneOffers).toHaveBeenCalledWith("z1", { signal: expect.any(AbortSignal) });
   });
 });
 
@@ -1490,7 +1490,7 @@ describe("A768 the left draft saves in the background", () => {
       holdNextZones();
       server.personId = "p1";
       server.personName = "Ana";
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      emit(shell(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await settleTimers(15_000);
       expect(api.listDrafts!.mock.calls.length).toBe(reads);
     } finally {
@@ -1656,7 +1656,7 @@ describe("A768 the order screen shows at once", () => {
       .mocked(history.replaceState)
       .mock.calls.filter(([, , url]) => String(url).includes("/till/tabs/order"));
 
-  it("the order screen shows with its loading line before the table's reads answer", async () => {
+  it("the order screen names the table and guests before the table's reads answer", async () => {
     const lines = deferred<{ lines: never[]; revision: number }>();
     const drafts = deferred<void>();
     const { el } = await mountApp({
@@ -1671,11 +1671,45 @@ describe("A768 the order screen shows at once", () => {
     await flush(el, 1);
     expect(tableOrder(el)!.loading).toBe(true);
     expect(loadingLine(el)).not.toBeNull();
+    const heading = tableOrder(el)!.shadowRoot!.querySelector("[data-opening-table]");
+    expect(heading?.textContent ?? "").toContain("Table 4");
+    expect(heading?.textContent ?? "").toContain("2 guests");
     lines.resolve({ lines: [], revision: 0 });
     drafts.resolve();
     await flush(el);
     expect(tableOrder(el)!.loading).toBe(false);
     expect(tableOrder(el)!.draftStore).toBeTruthy();
+  });
+
+  it("retries the first menu read on the order screen before opening the table", async () => {
+    const silent = deferred<ZoneOffers>();
+    const { el } = await mountApp();
+    await onFloor(el);
+    const offers = menu("v1", { Beer: "7.00" });
+    const next = { ...offers, context: { ...offers.context, zoneId: "z2" } };
+    api.listZoneOffers.mockImplementationOnce(() => silent.promise).mockResolvedValue(next);
+    const browser = () => tableOrder(el)?.shadowRoot?.querySelector("till-menu-browser");
+    const retry = () =>
+      browser()?.shadowRoot?.querySelector<HTMLElement>("[data-first-read-retry]");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(retry()).toBeTruthy();
+      retry()!.click();
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+    expect(tableOrder(el)?.products.find((product) => product.name === "Beer")?.unitPrice).toBe(
+      "7.00",
+    );
+    const old = menu("old", { Beer: "2.00" });
+    silent.resolve({ ...old, context: { ...old.context, zoneId: "z2" } });
+    await flush(el);
+    expect(tableOrder(el)?.products.find((product) => product.name === "Beer")?.unitPrice).toBe(
+      "7.00",
+    );
   });
 
   it("a second open during the first's loading shows only the second table", async () => {

@@ -1,3 +1,5 @@
+import type { FirstReadView } from "../state/first-read.js";
+import { firstReadNotice, firstReadNoticeStyles } from "./first-read-notice.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
@@ -155,6 +157,7 @@ export class TillMenuBrowser extends LitElement {
 
   static override styles = [
     baseStyles,
+    firstReadNoticeStyles,
     css`
       :host {
         display: grid;
@@ -444,6 +447,9 @@ export class TillMenuBrowser extends LitElement {
   /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
    * renders until it is set. */
   @property({ attribute: false }) menu?: TillZoneMenu;
+  @property({ attribute: false }) firstRead?: FirstReadView;
+  @property({ attribute: false }) retryFirstRead?: () => void;
+  @property({ type: Boolean }) handheld = false;
   @property({ type: Boolean }) hasMenuPicker = false;
   @property({ type: Boolean }) locked = false;
 
@@ -1120,7 +1126,7 @@ export class TillMenuBrowser extends LitElement {
   }
 
   override render() {
-    const menu = this.menu;
+    const { menu, firstRead: stage } = this;
     const folder = this.setMenuCopies.find(({ copy }) => copy.menuId === this.setMenuFolder?.id);
     let view: TemplateResult | typeof nothing = nothing;
     if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder);
@@ -1139,6 +1145,12 @@ export class TillMenuBrowser extends LitElement {
       </section>`;
     }
     const showContent = view !== nothing;
+    if (!showContent && stage !== undefined) {
+      return html`<div class="first-content-read first-menu-read">
+        ${stage === "quiet" ? nothing : Array.from({ length: 6 }, () => html`<wt-placeholder></wt-placeholder>`)}
+        ${firstReadNotice(stage, this.handheld, () => this.retryFirstRead?.())}
+      </div>`;
+    }
     if (!showContent && !this.hasMenuPicker) return nothing;
     return html`
       ${

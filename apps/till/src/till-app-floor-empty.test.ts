@@ -418,6 +418,30 @@ it("shows the Floor after sign-in while its first tables read is still out", asy
   expect(drawn(el, "t1")).toBeTruthy();
 });
 
+it("opens the Floor frame as soon as the PIN is accepted while device zones wait", async () => {
+  const getDeviceZones = vi.fn(() => new Promise(() => {}));
+  const el = await signIn(stubApi({ getDeviceZones }));
+
+  expect(floorOf(el)).toBeTruthy();
+  expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
+  await vi.waitFor(() =>
+    expect(floorOf(el)?.shadowRoot?.querySelector("wt-placeholder")).toBeTruthy(),
+  );
+  expect(drawn(el, "t1")).toBeNull();
+});
+
+it("shows Counter menu placeholders while the first offers read waits", async () => {
+  const listDefaultZoneOffers = vi.fn(() => new Promise(() => {}));
+  const el = await signIn(stubApi({ listDefaultZoneOffers }, true));
+  const browser = () => el.shadowRoot!.querySelector("till-menu-browser");
+
+  expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
+  await vi.waitFor(() =>
+    expect(browser()?.shadowRoot?.querySelectorAll("wt-placeholder").length).toBeGreaterThan(1),
+  );
+  expect(browser()?.shadowRoot?.querySelector("button")).toBeNull();
+});
+
 it("shows the known Floor zone and keeps the view control quiet until tables arrive", async ({
   onTestFinished,
 }) => {
@@ -444,6 +468,60 @@ it("shows the known Floor zone and keeps the view control quiet until tables arr
 
   expect(view?.textContent).toContain("List");
   expect(view?.disabled).toBe(true);
+});
+
+it("remembers only the table shapes for this device's next Floor read", async () => {
+  const deviceId = "device-with-a-saved-floor";
+  const memoryKey = `waitron.floor-plan.${JSON.stringify([location.origin, deviceId])}`;
+  localStorage.removeItem(memoryKey);
+  const getDeviceIdentity = vi.fn().mockResolvedValue({
+    deviceId,
+    name: "Till",
+    formFactor: "till",
+    profileId: "profile",
+  });
+  const placed = (x: number, label: string) => ({
+    ...freeTable,
+    id: `table-${x}`,
+    label,
+    today: {
+      placement: { x, y: 2, width: 4, height: 4, shape: "round", rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      zoneRevision: 0,
+    },
+  });
+  try {
+    const first = await onFloor(
+      stubApi({
+        getDeviceIdentity,
+        getTablesState: vi.fn().mockResolvedValue([placed(1, "Window"), placed(9, "Wall")]),
+      }),
+    );
+    first.remove();
+    const el = await signIn(
+      stubApi({ getDeviceIdentity, getTablesState: vi.fn(() => new Promise(() => {})) }),
+    );
+    const map = () => floorOf(el)?.shadowRoot?.querySelector("wt-floor-map");
+    const shapes = () => [...(map()?.shadowRoot?.querySelectorAll("wt-placeholder") ?? [])];
+    await vi.waitFor(() => expect(shapes()).toHaveLength(2));
+
+    await vi.waitFor(() => {
+      const [left, right] = shapes().map((shape) => shape.getBoundingClientRect());
+      const mapRect = map()!.getBoundingClientRect();
+      expect(left!.width, `map ${mapRect.width} × ${mapRect.height}`).toBeGreaterThan(0);
+      expect(right!.left - left!.left).toBeGreaterThan(left!.width);
+      expect(right!.top).toBe(left!.top);
+    });
+    expect(map()?.shadowRoot?.querySelector("button")).toBeNull();
+    expect(map()?.shadowRoot?.textContent).not.toContain("Window");
+    expect(localStorage.getItem(memoryKey)).not.toContain("Window");
+  } finally {
+    localStorage.removeItem(memoryKey);
+  }
 });
 
 it("loads the next operator's Floor while its first reply waits", async () => {

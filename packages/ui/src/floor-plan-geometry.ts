@@ -350,3 +350,12 @@ export function automaticNames(
   }
   return Array.from({ length: count }, (_, i) => `${lead}${highest + BigInt(i + 1)}`);
 }
+
+export const sameRect = (a: PlanRect | null, b: PlanRect | null): boolean =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height);
