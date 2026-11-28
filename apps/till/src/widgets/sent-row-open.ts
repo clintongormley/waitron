@@ -140,35 +140,36 @@ const serveWords = (serve: SentServe) =>
     ? t("table.row_serve")
     : t("table.row_serve_n").replace("{n}", quantityText(serve.count));
 
-/** The opened row's line under it: the count and its Serve buttons, then Dish details. */
+/** The opened row's line under it: the count and its Serve buttons, when it has any, then Dish
+ * details. */
 export function sentOpenControls(view: SentOpenView): TemplateResult {
   const { row } = view;
-  const count =
-    row.state === "cancelled_charged" || row.left.length === 0
+  const serves = sentServes(row);
+  const serve =
+    serves.length === 0
       ? nothing
-      : html`<span class="sent-open-count" data-sent-open-count
-          >${t("table.row_served_of")
-            .replace("{served}", quantityText(row.served))
-            .replace("{quantity}", quantityText(row.quantity))}</span
-        >`;
+      : html`<div class="sent-open-serve">
+          <span class="sent-open-count" data-sent-open-count
+            >${t("table.row_served_of")
+              .replace("{served}", quantityText(row.served))
+              .replace("{quantity}", quantityText(row.quantity))}</span
+          ><span class="sent-open-acts"
+            >${serves.map(
+              (each) =>
+                html`<button
+                  type="button"
+                  class="sent-open-act"
+                  data-sent-serve=${each.kind}
+                  ?disabled=${view.busy}
+                  @click=${(event: Event) => view.serve(each, event)}
+                >
+                  ${serveWords(each)}
+                </button>`,
+            )}</span
+          >
+        </div>`;
   return html`<div class="sent-open" data-sent-open>
-    <div class="sent-open-serve">
-      ${count}
-      <span class="sent-open-acts"
-        >${sentServes(row).map(
-          (serve) =>
-            html`<button
-              type="button"
-              class="sent-open-act"
-              data-sent-serve=${serve.kind}
-              ?disabled=${view.busy}
-              @click=${(event: Event) => view.serve(serve, event)}
-            >
-              ${serveWords(serve)}
-            </button>`,
-        )}</span
-      >
-    </div>
+    ${serve}
     <button
       type="button"
       class="sent-open-act"

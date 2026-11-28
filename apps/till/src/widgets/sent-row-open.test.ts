@@ -62,7 +62,7 @@ function collect(el: Panel, name: string) {
 const opened = (el: Panel) =>
   [...root(el).querySelectorAll<HTMLElement>("li[data-open]")].map((li) => [
     li.querySelector("[data-sent-row]")!.getAttribute("data-sent-row"),
-    text(li.querySelector("[data-sent-open-count]")!),
+    li.querySelector("[data-sent-open-count]") && text(li.querySelector("[data-sent-open-count]")!),
     [...li.querySelectorAll("[data-sent-serve]")].map(text),
   ]);
 
@@ -373,7 +373,7 @@ it("lets go of keyboard focus once it moves out of the panel", async () => {
   }
 });
 
-it("a wholly served row, a held row and a row not yet released open with no Serve", async () => {
+it("a wholly served row, a held row and a row not yet released open with no Serve and no count line", async () => {
   const el = await mount(
     sentCurrent(
       [
@@ -389,13 +389,16 @@ it("a wholly served row, a held row and a row not yet released open with no Serv
   expect(find(el, "li[data-open] [data-sent-open-count]")).toBeNull();
   expect(find(el, "li[data-open] [data-sent-serve]")).toBeNull();
   expect(find(el, "li[data-open] [data-sent-details]")).not.toBeNull();
-  for (const [line, count] of [
-    ["waiting", "0 of 1 served"],
-    ["held", "0 of 1 served"],
-  ] as const) {
-    await tap(el, toggle(line));
-    expect(opened(el)).toEqual([[line, count, []]]);
-    expect(find(el, "li[data-open] [data-sent-details]")).not.toBeNull();
+  for (const line of ["done", "waiting", "held"]) {
+    if (line !== "done") await tap(el, toggle(line));
+    // With nothing to press, no count line: the box holds the dish's line and Dish details.
+    expect(opened(el)).toEqual([[line, null, []]]);
+    const li = find(el, "li[data-open]")!;
+    const gap = Number.parseFloat(getComputedStyle(li).getPropertyValue("--wt-space-2"));
+    expect(gap).toBeGreaterThan(0);
+    const details = li.querySelector("[data-sent-details]")!.getBoundingClientRect();
+    const row = li.querySelector("[data-sent-row]")!.getBoundingClientRect();
+    expect(details.top - row.bottom, line).toBeCloseTo(gap, 1);
   }
 });
 
