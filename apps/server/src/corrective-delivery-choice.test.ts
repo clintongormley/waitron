@@ -213,6 +213,23 @@ describe("the give-back preview shows where the corrective full invoice will go"
     });
   });
 
+  it("asks once whether email can be sent when the original was emailed", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await delivered(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const asked = vi.fn(() => Promise.resolve(true));
+    const shown = await preview(
+      saleId,
+      ask("goodwill", "10.00"),
+      venue.appWith({ invoiceEmailAvailable: asked }),
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect(shown.json.corrective).toMatchObject({
+      default: { medium: "email", recipient: "accounts@harbour.example" },
+      emailAvailable: true,
+    });
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
   it("shows this till's A4 printer when the original went on A4", async () => {
     const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
     await delivered(saleId, { medium: "a4", pagePrinterId: officeId });

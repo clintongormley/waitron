@@ -28,7 +28,7 @@ import {
   type InvoiceDeliveryAttempt,
   type OriginalWay,
 } from "./invoice-delivery-status.js";
-import { canEmailInvoice, type InvoiceEmailContactSource } from "./invoice-email-contact.js";
+import { canEmailInvoice } from "./invoice-email-contact.js";
 import type { InvoiceCorrectionDeps } from "./invoice-corrections.js";
 import { optionalDocument } from "./optional-document.js";
 import {
@@ -84,7 +84,7 @@ export type CorrectiveDelivery =
 /**
  * The way a corrective full invoice of the invoice `targetId` goes when nobody chooses: by email to
  * the address that invoice went to (for a replacement that never went out, the invoice it replaced)
- * when this box can email the invoice now (`emailSource`, `emailAvailable`, asked only then); on
+ * when this box can email the corrective now (`emailable`, asked only then); on
  * `cfg`'s device's own A4 printer when that way was A4 and the device has one; otherwise on the
  * device's receipt printer when its profile may print receipts. Null when none of these is there.
  */
@@ -92,15 +92,10 @@ async function defaultCorrectiveWay(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   targetId: string,
-  emailSource: InvoiceEmailContactSource,
-  emailAvailable: () => Promise<boolean>,
+  emailable: () => Promise<boolean>,
 ): Promise<CorrectiveWay | null> {
   const way = await readWayOf(tx, targetId);
-  if (
-    way?.medium === "email" &&
-    way.recipient !== null &&
-    (await canEmailInvoice(tx, emailSource, await emailAvailable()))
-  )
+  if (way?.medium === "email" && way.recipient !== null && (await emailable()))
     return { medium: "email", recipient: way.recipient };
   if (way?.medium === "a4") {
     const printer = await resolveInvoicePrinter(tx, cfg.origin);
@@ -147,12 +142,30 @@ async function emailTransportNow(
   }
 }
 
-/** What `device` may choose among for a corrective whose email contact `contactSaleId` gives. */
-async function readCorrectiveOffers(
+interface EmailNow {
+  transport: boolean;
+  emailAvailable: boolean;
+}
+
+/** Whether this box can send invoice email now, and whether it can email a corrective whose email
+ * contact `contactSaleId` gives. */
+async function readEmailNow(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
-  device: Pick<DeviceBinding, "deviceId" | "deviceProfileId">,
   contactSaleId: string,
+): Promise<EmailNow> {
+  const transport = await emailTransportNow(tx, deps);
+  return {
+    transport,
+    emailAvailable: await canEmailInvoice(tx, { kind: "sale", saleId: contactSaleId }, transport),
+  };
+}
+
+/** What `device` may choose among for a corrective whose email `emailNow` reads. */
+async function readCorrectiveOffers(
+  tx: Transaction,
+  device: Pick<DeviceBinding, "deviceId" | "deviceProfileId">,
+  emailNow: () => Promise<EmailNow>,
 ): Promise<{ mayPrint: boolean } & Omit<CorrectiveChoice, "default">> {
   const mayPrint = await deviceMayPrintReceipts(tx, device.deviceId);
   if (!mayPrint)
@@ -162,12 +175,7 @@ async function readCorrectiveOffers(
     { deviceId: device.deviceId, profileId: device.deviceProfileId },
     "invoice",
   );
-  const transport = await emailTransportNow(tx, deps);
-  const emailAvailable = await canEmailInvoice(
-    tx,
-    { kind: "sale", saleId: contactSaleId },
-    transport,
-  );
+  const { transport, emailAvailable } = await emailNow();
   return {
     mayPrint,
     printers: offered.printers,
@@ -184,13 +192,14 @@ export async function readCorrectiveChoice(
   device: DeviceBinding,
   originalSaleId: string,
 ): Promise<CorrectiveChoice> {
-  const offers = await readCorrectiveOffers(tx, deps, device, originalSaleId);
+  let email: Promise<EmailNow> | undefined;
+  const emailNow = () => (email ??= readEmailNow(tx, deps, originalSaleId));
+  const offers = await readCorrectiveOffers(tx, device, emailNow);
   const way = await defaultCorrectiveWay(
     tx,
     cfg,
     await correctionTargetFor(tx, brandSaleId(originalSaleId)),
-    { kind: "sale", saleId: originalSaleId },
-    () => emailTransportNow(tx, deps),
+    async () => (await emailNow()).emailAvailable,
   );
   const first = way !== null && way.medium !== "email" ? way.printerId : null;
   return {
@@ -234,7 +243,9 @@ export async function checkCorrectiveDelivery(
   contactSaleId: string,
   chosen: CorrectiveDelivery,
 ): Promise<void> {
-  const offers = await readCorrectiveOffers(tx, deps, device, contactSaleId);
+  const offers = await readCorrectiveOffers(tx, device, () =>
+    readEmailNow(tx, deps, contactSaleId),
+  );
   if (chosen.medium === "email") {
     if (!offers.emailAvailable)
       throw new AppError("invoice_delivery.email_unavailable", {
@@ -316,8 +327,7 @@ export async function sendFiledCorrective(
         tx,
         cfg,
         corrective!.corrects!,
-        { kind: "sale", saleId: correctiveSaleId },
-        () => emailTransportNow(tx, deps),
+        async () => (await readEmailNow(tx, deps, correctiveSaleId)).emailAvailable,
       );
       if (way?.medium === "receipt") way = { medium: "receipt", printerId: null };
     }
