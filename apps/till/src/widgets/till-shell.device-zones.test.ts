@@ -69,6 +69,7 @@ it("fades the Counter shortcuts only where more buttons can be scrolled into vie
       transferCount: 24,
       affordances: ["expo"],
     });
+    el.style.width = "180px";
     const strip = el.shadowRoot!.querySelector<HTMLElement>(".counter-shortcuts")!;
     const fadeWidth = (edge: "start" | "end") =>
       parseFloat(getComputedStyle(strip).getPropertyValue(`--fade-${edge}`));
@@ -80,6 +81,7 @@ it("fades the Counter shortcuts only where more buttons can be scrolled into vie
     await vi.waitFor(() => expect(fadeWidth("end")).toBe(0));
     expect(fadeWidth("start")).toBeGreaterThan(0);
 
+    el.style.removeProperty("width");
     await page.viewport(1180, 844);
     await vi.waitFor(() => expect(getComputedStyle(strip).maskImage).toBe("none"));
   } finally {

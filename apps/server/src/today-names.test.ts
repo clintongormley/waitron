@@ -8,10 +8,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { printJobs, ticketItems, floorZones, workingOrderLines } from "@waitron/db";
+import { printJobs, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
-import { kitchenNotices, setZoneSalePolicyOverride } from "@waitron/venue-service";
+import { kitchenNotices } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -24,7 +24,6 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
 import { handOverOrder } from "./working-order-counter.js";
-import { createOpenOrder } from "./working-order-open.js";
 import type { PassBoard } from "./pass-card.js";
 import { boardCards } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -622,34 +621,12 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
   });
 });
 
-/**
- * A walk-up sale of one Burger delivered to `tableId` in `zoneId` and paid in cash. The sale takes
- * the table's zone, and a paid walk-up sale fires its dishes in a zone that starts orders at
- * the counter and takes payment before the food, so the zone is set that way for the sale and its
- * settings put back after, as a manager would, since table actions refuse a zone that does not
- * serve tables.
- */
-async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<string> {
-  const [saved] = await inTx(v, (tx) =>
-    tx
-      .select({ orderStart: floorZones.orderStart, paidWhen: floorZones.paidWhen })
-      .from(floorZones)
-      .where(eq(floorZones.id, zoneId)),
-  );
-  const setZone = (orderStart: typeof saved.orderStart, paidWhen: typeof saved.paidWhen) =>
-    inTx(v, async (tx) => {
-      await setZoneSalePolicyOverride(tx, zoneId, "orderStart", orderStart);
-      await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", paidWhen);
-    });
-  await setZone("counter", "prepay");
-  const id = randomUUID();
+async function deliveredCounterOrder(tableId: string): Promise<string> {
+  const id = await counterOrder(v, "Burger");
   await inTx(v, (tx) =>
-    createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.item("Burger"), quantity: "1" }], null, {
-      deliveryTableId: tableId,
-    }),
+    tx.update(workingOrders).set({ deliveryTableId: tableId }).where(eq(workingOrders.id, id)),
   );
   await pay(v, id, "50.00");
-  await setZone(saved!.orderStart, saved!.paidWhen);
   expect(await sentCount(id)).toBe(1);
   return id;
 }
@@ -681,10 +658,10 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
   });
 
   it("renaming Table 9, which nobody sits at and whose delivered counter order was handed over, prints nothing, while another party has dishes sent", async () => {
-    const { table, zoneId } = await LONG_TABLE();
+    const { table } = await LONG_TABLE();
     const guests = await seat(v, table.c6!, 2);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
-    const handedOver = await deliveredCounterOrder(zoneId, table.t9!);
+    const handedOver = await deliveredCounterOrder(table.t9!);
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, handedOver));
     expect(await billRow(v, handedOver)).toMatchObject({
       status: "settled",
@@ -700,10 +677,10 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
   });
 
   it("a counter order delivered to Counter 6, which nobody sits at, prints one MOVED slip from its old name to its new one", async () => {
-    const { table, zoneId } = await LONG_TABLE();
+    const { table } = await LONG_TABLE();
     const window = suffixed("Window");
     await rename(table.c6!, window);
-    await deliveredCounterOrder(zoneId, table.c6!);
+    await deliveredCounterOrder(table.c6!);
     const patio = suffixed("Patio");
 
     const printed = await jobsFrom(() => rename(table.c6!, patio));
@@ -716,14 +693,14 @@ describe("a table or group renamed for today, with dishes sent, as the kitchen s
 
 describe("a counter order delivered to a table of a group that ends, as the kitchen sees it", () => {
   it("a counter order delivered to Counter 6 prints one MOVED slip from Anna birthday to Counter 6 when the unseated group ends by Back to saved place", async () => {
-    const { table, zoneId } = await LONG_TABLE();
+    const { table } = await LONG_TABLE();
     await post(
       `/api/tables/${table.t9!}/today/merge`,
       await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
     );
     const annaBirthday = suffixed("Anna birthday");
     await rename(table.c6!, annaBirthday);
-    await deliveredCounterOrder(zoneId, table.c6!);
+    await deliveredCounterOrder(table.c6!);
 
     const printed = await jobsFrom(async () =>
       post(`/api/tables/${table.t9!}/today/back`, await withRevision(v, table.t9!, {})),
@@ -738,10 +715,10 @@ describe("a counter order delivered to a table of a group that ends, as the kitc
 describe("a counter order delivered to a table split off a seated group, as the kitchen sees it", () => {
   it("a counter order delivered to Table 9 prints one MOVED slip from the group's name to Table 9's own name when Table 9 is split off", async () => {
     const nine = suffixed("Patio");
-    const { table, zoneId, guests } = await seatedPair({ own: suffixed("Window"), nine });
+    const { table, guests } = await seatedPair({ own: suffixed("Window"), nine });
     const name = suffixed("García birthday");
     await rename(table.c6!, name);
-    await deliveredCounterOrder(zoneId, table.t9!);
+    await deliveredCounterOrder(table.t9!);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
 
@@ -751,8 +728,8 @@ describe("a counter order delivered to a table split off a seated group, as the 
   });
 
   it("a counter order delivered to a table of an unnamed group prints no MOVED slip when the other table is split off: its table keeps its name", async () => {
-    const { table, zoneId, guests } = await seatedPair(null);
-    const sent = await jobsFrom(() => deliveredCounterOrder(zoneId, table.c6!));
+    const { table, guests } = await seatedPair(null);
+    const sent = await jobsFrom(() => deliveredCounterOrder(table.c6!));
     expect(sent.length).toBeGreaterThan(0);
 
     const printed = await jobsFrom(() => splitTableOff(guests.partyId, table.t9!, null));
@@ -776,8 +753,8 @@ async function unseatedGroup(name: string) {
 describe("a counter order delivered to a table an action brings into or takes out of a named group, as the kitchen sees it", () => {
   it("free Bar, with a counter order delivered to it, pushed onto the unseated group Celebration by the floor's merge route prints one MOVED slip from Bar to Celebration", async () => {
     const celebration = suffixed("Celebration");
-    const { table, zoneId } = await unseatedGroup(celebration);
-    await deliveredCounterOrder(zoneId, table.bar!);
+    const { table } = await unseatedGroup(celebration);
+    await deliveredCounterOrder(table.bar!);
 
     const printed = await jobsFrom(async () =>
       post(
@@ -793,10 +770,10 @@ describe("a counter order delivered to a table an action brings into or takes ou
   });
 
   it("the party at the group Celebration joining free Counter 6, with a counter order delivered to it, merged into the group prints one MOVED slip from Counter 6 to Celebration", async () => {
-    const { table, zoneId, guests } = await seatedGroup();
+    const { table, guests } = await seatedGroup();
     const celebration = suffixed("Celebration");
     await rename(table.bar!, celebration);
-    await deliveredCounterOrder(zoneId, table.c6!);
+    await deliveredCounterOrder(table.c6!);
 
     const printed = await jobsFrom(() => pushOnto(guests.partyId, table.c6!, table.bar!, 16));
 
@@ -808,8 +785,8 @@ describe("a counter order delivered to a table an action brings into or takes ou
 
   it("Table 9, with a counter order delivered to it, ticked off the unseated group Birthday by Split tables… prints one MOVED slip from Birthday to Table 9", async () => {
     const birthday = suffixed("Birthday");
-    const { table, zoneId } = await unseatedGroup(birthday);
-    await deliveredCounterOrder(zoneId, table.t9!);
+    const { table } = await unseatedGroup(birthday);
+    await deliveredCounterOrder(table.t9!);
 
     const printed = await jobsFrom(async () =>
       post(
@@ -826,7 +803,7 @@ describe("a counter order delivered to a table an action brings into or takes ou
 
   it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Birthday to Table 9 and one for the party's bill from Birthday to Counter 6", async () => {
     const birthday = suffixed("Birthday");
-    const { table, zoneId } = await unseatedGroup(birthday);
+    const { table } = await unseatedGroup(birthday);
     const movedBillId = await counterOrder(v, "Burger");
     await post(`/api/bills/${movedBillId}/move`, {
       partyId: null,
@@ -843,7 +820,7 @@ describe("a counter order delivered to a table an action brings into or takes ou
     // Keep the floor group named while seeding the partial seating that the split must handle.
     await inTx(v, (tx) => leaveTables(tx, [table.t9!]));
     expect(await inTx(v, (tx) => holderOf(tx, table.t9!))).toBeNull();
-    await deliveredCounterOrder(zoneId, table.t9!);
+    await deliveredCounterOrder(table.t9!);
 
     const printed = await jobsFrom(async () =>
       post(

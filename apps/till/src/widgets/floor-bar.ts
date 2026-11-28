@@ -1,4 +1,4 @@
-import { css, html, nothing, type TemplateResult } from "lit";
+import { css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TillClockState } from "../api/attendance-api.js";
 import type { ResolvedKitchenScreen } from "../api/device-session-api.js";
@@ -13,6 +13,7 @@ import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
 
 import { storedAttendanceTime, withHourArticle } from "./attendance-history.js";
+import { PHONE_WIDTH } from "./chooser-styles.js";
 
 import "@waitron/ui/src/components/wt-menu-row.js";
 
@@ -49,6 +50,12 @@ export const floorScreenLayoutStyles = css`
     --wt-floor-table-weight: 700;
     font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
     font-weight: var(--wt-floor-table-weight);
+  }
+  @media not all and ${unsafeCSS(PHONE_WIDTH)} {
+    wt-floor-map::part(name) {
+      text-wrap: wrap;
+      max-block-size: 100%;
+    }
   }
   .screen[data-floor-footer] {
     position: relative;

@@ -146,6 +146,7 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["ticket.already_fired.stationName", "the name of a prep station"],
   ["ticket.already_started.stationName", "the name of a prep station"],
   ["vat_rate.table_invalid.vatClass", "a VAT class: general, reduced, super_reduced or zero"],
+  ["zone.counter_has_tables.zoneName", "the name of a zone"],
   ["zone.name_taken.name", "the name of a zone"],
   ["zone.table_in_use.tableName", "the name of a table"],
 ]);

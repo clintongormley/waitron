@@ -2433,6 +2433,12 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
+      const tableService = await send(
+        "PATCH",
+        `/venue-service/departments/${departmentId}/sale-policy/orderStart`,
+        { value: "table" },
+      );
+      expect(tableService.status).toBe(204);
       const { setId } = await liveFixture(httpPort(), (db) => defaultLayout(db, zoneId));
       const planPath = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
       const table = {

@@ -362,6 +362,7 @@ describe("the cash register's bar measures its room again", () => {
       const transfer = head(el).querySelector("[data-open-transfers]")!.getBoundingClientRect();
       expect(transfer.right).toBeLessThanOrEqual(strip(el).getBoundingClientRect().right + 0.5);
       el.affordances = [];
+      el.counterZones = [];
       el.operatorName = "Ana";
       await widthTo(el, 730);
       await expect.poll(() => shown(el)).toBe(true);

@@ -158,7 +158,7 @@ it.each(FLOOR_FRAMES.flatMap(([w, h]) => [100, 130].map((scale) => [w, h, scale]
 );
 
 /** A map table's name size on Waitron's look at each text size. */
-const MAP_NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
+const MAP_NAME_SIZE: Record<number, string> = { 100: "17px", 130: "21.75px" };
 
 it.each(FLOOR_FRAMES.flatMap(([w, h]) => [100, 130].map((scale) => [w, h, scale] as const)))(
   "on the floor's map at %ix%i and %i%, every table's name stays inside its square",
