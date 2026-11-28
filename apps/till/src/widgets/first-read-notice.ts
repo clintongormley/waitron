@@ -47,6 +47,9 @@ export const firstReadNoticeStyles = css`
   }
 
   .first-menu-read {
+    box-sizing: border-box;
+    max-block-size: calc(100dvh - var(--wt-tap-min) * 3);
+    overflow: clip;
     grid-template-columns: repeat(
       auto-fill,
       minmax(max(calc(var(--wt-tap-min) * 2), calc((100% - var(--wt-space-2) * 5) / 6)), 1fr)
@@ -243,7 +246,7 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry?:
 
 export function firstMenuRead(stage: FirstReadView, handheld: boolean, retry?: () => void) {
   return html`<div class="first-content-read first-menu-read">
-    ${stage === "quiet" ? nothing : Array.from({ length: 12 }, () => html`<wt-placeholder></wt-placeholder>`)}
+    ${stage === "quiet" ? nothing : Array.from({ length: 72 }, () => html`<wt-placeholder></wt-placeholder>`)}
     ${firstReadNotice(stage, handheld, retry)}
   </div>`;
 }

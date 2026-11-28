@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -39,7 +40,7 @@ describe("till-table-order-screen while loading", () => {
     const row = root.querySelector(".loading-order-row")!;
     const quantity = row.querySelector("wt-placeholder")!;
     expect(quantity.getBoundingClientRect().left - row.getBoundingClientRect().left).toBe(16);
-    const menu = root.querySelector("footer wt-button");
+    const menu = root.querySelector<WtButton>("footer wt-button");
     expect(menu?.textContent?.trim()).toBe("Menu");
     expect(menu?.disabled).toBe(true);
     expect(shown(el, "section.screen")?.getAttribute("aria-busy")).toBe("true");
