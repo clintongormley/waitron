@@ -24,7 +24,6 @@
   "apps/server/src/adjustments-apply.ts": 1250,
   "apps/server/src/alert-sources.ts": 1250,
   "apps/server/src/boot.ts": 5000,
-  "apps/server/src/cloud-client.ts": 1250,
   "apps/server/src/errors.ts": 2250,
   "apps/server/src/order-drafts.ts": 1750,
   "apps/server/src/working-order-line-edits.ts": 1250,
