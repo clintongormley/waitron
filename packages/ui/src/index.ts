@@ -201,6 +201,7 @@ export { captureAppLinks, leftToBrowser } from "./app-links.js";
 
 export { WtRowActions, rowActionTail } from "./components/wt-row-actions.js";
 export { WtMenuRow } from "./components/wt-menu-row.js";
+export { WtDishPickRow } from "./components/wt-dish-pick-row.js";
 export { WtHelpSwitch } from "./components/wt-help-switch.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
 export { DROPDOWN_ICONS, WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";

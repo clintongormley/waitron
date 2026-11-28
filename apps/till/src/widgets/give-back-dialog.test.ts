@@ -85,7 +85,7 @@ async function choose(el: TillGiveBackDialog, purpose: string) {
   await el.updateComplete;
 }
 const dish = (el: TillGiveBackDialog, id: string) =>
-  root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(`wt-switch[data-line="${id}"]`);
+  root(el).querySelector<HTMLElementTagNameMap["wt-dish-pick-row"]>(`[data-line="${id}"]`);
 async function tick(el: TillGiveBackDialog, id: string) {
   dish(el, id)!.shadowRoot!.querySelector("input")!.click();
   await el.updateComplete;
@@ -271,21 +271,23 @@ describe("A dish", () => {
     expect(text(root(el).querySelector("[data-which]"))).toBe("Which dishes?");
     expect(
       ["croquetas", "paella", "salad"].map((id) => [
+        dish(el, id)!.quantity,
         dish(el, id)!.label,
         dish(el, id)!.description,
+        dish(el, id)!.amount,
       ]),
     ).toEqual([
-      ["2 × Croquetas · €8.00", ""],
-      ["Paella · €18.50", "Cancelled, not served"],
-      ["Salad · €9.50", "Cancelled, refunded"],
+      ["2", "Croquetas", "", "€8.00"],
+      ["1", "Paella", "Cancelled, not served", "€18.50"],
+      ["1", "Salad", "Cancelled, refunded", "€9.50"],
     ]);
     expect(text(root(el).querySelector("[data-extra-of=paella]"))).toBe("Aioli · €1.50");
     expect(dish(el, "aioli")).toBeNull();
     expect(dish(el, "cake")).toBeNull();
     expect(text(root(el).querySelector("[data-free=cake]"))).toContain("Given free");
-    expect([...root(el).querySelectorAll("wt-switch")].map((row) => row.description)).not.toContain(
-      "Served",
-    );
+    expect(
+      [...root(el).querySelectorAll("wt-dish-pick-row")].map((row) => row.description),
+    ).not.toContain("Served");
   });
 
   it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {

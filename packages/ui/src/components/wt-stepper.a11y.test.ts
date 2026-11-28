@@ -83,3 +83,17 @@ describe.each(["light", "dark"] as const)("wt-stepper round a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("wt-stepper portion a11y (%s theme)", (theme) => {
+  test("the compact outline keeps full tap targets and a named group", async () => {
+    await mountThemed(
+      '<wt-stepper variant="portion" label="Burger" value="1" max="3"></wt-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
+    const group = page.getByRole("group", { name: "Burger" });
+    await expect.element(group.getByText("1 of 3")).toBeInTheDocument();
+    await expect.element(group.getByRole("button", { name: "Decrease Burger" })).toBeEnabled();
+    await expect.element(group.getByRole("button", { name: "Increase Burger" })).toBeEnabled();
+  });
+});

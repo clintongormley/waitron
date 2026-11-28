@@ -403,8 +403,9 @@ till at a different counter.
 
 On a past receipt, choose **Refund**. **What is it for?** offers:
 
-- **A dish**: something they ordered never came, or was not right. Tick the dishes under **Which
-  dishes?**. **Amount to refund** starts at what they cost; change it to refund less, or more.
+- **A dish**: something they ordered never came, or was not right. Tick the box beside each dish
+  you want to refund under **Which dishes?**. **Amount to refund** starts at what they cost.
+  Change it to refund less or more.
 - **Goodwill or a complaint**: enter the **Amount to refund** you choose, up to the amount the window
   shows.
 - **Extra paid on top of the bill**: shown when the guest paid more than the bill. It refunds

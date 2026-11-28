@@ -39,6 +39,21 @@ test("+ and − step the count, show it and emit it as a number", async () => {
   expect(parts(el).count.textContent?.trim()).toBe("1");
 });
 
+test("the portion stepper shows the selected count out of the maximum as it changes", async () => {
+  const el = (await mount(
+    '<wt-stepper variant="portion" label="Burger" value="1" max="3"></wt-stepper>',
+  )) as Stepper;
+  const { count, plus, minus, group } = parts(el);
+  expect(count.textContent?.trim()).toBe("1 of 3");
+  expect(group.getBoundingClientRect().height).toBe(36);
+  expect(minus.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
+  el.formatCount = (value, max) => `${value} de ${max}`;
+  plus.click();
+  await el.updateComplete;
+  expect(count.textContent?.trim()).toBe("2 de 3");
+});
+
 test("wt-change bubbles out of a shadow root", async () => {
   const el = await mountInShadowRoot('<wt-stepper label="Burger" value="1"></wt-stepper>');
   const seen: number[] = [];

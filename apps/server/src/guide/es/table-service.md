@@ -425,8 +425,9 @@ las zonas, aunque hayas usado una caja en otro mostrador.
 
 En un ticket anterior, elige **Devolución**. **¿Por qué se devuelve?** ofrece:
 
-- **Un plato**: algo que pidieron no llegó o no estaba bien. Marca los platos en **¿Qué platos?**.
-  **Dinero a devolver** empieza en lo que cuestan; cámbialo para devolver menos, o más.
+- **Un plato**: algo que pidieron no llegó o no estaba bien. Marca la casilla de cada plato
+  que quieras devolver en **¿Qué platos?**. **Dinero a devolver** empieza en lo que cuestan.
+  Cámbialo para devolver menos o más.
 - **Cortesía o queja**: escribe el **Dinero a devolver** que elijas, hasta el importe que muestra
   la ventana.
 - **Lo pagado de más**: aparece cuando el cliente pagó más que la cuenta. Devuelve una parte o todo

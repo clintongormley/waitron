@@ -220,7 +220,7 @@ export class TillGiveBackDialog extends LitElement {
     (
       this.shadowRoot!.querySelector<HTMLElement>("[data-send-again]:not([disabled])") ??
       this.shadowRoot!.querySelector<HTMLElement>(
-        ".body :is(wt-choice-row, wt-switch, wt-price-input, wt-button):not([disabled])",
+        ".body :is(wt-choice-row, wt-dish-pick-row, wt-switch, wt-price-input, wt-button):not([disabled])",
       )
     )?.focus();
   }

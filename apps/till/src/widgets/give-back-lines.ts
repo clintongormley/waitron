@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
-import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-dish-pick-row.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type {
   GiveBackAvailability,
@@ -12,7 +12,7 @@ import type {
 } from "../api/give-back-types.js";
 import { usable } from "./give-back-draft.js";
 import { lineName } from "../screens/till-ticket-view.js";
-import { unservedDishText } from "./dish-format.js";
+import { quantityText, unservedDishText } from "./dish-format.js";
 
 const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
 
@@ -58,10 +58,12 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
                   <span class="muted">${t("give_back.given_free")}</span>
                 </div>
                 ${extrasOf(line)}`
-            : html`<wt-switch
+            : html`<wt-dish-pick-row
                   name="dish"
                   data-line=${line.id}
-                  .label=${dishText(line)}
+                  .label=${lineName(line.descriptions, options.namesLocale)}
+                  .quantity=${quantityText(line.quantity)}
+                  .amount=${formatMoney(line.gross, currentLocale())}
                   .description=${cancelledLabel(line)}
                   .checked=${options.ticked.includes(line.id)}
                   .disabled=${!line.available}
@@ -69,7 +71,7 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
                     event.stopPropagation();
                     options.onTick(line, event.detail.checked);
                   }}
-                ></wt-switch>
+                ></wt-dish-pick-row>
                 ${
                   !line.available && line.reason !== null
                     ? html`<p class="reason" data-line-reason=${line.id}>

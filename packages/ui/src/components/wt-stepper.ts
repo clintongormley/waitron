@@ -90,6 +90,22 @@ export class WtStepper extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      .stepper.portion {
+        align-items: center;
+        height: calc(var(--wt-space-6) + var(--wt-space-1));
+        border-radius: calc((var(--wt-space-6) + var(--wt-space-1)) / 2);
+      }
+
+      .portion button {
+        border-radius: inherit;
+      }
+
+      .portion .count {
+        min-width: var(--wt-tap-min);
+        font-size: var(--wt-font-size-md);
+        text-wrap: nowrap;
+      }
+
       .stepper.round {
         align-items: center;
         gap: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
@@ -119,8 +135,9 @@ export class WtStepper extends LitElement {
   @property({ type: Number }) max: number | null = null;
   @property() label = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /** `round`: − and + as separate circles beside a larger number. */
-  @property({ reflect: true }) variant: "box" | "round" = "box";
+  @property({ reflect: true }) variant: "box" | "round" | "portion" = "box";
+  @property({ attribute: false }) formatCount = (value: number, max: number): string =>
+    `${value} of ${max}`;
   /** Each is given `label`, naming the button after what it counts. */
   @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
     `Decrease ${label}`;
@@ -190,9 +207,10 @@ export class WtStepper extends LitElement {
     const atMin = this.#atMin;
     const atMax = this.#atMax;
     const removeLabel = this.removeLabel;
+    const portion = this.variant === "portion";
     return html`
       <div
-        class=${this.variant === "round" ? "stepper round" : "stepper"}
+        class=${portion ? "stepper portion" : this.variant === "round" ? "stepper round" : "stepper"}
         part="stepper"
         role="group"
         aria-label=${this.label}
@@ -218,7 +236,9 @@ export class WtStepper extends LitElement {
                 ${mark(false)}
               </button>`
         }
-        <span class="count" aria-live="polite">${this.value}</span>
+        <span class="count" aria-live="polite"
+          >${portion && this.max !== null ? this.formatCount(this.value, this.max) : this.value}</span
+        >
         <button
           type="button"
           data-step="1"
