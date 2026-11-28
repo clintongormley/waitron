@@ -128,3 +128,43 @@ it("does not bring back a discarded edit when the save sent before the discard i
   await expect.element(save).toBeDisabled();
   expect(el.leave.coordinator.isDirty()).toBe(false);
 });
+
+async function discardDuringSave(refusal: { code: string; params?: object }) {
+  let refuse!: () => void;
+  saveOtherCardMachines.mockImplementationOnce(
+    () =>
+      new Promise((_saved, refused) => {
+        refuse = () => refused(refusal);
+      }),
+  );
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  const { leaving, name } = await leaveWith("discard", async () => {
+    await save.click();
+    await vi.waitFor(() => expect(saveOtherCardMachines).toHaveBeenCalledTimes(1));
+  });
+  expect(await leaving).not.toBe("kept");
+  return { refuse, name, save };
+}
+const notConnected = () =>
+  page.getByText("This browser could not connect to Waitron.", { exact: false });
+
+it("shows nothing for a refusal of a save the manager discarded", async () => {
+  const { refuse, name, save } = await discardDuringSave({ code: "connection.failed" });
+  refuse();
+  await expect.element(save).toBeDisabled();
+  await new Promise(requestAnimationFrame);
+  await expect.element(notConnected()).not.toBeInTheDocument();
+  await expect.element(name).toHaveValue("Bar terminal");
+  expect(getOtherCardMachines).toHaveBeenCalledTimes(1);
+});
+
+it("says so when the list cannot be read again after a discarded save went out of date", async () => {
+  const { refuse, name } = await discardDuringSave({
+    code: "settings.out_of_date",
+    params: { revision: 1 },
+  });
+  getOtherCardMachines.mockRejectedValueOnce({ code: "connection.failed" });
+  refuse();
+  await expect.element(notConnected()).toBeVisible();
+  await expect.element(name).toHaveValue("Bar terminal");
+});
