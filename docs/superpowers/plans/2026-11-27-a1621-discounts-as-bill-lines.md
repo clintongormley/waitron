@@ -983,6 +983,11 @@ the items stay on their own bill with their 3.00 share.
 
 ## PR 5 — A changed dish keeps its discount (`feat/a1621-5-changed-dish`)
 
+**28 November line-edit split.** Find `addedApart` and pricing in `working-order-line-edit-plan.ts`.
+Find the extra rewrites and `endRepricedDishDiscounts` call inside `applyLineEdits` in
+`working-order-line-edits.ts`. Both files use the standard 1,000-line limit. The earlier line
+numbers and size tally for `working-order-line-edits.ts` describe the file before this split.
+
 **What lands.** A held-order save that swaps a dish's variant, or rewrites an extra, keeps its
 discounts (D18); an amount on a swapped dish is asked about. Dormant. Owner lands.
 
@@ -1008,8 +1013,7 @@ re-inserted row; a unit added to a discounted burger lands on its own line, undi
 
 **Checks to run.** `working-order-held-write.test.ts`, `dish-discount-ending.test.ts`,
 `working-order-pricing.test.ts`; `scripts/alert-codes.test.ts`; `scripts/errors-reachable.test.ts`;
-golden huella; `inmutabilidad`; `scripts/product-file-size.test.ts` (`working-order-line-edits.ts`
-has 40 lines of room).
+golden huella; `inmutabilidad`; `scripts/product-file-size.test.ts`.
 
 **Files.** `bill-discounts-rewrite.ts` (new), `working-order-line-edits.ts`,
 `working-order-edit-state.ts`, `working-order-held-write.ts`, `packages/adjustments/src/errors.ts`,
