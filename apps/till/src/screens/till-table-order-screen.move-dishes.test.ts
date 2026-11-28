@@ -390,9 +390,6 @@ describe("A803 move dishes panel", () => {
     await expect
       .poll(() => root.activeElement)
       .toBe(panel(el)!.querySelector("[data-action-heading]"));
-    await userEvent.click(another());
-    await userEvent.click(root.querySelector<HTMLElement>('[data-target="t7"]')!);
-    expect(textOf(confirm(el))).toBe("Move 1 dish to a new bill at Table 7");
   });
 
   it("Move is quiet until a dish and a destination are chosen", async () => {

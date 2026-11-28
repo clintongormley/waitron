@@ -218,11 +218,13 @@ it("moves the selected dish to the shown table once and stays on the source bill
   await vi.waitFor(() => expect(control('[data-move-dishes-to="table"]')).not.toBeNull());
   const picker = root.querySelector<TillPortionPicker>("till-portion-picker")!;
   await picker.updateComplete;
-  await userEvent.click(quantityButton(picker.shadowRoot!.querySelector("[data-pick]")!));
+  quantityButton(picker.shadowRoot!.querySelector("[data-pick]")!).click();
   await userEvent.click(control('[data-move-dishes-to="table"]'));
   await userEvent.click(control('[data-target="t7"]'));
   await vi.waitFor(() =>
-    expect(control("[data-move-dishes-confirm]")?.textContent ?? "").toContain("Table 7"),
+    expect(control("[data-move-dishes-confirm]")?.textContent?.trim()).toBe(
+      "Move 1 dish to a new bill at Table 7",
+    ),
   );
   await userEvent.click(control("[data-move-dishes-confirm]"));
 
