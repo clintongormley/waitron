@@ -87,3 +87,13 @@ export const giveBackStyles = css`
     gap: var(--wt-space-1);
   }
 `;
+
+export const giveBackDialogStyles = css`
+  ${giveBackStyles}
+
+  @media (width <= 480px) {
+    .body {
+      inline-size: calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5));
+    }
+  }
+`;
