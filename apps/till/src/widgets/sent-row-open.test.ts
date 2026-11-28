@@ -788,7 +788,7 @@ it("an opened part-served row shows its count once, on the count line, not under
 });
 
 it.each([390, 844, 1280])(
-  "at %i wide the last Serve stops a space in from the box's border, and the count starts under the name",
+  "at %i wide the last Serve stops a space in from the box's border, the price keeps the closed rows' end, and the count starts under the name",
   async (width) => {
     await page.viewport(width, 800);
     const el = await mount(
@@ -804,8 +804,12 @@ it.each([390, 844, 1280])(
     const last = serves.at(-1)!.getBoundingClientRect();
     expect(inner - last.right).toBeGreaterThanOrEqual(gap - 0.5);
     expect(inner - last.right).toBeLessThanOrEqual(gap + 0.5);
+    // The price keeps the closed rows' end column: a tap's width in from the row's edge.
+    const tapMin = Number.parseFloat(getComputedStyle(li).getPropertyValue("--wt-tap-min"));
+    const border = Number.parseFloat(getComputedStyle(li).borderRightWidth);
     const price = li.querySelector(".row-price")!.getBoundingClientRect();
-    expect(Math.abs(price.right - last.right)).toBeLessThanOrEqual(0.5);
+    expect(inner - price.right).toBeGreaterThanOrEqual(tapMin - gap - border - 0.5);
+    expect(inner - price.right).toBeLessThanOrEqual(tapMin - gap - border + 0.5);
     const name = li.querySelector(".row-name")!.getBoundingClientRect();
     const count = li.querySelector("[data-sent-open-count]")!.getBoundingClientRect();
     expect(Math.abs(count.left - name.left)).toBeLessThanOrEqual(0.5);
@@ -830,5 +834,17 @@ it.each([390, 844, 1280])(
       expect(moved, cell).toBeGreaterThanOrEqual(border - 0.5);
       expect(moved, cell).toBeLessThanOrEqual(border + 0.5);
     }
+  },
+);
+
+it.each([390, 844, 1280])(
+  "at %i wide an opened row's price ends where a closed row's does",
+  async (width) => {
+    await page.viewport(width, 800);
+    const el = await mount(sentCurrent([sentDish("bravas"), sentDish("water", { lineNo: 2 })]));
+    await tap(el, toggle("water"));
+    const closed = rectOf(find(el, "[data-fired-line=bravas]")!, ".row-price");
+    const open = rectOf(find(el, "li[data-open]")!, ".row-price");
+    expect(Math.abs(open.right - closed.right)).toBeLessThanOrEqual(0.5);
   },
 );

@@ -5,7 +5,7 @@ import { portionLineFacts } from "../state/portion-groups.js";
 import type { SentSlice } from "../state/sent-panel.js";
 import { type SentRow, sentPortionId } from "../state/sent-sections.js";
 import { quantityText, trimQuantity } from "./dish-format.js";
-import { OPEN_LEAD, openRowAction, openRowBox } from "./row-text.js";
+import { OPEN_BORDER, OPEN_LEAD, OPEN_MARGIN, openRowAction, openRowBox } from "./row-text.js";
 
 export interface ServeItem {
   lineId: string;
@@ -184,7 +184,10 @@ export function sentOpenControls(view: SentOpenView): TemplateResult {
 export const sentOpenStyles = css`
   .sent-row[data-open] {
     ${openRowBox}
-    grid-template-columns: ${OPEN_LEAD} minmax(0, 1fr) var(--wt-space-2);
+    /* The end column loses the box's margin and border, so the price keeps the closed rows' end. */
+    grid-template-columns: ${OPEN_LEAD} minmax(0, 1fr) calc(
+        var(--wt-tap-min) - ${OPEN_MARGIN} - ${OPEN_BORDER}
+      );
     color: var(--wt-color-text);
   }
   .sent-row[data-open] .row-qty {
@@ -194,12 +197,13 @@ export const sentOpenStyles = css`
     font-weight: var(--wt-font-weight-medium);
   }
   .sent-open {
-    grid-column: 2;
+    grid-column: 2 / -1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--wt-space-2);
-    padding: var(--wt-space-1) 0 var(--wt-space-2);
+    padding-block: var(--wt-space-1) var(--wt-space-2);
+    padding-inline: 0 var(--wt-space-2);
   }
   .sent-open-serve {
     display: flex;
