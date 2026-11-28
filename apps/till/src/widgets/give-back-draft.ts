@@ -1,14 +1,16 @@
-import { compareDecimal, decimal } from "@waitron/shared";
+import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type {
   CorrectiveDelivery,
   GiveBackLine,
   GiveBackPurpose,
   GiveBackWay,
 } from "../api/give-back-types.js";
+
 import { typedMoney } from "../state/bill-payment.js";
 
 export type Draft = {
   lineIds: string[];
+  portionCount: number | null;
   amount: string;
   extraOn: boolean;
   way: string;
@@ -27,6 +29,7 @@ export interface GiveBackFill {
 }
 export const blank = (): Draft => ({
   lineIds: [],
+  portionCount: null,
   amount: "",
   extraOn: false,
   way: "",
@@ -52,11 +55,30 @@ export const startOf = (line: GiveBackLine) =>
 export function comparable(value: Draft) {
   return {
     lineIds: [...value.lineIds].sort(),
+    portionCount: value.portionCount,
     amount: typedMoney(value.amount) ?? value.amount,
     extraOn: value.extraOn,
     way: value.way,
     reasonId: value.reasonId,
     note: value.note.trim(),
     corrective: value.corrective,
+  };
+}
+
+export function tickDish(
+  lines: readonly GiveBackLine[],
+  draft: Draft,
+  line: GiveBackLine,
+  checked: boolean,
+  amountTyped: boolean,
+): Partial<Draft> {
+  const others = draft.lineIds.filter((id) => id !== line.id);
+  const lineIds = checked ? [...others, line.id] : others;
+  const change = { lineIds, portionCount: null };
+  if (amountTyped) return change;
+  const ticked = lines.filter((row) => lineIds.includes(row.id));
+  return {
+    ...change,
+    amount: ticked.length === 0 ? "" : sumDecimals(ticked.map((row) => decimal(startOf(row)))),
   };
 }

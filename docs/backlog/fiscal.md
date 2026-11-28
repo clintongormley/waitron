@@ -961,9 +961,6 @@ Staff correct part of a paid invoice from **Refund** on a past receipt (A802, th
 [owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
 A802 slice 5b (#3108):
 
-- **Picking how many of a dish to correct:** the window ticks whole dishes. The bills-and-tables
-  brainstorm (2026-10-17/18) moves order lines to one portion per line; a correction then picks
-  portions the same way staff pick dishes to move.
 - **Counting an earlier ordinary refund towards a correction:** the design's assignment of earlier
   refunds is not built, so such a refund stays unrelated.
 - **A refund of cancelled dishes files its corrective in the same step.** A758 §3.8 (revised

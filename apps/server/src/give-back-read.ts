@@ -66,6 +66,10 @@ export interface GiveBackLine extends Availability {
    * itself, and its `left` is counted on the dish's. */
   partOf: string | null;
   givenFree: boolean;
+  /** Money already taken off this dish by filed corrections. */
+  credited?: string;
+  /** Exact amounts to add as portions are picked. */
+  portionAmounts?: string[];
 }
 
 export interface GiveBackWay {
@@ -326,6 +330,7 @@ export async function readFacts(
   reading: TrustedReading,
   saleId: SaleId,
   device: DeviceBinding | null,
+  { includeDishDetails = false }: { includeDishDetails?: boolean } = {},
 ): Promise<GiveBackFacts> {
   const correctable = await readCorrectableNow(tx, deps.backend, cfg, reading, saleId, () => false);
   const openCorrectionId = await openCorrectionOf(tx, saleId);
@@ -356,16 +361,15 @@ export async function readFacts(
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await correctionTargetLines(tx, saleId);
-  const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
-    tx,
-    saleId,
-    toLine,
-    { filedLegs: correctable.fullInvoice && correctable.lines !== null },
-  );
-  const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
+  const { cancelled, cancelIds, members, partOf, free, filedBack, portionAmounts } =
+    await cancelsAndFreeByLine(tx, saleId, toLine, {
+      filedLegs: correctable.fullInvoice && correctable.lines !== null,
+      includePortions: includeDishDetails,
+    });
+  const correctableById = new Map(correctable.lines?.map((line) => [line.id, line]));
   const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
   const leftOf = (id: string) =>
-    decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
+    decimalToCents(correctableById.get(id)?.left ?? centsToDecimal(grossOf.get(id) ?? 0));
   const familyOf = (id: string) => [...(members.get(id) ?? [id])];
   // A filed corrective's links never exceed what it took off the dish, which `left` already counts.
   const lines = filed.map((line) => {
@@ -392,11 +396,28 @@ export async function readFacts(
       partOf: dish ?? null,
       givenFree: free.has(line.id),
     };
+    const availability =
+      dish === undefined
+        ? lineAvailability(view, waits, money, correctable.fullInvoice)
+        : { available: false, reason: null };
+    const amounts = portionAmounts.get(line.id);
+    const corrected = correctableById.get(line.id);
+    const credited =
+      includeDishDetails && cancel === undefined && !view.givenFree
+        ? corrected?.credited
+        : undefined;
     return {
       ...view,
-      ...(dish === undefined
-        ? lineAvailability(view, waits, money, correctable.fullInvoice)
-        : { available: false, reason: null }),
+      ...availability,
+      ...(credited === undefined ? {} : { credited }),
+      ...(amounts !== undefined &&
+      availability.available &&
+      cancel === undefined &&
+      !view.givenFree &&
+      corrected !== undefined &&
+      decimalToCents(corrected.left) === line.lineGross
+        ? { portionAmounts: amounts }
+        : {}),
     };
   });
   return {
@@ -432,5 +453,6 @@ export async function readGiveBack(
   saleId: SaleId,
   device: DeviceBinding | null,
 ): Promise<GiveBackView> {
-  return (await readFacts(tx, deps, cfg, reading, saleId, device)).view;
+  return (await readFacts(tx, deps, cfg, reading, saleId, device, { includeDishDetails: true }))
+    .view;
 }

@@ -99,5 +99,9 @@ export const giveBackDialogStyles = css`
     .body {
       inline-size: calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5));
     }
+
+    wt-dish-pick-row::part(portion) {
+      padding-inline-start: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    }
   }
 `;

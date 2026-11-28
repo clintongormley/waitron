@@ -178,6 +178,9 @@ export const en = {
   "give_back.extra_hint":
     "Refund some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
   "give_back.which": "Which dishes?",
+  "give_back.refunding_portions": "Refunding",
+  "give_back.portion_count": "{count} of {total}",
+  "give_back.credited": "Already refunded: {amount}",
   "give_back.cancelled_owed": "Cancelled, not served",
   "give_back.cancelled_back": "Cancelled, refunded",
   "give_back.cancelled_waiting": "Cancelled, refund waiting for the card company",
@@ -2759,6 +2762,9 @@ export const es: Record<StringKey, string> = {
   "give_back.extra_hint":
     "Devuelve una parte o todos los {amount} pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
   "give_back.which": "¿Qué platos?",
+  "give_back.refunding_portions": "Devolver",
+  "give_back.portion_count": "{count} de {total}",
+  "give_back.credited": "Ya devuelto: {amount}",
   "give_back.cancelled_owed": "Cancelado, no servido",
   "give_back.cancelled_back": "Cancelado, dinero devuelto",
   "give_back.cancelled_waiting": "Cancelado, devolución a la espera de la compañía de la tarjeta",

@@ -5,6 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
+  PORTION_LINES,
   SCOPE,
   UNDER_WAY,
   VIEW,
@@ -132,6 +133,27 @@ it("a choice made with nothing typed closes without asking", async () => {
   await userEvent.keyboard("{Escape}");
   await closed;
   expect((await question(app)).open).toBe(false);
+});
+
+it("keeps a partial count and an edited amount when staff keep their draft", async () => {
+  GiveBackLeaveApp.view = { ...VIEW, lines: PORTION_LINES };
+  const { app, form } = await mount();
+  await choose(form, "dishes");
+  const row = form.shadowRoot!.querySelector('wt-dish-pick-row[data-line="croquetas"]')!;
+  row.shadowRoot!.querySelector("input")!.click();
+  await form.updateComplete;
+  const stepper = row.querySelector("wt-stepper");
+  expect(stepper).not.toBeNull();
+  await userEvent.click(page.elementLocator(stepper!.shadowRoot!.querySelector("button")!));
+  await type(form, "5");
+  await userEvent.keyboard("{Escape}");
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(app.closes).toBe(0);
+  expect(row.querySelector("wt-stepper")!.value).toBe(2);
+  expect(amount(form).value).toBe("5");
 });
 
 it("a ticked dish asks first", async () => {

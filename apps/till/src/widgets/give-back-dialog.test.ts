@@ -21,6 +21,7 @@ import {
   APPROVERS,
   CARD,
   CASH,
+  PORTION_LINES,
   SCOPE,
   VIEW,
   UNDER_WAY,
@@ -79,7 +80,7 @@ const withView = (over: Partial<GiveBackView>) => fakeGiveBackApi({ ...VIEW, ...
 const root = (el: TillGiveBackDialog) => el.shadowRoot!;
 const underWay = (el: TillGiveBackDialog) => root(el).querySelector("till-give-back-under-way");
 const heading = (el: TillGiveBackDialog) => root(el).querySelector("wt-dialog")!.heading;
-const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+const text = (node: Node | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 const choice = (el: TillGiveBackDialog, purpose: string) =>
   root(el).querySelector<HTMLElement>(`[data-choice=${purpose}]`);
 async function choose(el: TillGiveBackDialog, purpose: string) {
@@ -269,6 +270,58 @@ describe("the choice", () => {
 });
 
 describe("A dish", () => {
+  it("fills exact shares with the stepper and sends the edited amount for one filed row", async () => {
+    const { el, api } = await mount(withView({ lines: PORTION_LINES }));
+    await choose(el, "dishes");
+    await tick(el, "croquetas");
+    await type(el, "7");
+    const stepper = dish(el, "croquetas")!.querySelector("wt-stepper");
+    expect(stepper).not.toBeNull();
+    await userEvent.click(page.elementLocator(stepper!.shadowRoot!.querySelector("button")!));
+    await el.updateComplete;
+    expect(amountField(el).value).toBe("5.34");
+    expect(dish(el, "croquetas")!.shadowRoot!.querySelector("input")!.indeterminate).toBe(true);
+    expect(dish(el, "paella")!.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+    expect(text(root(el))).not.toContain("Select all portions or clear this dish to pick others.");
+    await type(el, "5.00");
+    expect(dish(el, "croquetas")!.portionAmount).toBe("€5.00");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(1));
+    expect(asksOf(el)[0]!.request).toEqual({
+      purpose: "dishes",
+      lineIds: ["croquetas"],
+      amount: "5.00",
+      extra: "0.00",
+      way: "cash",
+    });
+  });
+
+  it("unlocks other dishes after choosing the whole row or clearing a partial choice", async () => {
+    const { el } = await mount(withView({ lines: PORTION_LINES }));
+    await choose(el, "dishes");
+    await tick(el, "croquetas");
+    const stepper = dish(el, "croquetas")!.querySelector("wt-stepper");
+    expect(stepper).not.toBeNull();
+    const [less, more] = stepper!.shadowRoot!.querySelectorAll("button");
+    await userEvent.click(page.elementLocator(less!));
+    await userEvent.click(page.elementLocator(more!));
+    expect(amountField(el).value).toBe("8.02");
+    await tick(el, "paella");
+    expect(amountField(el).value).toBe("28.02");
+    expect(dish(el, "croquetas")!.querySelector("wt-stepper")).toBeNull();
+    await tick(el, "paella");
+    await userEvent.click(
+      page.elementLocator(
+        dish(el, "croquetas")!.querySelector("wt-stepper")!.shadowRoot!.querySelector("button")!,
+      ),
+    );
+    await tick(el, "croquetas");
+    await tick(el, "paella");
+    expect(amountField(el).value).toBe("20.00");
+  });
+
   it("lists the dishes with only what Waitron knows, extras under their dish", async () => {
     const { el } = await mount();
     await choose(el, "dishes");
@@ -302,6 +355,53 @@ describe("A dish", () => {
     expect(
       [...root(el).querySelectorAll("wt-dish-pick-row")].map((row) => row.description),
     ).not.toContain("Served");
+  });
+
+  it("shows the balance and credited money for a partly refunded dish and omits fully credited dishes", async () => {
+    const original = VIEW.lines[0]!;
+    const reduced = { ...original, left: "5.00", credited: "3.00" };
+    const fullyCredited = {
+      ...original,
+      id: "bread",
+      descriptions: { en: "Bread" },
+      left: "0.00",
+      credited: "8.00",
+      available: false,
+    };
+    const { el } = await mount(
+      withView({ lines: [reduced, fullyCredited, ...VIEW.lines.slice(1)] }),
+    );
+    await choose(el, "dishes");
+
+    const row = dish(el, "croquetas")!;
+    expect([row.label, row.quantity, row.amount, row.description]).toEqual([
+      "Croquetas",
+      "",
+      "€5.00",
+      "Already refunded: €3.00",
+    ]);
+    expect(dish(el, "bread")).toBeNull();
+    await tick(el, "croquetas");
+    expect(amountField(el).value).toBe("5.00");
+  });
+
+  it("fits the refund note beside the remaining balance on a phone", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    onTestFinished(() => page.viewport(viewport.width, viewport.height));
+    await page.viewport(390, 844);
+    const reduced = { ...VIEW.lines[0]!, gross: "43.50", left: "29.00", credited: "14.50" };
+    const { el } = await mount(withView({ lines: [reduced] }));
+    await choose(el, "dishes");
+    const row = dish(el, "croquetas")!;
+    await row.updateComplete;
+    await document.fonts.ready;
+
+    const note = row.shadowRoot!.querySelector('[part="description"]')!;
+    const balance = row.shadowRoot!.querySelector("#dish-amount")!;
+    const words = document.createRange();
+    words.selectNodeContents(note);
+    expect(words.getClientRects()).toHaveLength(1);
+    expect(words.getBoundingClientRect().right).toBeLessThan(balance.getBoundingClientRect().left);
   });
 
   it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {

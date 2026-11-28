@@ -70,7 +70,7 @@ import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { REASONS } from "./testing/adjustment-venue.js";
+import { REASONS, takeawayRates } from "./testing/adjustment-venue.js";
 import { openedCorrection } from "./testing/invoice-correction.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
@@ -284,7 +284,7 @@ interface Tab {
 
 async function tab(
   lines: readonly (Dish | [Dish, string])[],
-  { withAioli = false }: { withAioli?: boolean } = {},
+  { withAioli = false, dining }: { withAioli?: boolean; dining?: "takeaway" } = {},
 ): Promise<Tab> {
   const { partyId, tabId } = await inTx(venue, async (tx) => {
     const table = await createTable(tx, {
@@ -295,14 +295,17 @@ async function tab(
       const [name, quantity] = typeof line === "string" ? [line, "1"] : line;
       return { menuItemId: offers.offerFor(productIds.get(name)!), quantity };
     });
-    if (!withAioli) return openPartyTab(tx, venue.cfg, { tableId: table.id, lines: orderLines });
+    if (!withAioli && dining === undefined)
+      return openPartyTab(tx, venue.cfg, { tableId: table.id, lines: orderLines });
     const opened = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+    if (dining !== undefined)
+      await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, opened.tabId));
     await placeGroups(tx, venue.cfg, opened.partyId, {
       groups: [
         {
           lines: orderLines.map((line) => ({
             ...line,
-            ...(line.menuItemId === offers.offerFor(productIds.get("Paella")!)
+            ...(withAioli && line.menuItemId === offers.offerFor(productIds.get("Paella")!)
               ? { extras: [{ listId: sauces, picks: [{ productId: aioliId, quantity: 1 }] }] }
               : {}),
           })),
@@ -568,6 +571,52 @@ function admittingNot(reason: string) {
 const FIVE: Dish[] = ["Paella", "Croquetas", "Cheesecake", "Bread", "Water"];
 
 describe("readGiveBack: the lines", () => {
+  it("offers exact filed shares in last-portion-first order, with the remainder cent last", async () => {
+    await takeawayRates(venue, { Water: "21.00" });
+    const b = await tab([["Croquetas", "3"], "Bread", "Water"], { dining: "takeaway" });
+    await comp(b, "Water");
+    const saleId = await pay(b, [{ cash: "14.00" }]);
+    const view = await read(saleId);
+    expect(lineOf(view, "Croquetas")).toMatchObject({
+      quantity: "3.000",
+      gross: "9.88",
+      left: "9.88",
+      portionAmounts: ["3.29", "3.29", "3.30"],
+    });
+    expect(lineOf(view, "Water").portionAmounts).toBeUndefined();
+    await gaveCash(saleId, ask("goodwill", "4.00"));
+    const water = lineOf(await read(saleId), "Water");
+    expect(water.givenFree).toBe(true);
+    expect(water).not.toHaveProperty("credited");
+  });
+
+  it("offers only the remaining amount on a grouped row reduced by a filed refund", async () => {
+    const b = await tab([
+      ["Croquetas", "3"],
+      ["Bread", "2"],
+    ]);
+    const saleId = await pay(b, [{ cash: "16.00" }]);
+    const dish = lineOf(await read(saleId), "Croquetas");
+    expect(dish.portionAmounts).toEqual(["4.00", "4.00", "4.00"]);
+    await gaveCash(saleId, ask("dishes", "4.00", { lineIds: [dish.id] }));
+    const view = await read(saleId);
+    expect(lineOf(view, "Croquetas")).toMatchObject({
+      available: true,
+      left: "8.00",
+      credited: "4.00",
+    });
+    expect(lineOf(view, "Croquetas").portionAmounts).toBeUndefined();
+    expect(lineOf(view, "Bread").portionAmounts).toEqual(["2.00", "2.00"]);
+    expect(lineOf(view, "Bread")).not.toHaveProperty("credited");
+
+    await gaveCash(saleId, ask("dishes", "8.00", { lineIds: [dish.id] }));
+    expect(lineOf(await read(saleId), "Croquetas")).toMatchObject({
+      available: false,
+      left: "0.00",
+      credited: "12.00",
+    });
+  });
+
   it("shows the paella cancelled with Refund ticked as owing its money, the other dishes with no cancel", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
@@ -621,12 +670,14 @@ describe("readGiveBack: the lines", () => {
     const b = await tab([["Croquetas", "2"], "Bread"]);
     const saleId = await pay(b, [{ cash: "10.00" }]);
     await cancel(b, "Croquetas", "1", true);
-    expect(lineOf(await read(saleId), "Croquetas").cancelled).toEqual({
+    const line = lineOf(await read(saleId), "Croquetas");
+    expect(line.cancelled).toEqual({
       quantity: "1.000",
       owed: "4.00",
       back: "0.00",
       waiting: "0.00",
     });
+    expect(line.portionAmounts).toBeUndefined();
   });
 
   it("shows no cancel for one made without Refund ticked", async () => {
@@ -634,6 +685,15 @@ describe("readGiveBack: the lines", () => {
     const saleId = await pay(b, [{ cash: "20.50" }]);
     await cancel(b, "Paella", "1", false);
     expect(lineOf(await read(saleId), "Paella").cancelled).toBeNull();
+  });
+
+  it("lets the grouped dish use a count while its priced extra stays an amount", async () => {
+    const b = await tab([["Paella", "2"]], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "43.00" }]);
+    const view = await read(saleId);
+    expect(lineOf(view, "Paella").portionAmounts).toEqual(["18.50", "18.50"]);
+    expect(aioliOf(view)).toMatchObject({ available: true, left: "6.00" });
+    expect(aioliOf(view).portionAmounts).toBeUndefined();
   });
 
   it("marks a dish given free", async () => {

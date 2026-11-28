@@ -1069,9 +1069,10 @@ Set `--wt-menu-row-gap` to change the space between the label and trailing conte
 `trailing` part to keep a value together and the `check` part to paint its status mark.
 
 Use `wt-dish-pick-row` for a dish that staff can tick. Give it a checkbox `name`, the dish
-`label`, and the formatted `quantity` and `amount`. Optional `description` sits below the
-name. Use the `details` slot for extra lines under the name. Set `checked` for a whole-row
-pick or `indeterminate` for a partial pick. Set `disabled` when the dish cannot be picked
+`label`, and the formatted `quantity` and `amount`. Leave `quantity` empty when there is no count
+to show. The name and optional `description` use that space. Use the `details` slot for extra lines
+under the name. Set `checked` for a whole-row pick or `indeterminate` for a partial pick.
+Set `disabled` when the dish cannot be picked
 and `display-only` when it needs no checkbox. The row covers the checkbox's tap area.
 Listen for `wt-change` carrying `{ checked: boolean }`. For a part of one row, supply
 `portion-label`, `portion-amount` and a stepper in the `stepper` slot.

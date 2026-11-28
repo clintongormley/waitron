@@ -226,6 +226,7 @@ describe("a full invoice's corrective pays its dishes' cancels (section 5)", () 
       { cancel: cancelId, method: "cash", refund: 1900, amount: 900 },
     ]);
     expect(await shown(saleId, "18.00")).toEqual({ left: "9.00", owed: "9.00", back: "9.00" });
+    expect(await lineOf(saleId, "18.00")).not.toHaveProperty("credited");
   });
 
   it("one of two cancelled croquettes: goodwill pays its share, then a tick pays the rest it owes", async () => {

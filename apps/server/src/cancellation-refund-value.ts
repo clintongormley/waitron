@@ -345,6 +345,29 @@ function byPosition(
   return { quantity: thousandthsToDecimal(family[0]!.quantity), gross };
 }
 
+function shareOfPortion(amount: number, count: number, index: number): number {
+  const base = Math.floor(amount / count);
+  return base + (index < amount - base * count ? 1 : 0);
+}
+
+/** Exact shares of one ordinary filed dish row, in the order a row gives up its portions. */
+export function filedPortionAmounts(pairs: FilingPairs, row: Filed): string[] | undefined {
+  const portions = pairs.portionsOf.get(row.id);
+  const amount = row.lineGross;
+  if (
+    portions === undefined ||
+    portions.length < 2 ||
+    row.parentLineId !== null ||
+    row.setMenuPart !== null ||
+    amount === null ||
+    !portions.every((id) => pairs.familyOf.get(id)?.[0]?.wholePortion === true)
+  )
+    return undefined;
+  return portions
+    .map((_, index) => centsToDecimal(shareOfPortion(amount, portions.length, index)))
+    .reverse();
+}
+
 /** Each filed row linked to `dishLineId` with that portion's share of its quantity and of what it
  * sold for in cents: those cents go to its portions evenly, the cents left over one each to the
  * earliest. */
@@ -353,12 +376,10 @@ function portionShares(pairs: FilingPairs, dishLineId: string) {
     const portions = pairs.portionsOf.get(row.id)!;
     const sold = soldAmount(row);
     if (sold === null) return { row, quantity: 0, share: null };
-    const base = Math.floor(sold / portions.length);
-    const left = sold - base * portions.length;
     return {
       row,
       quantity: row.quantity / portions.length,
-      share: base + (portions.indexOf(dishLineId) < left ? 1 : 0),
+      share: shareOfPortion(sold, portions.length, portions.indexOf(dishLineId)),
     };
   }) as { row: Filed; quantity: number; share: number }[];
 }

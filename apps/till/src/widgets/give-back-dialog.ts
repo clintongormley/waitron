@@ -25,7 +25,6 @@ import type { AdjustmentReason } from "../api/payments-api.js";
 import type { StaffMember } from "../api/device-session-api.js";
 import type {
   GiveBackAsk,
-  GiveBackLine,
   GiveBackOutcome,
   GiveBackPreview,
   GiveBackPurpose,
@@ -43,7 +42,7 @@ import {
   blank,
   comparable,
   positive,
-  startOf,
+  tickDish,
   usable,
   type Draft,
   type Field,
@@ -331,17 +330,11 @@ export class TillGiveBackDialog extends LitElement {
     if (!("reasonId" in change) && !("note" in change) && !("corrective" in change))
       void this.#preview();
   }
-  #tick(line: GiveBackLine, checked: boolean): void {
-    const others = this.draft.lineIds.filter((id) => id !== line.id);
-    const lineIds = checked ? [...others, line.id] : others;
-    if (this.amountTyped) {
-      this.#set({ lineIds });
-      return;
-    }
-    const ticked = this.view!.lines.filter((row) => lineIds.includes(row.id));
+  #pickPortions(amounts: readonly string[], count: number): void {
+    this.amountTyped = false;
     this.#set({
-      lineIds,
-      amount: ticked.length === 0 ? "" : sumDecimals(ticked.map((row) => decimal(startOf(row)))),
+      portionCount: count === amounts.length ? null : count,
+      amount: sumDecimals(amounts.slice(0, count).map(decimal)),
     });
   }
   #chooseWay(way: GiveBackWay): void {
@@ -741,7 +734,11 @@ export class TillGiveBackDialog extends LitElement {
           ? dishLines(view, {
               namesLocale: this.namesLocale,
               ticked: this.draft.lineIds,
-              onTick: (line, checked) => this.#tick(line, checked),
+              portionCount: this.draft.portionCount,
+              portionAmount: amount === null ? "" : this.#money(amount),
+              onTick: (line, checked) =>
+                this.#set(tickDish(view.lines, this.draft, line, checked, this.amountTyped)),
+              onPortions: (amounts, count) => this.#pickPortions(amounts, count),
               reasonText: this.#waitText,
             })
           : nothing

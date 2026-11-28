@@ -2,7 +2,8 @@ import { html, nothing } from "lit";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dish-pick-row.js";
-import { currentLocale, t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-stepper.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type {
   GiveBackAvailability,
   GiveBackLine,
@@ -29,6 +30,9 @@ function cancelledLabel(line: GiveBackLine): string {
 export interface DishLinesOptions {
   namesLocale: string;
   ticked: readonly string[];
+  portionCount: number | null;
+  portionAmount: string;
+  onPortions: (amounts: readonly string[], count: number) => void;
   onTick: (line: GiveBackLine, checked: boolean) => void;
   reasonText: (reason: NonNullable<GiveBackLine["reason"]>) => string;
 }
@@ -49,35 +53,70 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
     <legend data-which>${t("give_back.which")}</legend>
     <div class="lines">
       ${view.lines
-        .filter((line) => line.partOf === null)
-        .map(
-          (line) =>
-            html`<wt-dish-pick-row
-              name="dish"
-              data-line=${line.givenFree ? nothing : line.id}
-              data-free=${line.givenFree ? line.id : nothing}
-              .label=${lineName(line.descriptions, options.namesLocale)}
-              .quantity=${quantityText(line.quantity)}
-              .amount=${formatMoney(line.gross, currentLocale())}
-              .description=${line.givenFree ? t("give_back.given_free") : cancelledLabel(line)}
-              .displayOnly=${line.givenFree}
-              .checked=${options.ticked.includes(line.id)}
-              .disabled=${line.givenFree || !line.available}
-              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                event.stopPropagation();
-                options.onTick(line, event.detail.checked);
-              }}
-            >
-              ${extrasOf(line)}
-              ${
-                !line.givenFree && !line.available && line.reason !== null
-                  ? html`<p slot="details" data-line-reason=${line.id}>
-                      ${options.reasonText(line.reason)}
-                    </p>`
-                  : nothing
-              }
-            </wt-dish-pick-row>`,
-        )}
+        .filter(
+          (line) => line.partOf === null && (line.credited === undefined || positive(line.left)),
+        )
+        .map((line) => {
+          const label = lineName(line.descriptions, options.namesLocale);
+          const credited = line.credited;
+          const description =
+            credited === undefined
+              ? line.givenFree
+                ? t("give_back.given_free")
+                : cancelledLabel(line)
+              : fill(t("give_back.credited"), { amount: formatMoney(credited, currentLocale()) });
+          const checked = options.ticked.includes(line.id);
+          const partial = checked && options.portionCount !== null;
+          const amounts = checked && options.ticked.length === 1 ? line.portionAmounts : undefined;
+          const count = options.portionCount ?? amounts?.length ?? 0;
+          return html`<wt-dish-pick-row
+            name="dish"
+            data-line=${line.givenFree ? nothing : line.id}
+            data-free=${line.givenFree ? line.id : nothing}
+            .label=${label}
+            .quantity=${credited === undefined ? quantityText(line.quantity) : ""}
+            .amount=${formatMoney(credited === undefined ? line.gross : line.left, currentLocale())}
+            .description=${description}
+            .displayOnly=${line.givenFree}
+            .checked=${checked}
+            .indeterminate=${partial}
+            .disabled=${line.givenFree || !line.available || (options.portionCount !== null && !checked)}
+            .portionLabel=${amounts === undefined ? "" : t("give_back.refunding_portions")}
+            .portionAmount=${amounts === undefined ? "" : options.portionAmount}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              options.onTick(line, !partial && event.detail.checked);
+            }}
+          >
+            ${extrasOf(line)}
+            ${
+              amounts === undefined
+                ? nothing
+                : html`<wt-stepper
+                    slot="stepper"
+                    variant="portion"
+                    .label=${label}
+                    .value=${count}
+                    .min=${1}
+                    .max=${amounts.length}
+                    .formatCount=${(value: number, max: number) => fill(t("give_back.portion_count"), { count: String(value), total: String(max) })}
+                    .decreaseLabel=${(name: string) => fill(t("action.decrease"), { label: name })}
+                    .increaseLabel=${(name: string) => fill(t("action.increase"), { label: name })}
+                    @wt-change=${(event: CustomEvent<{ value: number }>) => {
+                      event.stopPropagation();
+                      options.onPortions(amounts, event.detail.value);
+                    }}
+                  ></wt-stepper>`
+            }
+            ${
+              !line.givenFree && !line.available && line.reason !== null
+                ? html`<p slot="details" data-line-reason=${line.id}>
+                    ${options.reasonText(line.reason)}
+                  </p>`
+                : nothing
+            }
+          </wt-dish-pick-row>`;
+        })}
     </div>
   </fieldset>`;
 }

@@ -338,8 +338,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   takeaway rate stops at 0, 4, 10 and 21% because the modelo 303 download has no box for the
   others. [Detail](backlog/fiscal.md#offer-2-5-and-75-taken-away-once-modelo-303-can-report-them)
 
-- **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
-  A802 slice 5b, #3108).** Picking part of a row of identical portions in Refund remains open.
+- **Correcting a paid invoice: earlier refunds and cancelled dishes (left open by A802 slice 5b,
+  #3108).**
   An earlier ordinary refund does not count towards a correction. A refund of cancelled dishes on a
   receipt does not yet file its corrective in the same step (a full invoice's goes on its R1, CORRECT-FULL-INVOICE PR 2b) (A758
   §3.8, owner Q43 e).
@@ -600,6 +600,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Dock Pay in the wide order column once PR 12 supplies the wide order shell. PR 14a supplies the
   shared inset. Table and Counter Pay already show the checked amount and receipt questions,
   start the reader from **Charge**, and open cash entry from **Cash**.
+  **Refund dishes** still needs mixed selection. Staff should be able to pick some portions of
+  one row alongside other dishes, with each row credited by the amount they chose. Record how
+  many portions were refunded so a later refund shows only the portions left. Keep showing the dish
+  and its remaining balance after a money-only refund.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and
