@@ -19,10 +19,18 @@ export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
   card_terminal: 0,
 });
 
-/** The roles a sticker of `kind` may set: the server sets a printer as receipt and payment slip
- * printer at once, as far as the printer picks up each and the profile lists it. */
-export const stickerRoles = (kind: EquipmentCode["kind"]): EquipmentRole[] =>
-  kind === "reader" ? ["card_terminal"] : ["receipt", "payment_slip"];
+/** The roles of `equipment` that list the sticker's item among their choices; a printer's sticker
+ * may set the receipt and payment slip printer at once. */
+export function stickerRoles(
+  code: EquipmentCode,
+  equipment: DeviceEquipment | null,
+): RoleEquipment[] {
+  const roles: EquipmentRole[] =
+    code.kind === "reader" ? ["card_terminal"] : ["receipt", "payment_slip"];
+  return (equipment?.roles ?? []).filter(
+    (each) => roles.includes(each.role) && each.choices.some((item) => item.id === code.id),
+  );
+}
 
 /** `errors` with `message` under `role`, or with `role`'s message removed when it is null. */
 export function withRoleError(

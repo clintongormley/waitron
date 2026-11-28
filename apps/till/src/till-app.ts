@@ -3708,22 +3708,20 @@ export class TillApp extends LitElement {
   }
 
   async #pickUpSticker(code: EquipmentCode): Promise<void> {
-    const roles = stickerRoles(code.kind);
-    const permitted = this.deviceEquipment?.roles.find(
-      (role) => roles.includes(role.role) && role.choices.some((item) => item.id === code.id),
-    );
-    if (!permitted) {
+    const roles = stickerRoles(code, this.deviceEquipment);
+    if (roles.length === 0) {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
-    // The sticker is now the latest pick of each field it sets, so no earlier refusal shows there.
-    for (const role of roles) {
+    // The sticker is now the latest pick of each field whose list holds it, so no earlier refusal
+    // shows there; a field that does not list it keeps its pending pick and that pick's answer.
+    for (const { role } of roles) {
       this.#payEquipmentPicks[role]++;
       this.#setPayEquipmentError(role, null);
     }
     const context = {
       session: this.#operatorSession,
-      name: permitted.choices.find((item) => item.id === code.id)!.name,
+      name: roles[0]!.choices.find((item) => item.id === code.id)!.name,
     };
     await this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {

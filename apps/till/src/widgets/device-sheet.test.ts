@@ -288,6 +288,15 @@ describe("till-device-sheet", () => {
     expect(box(el, "cardReaderId")?.error).toBe("Take it first");
   });
 
+  it("draws the reader's problem only on a profile that takes cards on a reader", async () => {
+    const reason = { readerReason: "Reader 2 is switched off" };
+    const withCard = await mountSheet(reason);
+    const cashOnly = await mountSheet({ ...reason, capabilities: ["print-receipt"] });
+
+    expect(withCard.el.shadowRoot!.querySelector("[data-pay-reader-reason]")).not.toBeNull();
+    expect(cashOnly.el.shadowRoot!.querySelector("[data-pay-reader-reason]")).toBeNull();
+  });
+
   it("adds the NFC sentence where the browser supports NFC, and drops it once NFC proved unavailable", async () => {
     const hint = (el: TillDeviceSheet) =>
       el.shadowRoot!.querySelector("[data-device-sheet-hint]")!.textContent!.trim();

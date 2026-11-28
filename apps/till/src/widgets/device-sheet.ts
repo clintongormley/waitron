@@ -389,7 +389,8 @@ export class TillDeviceSheet extends LitElement {
   }
 
   #reason(): TemplateResult | typeof nothing {
-    if (this.readerReason === null) return nothing;
+    if (this.readerReason === null || !this.capabilities.includes("integrated-card-payment"))
+      return nothing;
     return html`<div class="reason" role="status" data-pay-reader-reason>
       <p data-pay-reader-line>${this.readerReason}</p>
       ${

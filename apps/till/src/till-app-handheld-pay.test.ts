@@ -2824,6 +2824,42 @@ describe("till-app: Pay's device sheet on a phone", () => {
     expect(slip().error).toBe("");
   });
 
+  it("a sticker for a printer not listed under Payment slip printer keeps a slip pick's refusal", async () => {
+    camera = cameraShowing(null);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const SLIP_ONLY = equipmentItem("p3", "Slip printer");
+    const withSlip = (printer: EquipmentItem) => {
+      const equipment = equipmentOf(SECOND_READER, printer);
+      equipment.roles.push(roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER, SLIP_ONLY]));
+      return equipment;
+    };
+    let refuse!: (reason: unknown) => void;
+    const { el } = await phonePay({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withSlip(BAR_PRINTER)),
+      setDeviceEquipment: vi
+        .fn()
+        .mockReturnValueOnce(new Promise((_, reject) => (refuse = reject)))
+        .mockResolvedValueOnce(withSlip(PORTABLE)),
+    });
+    const sheet = await openDeviceSheet(el);
+    const field = (name: string) =>
+      sheet.shadowRoot!.querySelector<WtCombobox>(`[name="${name}"]`)!;
+    const slip = () => field("paymentSlipPrinterId");
+    await userEvent.click(slip().shadowRoot!.querySelector<HTMLElement>('[role="combobox"]')!);
+    const options = [...slip().shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    await userEvent.click(options.find((option) => text(option).includes("Slip printer"))!);
+    const scanned = new Promise((resolve) => el.addEventListener("pay-equipment-sticker", resolve));
+
+    camera.show(formatEquipmentCode("printer", PRINTER_ID));
+    await scanned;
+    refuse({ code: "device.binding_invalid", status: 400 });
+    await vi.waitFor(() => expect(field("receiptPrinterId").value).toBe(PRINTER_ID), {
+      timeout: 10_000,
+    });
+    expect(slip().value).toBe(BAR_PRINTER.id);
+    expect(slip().error).not.toBe("");
+  });
+
   it("two stickers in a row send two scan choices and leave the camera on", async () => {
     camera = cameraShowing(null);
     vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
