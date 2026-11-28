@@ -172,9 +172,16 @@ docker exec -d "$name-gateway" sh -c '
 held_ready() { docker exec "$name-gateway" grep -q 'starting data transfer' /tmp/held.log; }
 wait_for held_ready
 docker exec "$name-peer" rm /control/peer.json
-off() { ! docker exec "$name-peer" ip link show wg-cloud >/dev/null 2>&1; }
-wait_for off
-[ "$(docker exec "$name-peer" iptables -S INPUT)" = '-P INPUT ACCEPT' ]
+link_gone() { ! docker exec "$name-peer" ip link show wg-cloud >/dev/null 2>&1; }
+rules_gone() { [ "$(docker exec "$name-peer" iptables -S INPUT)" = '-P INPUT ACCEPT' ]; }
+off() { link_gone && rules_gone; }
+wait_for off || {
+  left=
+  link_gone || left='the wg-cloud interface'
+  rules_gone || left="${left:+$left and }the INPUT firewall rules"
+  printf '%s\n' "FAIL 40 seconds after peer.json was removed, still present: ${left:-neither now, but one was at the deadline}" >&2
+  exit 1
+}
 wait_for docker exec "$name-gateway" test -f /tmp/held.closed
 if request; then exit 1; fi
 printf '%s\n' 'PASS removing configuration closes an existing stream and disconnects the peer'
