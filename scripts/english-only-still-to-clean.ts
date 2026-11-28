@@ -604,7 +604,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/till/src/screens/till-ticket-view.look.test.ts",
   "apps/till/src/screens/till-ticket-view.presentation.test.ts",
   "apps/till/src/screens/till-ticket-view.test.ts",
-  "apps/till/src/screens/zone-keep-open-screens.a11y.test.ts",
   "apps/till/src/state/bill-unsent.test.ts",
   "apps/till/src/state/counter-portion-rows.test.ts",
   "apps/till/src/state/floor-map.test.ts",
