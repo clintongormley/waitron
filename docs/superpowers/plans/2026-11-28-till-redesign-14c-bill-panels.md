@@ -6,8 +6,8 @@ destination on the final button. [Design §§6, 12 and 14](../specs/2026-11-26-t
 [Pass 1 split](2026-11-26-till-handheld-redesign-pass-1.md).
 
 The watcher’s 27 November 19:47 note puts 14c after A1515-4 slice 1 and A1626’s next PR open.
-Both are open. Base 14c on main with #4495. Claude supports two PRs, subject to watcher
-clearance. Each slice keeps today’s receipt and invoice issuance.
+Both are open. Base 14c on main with #4495. Claude reviewed the plan. The watcher cleared
+two PRs on 28 November at 01:41. Each keeps today’s receipt and invoice issuance.
 
 ## First slice · Merge bills and Move this bill
 
@@ -29,12 +29,15 @@ clearance. Each slice keeps today’s receipt and invoice issuance.
 
 - Add a `quantity` mode to `apps/till/src/widgets/portion-picker.ts`. Use the shared
   `wt-stepper` with `pickedCount` and `setCount` from `state/portion-selection.ts`, starting at
-  zero. Bind the live count and row limit so a fresh read can correct a pick. Keep blocked
-  reasons, weighed dishes as whole items and set-menu grouping. Tint selected rows. Use the
+  zero. Bind the live count and row limit so a fresh read can correct a pick. Show options and
+  “N on the bill” with “Sent” when sent. Replace the tick and price with the stepper. Keep
+  the payment-floor refusal, weighed dishes as whole items and set-menu grouping. Use the
   stepper’s focus handling and check keyboard focus at both limits. Split keeps its
   checkbox mode. Add a pill variant in shared `wt-choice-tile` with the dark selected fill
   from h 3, no check icon, and `aria-pressed`. Check token painting and axe in both themes.
-- Use the same dialog with a Move dishes step. In `i18n/strings.ts` use the existing `_one`
+- Use the same dialog. Title it “Move dishes” with “from Bill N” beneath. Use the headings
+  “How many of each” and “Move them to” and a single full-width teal action. Tint selected rows.
+  In `i18n/strings.ts` use the existing `_one`
   pattern and add EN/ES text, for example “Move 2 dishes to Bill 2”. Get the Spanish wording
   cleared through the watcher. Count selected ids and use “items” if they include a set menu.
   Use a separate “to a new bill” phrase. Keep the button quiet until the picks and destination
@@ -44,13 +47,13 @@ clearance. Each slice keeps today’s receipt and invoice issuance.
   removal and the exact ids submitted. Preserve the Keep/Discard, Escape and stale-opening
   checks in `till-table-order-screen.actions-unsaved.test.ts`. Keep the app’s request and recovery
   assertions in `till-app-move-dishes.test.ts` and its read in
-  `till-app-split-table.snapshot.test.ts`. Run the portion-picker and split-picker suites,
-  their axe checks, and the shared choice tile cases. Estimate 250 changed product lines and
+  `till-app-split-table.snapshot.test.ts`. Test limits, focus and live count correction in
+  the portion-picker suite. Run it, split-picker, their axe checks and the shared tile cases. Estimate 250 changed product lines and
   300 changed test lines. This slice is at the three-hour limit.
-- **Owner decision before this slice builds.** The approved h 3 draws “Another table…”.
+- **Owner decision before 14c lands.** The approved h 3 draws “Another table…”.
   `moveDishes` in `apps/server/src/bill-actions.ts` requires the receiving bill’s party to
-  match. Recommend shipping New bill and another open bill in this party, recording the frame
-  difference for Lane P, and queuing a separate direct move, which the owner would land if
+  match. Build with New bill and another open bill in this party, and record the frame
+  difference for Lane P. The recommendation is a separate direct move, which the owner would land if
   it changes invoice issuance. The watcher takes the question to the owner and records the
   answer in Lane E’s questions. Today New bill and Move this bill get dishes to a separate
   bill there. Merge puts them onto an existing bill.
