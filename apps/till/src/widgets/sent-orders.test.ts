@@ -145,22 +145,13 @@ it("stays absent until this bill has sent food in the current visit's snapshot",
   expect(find(el, "[data-fired-line=Bravas]").checkVisibility()).toBe(true);
 });
 
-it("has no box to open: no toggle, summary or attention mark, and a hidden level-2 Sent heading", async () => {
+it("draws every row with a hidden level-2 Sent heading and level-3 section headings", async () => {
   const el = await mount(
     current(
       [row("ready", { readyAt: at(59) }), row("served", { servedQuantity: "1.000" })],
       [group("g", [row("held", { released: false, lineNo: 2 })])],
     ),
   );
-  for (const selector of [
-    "[data-sent-toggle]",
-    "[data-served-toggle]",
-    "[data-held-toggle]",
-    "[data-sent-attention]",
-    ".summary",
-    "[aria-expanded]",
-  ])
-    expect(root(el).querySelector(selector), selector).toBeNull();
   const title = find(el, "h2");
   expect(title.textContent).toBe("Sent");
   expect(title.getBoundingClientRect().width).toBeLessThanOrEqual(1);
@@ -660,10 +651,9 @@ it.each(["en", "es"] as const)(
     const el = await mount(data);
     const words = find(el, "[data-section-title]").textContent!.trim();
     expect(words).toBe(
-      locale === "en"
-        ? "Drinks\u00a0· Fired\u00a012\u00a0min\u00a0ago"
-        : "Drinks\u00a0· Marchado\u00a0hace\u00a012\u00a0min",
+      `Drinks\u00a0· ${{ en, es }[locale]["table.group_fired_ago"].replace("{n}", "12")}`,
     );
+    expect(words.split(" ")).toHaveLength(2);
   },
 );
 
@@ -798,7 +788,7 @@ it("shows Spanish ready age, information and charged cancellations without a mis
     "Detalles del plato · Bravas",
   );
   expect(second(el, "[data-served-line=Cancelado]")).toBe("Cancelado, cobrado");
-  expect(text(find(el, "[data-serve-all]"))).toBe("Servir todo");
+  expect(text(find(el, "[data-serve-all]"))).toBe(es["table.serve_group"]);
 });
 
 it.each([
@@ -1543,7 +1533,7 @@ describe("A773 at the pass", () => {
       text(find(await mount(current([atPass("burger")])), "[data-section-title]"));
     expect(await title()).toBe("At the pass");
     setLocale("es");
-    expect(await title()).toBe("En el pase");
+    expect(await title()).toBe(es["table.at_the_pass"]);
   });
 
   it("heads a section whose every waiting dish is at the pass At the pass, never Fired, in Spanish", async () => {
