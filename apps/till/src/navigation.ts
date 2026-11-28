@@ -12,7 +12,8 @@ export const tillPath: UrlPathConfig = {
   },
 };
 
-export type TillDestination = "schedule" | "station" | "expo" | "hours" | "find-bill";
+export type TillDestination =
+  "schedule" | "station" | "expo" | "hours" | "hours-approval" | "find-bill";
 
 export function isTillDestination(value: string | null | undefined): value is TillDestination {
   return (
@@ -20,6 +21,7 @@ export function isTillDestination(value: string | null | undefined): value is Ti
     value === "station" ||
     value === "expo" ||
     value === "hours" ||
+    value === "hours-approval" ||
     value === "find-bill"
   );
 }

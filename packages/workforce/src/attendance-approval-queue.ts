@@ -5,7 +5,8 @@ import type { AttendanceDayApprovalTarget, AttendanceManagerQueue } from "./atte
 import { projectCorrectionItems } from "./attendance-responses.js";
 import { maySelfApproveAttendance } from "./corrections.js";
 import { approvalsForPerson, writeAttendanceDayApproval } from "./day-approvals.js";
-import { groupByPerson } from "./projection.js";
+import { groupByPerson, projectWorkSessions } from "./projection.js";
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { entryDate } from "./record-period.js";
 import { recordRoot } from "./record-projection.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -23,8 +24,9 @@ async function readManagerQueue(tx: Transaction) {
   );
   const pendingByPerson = groupByPerson(items);
   const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
+  const entriesByPerson = groupByPerson(entries);
   const days = new Map(
-    Array.from(groupByPerson(entries), ([personId, own]) => {
+    Array.from(entriesByPerson, ([personId, own]) => {
       const openChanges = pendingByPerson.get(personId)?.flatMap((item) => item.history) ?? [];
       const days = approvalsForPerson(own);
       if (openChanges.length === 0) return [personId, days];
@@ -47,19 +49,32 @@ async function readManagerQueue(tx: Transaction) {
       return [personId, days];
     }),
   );
-  return { items, days };
+  return { items, days, entriesByPerson };
 }
 
-export async function readAttendanceManagerQueue(tx: Transaction): Promise<AttendanceManagerQueue> {
-  const { items, days } = await readManagerQueue(tx);
+export async function readAttendanceManagerQueue(
+  tx: Transaction,
+  paidBreakPolicy?: PaidBreakPolicy | null,
+): Promise<AttendanceManagerQueue> {
+  const { items, days, entriesByPerson } = await readManagerQueue(tx);
   const finishedDays: AttendanceManagerQueue["finishedDays"] = [];
   for (const [personId, own] of days) {
+    const totals = new Map<string, { workedMinutes: number; breakMinutes: number }>();
+    if (paidBreakPolicy !== undefined) {
+      for (const session of projectWorkSessions(entriesByPerson.get(personId)!, paidBreakPolicy)) {
+        const day = totals.get(session.workDate) ?? { workedMinutes: 0, breakMinutes: 0 };
+        day.workedMinutes += session.workedMinutes;
+        day.breakMinutes += session.breakMinutes;
+        totals.set(session.workDate, day);
+      }
+    }
     for (const [date, { approval, times }] of own) {
       if (approval.status === "approved") continue;
       finishedDays.push({
         personId,
         date,
         digest: approval.digest,
+        ...totals.get(date),
         times: times.map((time) => ({
           kind: time.entryKind,
           at: time.eventAt,

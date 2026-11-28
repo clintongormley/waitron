@@ -193,3 +193,30 @@ describe("attendance client", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
+
+it("names the manager and day routes and sends only the displayed day keys for approval", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async (_url, options) =>
+      options?.method === "POST" ? new Response(null, { status: 204 }) : Response.json({}),
+    );
+  const api = new TillApi("", fetcher);
+  const stop = new AbortController();
+  const days = [{ personId: "p", date: "2026-10-13", digest: "A".repeat(64) }];
+
+  await api.getAttendanceManagerLookups();
+  await api.getAttendanceManagerQueue();
+  await api.getAttendanceManagerDay("p", "2026-10-13", { signal: stop.signal });
+  await api.approveAttendanceDays(days);
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+    "/api/attendance/manager/lookups",
+    "/api/attendance/manager/queue",
+    "/api/attendance/manager/day?personId=p&date=2026-10-13",
+    "/api/attendance/manager/approve-days",
+  ]);
+  expect(fetcher.mock.calls[2]?.[1]?.signal).toBe(stop.signal);
+  expect(fetcher.mock.calls[3]?.[1]).toMatchObject({
+    method: "POST",
+    body: JSON.stringify({ days }),
+  });
+});

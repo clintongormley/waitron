@@ -231,7 +231,10 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
         await withTransaction(deps.db, async (tx) => {
           await admitManager(tx, session);
           noQuery(c);
-          return readAttendanceManagerQueue(tx);
+          return readAttendanceManagerQueue(
+            tx,
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),

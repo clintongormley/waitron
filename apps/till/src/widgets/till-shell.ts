@@ -63,6 +63,7 @@ import { counterHeaderStyles, counterStripItems } from "./counter-header-styles.
 import { edgeFadeStyles, markOverflow, oncePerFrame } from "./edge-fade.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
+import { hoursApprovalMenuItem } from "./till-hours-approval-menu-item.js";
 import { reportAvailable } from "../problem-report.js";
 import { aboutHeading, readLegalAbout } from "../legal-about.js";
 import type { LegalAbout } from "@waitron/shared";
@@ -477,6 +478,7 @@ export class TillShell extends LitElement {
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
   @property({ type: Boolean }) hoursBusy = false;
+  @property({ attribute: false }) hoursApprovalCount?: number;
   @property({ type: Boolean }) clockBusy = false;
   @property() clockError = "";
   @property({ attribute: false }) transferCount?: number;
@@ -1309,6 +1311,7 @@ export class TillShell extends LitElement {
       items.station,
       items["find-bill"],
       items.schedule,
+      hoursApprovalMenuItem(this.hoursApprovalCount, () => this.#emit("hours-approval")),
       items.profile,
       this.#drawerItem("close"),
       this.#drawerItem("cash"),
@@ -1372,7 +1375,9 @@ export class TillShell extends LitElement {
     return floorMoreSheet(
       this.transferCount,
       html`
-        <section aria-label=${t("floor.menu_you")}>${this.#operatorActions(false, true)}</section>
+        <section aria-label=${t("floor.menu_you")}>
+          ${this.#operatorActions(false, true)}${hoursApprovalMenuItem(this.hoursApprovalCount, () => this.#emit("hours-approval"), true)}
+        </section>
         ${floor.zonePlanRows()}
         ${floorMenuSection("floor.menu_bills_cash", html`${items["find-bill"]}${this.#drawerItem("cash", true)}${this.#drawerItem("close", true)}${items["transfer-button"]}`)}
         ${floorMenuSection("floor.menu_time", html`${this.#operatorHours(true)}${items.schedule}`)}
@@ -1455,6 +1460,7 @@ export class TillShell extends LitElement {
     >
       ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
       ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
+      ${hoursApprovalMenuItem(this.hoursApprovalCount, () => this.#emit("hours-approval"))}
       ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
       ${this.#drawerItem("close")} ${this.#drawerItem("cash")} ${this.#chooser("group")}
       ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
