@@ -419,6 +419,23 @@ async function openPartServed(over: Partial<TillTableOrderScreen> = {}, served =
   return el;
 }
 
+it("A803 portion grouping: a part-served row's window is headed with the row's count and price", async () => {
+  const el = await openPartServed();
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  const rowPrice = text(panel.shadowRoot!.querySelector('[data-fired-line="s-2"] .row-price')!);
+  const sheet = q(el, "[data-sent-line-dialog]");
+  expect(text(sheet.querySelector(".move-dish")!)).toBe("Steak ×3");
+  expect(text(sheet.querySelector("[data-sent-line-amount]")!)).toBe("€28.50");
+  const cells = (row: Element) => [...row.children].map(text);
+  expect(cells(sheet.querySelector('[data-sent-extra="s-2-lime"]')!)).toEqual(["Lime ×2", "€3.00"]);
+  expect(cells([...sheet.querySelectorAll(".total-row")].at(-1)!)).toEqual(["Total", rowPrice]);
+  expect(rowPrice).toBe("€31.50");
+  cleanupWidgets();
+
+  const served = await openGrouped("served", {}, 3);
+  expect(text(q(served, "[data-sent-line-dialog] .move-dish"))).toBe("Steak ×3");
+});
+
 it("A803 portion grouping: a part-served row takes back only its served portion and serves only what is left", async () => {
   const el = await openPartServed();
   const undos = capture(el, "unserve-lines");

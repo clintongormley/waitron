@@ -3930,9 +3930,13 @@ export class TillTableOrderScreen extends LitElement {
     const slice = members?.[0];
     const row = slice?.row;
     const count = members?.length ?? 1;
-    // Members are identical portions, so the first one's amounts, times the count, are the row's.
-    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
-    const shownQuantity = row === undefined ? "0" : times(decimal(row.quantity));
+    const joined = slice?.kind === "served" ? undefined : this.#sentTakeBack(members);
+    // Members and the served portions their row joins are identical portions, so the first one's
+    // amounts, times the row's count, are the row's; the window's actions take `count` of them.
+    const rowCount = count + (joined?.length ?? 0);
+    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(rowCount)));
+    const shownQuantity =
+      row === undefined ? "0" : multiplyDecimal(decimal(row.quantity), decimal(String(count)));
     const disabled = this.busy || this.groupCommandBusy;
     const group =
       row === undefined
@@ -3993,7 +3997,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${quantityText(shownQuantity)}`}
+                ${row.name}${this.#nutrition(row)}${priceMoves || row === undefined ? nothing : ` ×${quantityText(times(decimal(row.quantity)))}`}
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
@@ -4041,10 +4045,10 @@ export class TillTableOrderScreen extends LitElement {
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, count)}</span
+                  >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, rowCount)}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, rowCount)}</span></div>`)}
               ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
