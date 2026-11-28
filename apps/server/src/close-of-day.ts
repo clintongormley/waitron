@@ -15,13 +15,20 @@ import { codeOf } from "@waitron/server-kit";
 import {
   businessDayAt,
   businessDayBounds,
+  compareDecimal,
+  decimal,
   decimalToCents,
   isAppError,
   jobOrigin,
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockUnconfirmedRefusal } from "./bill-payment-failures.js";
-import { stillOwedOnIssuedBill } from "./bill-payment-rows.js";
+import {
+  readBillAdvances,
+  refuseWhileAdvanceCorrectionOpen,
+  type BillAdvances,
+} from "./bill-advances.js";
+import { readBillFigures, stillOwedOnIssuedBill } from "./bill-payment-rows.js";
 import { issuedBillStanding } from "./bill-payment-money.js";
 import { queueDailyReportMail } from "./daily-report-mail.js";
 import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
@@ -48,6 +55,8 @@ export interface CloseOfDayRule {
   dayStartedAt: Date;
   venueClock: BusinessDayClock;
 }
+
+const ZERO = decimal("0.00");
 
 const MONEY_MOVING: ReadonlySet<string> = new Set([
   "advance.correction_open",
@@ -98,6 +107,12 @@ export async function issueBillAtClose(
     // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
     if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
       return { kind: "left_open", reason: "dish_not_made" };
+    const advances = await readBillAdvances(tx, [billId]);
+    if (advances.credits.has(billId)) await refuseWhileAdvanceCorrectionOpen(tx, billId);
+    // Decided before `priceForIssuance` writes the discounts the bill holds into its lines: a bill
+    // left open keeps them held, to cover what is added to it later.
+    if (!(await owesAtClose(tx, billId, advances)))
+      return { kind: "left_open", reason: "owes_nothing" };
 
     // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
     invoice = await priceForIssuance(
@@ -114,9 +129,6 @@ export async function issueBillAtClose(
     throw error;
   }
   const total = invoice.priced.total;
-  const owed = await stillOwedOnIssuedBill(tx, billId, total);
-  if (issuedBillStanding(total, owed) !== "owes")
-    return { kind: "left_open", reason: "owes_nothing" };
   // Unlike Print the bill, a staged delivery that fails or cannot be reserved does not stop the
   // close: nobody is there to hand it to.
   const { saleId } = await issueUnpaidInvoice(
@@ -132,6 +144,19 @@ export async function issueBillAtClose(
   await bumpPartyRevision(tx, bill.partyId);
   deps.log?.("info", "close_of_day.issued", { workingOrderId: billId, saleId });
   return { kind: "issued", saleId };
+}
+
+/** Whether the bill would owe something once issued, read from its {@link readBillFigures}, which
+ * take the discounts it holds off as its invoice would. A bill whose advances exceed its meal
+ * counts as owing, for its pricing to refuse as `advance.exceeds_bill` (`deductAdvances`). */
+async function owesAtClose(
+  tx: Transaction,
+  billId: string,
+  advances: BillAdvances,
+): Promise<boolean> {
+  const { due } = await readBillFigures(tx, billId, advances);
+  if (compareDecimal(due, ZERO) < 0) return true;
+  return issuedBillStanding(due, await stillOwedOnIssuedBill(tx, billId, due)) === "owes";
 }
 
 /** The bill the close considers once its business day is over: a table bill with lines,

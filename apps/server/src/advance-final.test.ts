@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
+  billPayments,
   devices,
   drawerEntries,
   parties,
@@ -20,7 +21,7 @@ import {
 } from "@waitron/db";
 import { createCategory, createProduct } from "@waitron/menu";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { listAdjustmentReasons } from "@waitron/adjustments";
+import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { addDecimal, decimal, saleId as brandSaleId, type Dining } from "@waitron/shared";
 import {
   filedInvoicesOf,
@@ -35,6 +36,9 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
 import { readOrderRevision } from "./working-order-context.js";
+import { priceForIssuance } from "./working-order-invoice.js";
+import { REASONS } from "./testing/adjustment-venue.js";
+import { holdDiscount } from "./testing/bill-discounts.js";
 import { createTable } from "./testing/live-table.js";
 import {
   openedCorrection,
@@ -953,5 +957,165 @@ describe("a bill whose advance has a correction still open", () => {
     expect(await deductionLinesOf((await restOf(bill.billId))!.id)).toEqual([
       { deductsSaleId: advanceId, lineTotal: -2727, lineGross: -3000, vatRate: 1000 },
     ]);
+  });
+
+  it("is left for later by the close of the business day even once the rest's money is in", async () => {
+    const { bill } = await correcting();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: new Date(Date.now() - 60_000).toISOString() })
+        .where(eq(workingOrders.id, bill.billId)),
+    );
+    // Received without issuing: the payment route refuses to take it while the correction is open.
+    await inTx(venue, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: bill.billId,
+        submissionId: randomUUID(),
+        fingerprint: randomUUID(),
+        kind: "contribution",
+        method: "cash",
+        applied: 9000,
+        tendered: 9000,
+        tip: 0,
+        state: "received",
+        receivedAt: new Date().toISOString(),
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+      }),
+    );
+
+    const outcome = await withTransaction(venue.db, async (tx) =>
+      issueBillAtClose(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        closeOfDayConfig(venue.cfg),
+        bill.billId,
+        { dayStartedAt: new Date(Date.now() + 60_000), venueClock: await readVenueClock(tx) },
+      ),
+    );
+
+    expect(outcome).toEqual({ kind: "money_moving" });
+    expect(await restOf(bill.billId)).toBeUndefined();
+  });
+
+  it("leaves a held discount held when the close of the business day leaves the bill for later", async () => {
+    const { bill, corrections } = await correcting();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: new Date(Date.now() - 60_000).toISOString() })
+        .where(eq(workingOrders.id, bill.billId)),
+    );
+    const complaint = await inTx(
+      venue,
+      async (tx) => (await createAdjustmentReason(tx, REASONS.complaint)).id,
+    );
+    const heldId = await inTx(venue, (tx) =>
+      holdDiscount(
+        tx,
+        {
+          reasonId: { complaint } as Record<keyof typeof REASONS, string>,
+          staffId: venue.operatorId,
+        },
+        { workingOrderId: bill.billId },
+      ),
+    );
+    const linesOf = () =>
+      venue.db.all<{ id: string; lineTotal: number }>(
+        sql`select id, line_total as lineTotal from working_order_lines
+            where working_order_id = ${bill.billId} order by line_no`,
+      );
+    const heldOf = () =>
+      venue.db.all<{ id: string }>(
+        sql`select id from bill_discounts where working_order_id = ${bill.billId}`,
+      );
+    const adjustmentsOf = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(adjustments).where(eq(adjustments.workingOrderId, bill.billId)),
+      );
+    const closeTheDay = () =>
+      withTransaction(venue.db, async (tx) =>
+        issueBillAtClose(
+          tx,
+          {
+            admission: testTradingAdmission(),
+            db: venue.db,
+            backend: venue.backend,
+            clock: venue.clock,
+          },
+          closeOfDayConfig(venue.cfg),
+          bill.billId,
+          { dayStartedAt: new Date(Date.now() + 60_000), venueClock: await readVenueClock(tx) },
+        ),
+      );
+    const lines = linesOf();
+
+    expect(await closeTheDay()).toEqual({ kind: "money_moving" });
+
+    expect(heldOf()).toEqual([{ id: heldId }]);
+    expect(await adjustmentsOf()).toEqual([]);
+    expect(linesOf()).toEqual(lines);
+    // Pricing itself refuses before it writes anything, for a caller that commits past the refusal.
+    const refused = await withTransaction(venue.db, (tx) =>
+      priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, bill.billId, {
+        asked: false,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+    expect(refused).toMatchObject({ code: "advance.correction_open" });
+    expect(heldOf()).toEqual([{ id: heldId }]);
+    expect(await adjustmentsOf()).toEqual([]);
+    expect(linesOf()).toEqual(lines);
+    expect(await restOf(bill.billId)).toBeUndefined();
+    expect((await corrections("close", {})).status).toBe(200);
+    expect(await closeTheDay()).toMatchObject({ kind: "issued" });
+    expect(heldOf()).toEqual([]);
+    expect((await adjustmentsOf()).map((row) => row.reduction)).toEqual([1200]);
+    expect(await restOf(bill.billId)).toMatchObject({ total: 7800 });
+  });
+});
+
+describe("a bill whose advances exceed its meal", () => {
+  it("is refused by the close of the business day, which issues nothing", async () => {
+    const bill = await seated("Tasting menu");
+    await advance(bill.billId, "30.00");
+    // A write that bypasses every writer's checks: only issuance's own refusal is left to hold.
+    venue.db.run(
+      sql`update working_order_lines set line_total = 2000, unit_price_gross = 2000
+          where working_order_id = ${bill.billId}`,
+    );
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: new Date(Date.now() - 60_000).toISOString() })
+        .where(eq(workingOrders.id, bill.billId)),
+    );
+
+    const closed = withTransaction(venue.db, async (tx) =>
+      issueBillAtClose(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        closeOfDayConfig(venue.cfg),
+        bill.billId,
+        { dayStartedAt: new Date(Date.now() + 60_000), venueClock: await readVenueClock(tx) },
+      ),
+    );
+
+    await expect(closed).rejects.toMatchObject({ code: "advance.exceeds_bill" });
+    expect(await restOf(bill.billId)).toBeUndefined();
   });
 });
