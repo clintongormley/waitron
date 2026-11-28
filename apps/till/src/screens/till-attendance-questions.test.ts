@@ -35,9 +35,26 @@ describe("attendance questions before work", () => {
     expect(time).not.toBeNull();
     expect(time.getAttribute("datetime")).toBe("2026-10-13T23:30:00.000Z");
     expect(words(time.closest("li")!)).toBe(
-      "You did not clock out, so Waitron clocked you out at 01:30, Wednesday 14 October.",
+      "Waitron clocked you out at 01:30, Wednesday 14 October, the time of your last recorded activity.",
+    );
+    expect(words(button(el, "header p"))).toBe("Before you start, check these times.");
+    expect(Number(getComputedStyle(time).fontWeight)).toBeGreaterThan(
+      Number(getComputedStyle(time.closest("li")!).fontWeight),
     );
     expect(el.shadowRoot!.textContent).not.toMatch(/unconfirmed/i);
+  });
+
+  it("uses the singular Spanish hour article for a recorded automatic clock-out at one", async () => {
+    const locale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount();
+      const time = el.shadowRoot!.querySelector("time")!;
+      expect(time.textContent).toBe("01:30");
+      expect(words(time.closest("li")!).split("01:30", 1)[0]).toMatch(/\bla\s*$/u);
+    } finally {
+      setLocale(locale);
+    }
   });
 
   it("heads a question card by its work day and a proposal card by nothing", async () => {

@@ -32,6 +32,9 @@ describe("first-sign-in clock page", () => {
       vi.setSystemTime(at(27, 17, 2));
       const { el } = await mount({ displayName: "Javier Torres" });
       expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe("Hello, Javier");
+      expect(el.shadowRoot!.querySelector(".subheading")?.textContent?.trim()).toBe(
+        "You are not clocked in.",
+      );
       const buttons = [...el.shadowRoot!.querySelectorAll("wt-foot-button-bar wt-button")];
       expect(buttons.map((b) => b.textContent?.trim())).toEqual(["Clock in · 17:02", "Not now"]);
       expect(buttons[0]!.shadowRoot!.querySelector("button")!.getBoundingClientRect().height).toBe(
@@ -83,6 +86,9 @@ describe("first-sign-in clock page", () => {
       breakStart: { eventAt: "2026-11-27T20:30:00Z", offsetMinutes: 60 },
     });
     expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe("Welcome back, Javier");
+    expect(el.shadowRoot!.querySelector(".subheading")?.textContent?.trim()).toBe(
+      "You are on a break.",
+    );
     expect(el.shadowRoot!.querySelector("time")?.textContent?.trim()).toBe("21:30");
     expect(el.shadowRoot!.querySelector("strong")?.textContent?.replace(/\s+/gu, " ").trim()).toBe(
       "21:30 · 25 min",

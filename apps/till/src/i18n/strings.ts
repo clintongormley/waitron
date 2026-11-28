@@ -371,7 +371,7 @@ export const en = {
 
   "attendance.questions": "Check your times",
   "attendance.answer_later": "Answer later",
-  "attendance.questions_intro": "Tell us whether these recorded times are right.",
+  "attendance.questions_intro": "Before you start, check these times.",
   "attendance.add_missing_times": "Add missing times",
   "attendance.some_times_missing": "Some times are missing.",
   "attendance.no_times_recorded": "No times recorded.",
@@ -410,7 +410,7 @@ export const en = {
     "These times cannot be applied to your current record. You can disagree with the proposal.",
 
   "attendance.automatic_out_question":
-    "You did not clock out, so Waitron clocked you out at {time}.",
+    "Waitron clocked you out at {time}, the time of your last recorded activity.",
   "attendance.automatic_counted": "This automatic finish already counts towards your hours.",
   "attendance.confirmed_by_worker": "Confirmed by the worker",
   "attendance.waiting_manager": "Waiting for a manager",
@@ -2885,7 +2885,7 @@ export const es: Record<StringKey, string> = {
 
   "attendance.questions": "Comprueba tus horas",
   "attendance.answer_later": "Responder más tarde",
-  "attendance.questions_intro": "Indica si estos fichajes son correctos.",
+  "attendance.questions_intro": "Antes de empezar, revisa estos fichajes.",
   "attendance.add_missing_times": "Añadir fichajes que faltan",
   "attendance.some_times_missing": "Faltan algunos fichajes.",
   "attendance.no_times_recorded": "No hay fichajes.",
@@ -2924,7 +2924,7 @@ export const es: Record<StringKey, string> = {
     "Estas horas no se pueden aplicar a tu registro actual. Puedes indicar que no estás de acuerdo.",
 
   "attendance.automatic_out_question":
-    "No fichaste al salir, así que Waitron registró tu salida a la{plural} {time}.",
+    "Waitron registró tu salida a la{plural} {time}, la hora de tu última actividad registrada.",
   "attendance.automatic_counted": "Esta salida automática ya cuenta para tus horas.",
   "attendance.confirmed_by_worker": "Confirmado por el trabajador",
   "attendance.waiting_manager": "Pendiente de un responsable",
