@@ -319,7 +319,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) openingBack = "";
   @property({ type: Boolean }) quiet = false;
   @property() billName = "";
-  /** On a handheld, the reader and printer row's inputs, passed straight to it. */
+  /** On a handheld, the inputs of the device sheet or the reader and printer row. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
   @property({ attribute: false }) equipmentSaving: { role: EquipmentRole; id: string } | null =
     null;

@@ -20,8 +20,8 @@ import {
   readerChoices,
 } from "../state/pay-equipment.js";
 
-/** What the open row says under the printer field when the receipt cannot print now; the
- * payment still goes ahead (design default 19). */
+/** What the row and the device sheet say under the receipt printer field when the receipt cannot
+ * print now; the payment still goes ahead (design default 19). */
 export function printerWarning(printer: PayPrinter): string | null {
   if (printer.kind === "switched_off")
     return t("pay_equipment.printer_switched_off").replace("{item}", () => printer.name);

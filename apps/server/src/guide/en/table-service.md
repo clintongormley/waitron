@@ -1088,7 +1088,8 @@ again after choosing a tip, then press **Take payment** and give that change to 
 
 **Card and reader.** On a handheld, the contactless icon at the top of Pay opens the camera. Scan
 the Waitron labels of the reader and printers in your hand, one after another, or choose them from
-the lists, then press **Done**. If the contactless icon on a till opens a list of readers, choose
+the lists, then press **Done**. On a bill already presented, or on the confirmation, open
+**Reader and printer** and use **Change** or **QR**. If the contactless icon on a till opens a list of readers, choose
 the one you need. Check the amount on **Charge** before pressing it.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 

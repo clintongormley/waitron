@@ -188,7 +188,7 @@ const presented = (el: TillApp) =>
 const inPresented = (el: TillApp, selector: string) =>
   presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
 /** The open pay sheet's devices: Pay's device sheet on a bill, the folded row on a presented bill.
- * Both draw the same dropdowns, notes and lines. */
+ * Both draw the reader and receipt dropdowns, their notes and the printer warning. */
 const devicesOf = (el: TillApp) =>
   (dialog(el) ?? presented(el))!.shadowRoot!.querySelector<TillPayEquipment>(
     "till-device-sheet, till-pay-equipment",
@@ -2627,7 +2627,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
     return { el, before };
   }
 
-  it("a reader's sticker is sent as a scan, and the row then names the reader", async () => {
+  it("a reader's sticker is sent as a scan, and the device sheet then names the reader", async () => {
     film(formatEquipmentCode("reader", READER_ID));
     const setDeviceEquipment = vi.fn().mockResolvedValue(equipmentOf(THIRD_READER, BAR_PRINTER));
     const { el } = await scanFromSheet(setDeviceEquipment);
@@ -2725,7 +2725,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
     );
   });
 
-  it("a printer's sticker refused changes nothing in the row", async () => {
+  it("a printer's sticker refused changes nothing on the device sheet", async () => {
     film(formatEquipmentCode("printer", PRINTER_ID));
     const setDeviceEquipment = vi
       .fn()
@@ -5709,7 +5709,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     },
   );
 
-  it("an automatic pick with no answer opens the row and says it was not saved", async () => {
+  it("an automatic pick with no answer opens the device sheet and says it was not saved", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const { el, order } = await firstUsePhone({ setDeviceEquipment });
     await pressPaySheet(el, order);
@@ -5890,7 +5890,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(devicesOpen(el)).toBe(true);
   });
 
-  it("an opening read that never answers is cut off, and the row opens with nothing picked", async () => {
+  it("an opening read that never answers is cut off, and the device sheet opens with nothing picked", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5923,7 +5923,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     }
   });
 
-  it("an automatic pick refused while a reopened sheet's opening read is out keeps the row closed until that read answers", async () => {
+  it("an automatic pick refused while a reopened sheet's opening read is out keeps the device sheet closed until that read answers", async () => {
     const { setDeviceEquipment, answers } = heldPicks();
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5952,7 +5952,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
   });
 
-  it("an earlier opening's read failing after the sheet reopened leaves the row to the newer opening", async () => {
+  it("an earlier opening's read failing after the sheet reopened leaves the device sheet to the newer opening", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue(firstUse());
     const { el, order } = await firstUsePhone({ setDeviceEquipment, getDeviceEquipment });
@@ -5981,7 +5981,7 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(await summary(el)).toContain("Lector 2");
   });
 
-  it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the row stays open", async () => {
+  it("when the equipment held offers no reader but the opening read finds one, the pick is sent and the device sheet stays open", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     const getDeviceEquipment = vi.fn().mockResolvedValue({
       roles: [roleOf("receipt", BAR_PRINTER, [BAR_PRINTER]), roleOf("card_terminal", null, [])],

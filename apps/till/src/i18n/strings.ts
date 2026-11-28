@@ -3765,8 +3765,8 @@ export const es: Record<StringKey, string> = {
     "No se ha seleccionado ninguna función de impresora. Elige una en Equipo.",
   "equipment.no_pickup_role":
     "Esta impresora no tiene ninguna función al recogerla. Elige una arriba.",
-  "device_sheet.label": "Dispositivos",
-  "device_sheet.label_problem": "Dispositivos: una impresora necesita atención",
+  "device_sheet.label": "Equipo",
+  "device_sheet.label_problem": "Equipo: una impresora necesita atención",
   "device_sheet.caption": "Apunta al código QR de un equipo · escanea todos los que necesites",
   "device_sheet.hint": "O elige abajo.",
   "device_sheet.hint_nfc":
