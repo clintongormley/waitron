@@ -29,9 +29,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
-// The check before money moves (plan A1621 PR 2b, item 5; D6): every path that would issue a bill's
-// invoice now asks about a discount that no longer holds, before a card is charged or a payment row
-// is written; the paths nobody is asked on write it as it stood.
+// The check before money moves (plan A1621 PR 2b, item 5; D6): every asked path that would issue a
+// bill's invoice asks about a discount that no longer holds, before a card is charged or a payment
+// row is written; the paths nobody is asked on write it as it stood.
 let venue: BillVenue;
 let giver: Pick<AdjustmentVenue, "reasonId" | "staffId">;
 let voidReason: string;

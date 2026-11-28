@@ -110,7 +110,8 @@ interface Parts {
 }
 
 /** The rows `discount` covers as its working-out spreads it, every part of each: a dish with its
- * extras, a set menu's row with the dishes it covers that are charged, or every row. */
+ * extras (a share of a whole-bill discount, its dish alone), a set menu's row with the dishes it
+ * covers that are charged, or every row. */
 function coveredRows(discount: PendingBillDiscount, parts: Parts): Row[] {
   const { target } = discount;
   const rows = [...parts.rowOf.values()];
@@ -339,7 +340,8 @@ function fitted(
  * them out, and each is written with exactly those figures, one record over every line and part it
  * covers. `asked`: a discount that no longer holds refuses `adjustment.no_longer_applies` before
  * anything is written. Otherwise it is written as it stands, with a `discount.written_as_it_stood`
- * activity entry (D20).
+ * activity entry (D20). A discount whose set menu is gone is not recorded; it gets only its
+ * activity entry.
  */
 export async function crystalliseBillDiscounts(
   tx: Transaction,

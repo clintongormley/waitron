@@ -35,7 +35,8 @@ declare module "@waitron/shared" {
      * whole. `lineNo` is the line asked about. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
     /** Held discounts the bill's invoice would write other than as given: `set_menu_gone`, its
-     * set menu broke up, so it takes nothing; `cut_down`, an amount larger than what it is on.
+     * set menu broke up, so it takes nothing; `cut_down`, an amount that would take less than was
+     * given: more than what it is on, or, on a line or the parts a split left, rounded below it.
      * `on` names the dish, extra or set menu it was given on, or the bill; amounts are decimal
      * strings. */
     "adjustment.no_longer_applies": {

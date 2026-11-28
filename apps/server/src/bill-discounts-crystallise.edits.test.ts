@@ -32,8 +32,8 @@ import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 // Spec 6.6: nothing may make a held discount stop holding between the check a card payment's start
-// makes and the invoice its capture issues, so while a card payment is pending every edit of the
-// bill is refused (plan A1621 PR 2b, item 5).
+// makes and the invoice its capture issues, so while a card payment is pending every edit that
+// changes what the bill charges is refused (plan A1621 PR 2b, item 5).
 let venue: BillVenue;
 let giver: Pick<AdjustmentVenue, "reasonId" | "staffId">;
 let voidReason: string;
@@ -153,7 +153,7 @@ async function draftOn(party: { partyId: string; tabId: string }) {
   return (saved.json as { draft: { id: string; revision: number; lines: { id: string }[] } }).draft;
 }
 
-describe("while a card payment is pending, every edit of the bill is refused", () => {
+describe("while a card payment is pending, every edit that changes what the bill charges is refused", () => {
   it("adding a round: POST /api/parties/:id/groups", async () => {
     const p = await paying();
     expectRefused(

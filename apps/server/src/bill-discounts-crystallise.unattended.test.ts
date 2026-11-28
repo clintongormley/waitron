@@ -12,8 +12,6 @@ import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testi
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
-// The issuing paths no person waits on write a held discount that no longer holds as it stood,
-// rather than refuse it (plan A1621 D6).
 let venue: BillVenue;
 let giver: Pick<AdjustmentVenue, "reasonId" | "staffId">;
 
@@ -179,7 +177,7 @@ describe("paths nobody is asked on write a discount that no longer holds as it s
       refund: { manualConfirmed: true },
     },
   ])(
-    "a $way refund of a bill payment that leaves the bill paid, completed as it is asked",
+    "a $way refund of a bill payment that leaves the bill paid, completed in its own request",
     async ({ payment, refund }) => {
       const billId = await tabWith(venue, "Tarta", "Steak");
       const paid = await send(
