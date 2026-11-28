@@ -1,5 +1,9 @@
 import type {
   AttendanceInbox,
+  AttendanceLookups,
+  AttendanceManagerQueue,
+  AttendanceDayApprovalTarget,
+  AttendanceCommand,
   HoursSelection,
   PersonHours,
   AttendanceDayView,
@@ -79,6 +83,32 @@ export class AttendanceApi extends DepartmentTransfersApi {
   getAttendanceDay(date: string, options: ReadOptions = {}): Promise<AttendanceDayView> {
     const query = new URLSearchParams({ date });
     return this.#request(`/api/attendance/day?${query}`, "GET", undefined, options.signal);
+  }
+  getAttendanceManagerLookups(options: ReadOptions = {}): Promise<AttendanceLookups> {
+    return this.#request("/api/attendance/manager/lookups", "GET", undefined, options.signal);
+  }
+  getAttendanceManagerQueue(options: ReadOptions = {}): Promise<AttendanceManagerQueue> {
+    return this.#request("/api/attendance/manager/queue", "GET", undefined, options.signal);
+  }
+  getAttendanceManagerDay(
+    personId: string,
+    date: string,
+    options: ReadOptions = {},
+  ): Promise<AttendanceDayView> {
+    const query = new URLSearchParams({ personId, date });
+    return this.#request(`/api/attendance/manager/day?${query}`, "GET", undefined, options.signal);
+  }
+  sendAttendanceManagerCommand(
+    command: AttendanceCommand,
+    options: ReadOptions = {},
+  ): Promise<AttendanceCommandResult> {
+    return this.#request("/api/attendance/manager/commands", "POST", command, options.signal);
+  }
+  approveAttendanceDays(
+    days: AttendanceDayApprovalTarget[],
+    options: ReadOptions = {},
+  ): Promise<void> {
+    return this.#request("/api/attendance/manager/approve-days", "POST", { days }, options.signal);
   }
   getAttendanceCommand(
     commandId: string,

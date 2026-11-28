@@ -116,6 +116,8 @@ export interface AttendanceDayApprovalTarget {
   digest: string;
 }
 export interface FinishedAttendanceDay extends AttendanceDayApprovalTarget {
+  workedMinutes?: number;
+  breakMinutes?: number;
   times: { kind: ClockEntryKind; at: string; offsetMinutes: number; automatic: boolean }[];
 }
 export interface AttendanceManagerQueue {

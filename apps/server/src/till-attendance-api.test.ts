@@ -215,7 +215,10 @@ it("reads and approves another person's finished day from a manager's clock-only
     approval: { status: "pending", digest: expect.stringMatching(/^[A-F0-9]{64}$/) },
   });
   const days = [{ personId: venue.personId, date: "2026-01-05", digest: day.approval.digest }];
-  expect(await read("manager/queue")).toMatchObject({ items: [], finishedDays: days });
+  expect(await read("manager/queue")).toMatchObject({
+    items: [],
+    finishedDays: [{ ...days[0], workedMinutes: 480, breakMinutes: 0 }],
+  });
   const [managerDevice] = await suite.db.select().from(devices).where(eq(devices.id, deviceId));
   expect(managerDevice?.lastSeenAt).toBe(oldSighting);
 
@@ -1002,4 +1005,12 @@ it("delivers paid totals through every attendance read route", async () => {
       value.record.sessions.find((row: { workDate: string }) => row.workDate === "2026-01-06"),
     ).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
   }
+  const { cookie } = await managerCookie();
+  const queue = await paid.request("/api/attendance/manager/queue", { headers: { cookie } });
+  expect(queue.status).toBe(200);
+  expect(await queue.json()).toMatchObject({
+    finishedDays: expect.arrayContaining([
+      expect.objectContaining({ date: "2026-01-06", workedMinutes: 400, breakMinutes: 20 }),
+    ]),
+  });
 });

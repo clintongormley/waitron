@@ -601,10 +601,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the Hours reads carry the status for each finished day. In the dashboard's **To approve** list,
   managers can approve the displayed finished days together, edit a whole day for the worker to
   review, and settle a dispute in favour of the worker's time or send another edit. On the till,
-  workers' requests go to managers without a PIN prompt. The till has manager-session approval
-  routes. Still open: clocking in and out with breaks, My hours,
-  **To approve** on the till, export markers for approval and disputes (the labour adviser is asked
-  L8), the cash drawer's screens, and waiter floats (A240).
+  workers send their requests to managers. Managers can open **To approve** from **More** on
+  their own till to review requests and disputes or approve the displayed finished days. Still
+  open: editing a whole day on the till, clocking in and out with breaks, My hours, export markers
+  for approval and disputes (the labour adviser is asked L8), the cash drawer's screens, and waiter
+  floats (A240).
   Pass 3's last part (27 November; §7.16–§7.17, not started): no blank screen while loading (grey
   shapes at once, a banner over them after 5 and 15 seconds, one shared placeholder piece), with
   §7.18's loading words ("Esperando al servidor…").

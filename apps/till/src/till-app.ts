@@ -398,6 +398,7 @@ import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
+import "./screens/till-hours-approval-screen.js";
 import { floorKitchenRows, floorToastStyles, restoreFloorZoneFocus } from "./widgets/floor-bar.js";
 import "./screens/till-drawer-close.js";
 import "./screens/till-drawer-cash.js";
@@ -3349,6 +3350,7 @@ export class TillApp extends LitElement {
   /** Bumped when the operator's session ends by logout or a server switch, so an answer arriving
    * afterwards can tell that the session it was asked in has ended. */
   #operatorSession = 0;
+  @state() private hoursApprovalCount?: { session: number; api: TillApi; count: number };
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
   get #sessionPersonId(): string {
@@ -4251,6 +4253,8 @@ export class TillApp extends LitElement {
   }
 
   #allowsDestination(destination: TillDestination): boolean {
+    if (destination === "hours-approval")
+      return this.#allowsDestination("hours") && this.permissions.includes("workforce.correct");
     if (destination === "hours")
       return (
         !this.deviceMode &&
@@ -24255,9 +24259,32 @@ export class TillApp extends LitElement {
           .deviceId=${this.deviceId}
           .serverOrigin=${this.#serverOrigin()}
         ></till-pass-screen>`;
+      case "hours-approval":
       case undefined:
         return nothing;
     }
+  }
+
+  #hoursApprovalBody() {
+    if (!this.#allowsDestination("hours-approval")) return nothing;
+    const active = this.drill?.kind === "hours-approval";
+    const api = this.api;
+    const session = this.#operatorSession;
+    return keyed(
+      session,
+      html`<till-hours-approval-screen
+        .slot=${active ? "drill" : ""}
+        .active=${active}
+        .api=${api}
+        .personId=${this.operatorPersonId}
+        .backLabel=${t(this.#homeScreen() === "counter" ? "tab.counter" : "tab.floor")}
+        @hours-approval-count=${(event: CustomEvent<number>) => {
+          this.hoursApprovalCount = { session, api, count: event.detail };
+        }}
+        @hours-approval-close=${() => this.#requestLeave(() => this.#popDrill())}
+        @hours-approval-session-ended=${() => void this.#onLogout()}
+      ></till-hours-approval-screen>`,
+    );
   }
 
   #renderMoveStationDialog(open: DishMove | WaitingOrderMove) {
@@ -24424,6 +24451,7 @@ export class TillApp extends LitElement {
           this.initialDeviceStation = event.detail;
         }}
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+        @hours-approval=${() => this.#requestLeave(() => this.#pushDrill({ kind: "hours-approval" }))}
         @my-hours=${(event: Event) => {
           event.stopPropagation();
           this.#requestLeave(() => this.#openHours());
@@ -25181,6 +25209,18 @@ export class TillApp extends LitElement {
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
                           .clockBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null}
+                          @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+                            if (
+                              event.detail.open &&
+                              (event.composedPath()[0] as HTMLElement).matches(
+                                "[data-test=more-menu]",
+                              )
+                            )
+                              void this.shadowRoot
+                                ?.querySelector("till-hours-approval-screen")
+                                ?.refresh();
+                          }}
+                          .hoursApprovalCount=${!this.#allowsDestination("hours-approval") ? undefined : this.hoursApprovalCount?.session === this.#operatorSession && this.hoursApprovalCount.api === this.api ? this.hoursApprovalCount.count : 0}
                           .hoursBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true}
                           .clockError=${this.#attendanceMessage()}
                           .affordances=${this.#affordanceList}
@@ -25246,7 +25286,7 @@ export class TillApp extends LitElement {
                                 ></till-department-transfers>`
                           }
                           ${this.#renderDrawerDialog()} ${this.#activeTabBody()}
-                          ${this.#findBillBody()}${this.#drillBody() /* the drill overlay, when one is open */}
+                          ${this.#findBillBody()}${this.#drillBody()}${this.#hoursApprovalBody()}
                         </till-shell>`,
                       )
                     : keyed(
