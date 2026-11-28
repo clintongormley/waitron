@@ -1,8 +1,10 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import { t } from "../i18n/t.js";
+import type { TabLine } from "../api/kitchen-api.js";
+import { portionLineFacts } from "../state/portion-groups.js";
 import type { SentSlice } from "../state/sent-panel.js";
-import type { SentRow } from "../state/sent-sections.js";
-import { quantityText } from "./dish-format.js";
+import { type SentRow, sentPortionId } from "../state/sent-sections.js";
+import { quantityText, trimQuantity } from "./dish-format.js";
 import { openRowAction, openRowBox } from "./row-text.js";
 
 export interface ServeItem {
@@ -47,42 +49,86 @@ export function sentServes(row: SentRow): SentServe[] {
     : [one, { kind: "rest", count: slice.quantity, items: [item(slice)] }];
 }
 
-/** What a press checks against the live list: every portion of the row as it was drawn. */
-export function sentRowDrawn(row: SentRow): string {
+/** What a press checks against the live list: every portion of the row as it was drawn, with the
+ * bill line that says which dish it is. */
+export function sentRowDrawn(row: SentRow, lines: readonly TabLine[]): string {
   return JSON.stringify(
-    row.slices.map((slice) => [slice.row.lineId, slice.kind, slice.quantity, slice.row.released]),
+    row.slices.map(({ row: dish, kind, quantity }) => {
+      const line = lines.find((each) => each.id === dish.lineId && each.lineNo === dish.lineNo);
+      return [
+        dish.lineId,
+        dish.workingOrderId,
+        dish.lineNo,
+        kind,
+        quantity,
+        trimQuantity(dish.quantity),
+        trimQuantity(dish.servedQuantity),
+        trimQuantity(dish.cancelledQuantity ?? "0"),
+        dish.released,
+        dish.unitPrecision,
+        dish.countsWholePortions ?? null,
+        dish.name,
+        dish.note,
+        dish.extras.map((extra) => [extra.lineId, extra.name, trimQuantity(extra.quantity)]),
+        line === undefined ? null : portionLineFacts(line),
+      ];
+    }),
   );
 }
 
+interface Opened {
+  opening: string;
+  id: string;
+  left: string[];
+  portions: string[];
+}
+
+const opened = (opening: string, row: SentRow): Opened => ({
+  opening,
+  id: row.id,
+  left: row.left.map(sentPortionId),
+  portions: row.slices.map(sentPortionId),
+});
+
 /**
- * Which sent row is open in place, one at a time, by its id (its first portion's line, and
- * whether it is the cancelled-but-charged part). A serve does not change a row's id, so the row
- * stays open across it; the row closes when the bill or party changes or no row holds the id.
+ * Which sent row is open in place, one at a time. A serve can join a portion to another row and
+ * change which line a row starts with, so the open row is followed by its portions: to the row now
+ * holding the first of its unserved ones still unserved, or else any of them. It closes when the
+ * bill or party changes or no row holds any of them.
  */
 export class OpenSentRow {
-  #open?: { opening: string; id: string };
+  #open?: Opened;
 
-  toggle(opening: string, id: string): void {
-    this.#open = this.is(opening, id) ? undefined : { opening, id };
+  toggle(opening: string, row: SentRow): void {
+    this.#open = this.is(opening, row.id) ? undefined : opened(opening, row);
   }
 
   is(opening: string, id: string): boolean {
     return this.#open?.opening === opening && this.#open.id === id;
   }
 
-  /** Closes the row unless `rows`, drawn under `opening`, still hold it. */
+  /** Follows the open row into `rows`, drawn under `opening`, or closes it. */
   keep(opening: string, rows: readonly SentRow[]): void {
     const open = this.#open;
-    if (open !== undefined && (open.opening !== opening || !rows.some((row) => row.id === open.id)))
-      this.#open = undefined;
+    if (open === undefined) return;
+    const holds = (slices: readonly SentSlice[], id: string) =>
+      slices.some((slice) => sentPortionId(slice) === id);
+    const row =
+      open.opening !== opening
+        ? undefined
+        : (open.left
+            .map((id) => rows.find((each) => holds(each.left, id)))
+            .find((each) => each !== undefined) ??
+          rows.find((each) => open.portions.some((id) => holds(each.slices, id))));
+    this.#open = row && opened(opening, row);
   }
 }
 
 export interface SentOpenView {
   row: SentRow;
   busy: boolean;
-  serve: (serve: SentServe) => void;
-  details: () => void;
+  serve: (serve: SentServe, event: Event) => void;
+  details: (event: Event) => void;
 }
 
 const serveWords = (serve: SentServe) =>
@@ -112,7 +158,7 @@ export function sentOpenControls(view: SentOpenView): TemplateResult {
               class="sent-open-act"
               data-sent-serve=${serve.kind}
               ?disabled=${view.busy}
-              @click=${() => view.serve(serve)}
+              @click=${(event: Event) => view.serve(serve, event)}
             >
               ${serveWords(serve)}
             </button>`,

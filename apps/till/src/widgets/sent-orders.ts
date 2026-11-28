@@ -379,14 +379,11 @@ export class TillSentOrders extends LitElement {
     this.#releaseHeading();
   }
   /** `groupId` names the section a heading's Serve all belongs to (null: the ungrouped one), whose
-   * live rows must still hold everything it showed; a row's Serve checks the whole bill. */
-  #serve(
-    displayed: readonly { lineId: string; quantity: string }[],
-    groupId?: string | null,
-  ): void {
+   * live rows must still hold everything it showed. */
+  #serve(displayed: readonly { lineId: string; quantity: string }[], groupId: string | null): void {
     if (!this.isConnected || this.busy || displayed.length === 0) return;
     const sections = (this.#model()?.sections ?? []).filter(
-      (section) => groupId === undefined || (section.group?.id ?? null) === groupId,
+      (section) => (section.group?.id ?? null) === groupId,
     );
     const current = new Map(
       servable(sections.flatMap((section) => section.rows)).map((slice) => [
@@ -398,14 +395,25 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
-  /** Sends `serve` only while every portion of `row` stands in the live list as it was drawn. */
-  #serveRow(row: SentRow, serve: SentServe, opening: string): void {
-    if (!this.isConnected || this.busy || opening !== this.#opening) return;
-    const drawn = sentRowDrawn(row);
+  /** Whether `event` came from the open row's box as it stands, for the bill and party now shown,
+   * `row` having been drawn open under `opening`. */
+  #fromOpenRow(row: SentRow, opening: string, event: Event): boolean {
+    const now = JSON.stringify([this.scope, this.billId]);
+    const button = event.currentTarget;
+    return (
+      opening === now &&
+      this.#open.is(now, row.id) &&
+      button instanceof Element &&
+      this.renderRoot.querySelector("li[data-open]")?.contains(button) === true
+    );
+  }
+  /** Sends `serve` only while every portion of `row` stands in the live list as `drawn`. */
+  #serveRow(row: SentRow, serve: SentServe, drawn: string, opening: string, event: Event): void {
+    if (!this.isConnected || this.busy || !this.#fromOpenRow(row, opening, event)) return;
     const live = this.#model()
       ?.sections.flatMap((section) => section.rows)
       .find((each) => each.id === row.id);
-    if (live === undefined || sentRowDrawn(live) !== drawn) return;
+    if (live === undefined || sentRowDrawn(live, this.lines) !== drawn) return;
     this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
@@ -454,7 +462,7 @@ export class TillSentOrders extends LitElement {
     }
   }
   #clickRow(row: SentRow, event: MouseEvent): void {
-    if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row.id);
+    if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row);
     this.#releasePointer();
     if (this.#open.is(this.#opening, row.id)) void this.#reveal();
   }
@@ -606,12 +614,7 @@ export class TillSentOrders extends LitElement {
               press: (event) => this.#pressLine(row, event),
               open: (event) => this.#clickRow(row, event),
               opened: this.#open.is(this.#opening, row.id)
-                ? sentOpenControls({
-                    row,
-                    busy: this.busy,
-                    serve: (serve) => this.#serveRow(row, serve, opening),
-                    details: () => this.#info(row),
-                  })
+                ? this.#openControls(row, opening)
                 : nothing,
             }),
         )}
@@ -624,6 +627,17 @@ export class TillSentOrders extends LitElement {
         )}
       </ul>
     </section>`;
+  }
+  #openControls(row: SentRow, opening: string): TemplateResult {
+    const drawn = sentRowDrawn(row, this.lines);
+    return sentOpenControls({
+      row,
+      busy: this.busy,
+      serve: (serve, event) => this.#serveRow(row, serve, drawn, opening, event),
+      details: (event) => {
+        if (this.#fromOpenRow(row, opening, event)) this.#info(row);
+      },
+    });
   }
   #reminder(model: SentModel): TemplateResult | typeof nothing {
     const reminder = model.reminder;

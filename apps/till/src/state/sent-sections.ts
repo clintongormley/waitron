@@ -40,7 +40,8 @@ export interface SentSection {
 }
 
 const sum = (values: readonly string[]) => sumDecimals(values.map((value) => decimal(value)));
-const unitId = (slice: SentSlice) => `${slice.kind === "cancelled_charged"}:${slice.row.lineId}`;
+export const sentPortionId = (slice: SentSlice): string =>
+  `${slice.kind === "cancelled_charged"}:${slice.row.lineId}`;
 
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const list = map.get(key);
@@ -65,7 +66,7 @@ function toRow(slices: SentSlice[]): SentRow {
     slices,
     left,
     lead: left[0] ?? slices[0]!,
-    id: unitId(slices[0]!),
+    id: sentPortionId(slices[0]!),
     state: stateOf(slices, left),
     quantity: trimQuantity(sum(slices.map((slice) => slice.quantity))),
     served: trimQuantity(
@@ -87,7 +88,7 @@ function portionRows(
   portionKey: (slice: SentSlice) => SentRowPortionKey | null,
 ): PortionRow[] {
   const units = new Map<string, SentSlice[]>();
-  for (const slice of slices) push(units, unitId(slice), slice);
+  for (const slice of slices) push(units, sentPortionId(slice), slice);
   const keyed = [...units.values()].map((unit) => ({
     key: unit.length === 1 ? portionKey(unit[0]!) : null,
     slices: unit,

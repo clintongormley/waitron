@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { CurrentOrders, TabLine } from "../api/kitchen-api.js";
+import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/kitchen-api.js";
 import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -237,6 +237,157 @@ it("sends nothing on one line whose quantity changed since it was drawn", async 
   };
   one.click();
   expect(serves).toEqual([]);
+});
+
+const bravasLine: TabLine = {
+  ...burgerLine("bravas", 1),
+  name: "Bravas",
+  productId: "bravas",
+  menuItemId: "offer-bravas",
+  quantity: "3.000",
+  portion: false,
+};
+
+it.each<[string, Partial<CurrentOrderRow>, TabLine[]?]>([
+  ["the dish drawn on the line", { name: "Croquetas" }],
+  ["the bill line's dish", {}, [{ ...bravasLine, productId: "croquetas" }]],
+  [
+    "the line's extras",
+    {
+      extras: [
+        {
+          lineId: "aioli",
+          name: "Aioli",
+          quantity: "1.000",
+          netAmount: "0.50",
+          unitPriceGross: "0.50",
+          priceQuantity: "1.000",
+        },
+      ],
+    },
+  ],
+  ["the line's note", { note: "no salt" }],
+  ["the serving unit's decimals", { unitPrecision: 3 }],
+  ["whether it counts whole portions", { countsWholePortions: false }],
+  [
+    "the total and served amounts, leaving the same left",
+    { quantity: "4.000", servedQuantity: "1.000" },
+  ],
+  [
+    "the total and cancelled amounts, leaving the same left",
+    { quantity: "4.000", cancelledQuantity: "1.000" },
+  ],
+])("sends nothing when %s changed since the row was drawn", async (_change, over, lines) => {
+  const el = await mount(sentCurrent([sentDish("bravas", { quantity: "3.000" })]), {
+    lines: [bravasLine],
+  });
+  const serves = collect(el, "serve-lines");
+  await tap(el, toggle("bravas"));
+  const one = find(el, "[data-sent-serve=one]")!;
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([sentDish("bravas", { quantity: "3.000", ...over })]),
+  };
+  if (lines !== undefined) el.lines = lines;
+  one.click();
+  expect(serves).toEqual([]);
+});
+
+it.each<[string, (el: Panel) => Promise<void> | void]>([
+  ["after the row closed", (el) => tap(el, toggle("bravas"))],
+  [
+    "after the row closed and opened again",
+    async (el) => {
+      await tap(el, toggle("bravas"));
+      await tap(el, toggle("bravas"));
+    },
+  ],
+  ["after another row opened", (el) => tap(el, toggle("water"))],
+  [
+    "after another row opened, before the list drew again",
+    (el) => find(el, toggle("water"))!.click(),
+  ],
+  [
+    "once the party changed, before the list drew again",
+    (el) => {
+      el.scope = "visit-2";
+      el.snapshot = { ...el.snapshot!, scope: "visit-2" };
+    },
+  ],
+  [
+    "once its line moved to the bill now shown, before the list drew again",
+    (el) => {
+      el.billId = "b2";
+      el.snapshot = {
+        scope: "visit-1",
+        billId: "b2",
+        current: sentCurrent([
+          sentDish("bravas", { quantity: "3.000", workingOrderId: "b2" }),
+          sentDish("water", { lineNo: 2, workingOrderId: "b2" }),
+        ]),
+      };
+    },
+  ],
+])("a retained Serve button sends nothing %s", async (_when, change) => {
+  const el = await mount(
+    sentCurrent([sentDish("bravas", { quantity: "3.000" }), sentDish("water", { lineNo: 2 })]),
+  );
+  const serves = collect(el, "serve-lines");
+  const details = collect(el, "sent-line-info");
+  await tap(el, toggle("bravas"));
+  const one = find(el, "[data-sent-serve=one]")!;
+  const info = find(el, "[data-sent-details]")!;
+  const drawn = change(el);
+  if (drawn !== undefined) await drawn;
+  one.click();
+  info.click();
+  expect(serves).toEqual([]);
+  expect(details).toEqual([]);
+});
+
+it("stays open after Serve 1 when the served portion joins an identical one further along", async () => {
+  const ready = { readyAt: at(55) };
+  const el = await mount(
+    sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2),
+      burgerDish("burger-3", 3),
+    ]),
+    { lines: burgers },
+  );
+  const serves = collect(el, "serve-lines");
+  await tap(el, toggle("burger-2"));
+  expect(opened(el)).toEqual([["burger-2", "0 of 2 served", ["Serve 1", "Serve 2"]]]);
+  await tap(el, "[data-sent-serve=one]");
+  const served = { servedQuantity: "1.000", servedAt: at(59) };
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2, served),
+      burgerDish("burger-3", 3),
+    ]),
+  };
+  el.lines = [burgers[0]!, { ...burgers[1]!, servedAt: at(59) }, burgers[2]!];
+  await el.updateComplete;
+  expect(opened(el)).toEqual([["burger-3", "0 of 1 served", ["Serve 1"]]]);
+  await tap(el, "[data-sent-serve=one]");
+  expect(serves).toEqual([
+    { items: [{ lineId: "burger-2", quantity: "1" }] },
+    { items: [{ lineId: "burger-3", quantity: "1" }] },
+  ]);
+  // With none of it left, the row holding its served portions stays open.
+  el.snapshot = {
+    ...el.snapshot!,
+    current: sentCurrent([
+      burgerDish("burger-1", 1, ready),
+      burgerDish("burger-2", 2, served),
+      burgerDish("burger-3", 3, served),
+    ]),
+  };
+  el.lines = [burgers[0]!, ...burgers.slice(1).map((line) => ({ ...line, servedAt: at(59) }))];
+  await el.updateComplete;
+  expect(opened(el)).toEqual([["burger-1", "2 of 3 served", ["Serve 1"]]]);
 });
 
 it("keeps the box open with its buttons disabled while busy, and sends nothing", async () => {
