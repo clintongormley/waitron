@@ -116,7 +116,7 @@ export const workingOrders = table(
     editorVersion: count("editor_version").notNull().default(0),
     // Eaten here or taken away. No default: whoever opens an order decides it.
     dining: dining("dining").notNull(),
-    // Handover return keeps pending refunds when the original zone is absent (handover-return.ts).
+    // fiscal-verifactu's handover-return.ts clears all three for a pending card refund if its zone or department is missing.
     zoneId: id("zone_id"),
     departmentId: id("department_id"),
     serviceMode: label("service_mode").$type<"table_tab" | "prepay" | "ticket_then_pay">(),
