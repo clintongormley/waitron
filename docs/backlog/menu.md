@@ -784,19 +784,17 @@ by a set menu can be corrected through the API. Extras usage and routing include
 The till's zone offers now include published set-menu copies. They identify the newest copy on sale,
 and the server can read a bill's recorded copy after its full menu is republished.
 Shared ordering code calculates where a dish fits, what it costs there and which moves make room.
-Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
+Bill storage holds set menus, their recorded copies and dish places.
 The server reads the recorded copies and dish places.
 Kitchen tickets, station queues and service reads show the dishes from a set menu. The menu
 itself adds no kitchen work and does not count as a dish. A table can still order
 from its recorded copy after the menu period ends. The server can move a menu with its dishes
-between bills. Splitting a draft keeps the dish's menu offer and clears its
-place reservation on the old bill. The till API returns the bill's saved copies after a full menu
-is republished. The till restores saved set-menu dishes from the bill's copy, follows sold-out
-changes and explains refusals in English and Spanish. At a seated table the till orders from the
-bill's folders and moves a set menu with its dishes.
+between bills. Splitting a draft keeps the dish's menu offer. The till API returns the bill's saved
+copies after a full menu is republished. The till restores saved set-menu dishes from the bill's
+copy, follows sold-out changes and explains refusals in English and Spanish. At a seated table
+the till orders from the bill's folders and moves a set menu with its dishes.
 
-_2026-11-28: D22 removed the draft reservation fields and columns. Draft splits still carry the
-dish's menu offer._
+_2026-11-28: D22 removed the draft reservation fields and columns._
 
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
