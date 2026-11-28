@@ -169,6 +169,7 @@ import {
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-clock-in-screen.js";
+import "./widgets/till-clock-out-sheet.js";
 import "./screens/till-attendance-questions.js";
 import "./screens/till-hours-screen.js";
 import { HoursController, type HoursSnapshot } from "./state/hours.js";
@@ -3014,6 +3015,7 @@ export class TillApp extends LitElement {
   @state() private clockPage: SignInClockAction | false = false;
   @state() private clockedOut = false;
   @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
+  @state() private clockOutOpen = false;
   #clockIntent?: ClockIntent;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
@@ -5146,6 +5148,7 @@ export class TillApp extends LitElement {
     this.#clockIntent = undefined;
     this.#clockNeedsInitialRead = false;
     this.clockPage = false;
+    this.clockOutOpen = false;
     controller?.stop();
     this.clockSnapshot = IDLE_CLOCK;
   }
@@ -5165,6 +5168,7 @@ export class TillApp extends LitElement {
       (snapshot) => {
         if (!current()) return;
         this.clockSnapshot = snapshot;
+        if (snapshot.state?.state === "out") this.clockOutOpen = false;
         const code = snapshot.refusal?.code;
         if (code === "session.required" || code === "session.not_open") {
           void this.#onLogout();
@@ -5641,6 +5645,10 @@ export class TillApp extends LitElement {
     )
       return;
     const action = event.detail.action;
+    if (action === "out") {
+      this.clockOutOpen = this.clockSnapshot.state.state !== "out";
+      return;
+    }
     if (action === "in" && !this.clockPage && this.#attendance !== undefined) {
       this.#attendanceGate = "in";
       this.#attendanceGateVersion++;
@@ -24325,6 +24333,25 @@ export class TillApp extends LitElement {
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
+      ${
+        this.clockOutOpen &&
+        this.#clocking &&
+        this.clockSnapshot.state &&
+        this.clockSnapshot.state.state !== "out"
+          ? html`<till-clock-out-sheet
+              .api=${this.api}
+              .clockState=${this.clockSnapshot.state}
+              @clock-out-dismiss=${() => {
+                this.clockOutOpen = false;
+              }}
+              @clock-out-confirm=${() => {
+                if (!this.clockOutOpen || this.clockSnapshot.state?.state === "out") return;
+                this.clockOutOpen = false;
+                void this.#performClockAction("out");
+              }}
+            ></till-clock-out-sheet>`
+          : nothing
+      }
       ${this.#renderAllergyDialog()} ${this.#renderMoveAllergyDialog()}
       ${
         conflicts !== null && conflicts.current()

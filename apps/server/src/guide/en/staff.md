@@ -222,7 +222,7 @@ Choose **Answer later** to leave the questions for another sign-in. On **Clock i
 shift if one is shown and choose **Clock in**. If you sign in during a break, choose **End break**
 to resume. Choose **Not now** to open the till without recording either action.
 
-Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
+Use **Start break** and **End break** for a pause during your shift. Choose **Clock out** when your work ends, review your day and confirm. To leave the till while staying clocked in, use **Log out**.
 
 When a recorded time is wrong or missing, choose **Fix my hours** from your name's menu. On a
 handheld, open **More** if your name is there. The option appears when clocking is available.

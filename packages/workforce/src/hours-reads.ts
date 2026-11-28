@@ -3,21 +3,16 @@ import { asc } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, businessDayAt, type BusinessDayClock } from "@waitron/shared";
-import type {
-  HoursDay,
-  HoursOpenShift,
-  HoursSelection,
-  ManagerHours,
-  PersonHours,
-} from "./attendance-contract.js";
+import type { HoursDay, HoursSelection, ManagerHours, PersonHours } from "./attendance-contract.js";
 import { projectAttendanceInboxWork, readAttendanceInboxInputs } from "./attendance-reads.js";
 import { dayApprovalsForPerson } from "./day-approvals.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { readClosedPeriodContaining, readClosures } from "./pay-period-reads.js";
 import type { PayPeriodClosure } from "./record-types.js";
 import { readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
-import type { Period, TimeEntryRecord } from "./projection.js";
+import type { Period } from "./projection.js";
 import { isRecordDate } from "./record-dates.js";
+import { entriesFromOpenShift, openShiftsFor } from "./open-shift-context.js";
 import { monthlyIssues } from "./hours-monthly-issues.js";
 import { projectTimeRecord, recordRoot } from "./record-projection.js";
 import { readOutstandingHoursEntries, readTimeRecord } from "./record-reads.js";
@@ -72,26 +67,6 @@ async function windowFor(
     end.setUTCMonth(end.getUTCMonth() + 1);
   }
   return { businessDay, period: { start: dateString(start), end: dateString(end) } };
-}
-function openShiftsFor(entries: TimeEntryRecord[]): HoursOpenShift[] {
-  let open: HoursOpenShift | undefined;
-  for (const entry of entries) {
-    switch (entry.entryKind) {
-      case "in":
-        open = { start: entry, breakStart: null };
-        break;
-      case "out":
-        open = undefined;
-        break;
-      case "break_start":
-        if (open) open.breakStart = entry;
-        break;
-      case "break_end":
-        if (open) open.breakStart = null;
-        break;
-    }
-  }
-  return open === undefined ? [] : [open];
 }
 async function hoursInbox(tx: Transaction, personId: string, monthly: boolean) {
   const inputs = await readAttendanceInboxInputs(tx, personId, "possible-prompts");
@@ -177,7 +152,7 @@ async function personInWindow(
       ...pending.prompts.flatMap((p) => p.history),
       ...pending.items.flatMap((i) => i.history),
       ...entries.filter((e) => pending.automaticEntryIds.includes(e.entryId)),
-      ...openShifts.flatMap((s) => entries.filter((e) => compareEvents(e, s.start) >= 0)),
+      ...openShifts.flatMap((shift) => entriesFromOpenShift(entries, shift)),
     ].map((e) => recordRoot(e, byId).entryId),
   );
   const shown = new Set(record.entries.map((e) => e.entry.entryId));

@@ -11,6 +11,12 @@ export function storedAttendanceTime(at: string, offset: number): string {
   return `${wall.slice(0, 10)} ${wall.slice(11, 16)} ${zone}`;
 }
 
+export function attendanceDuration(minutes: number, omitZeroHours = false): string {
+  const absolute = Math.abs(minutes);
+  if (omitZeroHours && absolute < 60) return `${absolute} min`;
+  return `${minutes < 0 ? "−" : ""}${Math.floor(absolute / 60)} h ${String(absolute % 60).padStart(2, "0")} min`;
+}
+
 type AttendanceEntry = AttendancePrompt["history"][number];
 
 function historyLabel(entry: AttendanceEntry) {

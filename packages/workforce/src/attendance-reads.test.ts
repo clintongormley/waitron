@@ -739,6 +739,20 @@ it("approves an older missing out behind a newer actual in without closing the c
   expect((await day("2026-01-06")).record.sessions.map((s) => s.workedMinutes)).toEqual([480]);
 });
 
+it("includes after-midnight break entries on the start date of an open shift", async () => {
+  const input = { nodeId, personId, offsetMinutes: 60, origin };
+  await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T20:00:00Z" }));
+  await run((tx) => backend.breakStart(tx, { ...input, at: "2026-01-05T23:15:00Z" }));
+  await run((tx) => backend.breakEnd(tx, { ...input, at: "2026-01-05T23:35:00Z" }));
+
+  expect((await day()).record.entries.map(({ entry }) => entry.entryKind)).toEqual([
+    "in",
+    "break_start",
+    "break_end",
+  ]);
+  expect((await day("2026-01-06")).record.sessions).toEqual([]);
+});
+
 it("shows paid time and the actual pause in the attendance day", async () => {
   for (const [kind, at] of [
     ["clockIn", "09:00"],

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./attendance-contract": "./src/attendance-contract.ts",
+    "./projection": "./src/projection.ts",
     "./test/fixtures.js": "./test/fixtures.ts",
     "./dashboard": "./src/dashboard/index.ts",
     "./roster-validation": "./src/roster-validation.ts",
