@@ -136,6 +136,12 @@ export class TillFindBillScreen extends LitElement {
       .state p {
         margin: 0;
       }
+      .more {
+        padding-block-end: var(--wt-space-4);
+      }
+      wt-full-screen-panel > :last-child {
+        margin-block-end: env(safe-area-inset-bottom);
+      }
     `,
   ];
   @property({ attribute: false }) api!: TillApi;
@@ -564,7 +570,7 @@ export class TillFindBillScreen extends LitElement {
       ></span>
       <div role="menu" aria-label=${label("dates")}>
         ${presets.map(
-          (preset) =>
+          (preset, index) =>
             html`<button
               type="button"
               role="menuitemradio"
@@ -573,7 +579,11 @@ export class TillFindBillScreen extends LitElement {
               aria-checked=${preset === chosen ? "true" : "false"}
               @click=${() => this.#setDates(preset)}
             >
-              <wt-menu-row label=${label(preset)} .check=${preset === chosen}></wt-menu-row>
+              <wt-menu-row
+                label=${label(preset)}
+                .check=${preset === chosen}
+                ?divider=${index < presets.length - 1}
+              ></wt-menu-row>
             </button>`,
         )}
       </div>
@@ -668,7 +678,7 @@ export class TillFindBillScreen extends LitElement {
         this.listError === "more"
           ? failure(true)
           : this.more
-            ? html`<div class="state">
+            ? html`<div class="state more">
                 <wt-button
                   variant="secondary"
                   data-list-more

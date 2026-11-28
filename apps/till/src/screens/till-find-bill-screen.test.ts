@@ -642,9 +642,28 @@ function brokenWords(node: Node): string[] {
     }
   return broken;
 }
-it.each([320, 390])(
-  "at %i px in Spanish, a long receipt number never overlaps a row's place, amount, label or way paid",
-  async (width) => {
+/** The text under `node` on each line it is drawn across, top to bottom. */
+function linesOf(node: Node): string[] {
+  const lines = new Map<number, string>();
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode())
+    for (let at = 0; at < text.textContent!.length; at++) {
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + 1);
+      const rect = [...range.getClientRects()].find((r) => r.width > 0);
+      if (!rect) continue;
+      const top = Math.round(rect.top);
+      lines.set(top, (lines.get(top) ?? "") + text.textContent![at]);
+    }
+  return [...lines.entries()].sort(([a], [b]) => a - b).map(([, line]) => line);
+}
+it.each([
+  [320, ["A-0CNNY/", "9007199254740993"]],
+  [390, ["A-0CNNY/9007199254740993"]],
+])(
+  "at %i px in Spanish, a long receipt number breaks only after its series' slash, as %j, and never overlaps a row's place, amount, label or way paid",
+  async (width, numberLines) => {
     const face = await loadPhoneFont();
     try {
       await pageAt(width, 844);
@@ -696,6 +715,7 @@ it.each([320, 390])(
         expect(detail.getBoundingClientRect().width).toBeGreaterThan(0);
         expect(detail.scrollWidth, words(detail)).toBeLessThanOrEqual(detail.clientWidth);
         for (const part of parts) expect(brokenWords(part), part.className).toEqual([]);
+        expect(linesOf(number)).toEqual(numberLines);
         for (const part of [...parts, number]) {
           const rect = part.getBoundingClientRect();
           expect(rect.left, `${part.className} ${box(rect)}`).toBeGreaterThanOrEqual(button.left);
@@ -784,13 +804,54 @@ it("keeps a refund row's identity, sign and the sale's number, under a Refund la
   const drawn = row(el, "refund:refund-1");
   expect(drawn.querySelector("[data-way] wt-icon")!.getAttribute("name")).toBe("undo");
   expect(words(drawn.querySelector("[data-way] [data-tag]"))).toBe("Refund");
-  expect(words(drawn.querySelector("[data-amount]"))).toBe("-€13.75");
+  expect(words(drawn.querySelector("[data-amount]"))).toBe("−€13.75");
   expect(words(drawn.querySelector("[data-number]"))).toBe("F/0012");
   const opened = vi.fn();
   el.addEventListener("find-transaction-open", opened);
   await userEvent.click(drawn);
   expect(opened.mock.calls[0]![0].detail).toEqual({ row: refund });
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(words(row(el, "refund:refund-1").querySelector("[data-amount]"))).toBe("−13,75 €");
 });
+it.each([
+  ["en-GB", "Cash, card ··5502 · Luis", "Card ··4821, cash, voucher"],
+  ["es-ES", "Efectivo, tarjeta ··5502 · Luis", "Tarjeta ··4821, efectivo, vale"],
+] as const)(
+  "in %s, writes a split payment's later ways of paying in lower case",
+  async (language, cashFirst, cardFirst) => {
+    const { el } = await mount(
+      answering([
+        transactionRow({
+          transactionId: "split-1",
+          type: "sale",
+          customerName: null,
+          methods: [
+            { method: "cash", last4: null },
+            { method: "card", last4: "5502" },
+          ],
+          staff: { id: "staff-2", name: "Luis" },
+        }),
+        transactionRow({
+          transactionId: "split-2",
+          type: "sale",
+          customerName: null,
+          methods: [
+            { method: "card", last4: "4821" },
+            { method: "cash", last4: null },
+            { method: "voucher", last4: null },
+          ],
+          staff: null,
+        }),
+      ]),
+    );
+    setLocale(language);
+    await ready(el);
+    await el.updateComplete;
+    expect(words(row(el, "split-1").querySelector("[data-way] .detail"))).toBe(cashFirst);
+    expect(words(row(el, "split-2").querySelector("[data-way] .detail"))).toBe(cardFirst);
+  },
+);
 it.each([
   ["en-GB", "Corrective receipt", "Replacement corrective receipt", "Corrective invoice"],
   [
@@ -916,6 +977,37 @@ it("Show more appends the next page once, leaving out a sale it already shows", 
   ]);
   expect(requests(fetcher).map((url) => url.searchParams.get("page"))).toEqual(["0", "1"]);
   expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
+});
+it("leaves 16 px under Show more at the end of the scrolled list", async () => {
+  try {
+    await pageAt(390, 844);
+    const { el, host } = await mount(answering([transactionRow()], 60));
+    host.style.blockSize = "600px";
+    await ready(el);
+    const more = el.shadowRoot!.querySelector<HTMLElement>("[data-list-more]")!;
+    const panel = el.shadowRoot!.querySelector("wt-full-screen-panel")!;
+    const body = panel.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const content = panel.shadowRoot!.querySelector<HTMLElement>(".content")!;
+    body.scrollTop = body.scrollHeight;
+    const end = Math.min(
+      body.getBoundingClientRect().bottom,
+      content.getBoundingClientRect().bottom,
+    );
+    expect(end - more.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(16);
+  } finally {
+    await resetPage();
+  }
+});
+it("draws a line between the Days sheet's rows, and none under the last", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const menu = daysMenu(el);
+  await menu.updateComplete;
+  await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>('[part="trigger"]')!);
+  const rows = [...menu.querySelectorAll<HTMLElement>("[data-preset] > wt-menu-row")];
+  await vi.waitFor(() => expect(rows.at(-2)!.hasAttribute("divider")).toBe(true));
+  const lines = rows.map((r) => getComputedStyle(r).borderBottomWidth);
+  expect(lines).toEqual([...Array(rows.length - 1).fill("1px"), "0px"]);
 });
 const pagedSale = (n: number) => transactionRow({ transactionId: `sale-${n}` });
 /** Pages of two of six sales; page 1 repeats page 0's last sale, as an arrival between reads would. */

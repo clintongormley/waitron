@@ -45,11 +45,12 @@ function wayIcon(row: TransactionRow): string | null {
 
 function ways(row: TransactionRow): string {
   const paid = row.methods
-    .map((way) =>
-      way.method === "card" && way.last4
-        ? fill(label("card_digits"), { last4: way.last4 })
-        : label(way.method),
-    )
+    .map((way, index) => {
+      const prefix = index === 0 ? "" : "joined_";
+      return way.method === "card" && way.last4
+        ? fill(label(`${prefix}card_digits`), { last4: way.last4 })
+        : label(`${prefix}${way.method}`);
+    })
     .join(", ");
   return [paid || label("unpaid"), row.staff?.name].filter(Boolean).join(" · ");
 }
@@ -61,13 +62,21 @@ function detail(row: TransactionRow, shownPlace: string): string {
     : ways(row);
 }
 
+function receiptNumber(number: string) {
+  const series = number.lastIndexOf("/") + 1;
+  if (series === 0) return html`<span class="whole">${number}</span>`;
+  return html`<span class="whole">${number.slice(0, series)}</span><wbr /><span class="whole"
+      >${number.slice(series)}</span
+    >`;
+}
+
 export function findBillRow(
   row: TransactionRow,
   options: { timeZone: string; disabled: boolean; open: () => void },
 ) {
   const where = place(row);
   const icon = wayIcon(row);
-  const amount = formatMoney(row.amount, currentLocale());
+  const amount = formatMoney(row.amount, currentLocale()).replace("-", "\u2212");
   return html`<button
     type="button"
     class="sale"
@@ -85,7 +94,7 @@ export function findBillRow(
       ${row.type === "sale" ? nothing : html`<span class="tag" data-tag>${label(row.type)}</span>`}
       <span class="detail">${detail(row, where)}</span>
     </span>
-    <span class="number" data-number>${row.invoiceNumber}</span>
+    <span class="number" data-number>${receiptNumber(row.invoiceNumber)}</span>
   </button>`;
 }
 
@@ -94,8 +103,8 @@ export const findBillRowStyles = css`
     display: grid;
     grid-template-columns:
       calc(var(--wt-space-6) + var(--wt-space-4))
-      minmax(0, 1fr)
-      fit-content(40%);
+      minmax(calc(3 * var(--wt-space-6)), 1fr)
+      auto;
     column-gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
     row-gap: calc(var(--wt-space-1) / 2);
     align-items: center;
@@ -172,10 +181,11 @@ export const findBillRowStyles = css`
   .number {
     grid-column: 3;
     justify-self: end;
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
     text-align: end;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
+  }
+  .whole {
+    white-space: nowrap;
   }
 `;

@@ -1002,6 +1002,7 @@ visible enabled items, Home and End reach the ends, and Tab closes the menu and 
 trigger. Plain action disclosures keep their ordinary Tab order.
 
 Use `bottom-sheet sheet-variant="menu"` on `wt-row-actions` for the till's menu sheet.
+The sheet leaves `--wt-space-5` under its last row, plus the phone's bottom safe area.
 Set `sheet-heading` to show a title and name the dialog. A sheet without a heading takes
 its name from `sheet-label`, or from the trigger's `label` when you omit it. Use `data-sheet-heading` on a direct child to label a
 section. If the sheet needs to stop above a bottom bar, set `--wt-menu-sheet-bottom-offset`
