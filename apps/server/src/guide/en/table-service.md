@@ -48,18 +48,19 @@ drawer. If it stays shut, use the key.
 ## Close a cash drawer {#close-drawer}
 
 On a till assigned to the drawer, open **More** and choose **Close drawer**. Open it with the key
-if it stays shut. Count the cash and choose **Save count**. Waitron then shows any difference, and
-you can choose **Recount** once to check it. If you leave after saving a count, choose **Close drawer**
-again from any till assigned to it to pick up where you left off.
+if it stays shut. Enter the count on the keypad and choose **Save the count**. Waitron then shows
+any difference. Choose **Count again** if you want to check it. If you leave after saving a count,
+choose **Close drawer** again from any till assigned to it to pick up where you left off.
 
 If Close drawer says **Can't reach the box**, check the till's connection and choose **Try again**.
 
-If Waitron asks you to recount after cash moved, choose **Recount** and enter what is in the
+If Waitron asks you to recount after cash moved, choose **Count again** and enter what is in the
 drawer now.
 
-Enter the cash you want to leave and check **For the bank** before taking the rest out. Choose
-**Finish close**. If you need another slip, you can reprint it from
-[Sales](sales.md#drawer-close-history).
+Enter the cash you want to leave for the next service and check **For the bank** before taking the
+rest out. Choose **Finish and print the slip**, or **Finish close** if the printer is off. You can
+reprint a slip from [Sales](sales.md#drawer-close-history). When you see **Drawer closed**, go back
+to the floor or choose **Clock out** to finish your shift.
 
 ## Use another card machine {#outside-card}
 

@@ -50,9 +50,9 @@ cerrado, usa la llave.
 ## Cerrar un cajón de efectivo {#close-drawer}
 
 En una caja asignada al cajón, abre **Más** y elige **Cerrar cajón**. Si no se abre, usa la
-llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la diferencia, si la hay,
-y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
-**Cerrar cajón** en cualquier caja asignada al mismo cajón para continuar.
+llave. Introduce el recuento en el teclado numérico y elige **Guardar recuento**. Después verás la
+diferencia, si la hay, y podrás elegir **Volver a contar** una vez. Si sales después de guardar el
+recuento, elige **Cerrar cajón** en cualquier caja asignada al mismo cajón para continuar.
 
 Si al cerrar el cajón ves **No se puede conectar con el servidor**, comprueba la conexión de la
 caja y pulsa **Reintentar**.
@@ -60,9 +60,11 @@ caja y pulsa **Reintentar**.
 Si Waitron te pide que vuelvas a contar tras un movimiento de efectivo, elige **Volver a contar**
 e indica cuánto hay ahora en el cajón.
 
-Introduce el efectivo que quieres dejar y comprueba el importe **Para el banco** antes de retirar
-el resto. Elige **Finalizar cierre**. Puedes reimprimir el justificante en
-[Ventas](sales.md#drawer-close-history).
+Introduce el efectivo que quieres dejar para el próximo servicio y comprueba el importe **Para el
+banco** antes de retirar el resto. Elige **Finalizar e imprimir el justificante**, o **Finalizar
+cierre** si la impresora está apagada. Puedes reimprimir el justificante en
+[Ventas](sales.md#drawer-close-history). Cuando veas **Cajón cerrado**, vuelve a la sala o elige
+**Fichar salida** para terminar tu turno.
 
 ## Usar otro datáfono {#outside-card}
 
