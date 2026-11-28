@@ -2802,10 +2802,10 @@ export const es: Record<StringKey, string> = {
   "hours.no_approvals": "No hay horas pendientes de tu aprobación.",
   "hours.approvals_reading": "Cargando las horas por aprobar…",
   "hours.approvals_read_failed":
-    "No se han podido cargar las horas por aprobar. Inténtalo de nuevo.",
+    "No se pudo cargar la lista de horas por aprobar. Inténtalo de nuevo.",
   "hours.approvals_write_failed": "No se ha podido confirmar el cambio. Inténtalo de nuevo.",
   "hours.approvals_not_permitted":
-    "No puedes aprobar horas desde este terminal. Comprueba tu sesión o usa el panel de gestión.",
+    "No puedes aprobar horas desde esta caja. Comprueba tu sesión o usa el panel de gestión.",
   "hours.approvals_changed":
     "Estas horas han cambiado. Revisa las horas actuales antes de continuar.",
   "hours.cannot_approve_own": "Otro responsable debe aprobar tus horas.",

@@ -249,8 +249,8 @@ solicitud. Se envía a los encargados. Consulta su estado en **Mis horas**.
 
 ## Aprobar los días terminados {#approve-hours}
 
-En tu terminal, abre **Más** y elige **Por aprobar**. El número indica las solicitudes, los
-desacuerdos y los días terminados que puedes atender desde el terminal. Para editar toda una
+En tu caja, abre **Más** y elige **Por aprobar**. El número indica las solicitudes, los
+desacuerdos y los días terminados que puedes atender desde la caja. Para editar toda una
 jornada, ábrela en el panel de gestión.
 
 En el menú del panel, abre **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
