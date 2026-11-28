@@ -12,8 +12,10 @@ export const menuTileStyles: CSSResult = css`
     display: grid;
     gap: var(--wt-space-2);
     grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
-    padding-block-start: var(--wt-space-2);
-    padding-inline-end: var(--wt-space-2);
+    --count-outside: calc(var(--wt-space-3) / 2);
+    --count-ring: var(--wt-count-badge-ring-width);
+    padding-block-start: calc(var(--count-outside) + var(--count-ring));
+    padding-inline-end: calc(var(--count-outside) + var(--count-ring));
     --menu-tile-height: calc(var(--wt-tap-min) + var(--wt-space-6));
   }
 
@@ -94,10 +96,10 @@ export const menuTileStyles: CSSResult = css`
     height: 100vh;
   }
 
-  /* The count's reach into the tile (its width less the part drawn outside), on both sides so the
-     name stays centred. */
+  /* The count's reach into the tile, from the width the count publishes, on both sides so the name
+     stays centred; the tile's own padding covers the ring. */
   .tile[data-in-order] .name {
-    --name-count-room: calc(var(--wt-space-5) - var(--wt-space-3) / 2);
+    --name-count-room: calc(var(--count-badge-width, 0px) - var(--count-outside));
     padding-inline: calc(var(--name-count-room) + var(--name-ellipsis-room)) var(--name-count-room);
   }
 
@@ -122,12 +124,12 @@ export const menuTileStyles: CSSResult = css`
 
   .in-order {
     position: absolute;
-    inset-block-start: calc(var(--wt-space-3) / -2);
-    inset-inline-end: calc(var(--wt-space-3) / -2);
+    inset-block-start: calc(-1 * var(--count-outside));
+    inset-inline-end: calc(-1 * var(--count-outside));
   }
 
   .in-order::part(badge) {
-    box-shadow: 0 0 0 2px var(--wt-color-bg);
+    box-shadow: 0 0 0 var(--count-ring) var(--wt-color-bg);
   }
 
   .in-order-words {

@@ -4,7 +4,7 @@ import { DEFAULT_HOME_ORDER, type DocumentMember } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { daily } from "../../test/set-menu-widgets.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
@@ -120,6 +120,9 @@ function resolved(near: HTMLElement, property: "backgroundColor" | "color", valu
   return read;
 }
 
+/** After the next paint, so anything worked out from a drawn size is in place. */
+const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+
 afterEach(() => cleanupWidgets());
 
 const ALL = ["Starters", "Bravas", "Croquettes", "Squid", "Prawns", "Cheeses", "Daily menu"];
@@ -217,6 +220,71 @@ describe("menu tiles", () => {
     },
   );
 
+  it.each(
+    [390, 1280].flatMap((width) =>
+      [100, 130].flatMap((scale) => [9, 12, 100].map((count) => ({ width, scale, count }))),
+    ),
+  )(
+    "keeps a long counted name clear of a count of $count and its ring, centred, at $width px and $scale% text",
+    async ({ width, scale, count }) => {
+      const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
+      try {
+        await pageAt(width, 900, scale);
+        const { el } = await mountWidget<TillMenuBrowser>("till-menu-browser", {
+          menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
+          products: [product("long", full), bravas],
+          store: new WorkingOrderStore(),
+          inOrder: new Map([["p-long", count]]),
+        });
+        await nextPaint();
+        const dish = tile(el, full);
+        const name = dish.querySelector<HTMLElement>(".name")!;
+        const pill = getComputedStyle(badge(dish)!.shadowRoot!.querySelector("[part=badge]")!);
+        const ring = parseFloat(pill.boxShadow.split(" ").at(-1)!);
+        expect(ring).toBeGreaterThan(0);
+        const box = badge(dish)!.getBoundingClientRect();
+        const drawn = new DOMRect(
+          box.left - ring,
+          box.top - ring,
+          box.width + 2 * ring,
+          box.height + 2 * ring,
+        );
+        const own = name.getBoundingClientRect();
+        const words = document.createRange();
+        words.selectNodeContents(name);
+        const shown = [...words.getClientRects()].filter((line) => line.top < own.bottom);
+        expect(new Set(shown.map((line) => Math.round(line.top))).size).toBe(2);
+        for (const line of shown) {
+          const overlap = Math.min(line.right, drawn.right) - Math.max(line.left, drawn.left);
+          const apart = overlap <= 0 || drawn.bottom <= line.top || line.bottom <= drawn.top;
+          expect(apart, `line overlaps the count by ${overlap.toFixed(1)} px`).toBe(true);
+        }
+        // However the words wrap, no line can reach past the name's padding.
+        const look = getComputedStyle(name);
+        const textRight = own.right - parseFloat(look.paddingRight);
+        expect(
+          textRight <= drawn.left || drawn.bottom <= own.top,
+          `the name's text room overlaps the count by ${(textRight - drawn.left).toFixed(1)} px`,
+        ).toBe(true);
+        const outer = dish.getBoundingClientRect();
+        const first = shown[0]!;
+        expect(
+          Math.abs((first.left + first.right) / 2 - (outer.left + outer.right) / 2),
+        ).toBeLessThan(1);
+        expect(Math.abs((own.left + own.right) / 2 - (outer.left + outer.right) / 2)).toBeLessThan(
+          1,
+        );
+        const grid = dish.closest(".grid")!.getBoundingClientRect();
+        expect(drawn.top).toBeGreaterThanOrEqual(grid.top);
+        expect(drawn.right).toBeLessThanOrEqual(grid.right);
+        if (scale === 100) expect(outer.height).toBe(width < 720 ? 76 : 84);
+      } finally {
+        cleanupWidgets();
+        await resetPage();
+      }
+    },
+  );
+
   it.each([
     { width: 390, height: 76 },
     { width: 1280, height: 84 },
@@ -265,6 +333,7 @@ describe("menu tiles", () => {
           products: [dish],
           inOrder: new Map([[dish.id, 12]]),
         });
+        await nextPaint();
         const shown = tile(el, dish.name);
         const box = badge(shown)!.getBoundingClientRect();
         const lines = document.createRange();

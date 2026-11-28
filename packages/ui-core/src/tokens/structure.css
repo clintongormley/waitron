@@ -153,5 +153,7 @@
   --wt-focus-offset: 2px;
 
   --wt-selected-ring: 2px solid var(--wt-color-primary);
+  /* The page-coloured ring that parts a count drawn over an edge from what it sits on. */
+  --wt-count-badge-ring-width: 2px;
   --wt-color-row-selected: color-mix(in srgb, var(--wt-color-primary) 12%, var(--wt-color-surface));
 }

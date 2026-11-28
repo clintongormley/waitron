@@ -3061,6 +3061,9 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       ...overrides,
     });
   const badge = (tile: Button) => tile.querySelector<HTMLElement>("[data-in-order-count]");
+  /** After the next paint, by when a counted name has the room its badge's drawn width asks for. */
+  const nextPaint = () =>
+    new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
   /** The number the badge draws, read from its own rendering once it has drawn. */
   const shown = async (tile: Button) => {
     const count = badge(tile) as (HTMLElement & { updateComplete: Promise<boolean> }) | null;
@@ -3144,6 +3147,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           products: [dish],
           inOrder: new Map([[dish.id, 12]]),
         });
+        await nextPaint();
         const tile = entry(el, "structure", dish.name);
         const box = badge(tile)!.getBoundingClientRect();
         const outer = tile.getBoundingClientRect();
@@ -3266,6 +3270,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       expect(read()).toEqual(uncounted);
       el.inOrder = new Map(painted.map((dish) => [dish.id, 1]));
       await el.updateComplete;
+      await nextPaint();
       const counted = read();
       const shownTile = entry(el, "structure", painted[0]!.name).getBoundingClientRect();
       const reach =

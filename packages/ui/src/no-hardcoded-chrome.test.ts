@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
-import type { CSSResult } from "lit";
+import { CSSResult } from "lit";
+import { HOME_GRID_COLUMNS } from "@waitron/shared";
 
-// The negative pattern matters: eagerly importing a *.test.ts file would register its tests into
-// this file's run.
-const modules = import.meta.glob(["./components/*.ts", "!./components/*.test.ts"], {
-  eager: true,
-}) as Record<string, Record<string, unknown>>;
+// The negative patterns matter: eagerly importing a *.test.ts file would register its tests into
+// this file's run. The package's own style modules sit beside its index, which re-exports them.
+const modules = import.meta.glob(
+  ["./components/*.ts", "./*.ts", "!./**/*.test.ts", "!./*.d.ts", "!./index.ts"],
+  { eager: true },
+) as Record<string, Record<string, unknown>>;
 
 interface StyledCtor {
   styles: unknown;
@@ -15,11 +17,20 @@ function isStyledCtor(value: unknown): value is StyledCtor {
   return typeof value === "function" && "styles" in value;
 }
 
+/** Every exported component's styles and every exported stylesheet, and any other stylesheet a
+ * component keeps as a static. */
 const components: Record<string, StyledCtor> = {};
-for (const mod of Object.values(modules)) {
+function add(name: string, path: string, styled: StyledCtor) {
+  components[name in components ? `${name} (${path})` : name] = styled;
+}
+for (const [path, mod] of Object.entries(modules)) {
   for (const [exportName, value] of Object.entries(mod)) {
-    if (isStyledCtor(value)) {
-      components[exportName] = value;
+    if (value instanceof CSSResult) add(exportName, path, { styles: value });
+    else if (isStyledCtor(value)) {
+      add(exportName, path, value);
+      for (const [key, extra] of Object.entries(Object.getOwnPropertyDescriptors(value)))
+        if (key !== "styles" && extra.value instanceof CSSResult)
+          add(`${exportName}.${key}`, path, { styles: extra.value });
     }
   }
 }
@@ -48,8 +59,12 @@ for (const [name, ctor] of Object.entries(components)) {
   });
 
   test(`${name} declares no literal px/rem/em sizing`, () => {
-    // Up to 1px is allowed as a hairline; rem and em are banned at any size.
-    const css = cssOf(ctor.styles);
+    // Up to 1px is allowed as a hairline; rem and em are banned at any size. A media or container
+    // condition cannot read a custom property, and the menu's column formula is the shared one
+    // its tiles' widths are defined by.
+    const css = cssOf(ctor.styles)
+      .replace(/@(?:media|container)[^{]*\{/g, "{")
+      .replaceAll(HOME_GRID_COLUMNS, "");
     const pxOffenders = numbersWithUnit(css, "px").filter((n) => Math.abs(n) > 1);
     const remEmOffenders = numbersWithUnit(css, String.raw`(?:rem|em)\b`);
     expect([...pxOffenders, ...remEmOffenders]).toEqual([]);

@@ -61,18 +61,19 @@ export function dishTile(
       else onTap(event.currentTarget as HTMLElement);
     }}
   >
-    ${
-      counted > 0
-        ? html`<wt-count-badge
-            class="in-order"
-            data-in-order-count
-            tone="notice"
-            aria-hidden="true"
-            .count=${counted}
-          ></wt-count-badge>`
-        : nothing
-    }
     <span class="label">
+      ${
+        counted > 0
+          ? html`<wt-count-badge
+              class="in-order"
+              data-in-order-count
+              tone="notice"
+              aria-hidden="true"
+              publish-width
+              .count=${counted}
+            ></wt-count-badge>`
+          : nothing
+      }
       <span class="name" lang=${currentContentLanguages().defaultLanguage}
         >${productName(product)}</span
       >
