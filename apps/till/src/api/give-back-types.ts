@@ -29,6 +29,8 @@ export interface GiveBackLine extends GiveBackAvailability {
   /** The cancelled dish's line this priced extra's line is given back with; never ticked itself. */
   partOf: string | null;
   givenFree: boolean;
+  /** Exact amounts to add as portions are picked. */
+  portionAmounts?: string[];
 }
 
 export interface GiveBackWay {

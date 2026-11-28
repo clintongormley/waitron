@@ -84,6 +84,18 @@ export const LINES: GiveBackLine[] = [
   }),
 ];
 
+export const PORTION_LINES = LINES.map((row) =>
+  row.id === "croquetas"
+    ? {
+        ...row,
+        quantity: "3.000",
+        gross: "8.02",
+        left: "8.02",
+        portionAmounts: ["2.67", "2.67", "2.68"],
+      }
+    : row,
+);
+
 export const CASH: GiveBackWay = {
   way: "cash",
   last4: null,

@@ -19,7 +19,13 @@ import {
   type Decimal,
   type SaleId,
 } from "@waitron/shared";
-import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
+import {
+  filedFamilyOf,
+  filedPortionAmounts,
+  isFree,
+  pairFiling,
+  readBillFiling,
+} from "./cancellation-refund-value.js";
 
 const ZERO = decimal("0.00");
 
@@ -168,11 +174,13 @@ export async function cancelsAndFreeByLine(
   tx: Transaction,
   saleId: SaleId,
   toLine: (filedRowId: string) => string | undefined,
-  { filedLegs }: { filedLegs: boolean },
+  { filedLegs, includePortions }: { filedLegs: boolean; includePortions: boolean },
 ) {
   const free = new Set<string>();
+  const portionAmounts = new Map<string, string[]>();
   const found = await saleCancels(tx, saleId);
-  if (found === null) return { free, ...cancelsByLine(() => undefined, [], toLine, NONE, NONE) };
+  if (found === null)
+    return { free, portionAmounts, ...cancelsByLine(() => undefined, [], toLine, NONE, NONE) };
   const filing = await readBillFiling(tx, found.workingOrderId, saleId);
   const pairs = pairFiling(filing);
   for (const line of filing.stored.filter(isFree)) {
@@ -180,11 +188,19 @@ export async function cancelsAndFreeByLine(
     const id = dish === undefined ? undefined : toLine(dish.rowId);
     if (id !== undefined) free.add(id);
   }
+  if (includePortions) {
+    for (const row of filing.filed) {
+      const id = toLine(row.id);
+      const amounts = filedPortionAmounts(pairs, row);
+      if (id !== undefined && amounts !== undefined) portionAmounts.set(id, amounts);
+    }
+  }
   const some = found.cancels.length > 0;
   const waitingOf = some ? await waitingByCancel(tx, found.workingOrderId) : NONE;
   const filedOf = some && filedLegs ? await filedLegsByCancel(tx, found.workingOrderId) : NONE;
   return {
     free,
+    portionAmounts,
     ...cancelsByLine(
       (lineId) => filedFamilyOf(filing, pairs, lineId),
       found.cancels,

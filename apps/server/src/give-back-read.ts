@@ -66,6 +66,8 @@ export interface GiveBackLine extends Availability {
    * itself, and its `left` is counted on the dish's. */
   partOf: string | null;
   givenFree: boolean;
+  /** Exact amounts to add as portions are picked. */
+  portionAmounts?: string[];
 }
 
 export interface GiveBackWay {
@@ -326,6 +328,7 @@ export async function readFacts(
   reading: TrustedReading,
   saleId: SaleId,
   device: DeviceBinding | null,
+  { includePortions = false }: { includePortions?: boolean } = {},
 ): Promise<GiveBackFacts> {
   const correctable = await readCorrectableNow(tx, deps.backend, cfg, reading, saleId, () => false);
   const openCorrectionId = await openCorrectionOf(tx, saleId);
@@ -356,12 +359,11 @@ export async function readFacts(
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await correctionTargetLines(tx, saleId);
-  const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
-    tx,
-    saleId,
-    toLine,
-    { filedLegs: correctable.fullInvoice && correctable.lines !== null },
-  );
+  const { cancelled, cancelIds, members, partOf, free, filedBack, portionAmounts } =
+    await cancelsAndFreeByLine(tx, saleId, toLine, {
+      filedLegs: correctable.fullInvoice && correctable.lines !== null,
+      includePortions,
+    });
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
   const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
   const leftOf = (id: string) =>
@@ -392,11 +394,23 @@ export async function readFacts(
       partOf: dish ?? null,
       givenFree: free.has(line.id),
     };
+    const availability =
+      dish === undefined
+        ? lineAvailability(view, waits, money, correctable.fullInvoice)
+        : { available: false, reason: null };
+    const amounts = portionAmounts.get(line.id);
+    const remaining = correctableLeft.get(line.id);
     return {
       ...view,
-      ...(dish === undefined
-        ? lineAvailability(view, waits, money, correctable.fullInvoice)
-        : { available: false, reason: null }),
+      ...availability,
+      ...(amounts !== undefined &&
+      availability.available &&
+      cancel === undefined &&
+      !view.givenFree &&
+      remaining !== undefined &&
+      decimalToCents(remaining) === line.lineGross
+        ? { portionAmounts: amounts }
+        : {}),
     };
   });
   return {
@@ -432,5 +446,5 @@ export async function readGiveBack(
   saleId: SaleId,
   device: DeviceBinding | null,
 ): Promise<GiveBackView> {
-  return (await readFacts(tx, deps, cfg, reading, saleId, device)).view;
+  return (await readFacts(tx, deps, cfg, reading, saleId, device, { includePortions: true })).view;
 }

@@ -21,6 +21,7 @@ import {
   APPROVERS,
   CARD,
   CASH,
+  PORTION_LINES,
   SCOPE,
   VIEW,
   UNDER_WAY,
@@ -269,6 +270,57 @@ describe("the choice", () => {
 });
 
 describe("A dish", () => {
+  it("fills exact shares with the stepper and sends the edited amount for one filed row", async () => {
+    const { el, api } = await mount(withView({ lines: PORTION_LINES }));
+    await choose(el, "dishes");
+    await tick(el, "croquetas");
+    await type(el, "7");
+    const stepper = dish(el, "croquetas")!.querySelector("wt-stepper");
+    expect(stepper).not.toBeNull();
+    await userEvent.click(page.elementLocator(stepper!.shadowRoot!.querySelector("button")!));
+    await el.updateComplete;
+    expect(amountField(el).value).toBe("5.34");
+    expect(dish(el, "croquetas")!.shadowRoot!.querySelector("input")!.indeterminate).toBe(true);
+    expect(dish(el, "paella")!.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+    expect(text(root(el).querySelector("[role=status]"))).toContain("all portions");
+    await type(el, "5.00");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(1));
+    expect(asksOf(el)[0]!.request).toEqual({
+      purpose: "dishes",
+      lineIds: ["croquetas"],
+      amount: "5.00",
+      extra: "0.00",
+      way: "cash",
+    });
+  });
+
+  it("unlocks other dishes after choosing the whole row or clearing a partial choice", async () => {
+    const { el } = await mount(withView({ lines: PORTION_LINES }));
+    await choose(el, "dishes");
+    await tick(el, "croquetas");
+    const stepper = dish(el, "croquetas")!.querySelector("wt-stepper");
+    expect(stepper).not.toBeNull();
+    const [less, more] = stepper!.shadowRoot!.querySelectorAll("button");
+    await userEvent.click(page.elementLocator(less!));
+    await userEvent.click(page.elementLocator(more!));
+    expect(amountField(el).value).toBe("8.02");
+    await tick(el, "paella");
+    expect(amountField(el).value).toBe("28.02");
+    expect(dish(el, "croquetas")!.querySelector("wt-stepper")).toBeNull();
+    await tick(el, "paella");
+    await userEvent.click(
+      page.elementLocator(
+        dish(el, "croquetas")!.querySelector("wt-stepper")!.shadowRoot!.querySelector("button")!,
+      ),
+    );
+    await tick(el, "croquetas");
+    await tick(el, "paella");
+    expect(amountField(el).value).toBe("20.00");
+  });
+
   it("lists the dishes with only what Waitron knows, extras under their dish", async () => {
     const { el } = await mount();
     await choose(el, "dishes");
