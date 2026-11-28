@@ -1,3 +1,4 @@
+import type { PlanRect } from "@waitron/ui";
 import {
   floorOtherZone,
   pendingFloorControls,
@@ -20,6 +21,7 @@ import {
   nothing,
   unsafeCSS,
 } from "lit";
+import { floorMapStyles } from "./floor-map-styles.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { edgeFadeStyles, markOverflow, oncePerFrame } from "../widgets/edge-fade.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
@@ -299,6 +301,7 @@ export class TillFloorScreen extends LitElement {
     floorTrayStyles,
     floorScreenLayoutStyles,
     firstReadNoticeStyles,
+    floorMapStyles,
     floorRingStyles,
     signalChipStyles,
     stepChipStyles,
@@ -484,28 +487,6 @@ export class TillFloorScreen extends LitElement {
           border: calc(var(--wt-space-1) / 2) dotted CanvasText;
           border-radius: inherit;
           pointer-events: none;
-        }
-      }
-
-      .map {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-
-      wt-floor-map {
-        align-self: center;
-        width: min(
-          100%,
-          calc(max(var(--wt-tap-min) * 6, 100dvh - var(--wt-tap-min) * 8) * var(--floor-map-ratio))
-        );
-        aspect-ratio: var(--floor-map-ratio);
-      }
-
-      @media ${unsafeCSS(PHONE_WIDTH)}, (max-height: 40rem) and (orientation: landscape) {
-        wt-floor-map {
-          --floor-map-tap-size: var(--wt-tap-min);
-          min-height: calc(var(--wt-tap-min) + var(--wt-space-2) * 2);
         }
       }
 
@@ -878,7 +859,9 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tablesAnswered = false;
   @property({ attribute: false }) floorReadFailed = false;
   @property({ attribute: false }) firstRead?: FirstReadView;
+  @property({ attribute: false }) rememberedPlan?: ReadonlyMap<string, PlanRect[]>;
   @property({ attribute: false }) knownZones?: readonly Pick<FloorZone, "id" | "name">[];
+  @property({ attribute: false }) onZoneShown?: (zone: Pick<FloorZone, "id" | "name">) => void;
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -1070,6 +1053,7 @@ export class TillFloorScreen extends LitElement {
 
   @property({ attribute: false }) useFloorFooter = false;
   #footerZone?: ZoneOnScreen;
+  #shownZone?: FloorZone;
 
   override updated(changed: PropertyValues<this>): void {
     if (
@@ -1078,6 +1062,11 @@ export class TillFloorScreen extends LitElement {
     )
       this.dispatchEvent(new Event("floor-footer-update", { bubbles: true }));
     this.#footerZone = this.useFloorFooter ? this.#zone : undefined;
+    if (this.onZoneShown !== undefined && this.firstRead === undefined && this.tablesAnswered) {
+      const zone = this.zones.find(({ id }) => id === this.#zone.activeKey);
+      if (zone !== this.#shownZone && zone !== undefined) this.onZoneShown(zone);
+      this.#shownZone = zone;
+    }
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();
@@ -2341,6 +2330,10 @@ export class TillFloorScreen extends LitElement {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
     const firstRead = this.firstRead;
+    const knownZone =
+      this.knownZones?.find(({ id }) => id === this.activeZone) ?? this.knownZones?.[0];
+    const shapes = knownZone === undefined ? undefined : this.rememberedPlan?.get(knownZone.id);
+    const remembered = firstRead !== undefined && !!shapes?.length;
     const empty =
       listed.length === 0 && onMap.length === 0
         ? floorEmptyState(
@@ -2375,16 +2368,16 @@ export class TillFloorScreen extends LitElement {
             ${
               this.useFloorFooter ||
               this.#phone.matches ||
-              firstRead !== undefined ||
-              empty !== nothing
+              (firstRead === undefined ? empty !== nothing : !remembered)
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
                     data-view-toggle
                     variant="secondary"
+                    ?disabled=${firstRead !== undefined}
                     @click=${() => this.#toggleView(view)}
                   >
-                    ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+                    ${remembered || view === "map" ? t("floor.view_list") : t("floor.view_map")}
                   </wt-button>`
             }
             ${this.#zoneMenu(planned, activeKey, view)}
@@ -2429,8 +2422,19 @@ export class TillFloorScreen extends LitElement {
         ${this.#stationSummary()}
         ${
           firstRead !== undefined
-            ? firstFloorRead(firstRead, this.handheld, () =>
-                this.#requestFloorRefresh({ zones: true }),
+            ? firstFloorRead(
+                firstRead,
+                this.handheld,
+                () => this.#requestFloorRefresh({ zones: true }),
+                shapes?.length
+                  ? html`<wt-floor-map
+                      inert
+                      aria-hidden="true"
+                      .placeholders=${shapes}
+                      .fitKey=${knownZone!.id}
+                      .compact=${this.useFloorFooter}
+                    ></wt-floor-map>`
+                  : undefined,
               )
             : empty !== nothing
               ? empty

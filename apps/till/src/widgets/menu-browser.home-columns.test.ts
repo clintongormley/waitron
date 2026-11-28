@@ -22,6 +22,30 @@ const cases = [
   { width: 1440, columns: 7, theme: "dark" },
 ] as const;
 
+it.each([
+  [700, 390],
+  [1180, 820],
+] as const)("fills the menu area during a first read at %i × %i", async (width, height) => {
+  await pageAt(width, height);
+  try {
+    const { el } = await mountWidget<TillMenuBrowser>("till-menu-browser", {
+      firstRead: "waiting",
+    });
+    const tiles = [...el.shadowRoot!.querySelectorAll("wt-placeholder")];
+    const area = el.shadowRoot!.querySelector(".first-menu-read")!.getBoundingClientRect();
+    const visible = tiles
+      .map((tile) => tile.getBoundingClientRect())
+      .filter((tile) => tile.top < area.bottom);
+
+    expect(Math.min(Math.max(...visible.map((tile) => tile.bottom)), area.bottom)).toBeGreaterThan(
+      height * 0.65,
+    );
+    expect(area.bottom).toBeLessThanOrEqual(height);
+  } finally {
+    await resetPage();
+  }
+});
+
 it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale }))))(
   "fits $columns automatic columns at $width px and $scale% text",
   async ({ width, columns, theme, scale }) => {

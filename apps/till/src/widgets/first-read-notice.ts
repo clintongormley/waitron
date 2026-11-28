@@ -1,4 +1,6 @@
-import { css, html, nothing } from "lit";
+import "@waitron/ui/src/components/wt-placeholder.js";
+import "@waitron/ui/src/components/wt-spinner.js";
+import { css, html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n/t.js";
 import type { FirstReadView } from "../state/first-read.js";
 
@@ -16,16 +18,120 @@ export const firstReadNoticeStyles = css`
     margin-inline: 0;
   }
 
-  .first-floor-read:has(wt-placeholder) {
-    background: var(--wt-color-surface);
-    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
-    outline: 1px solid var(--wt-color-border);
-    outline-offset: -1px;
+  .first-floor-read[data-starting] {
+    box-sizing: border-box;
+    min-block-size: 100%;
   }
 
-  .first-floor-read wt-placeholder {
+  .first-floor-read.map {
+    flex: none;
+    min-block-size: 0;
+    margin-inline: 0;
+  }
+
+  .first-floor-read:has(> wt-placeholder) {
+    background: var(--wt-color-surface);
+    border: 1px solid var(--wt-color-border);
+    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+  }
+
+  .first-floor-read > wt-placeholder {
     flex: 1;
     margin: var(--wt-space-2);
+  }
+
+  .first-content-read {
+    position: relative;
+    display: grid;
+    gap: var(--wt-space-2);
+    min-block-size: calc(var(--wt-tap-min) * 4);
+    align-content: start;
+  }
+
+  .first-content-read wt-placeholder {
+    min-block-size: var(--wt-tap-min);
+  }
+
+  .first-menu-read {
+    box-sizing: border-box;
+    max-block-size: calc(100dvh - var(--wt-tap-min) * 3);
+    overflow: clip;
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(max(calc(var(--wt-tap-min) * 2), calc((100% - var(--wt-space-2) * 5) / 6)), 1fr)
+    );
+    padding: var(--wt-space-3);
+  }
+
+  .first-menu-read:has(wt-placeholder) {
+    background: var(--wt-color-surface);
+  }
+
+  .first-menu-read wt-placeholder {
+    min-block-size: calc(var(--wt-tap-min) * 2);
+  }
+
+  .first-menu-read .first-read-notice {
+    inset-inline: var(--wt-space-3);
+  }
+
+  .first-order-read {
+    gap: 0;
+  }
+
+  .loading-order-heading,
+  .loading-order-row {
+    background: var(--wt-color-surface);
+    padding-inline: var(--wt-space-4);
+  }
+
+  .loading-order-heading {
+    padding-block: calc(var(--wt-space-3) + var(--wt-space-1) / 2)
+      calc(var(--wt-space-2) - var(--wt-space-1) / 2);
+  }
+
+  .loading-order-heading wt-placeholder {
+    inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-1) / 2);
+    min-block-size: var(--wt-space-3);
+  }
+
+  .loading-order-row {
+    display: grid;
+    grid-template-columns:
+      calc(var(--wt-space-6) - var(--wt-space-1)) minmax(0, 1fr)
+      calc(var(--wt-space-6) + var(--wt-space-5) - var(--wt-space-1));
+    align-items: center;
+    gap: var(--wt-space-3);
+    padding-block: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    border-block-start: 1px solid var(--wt-color-border);
+  }
+
+  .loading-order-row:nth-of-type(2) {
+    --name-bar-width: calc(var(--wt-space-5) * 7 + var(--wt-space-1) / 2);
+  }
+
+  .loading-order-row:nth-of-type(3) {
+    --name-bar-width: calc(var(--wt-space-5) * 5);
+  }
+
+  .loading-order-row:nth-of-type(4) {
+    --name-bar-width: calc(var(--wt-space-5) * 8 + var(--wt-space-2));
+  }
+
+  .loading-order-row:nth-of-type(5) {
+    --name-bar-width: calc(var(--wt-space-5) * 6 - var(--wt-space-1));
+  }
+
+  .loading-order-row wt-placeholder:nth-child(2) {
+    max-inline-size: var(--name-bar-width);
+  }
+
+  .loading-order-row wt-placeholder {
+    min-block-size: var(--wt-space-4);
+  }
+
+  .loading-order-row wt-placeholder:first-child {
+    min-block-size: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
   }
 
   .read-failed {
@@ -99,7 +205,7 @@ export const firstReadNoticeStyles = css`
   }
 `;
 
-export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: () => void) {
+export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry?: () => void) {
   const waiting = stage === "waiting";
   const unreachable = stage === "unreachable";
   return html`<div class="first-read-notice" data-stage=${stage}>
@@ -134,17 +240,59 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: 
         }
       </div>
       ${
-        unreachable
-          ? html`<wt-button data-floor-retry @click=${retry}>${t("first_read.retry")}</wt-button>`
+        unreachable && retry !== undefined
+          ? html`<wt-button data-floor-retry data-first-read-retry @click=${retry}
+              >${t("first_read.retry")}</wt-button
+            >`
           : nothing
       }
     </div>
   </div>`;
 }
 
-export function firstFloorRead(stage: FirstReadView, handheld: boolean, retry: () => void) {
-  return html`<div class="first-floor-read">
-    ${stage === "quiet" ? nothing : html`<wt-placeholder></wt-placeholder>`}
+export function firstMenuRead(stage: FirstReadView, handheld: boolean, retry?: () => void) {
+  return html`<div class="first-content-read first-menu-read">
+    ${stage === "quiet" ? nothing : Array.from({ length: 72 }, () => html`<wt-placeholder></wt-placeholder>`)}
+    ${firstReadNotice(stage, handheld, retry)}
+  </div>`;
+}
+
+export function firstOrderRead(stage: FirstReadView, handheld: boolean) {
+  return html`<div class="first-content-read first-order-read" data-loading>
+    ${
+      stage === "quiet"
+        ? nothing
+        : html`
+            <div class="loading-order-heading" aria-hidden="true">
+              <wt-placeholder></wt-placeholder>
+            </div>
+            ${Array.from(
+              { length: 4 },
+              () =>
+                html`<div class="loading-order-row" aria-hidden="true">
+                  <wt-placeholder></wt-placeholder>
+                  <wt-placeholder></wt-placeholder>
+                  <wt-placeholder></wt-placeholder>
+                </div>`,
+            )}
+          `
+    }
+    ${firstReadNotice(stage, handheld)}
+  </div>`;
+}
+
+export function firstFloorRead(
+  stage: FirstReadView,
+  handheld: boolean,
+  retry: () => void,
+  map?: TemplateResult,
+  starting = false,
+) {
+  return html`<div
+    class=${map === undefined ? "first-floor-read" : "first-floor-read map"}
+    ?data-starting=${starting}
+  >
+    ${stage === "quiet" ? nothing : (map ?? html`<wt-placeholder></wt-placeholder>`)}
     ${firstReadNotice(stage, handheld, retry)}
   </div>`;
 }

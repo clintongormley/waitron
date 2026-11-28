@@ -109,6 +109,19 @@ it("fits the zone's tables to the map when it first draws them", async () => {
   expect(boxOf(el, "t1")).toEqual({ left: 150, top: 75, width: 300, height: 150 });
 });
 
+it("fits remembered rectangles without exposing the old table controls", async () => {
+  const el = await map([t1]);
+  el.placeholders = [{ x: 10, y: 5, width: 8, height: 8 }];
+  el.fitKey = "remembered-zone";
+  await settled(el);
+  const area = el.shadowRoot!.querySelector<HTMLElement>("[inert]");
+  expect(area).not.toBeNull();
+  const box = area!.querySelector("wt-placeholder")!.getBoundingClientRect();
+  expect([box.width, box.height]).toEqual([200, 200]);
+  expect(area!.getAttribute("aria-hidden")).toBe("true");
+  expect(button(el, "t1")).toBeNull();
+});
+
 it("turns a table about its centre", async () => {
   const el = await map([t("t1", "T1", { x: 10, y: 5, width: 8, height: 4, rotation: 90 })]);
   const m = new DOMMatrix(getComputedStyle(within(el, "shape", "t1")!).transform);

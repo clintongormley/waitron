@@ -261,7 +261,12 @@ export class MenuApi {
       options.signal,
     );
   }
-  async listDefaultZoneOffers(): Promise<ZoneOffers> {
-    return this.#request<ZoneOffers>("/api/default-service-zone/offers", "GET");
+  async listDefaultZoneOffers(options: ReadOptions = {}): Promise<ZoneOffers> {
+    return this.#request<ZoneOffers>(
+      "/api/default-service-zone/offers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 }

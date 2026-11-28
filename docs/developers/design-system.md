@@ -907,7 +907,8 @@ out of the tab order and screen reader announcements.
 
 Till screens share the first-read timer and notice. Keep the screen controls available while
 the timer waits to draw shapes. Put the notice over the loading area and keep **Try again**
-outside the live message. Keep content in place once you have shown it.
+outside the live message. Keep content in place once you have shown it. On Floor, draw the last
+positions for the device's allowed zones when known, or leave one plain grey area.
 
 On the waiting notice, set `wt-spinner`'s `--wt-spinner-track` and `--wt-spinner-arc` to
 the border and primary tokens for the grey track and teal leading arc.

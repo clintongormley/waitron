@@ -465,6 +465,7 @@ export class TillShell extends LitElement {
 
   @property() formFactor: FormFactor = "till";
   @property() activeScreen?: BuiltInScreen;
+  @property({ type: Boolean }) starting = false;
   @property({ attribute: false }) counterZones: readonly { id: string; name: string }[] = [];
   @property() selectedCounterZoneId = "";
   @property({ type: Boolean }) showCounter = true;
@@ -1620,6 +1621,7 @@ export class TillShell extends LitElement {
       this.drillNodes?.some((node) => node.localName === "till-hours-approval-screen");
     const floor = this.querySelector<TillFloorScreen>(":scope > till-floor-screen");
     const bottomFloor = this.narrowFloor && !hasDrill && !this.#barless() ? floor : null;
+    const startingFooter = this.starting && this.narrowFloor && !hasDrill && !this.#barless();
     if (floor) floor.useFloorFooter = Boolean(bottomFloor);
     const nameInMore = this.#nameInMore();
     this.#shownName = nameInMore;
@@ -1643,7 +1645,11 @@ export class TillShell extends LitElement {
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts() : nothing}
         ${
-          this.#barless() || bottomFloor || this.floorKitchenOpen || phoneApprovalOpen
+          this.#barless() ||
+          bottomFloor ||
+          startingFooter ||
+          this.floorKitchenOpen ||
+          phoneApprovalOpen
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
                   ${this.canChooseDevice ? html`<wt-button data-switch-device variant="secondary" @click=${() => this.#emit("switch-device")}>${t("device.switch")}</wt-button>` : nothing}
@@ -1693,7 +1699,17 @@ export class TillShell extends LitElement {
             ? floorControls(this, bottomFloor, this.#floorMenu(bottomFloor), (event, detail) =>
                 this.#emit(event, detail),
               )
-            : nothing
+            : startingFooter
+              ? html`<div class="floor-controls">
+                  <footer class="floor-bar">
+                    <wt-button variant="secondary" disabled>${t("floor.zones")}</wt-button>
+                    <wt-button variant="secondary" disabled data-view-toggle
+                      >${t("floor.view_list")}</wt-button
+                    >
+                    ${this.#tillMenu()}
+                  </footer>
+                </div>`
+              : nothing
         }
       </div>
       <till-guide-sheet

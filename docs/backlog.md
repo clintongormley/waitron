@@ -608,10 +608,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open: editing a whole day on the till, the You section’s clock actions, the break strip, the
   clock-out summary, My hours, export markers for approval and disputes (the labour adviser is asked
   L8), the drawer close screens, and waiter floats (A240).
-  Pass 3's last part (27 November; §7.16–§7.17) still needs the first read treatment during sign-in,
-  when opening an order or menu, and when closing the drawer. Reuse the Floor's placeholder, timer
-  and §7.18's loading words. Show rectangles where the device last drew its tables, with a plain grey
-  area on its first Floor load. Check that a busy button keeps its words.
 
 - **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
   of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show

@@ -418,6 +418,54 @@ it("shows the Floor after sign-in while its first tables read is still out", asy
   expect(drawn(el, "t1")).toBeTruthy();
 });
 
+it("opens the Floor frame as soon as the PIN is accepted while device zones wait", async () => {
+  const getDeviceZones = vi.fn(() => new Promise(() => {}));
+  const api = stubApi({ getDeviceZones });
+  api.getTill.mockResolvedValue({ ...(await api.getTill()), formFactor: "phone-portrait" });
+  const el = await signIn(api);
+
+  expect(floorOf(el)).toBeTruthy();
+  expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
+  await vi.waitFor(() =>
+    expect(floorOf(el)?.shadowRoot?.querySelector("wt-placeholder")).toBeTruthy(),
+  );
+  expect(drawn(el, "t1")).toBeNull();
+});
+
+it("keeps a fixed till's frame neutral until its starting zone answers", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(resetPage);
+  await pageAt(700, 390);
+  let answer!: (zones: ReturnType<typeof deviceZonesFixture>) => void;
+  const getDeviceZones = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+  const el = await signIn(stubApi({ getDeviceZones }, true));
+  const shell = () => el.shadowRoot!.querySelector("till-shell");
+  expect(shell()?.activeScreen).toBeUndefined();
+  expect(floorOf(el)).toBeNull();
+  await vi.waitFor(() => {
+    const body = shell()!.shadowRoot!.querySelector("main")!.getBoundingClientRect();
+    const grey = shell()!.querySelector("wt-placeholder")?.getBoundingClientRect();
+    expect(grey?.height ?? 0).toBeGreaterThan(body.height / 2);
+    const footer = shell()!.shadowRoot!.querySelector("footer")?.getBoundingClientRect();
+    expect(footer?.top).toBeGreaterThanOrEqual(body.bottom);
+  });
+  answer(deviceZonesFixture(undefined, ["z1"]));
+  await vi.waitFor(() => expect(shell()?.activeScreen).toBe("counter"));
+});
+
+it("shows Counter menu placeholders while the first offers read waits", async () => {
+  const listDefaultZoneOffers = vi.fn(() => new Promise(() => {}));
+  const el = await signIn(stubApi({ listDefaultZoneOffers }, true));
+  const browser = () => el.shadowRoot!.querySelector("till-menu-browser");
+
+  expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
+  await vi.waitFor(() =>
+    expect(browser()?.shadowRoot?.querySelectorAll("wt-placeholder").length).toBeGreaterThan(1),
+  );
+  expect(browser()?.shadowRoot?.querySelector("button")).toBeNull();
+});
+
 it("shows the known Floor zone and keeps the view control quiet until tables arrive", async ({
   onTestFinished,
 }) => {
@@ -444,6 +492,92 @@ it("shows the known Floor zone and keeps the view control quiet until tables arr
 
   expect(view?.textContent).toContain("List");
   expect(view?.disabled).toBe(true);
+});
+
+it("shows the last Floor zone and its untappable table shapes before the box answers", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(resetPage);
+  await pageAt(390, 844);
+  const deviceId = "device-with-a-saved-floor";
+  const memoryKeys = ["floor-plan", "floor-zone"].map(
+    (name) => `waitron.${name}.${JSON.stringify([location.origin, deviceId])}`,
+  );
+  const [memoryKey] = memoryKeys;
+  for (const key of memoryKeys) localStorage.removeItem(key);
+  const phone = async (api: ReturnType<typeof stubApi>) => {
+    api.getTill.mockResolvedValue({ ...(await api.getTill()), formFactor: "phone-portrait" });
+    return api;
+  };
+  const getDeviceIdentity = vi.fn().mockResolvedValue({
+    deviceId,
+    name: "Till",
+    formFactor: "till",
+    profileId: "profile",
+  });
+  const placed = (x: number, label: string) => ({
+    ...freeTable,
+    id: `table-${x}`,
+    label,
+    zoneId: "terrace",
+    today: {
+      placement: { x, y: 2, width: 4, height: 4, shape: "round", rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      zoneRevision: 0,
+    },
+  });
+  try {
+    const first = await onFloor(
+      await phone(
+        stubApi({
+          getDeviceIdentity,
+          getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1", "terrace"])),
+          listZones: vi
+            .fn()
+            .mockResolvedValue([
+              room,
+              { ...room, id: "terrace", name: "Terrace", displayOrder: 1 },
+            ]),
+          getTablesState: vi.fn().mockResolvedValue([placed(1, "Window"), placed(9, "Wall")]),
+        }),
+      ),
+    );
+    const firstShell = first.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+    const terrace = () =>
+      firstShell.querySelector<HTMLButtonElement>('[data-floor-zone="terrace"]');
+    await vi.waitFor(() => expect(terrace()).toBeTruthy());
+    terrace()!.click();
+    await vi.waitFor(() => expect(location.pathname).toMatch(/\/zone\/terrace$/u));
+    first.remove();
+    history.replaceState(null, "", initialUrl);
+    const el = await signIn(
+      await phone(
+        stubApi({ getDeviceIdentity, getDeviceZones: vi.fn(() => new Promise(() => {})) }),
+      ),
+    );
+    const map = () => floorOf(el)?.shadowRoot?.querySelector("wt-floor-map");
+    const shapes = () => [...(map()?.shadowRoot?.querySelectorAll("wt-placeholder") ?? [])];
+    await vi.waitFor(() => expect(shapes()).toHaveLength(2));
+    const shell = el.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+    expect(shell.querySelector("[data-floor-zone-chooser]")?.getAttribute("label")).toBe("Terrace");
+
+    await vi.waitFor(() => {
+      const [left, right] = shapes().map((shape) => shape.getBoundingClientRect());
+      const mapRect = map()!.getBoundingClientRect();
+      expect(left!.width, `map ${mapRect.width} × ${mapRect.height}`).toBeGreaterThan(0);
+      expect(right!.left - left!.left).toBeGreaterThan(left!.width);
+      expect(right!.top).toBe(left!.top);
+    });
+    expect(map()?.shadowRoot?.querySelector("button")).toBeNull();
+    expect(map()?.shadowRoot?.textContent).not.toContain("Window");
+    expect(localStorage.getItem(memoryKey!)).not.toContain("Window");
+  } finally {
+    for (const key of memoryKeys) localStorage.removeItem(key);
+  }
 });
 
 it("loads the next operator's Floor while its first reply waits", async () => {

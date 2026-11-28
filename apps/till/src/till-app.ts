@@ -13,11 +13,8 @@ import {
   type TicketDeliveryTarget,
 } from "./screens/ticket-delivery.js";
 import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
-import {
-  recoveryLink,
-  recoveryRefusalOf,
-  recoveryRefusalText,
-} from "./widgets/recovery-refusal.js";
+import { recoveryRefusalOf } from "./widgets/recovery-refusal.js";
+import { errorText } from "./widgets/counter-error-message.js";
 import type {
   AllergyCommand,
   AllergyMoveRead,
@@ -48,7 +45,14 @@ import {
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import { menusMoved, ZoneOfferIndex } from "./state/zone-offer-index.js";
 import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
+import {
+  rememberedFloorPlan,
+  rememberedFloorZone,
+  rememberFloorPlan,
+  rememberFloorZone,
+} from "./state/floor-plan-memory.js";
 import { startFirstRead, type FirstReadView } from "./state/first-read.js";
+import { firstFloorRead, firstReadNoticeStyles } from "./widgets/first-read-notice.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
@@ -114,13 +118,10 @@ import {
 } from "@waitron/shared";
 import {
   clockReadingOf,
-  clockUnusableText,
   countText,
   currentLocale,
   differentPeopleText,
   fill,
-  named,
-  overLimitText,
   setLocale,
   t,
 } from "./i18n/t.js";
@@ -404,7 +405,7 @@ import {
   type LateSendChoice,
   type LateSendApprovalPrompt,
 } from "./widgets/late-send-prompts.js";
-import { lateChangeMessage, lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
+import { lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
 import type { DishMove, WaitingOrderMove } from "./state/station-move-types.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
@@ -459,12 +460,7 @@ import {
   counterPaymentWindow,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
-import {
-  describePartyChange,
-  partyChangeMessage,
-  partyOf,
-  tableLabels,
-} from "./state/party-change.js";
+import { describePartyChange, partyOf, tableLabels } from "./state/party-change.js";
 import {
   barBillToOpen,
   barTables,
@@ -478,7 +474,6 @@ import {
   mergeMembersOf,
   nextFloorMoment,
   shownUnder,
-  tableSentence,
   type CarriedRevision,
 } from "./state/floor-today.js";
 import type { BillLookupRow } from "./api/find-bill-api.js";
@@ -1001,15 +996,6 @@ function refusedBillIn(error: unknown): { billId?: string } {
   const billId = (error as { workingOrderId?: unknown }).workingOrderId;
   return typeof billId === "string" ? { billId } : {};
 }
-
-/** What was refused for leaving a bill owing less than it has received, which picks its words. */
-
-const EXCESS_WORDS = {
-  move: "bill.received_exceeds_total_excess",
-  line: "bill.received_exceeds_total_line_excess",
-  send: "bill.received_exceeds_total_send_excess",
-  merge: "bill.received_exceeds_total_merge_excess",
-} as const satisfies Record<ExcessCause, StringKey>;
 
 /** A table refusal as said: one that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
@@ -1677,130 +1663,6 @@ interface ReadBills {
   balance?: Promise<boolean>;
 }
 
-function errorText(
-  error: CounterError,
-  menus: readonly TillZoneMenu[],
-  tables: readonly TableState[],
-  billLabel?: string,
-  checkTime = false,
-  surface: "banner" | "panel" = "banner",
-): string | TemplateResult {
-  if (typeof error === "object" && "unsentBill" in error) return billUnsentText(billLabel);
-  if (typeof error === "string") return t(error);
-  if ("replacedGroups" in error)
-    return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);
-  if ("code" in error) {
-    const recovery = recoveryRefusalText(error);
-    if (recovery !== null) return html`${recovery} ${recoveryLink(error, surface === "banner")}`;
-    if (error.code === "menu_period.not_running") {
-      const menu = menus.find((menu) => menu.id === error.menuId);
-      if (menu !== undefined)
-        return t("menu.period_not_running").replace("{menu}", () => menu.name);
-    }
-    if (error.code === "table.needs_moving") {
-      const table = tables.find((each) => each.id === error.tableId);
-      if (table !== undefined)
-        return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
-    }
-    const message =
-      error.dishes === undefined
-        ? codeMessage(error.code, undefined, error)
-        : fill(t("station.no_default_named"), { dishes: error.dishes });
-    const bill = error.bill;
-    if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
-    if (error.printedInstead === true) return `${message} ${t("sale.email_unavailable_print")}`;
-    return message;
-  }
-  if ("billNameTakenOver" in error)
-    return named(
-      error.billNameTakenOver,
-      t("table.bill_name_taken_over"),
-      t("table.bill_name_taken_over_unnamed"),
-    );
-  if ("printTakenOver" in error)
-    return named(
-      error.printTakenOver,
-      t("table.print_taken_over"),
-      t("table.print_taken_over_unnamed"),
-    );
-  if ("takenOver" in error)
-    return error.unsent === true
-      ? named(
-          error.takenOver,
-          t("table.draft_taken_over_unsent"),
-          t("table.draft_taken_over_unsent_unnamed"),
-        )
-      : named(
-          error.takenOver,
-          t("table.draft_taken_over_unsaved"),
-          t("table.draft_taken_over_unsaved_unnamed"),
-        );
-  if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
-  if ("billChanged" in error)
-    return t(error.billChanged.key).replace("{line}", () => error.billChanged.line);
-  if ("splitChanged" in error) return fill(t("table.split_changed"), { bill: error.splitChanged });
-  if ("splitTaken" in error)
-    return error.splitTaken === ""
-      ? t("table.split_taken_unnamed")
-      : fill(t("table.split_taken"), { who: error.splitTaken });
-  if ("splitGone" in error) return fill(t("table.split_bill_gone"), { bill: error.splitGone });
-  if ("refundGone" in error)
-    return fill(t("bill.refund_excess_bill_gone"), { bill: error.refundGone });
-  if ("excess" in error) {
-    const amount = formatMoney(error.excess, currentLocale());
-    const words = t(EXCESS_WORDS[error.cause ?? "move"]).replaceAll("{amount}", () => amount);
-    return html`<span class="error-part"
-        >${
-          error.bill === undefined
-            ? words
-            : fill(t("table.refused_on_bill"), { bill: error.bill, message: words })
-        }</span
-      ><span class="error-action"
-        ><wt-button
-          variant="secondary"
-          size="sm"
-          data-refund-excess
-          @click=${(event: Event) =>
-            event.currentTarget!.dispatchEvent(
-              new CustomEvent("refund-excess", {
-                detail: {
-                  excess: error.excess,
-                  ...(error.billId === undefined ? {} : { billId: error.billId }),
-                  ...(error.bill === undefined ? {} : { bill: error.bill }),
-                  ...(error.split === true ? { split: true } : {}),
-                },
-                bubbles: true,
-                composed: true,
-              }),
-            )}
-          >${t("bill.refund_excess").replace("{amount}", () => amount)}</wt-button
-        ></span
-      >`;
-  }
-  if ("overLimit" in error) return overLimitText(error.overLimit);
-  if ("sentDishRefused" in error) return sentDishRefusalText(error.sentDishRefused);
-  if ("clockUnusable" in error)
-    return clockUnusableText(
-      error.clockUnusable.clockAt,
-      error.clockUnusable.offsetMinutes,
-      checkTime,
-    );
-  if ("billPayments" in error)
-    return [
-      t("table.bill_to_pay").replace("{amount}", () =>
-        formatMoney(error.billPayments, currentLocale()),
-      ),
-      t("bill.pay_with_bill_payments"),
-    ].join(". ");
-  const late = lateChangeMessage(error.lateChange);
-  return error.also === undefined
-    ? late
-    : html`<span class="error-part">${late}</span
-        ><span class="error-part"
-          >${typeof error.also === "string" ? t(error.also) : codeMessage(error.also.code)}</span
-        >`;
-}
-
 /** "Fired: 2 groups. Held: 3 groups.", leaving out a clause with nothing in it. */
 function submittedText(tally: { fired: number; held: number; joined: number }): string {
   const count = (n: number, many: StringKey, one: StringKey) =>
@@ -1969,6 +1831,7 @@ function zoneKeepOpenMoved(
 export class TillApp extends LitElement {
   static override styles = [
     serverConnectionNoticeStyles,
+    firstReadNoticeStyles,
     floorToastStyles,
     baseStyles,
     css`
@@ -2696,6 +2559,8 @@ export class TillApp extends LitElement {
     this.#equipmentPoll.stop();
     this.#stopPinScreenPoll();
     this.#kitchenSetupPoll.stop();
+    this.#stopSignInRead();
+    this.#stopOpeningMenuRead();
     this.#stopFloorPoll();
     this.#endSplitRefusalReads(SPLIT_READS_OFF_PAGE);
     this.#draftSync?.drop();
@@ -2840,6 +2705,14 @@ export class TillApp extends LitElement {
   #lockLanguagePicks = 0;
   #venueLocaleReady = false;
   #loginPending = false;
+  @state() private signInReadView?: FirstReadView;
+  #signInRead?: { cancel: () => void; retry: () => void; displayName: string };
+
+  #stopSignInRead(): void {
+    this.#signInRead?.cancel();
+    this.#signInRead = undefined;
+    this.signInReadView = undefined;
+  }
 
   #preLoginLocale(): string {
     if (!this.#venueLocaleReady)
@@ -2933,6 +2806,40 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** The order screen is showing a table whose open has not finished. */
   @state() private tableOpening = false;
+  @state() private tableMenuFirstRead?: FirstReadView;
+  #openingMenuRead?: { cancel: () => void; retry: () => void };
+
+  #stopOpeningMenuRead(): void {
+    this.#openingMenuRead?.cancel();
+    this.#openingMenuRead = undefined;
+    this.tableMenuFirstRead = undefined;
+  }
+
+  async #readOpeningMenu(zoneId: string): Promise<ZoneOffers> {
+    this.tableMenuFirstRead = "quiet";
+    let retry = false;
+    const attempt = startFirstRead(
+      (signal) => this.#readZoneOffers(zoneId, { signal }),
+      (stage) => (this.tableMenuFirstRead = stage),
+    );
+    const current = {
+      cancel: attempt.cancel,
+      retry: () => {
+        if (this.tableMenuFirstRead !== "unreachable") return;
+        retry = true;
+        attempt.cancel();
+      },
+    };
+    this.#openingMenuRead = current;
+    try {
+      return await attempt.result;
+    } catch (error) {
+      if (retry && this.#openingMenuRead === current) return this.#readOpeningMenu(zoneId);
+      throw error;
+    } finally {
+      if (this.#openingMenuRead === current) this.#stopOpeningMenuRead();
+    }
+  }
   /** D13: the table {@link #openTableFromEvent} is opening, highlighted on the bar while it loads. */
   @state() private openingTableId?: string;
   /** D12: the zone of the table a handheld last held; its Floor opens there while it shows it. */
@@ -3268,6 +3175,7 @@ export class TillApp extends LitElement {
   }
   set #orderVisit(visit: number) {
     this.#orderVisitNumber = visit;
+    this.#stopOpeningMenuRead();
     this.#endSplitRefusalReads();
     this.#closeLateSend();
     this.lateSendApproval = null;
@@ -5848,6 +5756,7 @@ export class TillApp extends LitElement {
     { personId, displayName, permissions }: Omit<LoggedInDetail, "locale">,
     switched = false,
   ): Promise<void> {
+    this.#stopSignInRead();
     if (this.#tenderRefundScope?.personId !== personId) this.#clearTenderRefundSession();
     if (this.deviceId !== undefined) {
       this.#tenderRefundScope = { deviceId: this.deviceId, personId };
@@ -5899,16 +5808,17 @@ export class TillApp extends LitElement {
     this.deviceZonesUnread = false;
     let offerLoadFailed: CounterError | false = false;
     const retainedZone = this.#counterHasItems ? this.counterServiceZoneId : undefined;
-    try {
+    const opening = this.screen === "lock";
+    const readStartingOffers = async (signal: AbortSignal) => {
       if (this.#choosesZones()) {
         if (this.formFactor === "till") {
-          const selection = await this.api.getDeviceZones();
-          if (replaced()) return;
+          const selection = await api.getDeviceZones({ signal });
+          if (signal.aborted || replaced()) return;
           this.deviceZoneSelection = selection;
           this.profileServiceZones = [...selection.zones];
         } else {
-          const selection = await this.api.getDeviceZones().catch(() => null);
-          if (replaced()) return;
+          const selection = await api.getDeviceZones({ signal }).catch(() => null);
+          if (signal.aborted || replaced()) return;
           this.deviceZoneSelection = selection;
           this.deviceZonesNotice = selection === null ? t("device_zones.read_failed") : "";
         }
@@ -5937,9 +5847,14 @@ export class TillApp extends LitElement {
       } else {
         const zoneOffers =
           retainedZone === undefined
-            ? await this.#keepZoneRead(this.api, (api) => api.listDefaultZoneOffers())
-            : await this.#readZoneOffers(retainedZone);
-        if (replaced()) return;
+            ? await this.#keepZoneRead(
+                api,
+                (sent) => sent.listDefaultZoneOffers({ signal }),
+                undefined,
+                signal,
+              )
+            : await this.#readZoneOffers(retainedZone, { signal }, api);
+        if (signal.aborted || replaced()) return;
         const { zones, context } = zoneOffers;
         this.#loadCounterOffers(zoneOffers);
         if (this.formFactor !== "till") this.profileServiceZones = zones ?? [];
@@ -5947,6 +5862,30 @@ export class TillApp extends LitElement {
         this.api.setServiceZone(context.zoneId);
         if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       }
+    };
+    const readWithRetry = (): Promise<void> => {
+      let retry = false;
+      const attempt = startFirstRead(readStartingOffers, (stage) => {
+        if (opening && !replaced()) this.signInReadView = stage;
+      });
+      this.#signInRead = {
+        cancel: attempt.cancel,
+        displayName,
+        retry: () => {
+          if (replaced() || this.signInReadView !== "unreachable") return;
+          retry = true;
+          attempt.cancel();
+        },
+      };
+      if (opening) this.signInReadView = "quiet";
+      return attempt.result.catch((error: unknown) => {
+        if (retry && !replaced()) return readWithRetry();
+        throw error;
+      });
+    };
+    try {
+      await readWithRetry();
+      if (replaced()) return;
     } catch (error) {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
@@ -5975,6 +5914,8 @@ export class TillApp extends LitElement {
       if (this.deviceZoneSelection === null) this.profileServiceZones = [];
       this.counterServiceZoneId = retainedZone ?? "";
     }
+    this.#signInRead = undefined;
+    this.signInReadView = undefined;
     const menuId = this.#resolveZoneMenu(
       this.counterServiceZoneId,
       this.counterService?.periodOccurrenceKey ?? null,
@@ -6947,6 +6888,7 @@ export class TillApp extends LitElement {
       (sent) =>
         options === undefined ? sent.listZoneOffers(zoneId) : sent.listZoneOffers(zoneId, options),
       zoneId,
+      options?.signal,
     );
   }
 
@@ -6954,11 +6896,12 @@ export class TillApp extends LitElement {
     api: TillApi,
     send: (api: TillApi) => Promise<ZoneOffers>,
     zoneId?: string,
+    signal?: AbortSignal,
   ): Promise<ZoneOffers> {
     const read = ++this.#zoneOfferReads;
     const generation = this.#zoneOffersGeneration;
     const zoneOffers = await send(api);
-    if (api === this.api && generation === this.#zoneOffersGeneration)
+    if (!signal?.aborted && api === this.api && generation === this.#zoneOffersGeneration)
       this.#rememberZoneOffers(read, zoneOffers, zoneId);
     return zoneOffers;
   }
@@ -12607,7 +12550,17 @@ export class TillApp extends LitElement {
     if (this.tablesAnswered) this.floorReadFailed = false;
   }
 
+  #rememberShownFloorZone = (zone: Pick<FloorZone, "id" | "name">): void => {
+    if (this.deviceId !== undefined && this.#deviceNavigation()?.floorZoneIds.includes(zone.id)) {
+      rememberFloorZone({ origin: this.#serverOrigin(), deviceId: this.deviceId }, zone);
+    }
+  };
+
   #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
+    if (this.signInReadView !== undefined) {
+      if (poll !== true) this.#signInRead?.retry();
+      return;
+    }
     if (!this.#inShell()) return;
     if (this.firstFloorView !== undefined) {
       if (poll !== true || this.#firstFloorRead === undefined)
@@ -12696,7 +12649,11 @@ export class TillApp extends LitElement {
       this.#tablesJson = json;
       this.tables = tables;
     }
-    if (answered) this.barFloor = this.tables;
+    if (answered) {
+      this.barFloor = this.tables;
+      if (this.deviceId !== undefined)
+        rememberFloorPlan({ origin: this.#serverOrigin(), deviceId: this.deviceId }, tables);
+    }
     if (!changed) return;
     const party = this.orderParty;
     const latest = tables.find((row) => row.id === this.activeTableId)?.party;
@@ -12906,7 +12863,9 @@ export class TillApp extends LitElement {
         });
       } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
         try {
-          const zoneOffers = await this.#readZoneOffers(table.zoneId);
+          const zoneOffers = await (shownEarly
+            ? this.#readOpeningMenu(table.zoneId)
+            : this.#readZoneOffers(table.zoneId));
           if (
             left() ||
             offerRequest !== this.#tableOfferRequest ||
@@ -21222,6 +21181,7 @@ export class TillApp extends LitElement {
     this.#paymentsWait = false;
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopSignInRead();
     this.#stopFloorPoll();
     this.#polledDefaults.clear();
     this.#polledOccurrences.clear();
@@ -23709,12 +23669,23 @@ export class TillApp extends LitElement {
     }
     if (tab === "floor") {
       const navigation = this.#deviceNavigation();
+      const signingIn = this.signInReadView !== undefined;
+      const firstRead = this.signInReadView ?? this.firstFloorView;
+      const memory =
+        firstRead === undefined || this.deviceId === undefined
+          ? undefined
+          : { origin: this.#serverOrigin(), deviceId: this.deviceId };
+      const knownZones = this.deviceZoneSelection?.zones.filter(({ id }) =>
+        navigation?.floorZoneIds.includes(id),
+      );
       return html`<till-floor-screen
         .live=${this.#live}
         .zones=${
-          navigation === null
-            ? this.zones
-            : this.zones.filter((zone) => navigation.floorZoneIds.includes(zone.id))
+          signingIn
+            ? []
+            : navigation === null
+              ? this.zones
+              : this.zones.filter((zone) => navigation.floorZoneIds.includes(zone.id))
         }
         .selectedZoneId=${
           // After a table, the move onto the Floor wrote its zone into the address (#setActiveTab),
@@ -23727,19 +23698,21 @@ export class TillApp extends LitElement {
               ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
               : undefined
         }
-        .tables=${this.tables}
+        .tables=${signingIn ? [] : this.tables}
         .tablesReadAt=${this.tablesReadAt}
-        .tablesAnswered=${this.tablesAnswered}
-        .floorReadFailed=${this.floorReadFailed}
-        .firstRead=${this.firstFloorView}
-        .knownZones=${this.firstFloorView === undefined ? undefined : this.deviceZoneSelection?.zones.filter(({ id }) => navigation?.floorZoneIds.includes(id))}
+        .tablesAnswered=${!signingIn && this.tablesAnswered}
+        .floorReadFailed=${!signingIn && this.floorReadFailed}
+        .firstRead=${firstRead}
+        .rememberedPlan=${memory === undefined ? undefined : rememberedFloorPlan(memory)}
+        .knownZones=${memory === undefined ? undefined : (knownZones ?? rememberedFloorZone(memory))}
+        .onZoneShown=${this.#rememberShownFloorZone}
         .offerJoinConflicts=${this.#offerFloorJoinConflicts}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}
         .operatorSession=${this.#operatorSession}
-        .canOpenStation=${this.#allowsDestination("station")}
-        .canChangeToday=${this.capabilities.includes("take-orders")}
-        .canMarkSteps=${this.capabilities.includes("take-orders")}
+        .canOpenStation=${!signingIn && this.#allowsDestination("station")}
+        .canChangeToday=${!signingIn && this.capabilities.includes("take-orders")}
+        .canMarkSteps=${!signingIn && this.capabilities.includes("take-orders")}
         .handheld=${kindOfFormFactor(this.formFactor ?? "") === "handheld"}
         .viewMemory=${this.#floorViewChoices()}
       ></till-floor-screen>`;
@@ -23760,6 +23733,10 @@ export class TillApp extends LitElement {
       .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
       .activeTableId=${this.activeTableId}
       .loading=${this.tableOpening}
+      .openingTable=${this.barFloor.find(({ id }) => id === this.openingTableId)}
+      .menuFirstRead=${this.tableMenuFirstRead}
+      .retryMenuRead=${this.#openingMenuRead?.retry}
+      .menuReadOnPhone=${kindOfFormFactor(this.formFactor ?? "") === "handheld"}
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
@@ -23906,9 +23883,25 @@ export class TillApp extends LitElement {
         ></till-station-screen>`;
   }
 
-  #activeTabBody(): TemplateResult | typeof nothing {
+  #activeTabBody(openingScreen?: BuiltInScreen): TemplateResult | typeof nothing {
     const tab = this.#activeTab();
     const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
+    if (this.signInReadView !== undefined) {
+      if (openingScreen === undefined)
+        return firstFloorRead(
+          this.signInReadView,
+          handheld,
+          () => this.#signInRead?.retry(),
+          undefined,
+          true,
+        );
+      return openingScreen === "counter"
+        ? html`<till-menu-browser
+            .firstRead=${this.signInReadView}
+            .retryFirstRead=${this.#signInRead?.retry}
+          ></till-menu-browser>`
+        : html`${keyed("preparing-floor", this.#tabBody("floor"))}`;
+    }
     // A handheld's tab is always the Floor, so its empty selection is caught here; a Retry nulls the
     // selection while it reads again, which would otherwise draw the Floor with every venue zone.
     const noZones =
@@ -23974,6 +23967,10 @@ export class TillApp extends LitElement {
           .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
           .activeTableId=${this.activeTableId}
           .loading=${this.tableOpening}
+          .openingTable=${this.barFloor.find(({ id }) => id === this.openingTableId)}
+          .menuFirstRead=${this.tableMenuFirstRead}
+          .retryMenuRead=${this.#openingMenuRead?.retry}
+          .menuReadOnPhone=${kindOfFormFactor(this.formFactor ?? "") === "handheld"}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
@@ -24304,7 +24301,9 @@ export class TillApp extends LitElement {
   }
 
   override render() {
-    const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
+    const signingIn = this.signInReadView !== undefined;
+    const openingScreen = signingIn ? this.#requestedTab() : undefined;
+    const shellFormFactor = this.#inShell() || signingIn ? this.formFactor : undefined;
     const noBoxAnswering = this.router?.noBoxAnswering ?? false;
     const attendanceMessage = this.attendancePage ? this.#attendanceMessage(true) : "";
     const { lateSendWindow, lateSendApproval } = this;
@@ -25103,7 +25102,8 @@ export class TillApp extends LitElement {
                         currentLocale(),
                         html`<till-shell
                           .formFactor=${shellFormFactor}
-                          .activeScreen=${this.activeTabKey}
+                          .activeScreen=${signingIn ? openingScreen : this.activeTabKey}
+                          .starting=${signingIn && openingScreen === undefined}
                           @floor-controls-resized=${(event: CustomEvent<number>) => {
                             this.style.setProperty(
                               "--wt-floor-controls-height",
@@ -25113,11 +25113,11 @@ export class TillApp extends LitElement {
                           .counterZones=${this.deviceZoneSelection?.zones.filter((zone) => this.#deviceNavigation()?.counterZoneIds.includes(zone.id)) ?? []}
                           .selectedCounterZoneId=${this.counterServiceZoneId}
                           .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}
-                          .showFloor=${this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
+                          .showFloor=${openingScreen === "floor" || this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
                           .testingKitchen=${this.#testingKitchen()}
                           .floorKitchenRows=${floorKitchenRows(this.profileKitchenScreen, this.#affordanceList)}
                           .floorKitchenOpen=${this.drill?.fromFloorChooser ?? false}
-                          .operatorName=${this.operatorName}
+                          .operatorName=${signingIn ? (this.#signInRead?.displayName ?? this.operatorName) : this.operatorName}
                           .legalName=${this.issuer?.venueName ?? ""}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
@@ -25137,7 +25137,7 @@ export class TillApp extends LitElement {
                           .hoursBusy=${this.clockSnapshot.busy || this.attendanceSnapshot?.busy === true}
                           .clockError=${this.#attendanceMessage()}
                           .affordances=${this.#affordanceList}
-                          .barTables=${this.#barTables()}
+                          .barTables=${signingIn ? [] : this.#barTables()}
                           @open-bar-table=${(
                             event: CustomEvent<{ tableId: string; held: boolean }>,
                           ) => this.#onOpenBarTable(event.detail)}
@@ -25199,7 +25199,7 @@ export class TillApp extends LitElement {
                                   }}
                                 ></till-department-transfers>`
                           }
-                          ${this.#renderDrawerDialog()} ${this.#activeTabBody()}
+                          ${this.#renderDrawerDialog()} ${this.#activeTabBody(openingScreen)}
                           ${this.#findBillBody()}${this.#drillBody()}${this.#hoursApprovalBody()}
                         </till-shell>`,
                       )

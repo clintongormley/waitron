@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
-import type { FloorMapTable, WtFloorMap } from "@waitron/ui";
+import { rotatedRect, type FloorMapTable, type WtButton, type WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
@@ -115,6 +115,52 @@ const lookOf = ({ fill, outline, pulse, cue, description }: FloorMapTable) => ({
 afterEach(cleanupWidgets);
 
 describe("till-floor-screen: the map's look", () => {
+  it.each([
+    [390, 844, true],
+    [700, 390, true],
+    [820, 1180, true],
+    [1180, 820, false],
+  ] as const)(
+    "keeps remembered tables in the live map's positions at %i × %i",
+    async (width, height, useFloorFooter) => {
+      await pageAt(width, height);
+      try {
+        const tables = [free("t1", 2), free("t2", 11)];
+        const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+          useFloorFooter,
+          knownZones: [zone],
+          rememberedPlan: new Map([
+            [zone.id, tables.map(({ today }) => rotatedRect(today!.placement!))],
+          ]),
+          firstRead: "placeholder",
+        });
+        const boxes = (selector: string) =>
+          [...mapOf(el).shadowRoot!.querySelectorAll(selector)].map((node) => {
+            const { x, y, width, height } = node.getBoundingClientRect();
+            return [x, y, width, height].map(Math.round);
+          });
+        await expect
+          .poll(() => boxes("wt-placeholder").filter((box) => box[2]! > 0))
+          .toHaveLength(2);
+        const remembered = boxes("wt-placeholder");
+        if (!useFloorFooter) {
+          const view = el.shadowRoot!.querySelector<WtButton>("[data-view-toggle]");
+          expect(view?.textContent?.trim()).toBe(en["floor.view_list"]);
+          expect(view?.disabled).toBe(true);
+        }
+
+        el.zones = [zone];
+        el.tables = tables;
+        el.tablesAnswered = true;
+        el.firstRead = undefined;
+        await el.updateComplete;
+        await expect.poll(() => boxes("[part=table]")).toEqual(remembered);
+      } finally {
+        await resetPage();
+      }
+    },
+  );
+
   it("draws the table name in bold on the fixed till's map", async () => {
     await pageAt(1180, 820);
     try {

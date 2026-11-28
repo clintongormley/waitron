@@ -54,6 +54,9 @@ llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la difer
 y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
 **Cerrar cajón** en cualquier caja asignada al mismo cajón para continuar.
 
+Si al cerrar el cajón ves **No se puede conectar con el servidor**, comprueba la conexión de la
+caja y pulsa **Reintentar**.
+
 Si Waitron te pide que vuelvas a contar tras un movimiento de efectivo, elige **Volver a contar**
 e indica cuánto hay ahora en el cajón.
 
@@ -613,11 +616,11 @@ otra zona para cambiar, o usa las flechas arriba y abajo y pulsa Enter. Abre **M
 buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. La hora de entrada aparece debajo de tu nombre,
 junto a **Fichar salida**. En un móvil o una tableta con la sala en pantalla ancha, abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
-## Abrir el plano cuando el servidor tarda {#floor-first-read}
+## Abrir el plano o la carta cuando el servidor tarda {#floor-first-read}
 
-Si ves **Esperando al servidor…** en el plano, espera un momento a que se carguen las mesas.
+Si ves **Esperando al servidor…** en el plano o la carta, espera un momento a que se cargue.
 Si ves **No se puede conectar con el servidor**, comprueba la conexión de la caja o que el móvil
-esté en el WiFi del local. Después, pulsa **Reintentar**.
+esté en el WiFi del local. Pulsa **Reintentar** cuando aparezca.
 
 ## Tomar un pedido en un móvil {#phone-order}
 

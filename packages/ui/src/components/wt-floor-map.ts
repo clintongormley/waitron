@@ -16,6 +16,7 @@ import * as compactFloor from "../floor-map-compact.js";
 import { floorRingStyles, renderFloorPulse, renderFloorRing } from "../floor-ring.js";
 import "../floor-chips.js";
 import "./wt-icon.js";
+import { renderFloorPlaceholders } from "./floor-map-placeholders.js";
 import {
   type PlanPlacement,
   type PlanRect,
@@ -23,6 +24,7 @@ import {
   cropToTables,
   fitScale,
   showsCue,
+  sameRect,
   showsName,
   unionRect,
 } from "../floor-plan-geometry.js";
@@ -209,15 +211,6 @@ function linksOf(groups: readonly Group[]): Group[][] {
   }
   return links;
 }
-
-const sameRect = (a: PlanRect | null, b: PlanRect | null): boolean =>
-  a === b ||
-  (a !== null &&
-    b !== null &&
-    a.x === b.x &&
-    a.y === b.y &&
-    a.width === b.width &&
-    a.height === b.height);
 
 const px = (value: number): string => `${value}px`;
 
@@ -488,6 +481,8 @@ export class WtFloorMap extends LitElement {
 
   /** The placed tables only. */
   @property({ attribute: false }) tables: FloorMapTable[] = [];
+
+  @property({ attribute: false }) placeholders: readonly PlanRect[] = [];
 
   /** A change fits the view again. */
   @property() fitKey = "";
@@ -954,8 +949,11 @@ export class WtFloorMap extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("tables") || changed.has("compact")) {
-      const placements = this.tables.map((table) => table.placement);
+    if (changed.has("tables") || changed.has("compact") || changed.has("placeholders")) {
+      const placements =
+        this.placeholders.length === 0
+          ? this.tables.map((table) => table.placement)
+          : this.placeholders.map((rect) => ({ ...rect, shape: "rect" as const, rotation: 0 }));
       const crop = cropToTables(placements, this.compact ? 0 : undefined);
       if (this.compact) {
         const smallest = placements.reduce(
@@ -1032,6 +1030,7 @@ export class WtFloorMap extends LitElement {
       size !== null &&
       (crop.width * view.scale > size.width ||
         crop.height * view.scale + 2 * this.#fit!.inset > size.height);
+    if (this.placeholders.length > 0) return renderFloorPlaceholders(this.placeholders, view);
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
     return html`<div class="map-content">
       <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>

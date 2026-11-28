@@ -10,6 +10,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import type { TillApi } from "../api/client.js";
 import type { DrawerCloseRead, FinishedDrawerClose, SavedDrawerCount } from "../api/drawer-api.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { startFirstRead, type FirstReadView } from "../state/first-read.js";
+import { firstReadNotice, firstReadNoticeStyles } from "../widgets/first-read-notice.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 
 type DrawerCloseApi = Pick<
@@ -32,6 +34,7 @@ function money(value: string) {
 export class TillDrawerClose extends LitElement {
   static override styles = [
     baseStyles,
+    firstReadNoticeStyles,
     css`
       p,
       dl {
@@ -45,6 +48,15 @@ export class TillDrawerClose extends LitElement {
       dd {
         margin: 0;
         text-align: end;
+      }
+      .first-content-read {
+        min-inline-size: min(calc(var(--wt-tap-min) * 6), calc(100dvw - var(--wt-space-6) * 2));
+      }
+      .first-content-read:has([data-stage="unreachable"]) {
+        min-block-size: 0;
+      }
+      .first-content-read [data-stage="unreachable"] {
+        position: static;
       }
       .bank {
         margin-block-start: var(--wt-space-3);
@@ -66,15 +78,40 @@ export class TillDrawerClose extends LitElement {
   @state() private error = "";
   @state() private switchOperator = false;
 
+  @state() private firstRead: FirstReadView | undefined;
+  #firstAttempt?: ReturnType<typeof startFirstRead<DrawerCloseRead>>;
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
   }
 
+  override disconnectedCallback(): void {
+    this.#firstAttempt?.cancel();
+    this.#firstAttempt = undefined;
+    super.disconnectedCallback();
+  }
+
   async #load(previous?: SavedDrawerCount): Promise<void> {
+    const attempt =
+      previous === undefined
+        ? startFirstRead(
+            (signal) => this.api.readDrawerClose({ signal }),
+            (stage) => (this.firstRead = stage),
+          )
+        : undefined;
+    if (attempt !== undefined) {
+      this.#firstAttempt?.cancel();
+      this.#firstAttempt = attempt;
+      this.firstRead = "quiet";
+      this.busy = true;
+    }
+    const current = () =>
+      this.isConnected && (attempt === undefined || attempt === this.#firstAttempt);
     try {
-      const snapshot = await this.api.readDrawerClose();
-      if (!this.isConnected) return;
+      const snapshot = await (attempt?.result ?? this.api.readDrawerClose());
+      if (!current()) return;
+      this.firstRead = undefined;
       if (
         snapshot.printerId !== this.printerId ||
         (previous && (snapshot.state !== "counted" || snapshot.first.id !== previous.first.id))
@@ -92,17 +129,25 @@ export class TillDrawerClose extends LitElement {
             this.manual = true;
           }
         }
-        this.snapshot = snapshot;
+        if (current()) this.snapshot = snapshot;
       } else {
         this.#showCount(snapshot);
       }
     } catch (error) {
-      if (!this.#permissionRefused(error)) {
+      if (!current()) return;
+      if (this.#permissionRefused(error)) {
+        this.firstRead = undefined;
+      } else if (attempt !== undefined) {
+        this.firstRead = "unreachable";
+      } else {
         this.snapshot = null;
         this.error = t("drawer_close.read_failed");
       }
     } finally {
-      this.busy = false;
+      if (current()) {
+        this.#firstAttempt = undefined;
+        this.busy = false;
+      }
     }
   }
 
@@ -212,7 +257,8 @@ export class TillDrawerClose extends LitElement {
   }
 
   override render() {
-    const { snapshot, finished, recounting, busy } = this;
+    const { snapshot, finished, recounting, busy, firstRead } = this;
+    const canLeave = !busy || firstRead === "unreachable";
     const saved = snapshot?.state === "counted" ? snapshot : null;
     const counting = snapshot?.state === "new" || recounting;
     const count = saved?.recount ?? saved?.first;
@@ -234,7 +280,7 @@ export class TillDrawerClose extends LitElement {
       .open=${true}
       .heading=${t("drawer_close.title")}
       .opener=${this.opener}
-      .dismissible=${!busy}
+      .dismissible=${canLeave}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.dispatchEvent(new CustomEvent("drawer-close-dismiss"));
@@ -247,7 +293,18 @@ export class TillDrawerClose extends LitElement {
               ${t(finished.slip === "queued" ? "drawer_close.slip_queued" : "drawer_close.slip_unavailable")}
             </p>`
           : snapshot === null
-            ? nothing
+            ? firstRead === undefined
+              ? nothing
+              : html`<div class="first-content-read">
+                  ${
+                    firstRead === "placeholder" || firstRead === "waiting"
+                      ? html`<wt-placeholder></wt-placeholder><wt-placeholder></wt-placeholder>`
+                      : nothing
+                  }
+                  ${firstReadNotice(firstRead, false, () => {
+                    if (this.firstRead === "unreachable") void this.#load();
+                  })}
+                </div>`
             : html`
                 ${snapshot.state === "new" ? html`<p>${t(this.manual ? "drawer_close.use_key" : "drawer_close.key_if_needed")}</p>` : nothing}
                 ${
@@ -281,7 +338,7 @@ export class TillDrawerClose extends LitElement {
           slot="cancel"
           data-drawer-action="back"
           variant="secondary"
-          .disabled=${busy}
+          .disabled=${!canLeave}
           @click=${() => void this.renderRoot.querySelector<WtDialog>("wt-dialog")?.requestClose("navigation")}
           >${t("action.back")}</wt-button
         >

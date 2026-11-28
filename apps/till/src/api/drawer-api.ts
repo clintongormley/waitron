@@ -74,8 +74,8 @@ export class DrawerApi extends AttendanceApi {
   saveDrawerEntry(body: DrawerEntryRequest): Promise<{ id: string; printerId: string }> {
     return this.#request("/api/drawer/entries", "POST", body);
   }
-  readDrawerClose(): Promise<DrawerCloseRead> {
-    return this.#request("/api/drawer/close", "GET");
+  readDrawerClose(options: ReadOptions = {}): Promise<DrawerCloseRead> {
+    return this.#request("/api/drawer/close", "GET", undefined, options.signal);
   }
   saveDrawerCount(body: {
     printerId: string;

@@ -11021,7 +11021,9 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
 
-        expect(listZoneOffers).toHaveBeenCalledWith(floorZone.id);
+        expect(listZoneOffers).toHaveBeenCalledWith(floorZone.id, {
+          signal: expect.any(AbortSignal),
+        });
         expect(screen.products).toEqual([
           expect.objectContaining({
             id: "negroni",
@@ -15361,7 +15363,7 @@ describe("till-app", () => {
         ),
       });
       await toCounter(el);
-      expect(shell(el)).toBeNull();
+      expect(shell(el)?.activeScreen).toBe("counter");
       const back = new Promise<void>((done) =>
         window.addEventListener("popstate", () => done(), { once: true }),
       );
@@ -16912,7 +16914,9 @@ describe("till-app", () => {
         await flush(el);
         emit(floor(el)!, "open-table", { tableId: terraceTable.id, seated: false });
         await flush(el);
-        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-dining");
+        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-dining", {
+          signal: expect.any(AbortSignal),
+        });
         expect(tableOrder(el)!.selectedMenuId).toBe("cat-cocktails");
         selectTab(el, "counter");
         await flush(el);
@@ -17920,7 +17924,7 @@ describe("the device profile decides which screens a device offers", () => {
         });
         await flush(el);
         await startCounterBasket(el);
-        emit(lock(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
+        emit(shell(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
         await flush(el);
         await startCounterBasket(el);
         release(outcome);

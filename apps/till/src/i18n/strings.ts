@@ -2578,7 +2578,7 @@ export const es: Record<StringKey, string> = {
   "first_read.unreachable": "No se puede conectar con el servidor",
   "first_read.retry": "Reintentar",
   "first_read.phone_wifi": "Comprueba que este móvil está en el WiFi del local.",
-  "first_read.till_network": "Comprueba que esta caja esté conectada a la red del local.",
+  "first_read.till_network": "Comprueba que esta caja está conectada a la red del local.",
   "offline.wifi": "Comprueba que este móvil está en el WiFi del local.",
   "offline.already_on_wifi":
     "¿Ya estás en la red WiFi del local? Comprueba que el servidor esté encendido. Si lo está, puede que tengas que volver a instalar su certificado.",

@@ -52,6 +52,8 @@ if it stays shut. Count the cash and choose **Save count**. Waitron then shows a
 you can choose **Recount** once to check it. If you leave after saving a count, choose **Close drawer**
 again from any till assigned to it to pick up where you left off.
 
+If Close drawer says **Can't reach the box**, check the till's connection and choose **Try again**.
+
 If Waitron asks you to recount after cash moved, choose **Recount** and enter what is in the
 drawer now.
 
@@ -577,11 +579,11 @@ beside **Clock out**.
 On a wide handheld floor, open **More** at the top for **Equipment**, **Language** and
 **Theme** under **Settings**.
 
-## Open the Floor when the box is slow {#floor-first-read}
+## Open the Floor or menu when the box is slow {#floor-first-read}
 
-If the Floor says **Still waiting for the box…**, give it a moment to load your tables. If it says
+If the Floor or menu says **Still waiting for the box…**, give it a moment to load. If it says
 **Can't reach the box**, check your till's network connection or that your phone is on the venue's
-WiFi, then tap **Try again**.
+WiFi. Tap **Try again** when it appears.
 
 ## Take an order on a phone {#phone-order}
 
