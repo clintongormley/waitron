@@ -363,7 +363,7 @@ the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add o
 until its required choices are made, and shows changed or unavailable choices as `role="alert"`
 paragraphs rather than beside a field; and the supervisor override dialog
 (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
-empty, before any press.
+empty, before any press. In the Refund sheet, the approver picker is marked as required.
 
 ## The profile editor reads people and the venue's departments and zones
 

@@ -721,8 +721,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 
 - **Other till surfaces have not been checked against the forms rule.** The payment and weighing
-  steps, the dish options picker and the supervisor override dialog hold their buttons before any
-  press; whether a number pad or a choice picker counts as a form is open. Left open by C47.
+  steps, the dish options picker and supervisor approval hold their buttons before any
+  press. The Refund sheet marks its approver picker as required. Whether a number pad or a choice
+  picker counts as a form is open. Left open by C47.
   [Detail](backlog/till.md#other-till-surfaces-have-not-been-checked-against-the-forms-rule)
 
 - **Guest-facing QR, online ordering, delivery, online booking** (bundle of 4, size L, waits for another entry). Holds A508, A509, A1012, A1013. [Detail](backlog/till.md#bundle-guest-facing-qr-online-ordering-delivery-online-booking)

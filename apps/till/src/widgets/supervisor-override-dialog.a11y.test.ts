@@ -1,4 +1,5 @@
 import { afterEach, describe, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./supervisor-override-dialog.js";
@@ -10,11 +11,31 @@ const authorizers: StaffMember[] = [
   { personId: "adm-1", displayName: "Administradora" },
 ];
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 describe.each(["light", "dark"] as const)(
   "till-supervisor-override-dialog a11y (%s theme)",
   (theme) => {
+    it("names the approval sheet and its required picker, before and after selecting", async () => {
+      setLocale("en-GB");
+      const { host } = await mountWidget<TillSupervisorOverrideDialog>(
+        "till-supervisor-override-dialog",
+        {
+          authorizers,
+          sheet: { heading: "Refund approval", prompt: "Hand them the phone." },
+        },
+        theme,
+      );
+      const picker = page.getByRole("combobox", { name: /Who approves/ });
+      await expectNoA11yViolations(host);
+      await userEvent.click(picker);
+      await userEvent.click(page.getByRole("option", { name: "Responsable" }));
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations asking an approver for their PIN", async () => {
       setLocale("es-ES");
       const { el, host } = await mountWidget<TillSupervisorOverrideDialog>(

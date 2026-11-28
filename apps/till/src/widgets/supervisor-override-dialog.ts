@@ -1,8 +1,8 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import type { PropertyValues } from "lit";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, formMessage, formMessageStyles, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -10,7 +10,10 @@ import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
 import { CountdownController } from "../state/countdown-controller.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
+import "@waitron/ui/src/components/wt-full-screen-panel.js";
 import type { StaffMember } from "../api/device-session-api.js";
 
 export interface OverrideConfirmDetail {
@@ -52,6 +55,7 @@ export function overrideErrorText(code: string): string {
 export class TillSupervisorOverrideDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       .operator {
         margin: 0 0 var(--wt-space-3);
@@ -90,12 +94,104 @@ export class TillSupervisorOverrideDialog extends LitElement {
         font-size: var(--wt-font-size-xl);
         letter-spacing: var(--wt-space-2);
       }
+
+      .approval-sheet {
+        --wt-dialog-surface: transparent;
+      }
+
+      .approval-sheet::part(body) {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+
+      .approval-sheet wt-full-screen-panel {
+        inline-size: min(100%, var(--wt-till-chooser-dialog-width));
+        block-size: auto;
+        max-block-size: 100%;
+        margin-inline: auto;
+        background: var(--wt-color-surface);
+      }
+
+      .sheet-header {
+        padding-inline: var(--wt-space-4);
+      }
+
+      .sheet-header h2 {
+        margin: var(--wt-space-1) 0;
+        font-size: var(--wt-font-size-lg);
+        text-wrap: balance;
+      }
+
+      .sheet-content {
+        padding-inline: var(--wt-space-3);
+        padding-block-end: var(--wt-space-2);
+      }
+
+      .sheet-content wt-combobox {
+        display: block;
+        inline-size: min(calc(100% - 2 * var(--wt-space-1)), var(--wt-till-form-column-width));
+        margin-inline: auto;
+        --wt-field-height: var(--wt-dropdown-row-height);
+      }
+
+      .pin-dots {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--wt-font-size-md);
+        padding-block: var(--wt-space-3);
+      }
+
+      .pin-dots span {
+        inline-size: var(--wt-font-size-md);
+        block-size: var(--wt-font-size-md);
+        border: calc(2 * var(--wt-field-line-width)) solid var(--wt-color-text-muted);
+        border-radius: var(--wt-radius-full);
+      }
+
+      .pin-dots [data-filled] {
+        border-color: var(--wt-color-text);
+        background: var(--wt-color-text);
+      }
+
+      .sheet-content .pad-wrap {
+        inline-size: min(100%, var(--wt-till-form-column-width));
+        max-inline-size: none;
+        margin-inline: auto;
+        --wt-till-keypad-row-height: var(--wt-dropdown-row-height);
+        --wt-till-keypad-gap: calc(var(--wt-space-3) / 2);
+        --wt-till-keypad-font-size: var(--wt-font-size-lg);
+        --wt-action-weight: var(--wt-font-weight-normal);
+      }
+
+      .sheet-header,
+      .sheet-actions {
+        inline-size: min(100%, calc(var(--wt-till-form-column-width) + 2 * var(--wt-space-4)));
+        margin-inline: auto;
+      }
+
+      .sheet-actions .form-message {
+        padding-inline: var(--wt-space-4);
+      }
+
+      .sheet-actions wt-foot-button-bar {
+        --wt-foot-padding-bottom: max(var(--wt-space-4), env(safe-area-inset-bottom));
+      }
+
+      .sheet-actions wt-button {
+        flex: 1 1 0;
+        min-inline-size: 0;
+        --wt-action-font-size: var(--wt-text-control-font-size);
+      }
     `,
   ];
 
   @property({ attribute: false }) authorizers: StaffMember[] = [];
 
   @property({ attribute: false }) error: ApproverRefusal | null = null;
+  @property({ attribute: false }) sheet?: { heading: string; prompt: string };
+  @property({ attribute: false }) coverUnderlay?: (covered: boolean) => void;
 
   @state() private selected?: StaffMember;
   @state() private pin = "";
@@ -114,11 +210,16 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.coverUnderlay?.(false);
     this.pin = "";
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
     super.disconnectedCallback();
+  }
+
+  override updated(): void {
+    this.coverUnderlay?.(this.active);
   }
 
   /** A freshly-delivered refusal for the chosen approver (the parent nulls then re-sets it per
@@ -157,7 +258,8 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   #select(person: StaffMember): void {
-    if (!this.isConnected || !this.active) return;
+    if (!this.isConnected || !this.active || this.selected?.personId === person.personId) return;
+    this.#wait.stop();
     this.selected = person;
     this.pin = "";
     this.#scope?.changed();
@@ -226,6 +328,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   override render() {
+    if (this.sheet) return this.#renderSheet(this.sheet);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -267,41 +370,115 @@ export class TillSupervisorOverrideDialog extends LitElement {
     `;
   }
 
+  #errorText(): string {
+    if (this.#wait.remaining > 0)
+      return t("override.throttled").replace("{n}", String(this.#wait.remaining));
+    const refusal = this.#refusalFor(this.selected);
+    return refusal !== null && (refusal.retryAfterSeconds ?? 0) === 0 && !this.dismissed
+      ? overrideErrorText(refusal.code)
+      : "";
+  }
+
+  #renderPad(locked: boolean) {
+    return html`<div class="pad-wrap" ?inert=${locked}>
+      <till-numeric-pad
+        mode="pin"
+        .value=${this.pin}
+        @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @pad-enter=${() => pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
+      ></till-numeric-pad>
+    </div>`;
+  }
+
+  #renderAuthorize(locked: boolean) {
+    const disabled = this.pin === "" || locked;
+    return html`<wt-button
+      class="authorize"
+      variant=${this.sheet && disabled ? "secondary" : "primary"}
+      ?disabled=${disabled}
+      @click=${() => this.#confirm()}
+    >
+      ${t("action.authorize")}
+    </wt-button>`;
+  }
+
   #renderPin(person: StaffMember) {
     const waiting = this.#wait.remaining > 0;
-    const refusal = this.#refusalFor(person);
-    const errorText = waiting
-      ? t("override.throttled").replace("{n}", String(this.#wait.remaining))
-      : refusal !== null && (refusal.retryAfterSeconds ?? 0) === 0 && !this.dismissed
-        ? overrideErrorText(refusal.code)
-        : "";
     return html`
       <p class="operator">${person.displayName}</p>
       <p class="prompt">${this.#text("enter_pin")}</p>
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
-      <div class="pad-wrap" ?inert=${waiting}>
-        <till-numeric-pad
-          mode="pin"
-          .value=${this.pin}
-          @wt-change=${(event: Event) => this.#onPadChange(event)}
-          @pad-enter=${() =>
-            pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
-        ></till-numeric-pad>
-      </div>
-      <wt-form-actions slot="footer" .error=${errorText}>
+      ${this.#renderPad(waiting)}
+      <wt-form-actions slot="footer" .error=${this.#errorText()}>
         <wt-button slot="cancel" class="back" variant="secondary" @click=${() => this.#back()}>
           ${t("action.back")}
         </wt-button>
-        <wt-button
-          class="authorize"
-          variant="primary"
-          ?disabled=${this.pin === "" || waiting}
-          @click=${() => this.#confirm()}
-        >
-          ${t("action.authorize")}
-        </wt-button></wt-form-actions
-      >
+        ${this.#renderAuthorize(waiting)}
+      </wt-form-actions>
     `;
+  }
+
+  #renderSheet({ heading, prompt }: NonNullable<TillSupervisorOverrideDialog["sheet"]>) {
+    const locked = this.selected === undefined || this.#wait.remaining > 0;
+    const hasAuthorizers = this.authorizers.length > 0;
+    return html`<wt-dialog
+      ${trackDialog()}
+      class="approval-sheet"
+      full-screen
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+      aria-label=${heading}
+      @wt-close=${(event: Event) => this.#closed(event)}
+    >
+      <wt-full-screen-panel rising body-label=${heading}>
+        <div slot="header" class="sheet-header">
+          <h2>${heading}</h2>
+          <p class="prompt">${prompt}</p>
+        </div>
+        <div class="sheet-content">
+          ${
+            hasAuthorizers
+              ? html`<wt-combobox
+                    name="approver"
+                    label=${t("override.who_approves")}
+                    placeholder=${this.#text("pick")}
+                    search="never"
+                    required
+                    .value=${this.selected?.personId ?? ""}
+                    .options=${this.authorizers.map(({ personId, displayName }) => ({
+                      value: personId,
+                      label: displayName,
+                    }))}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      const person = this.authorizers.find(
+                        ({ personId }) => personId === event.detail.value,
+                      );
+                      if (person) this.#select(person);
+                    }}
+                  ></wt-combobox>
+                  <div class="pin-dots" aria-hidden="true">
+                    ${Array.from(
+                      { length: Math.max(4, this.pin.length) },
+                      (_, index) =>
+                        html`<span data-pin-dot ?data-filled=${index < this.pin.length}></span>`,
+                    )}
+                  </div>
+                  ${this.#renderPad(locked)}`
+              : html`<p class="prompt">${this.#text("none")}</p>`
+          }
+        </div>
+        <div slot="footer" class="sheet-actions">
+          ${formMessage(this.#errorText())}
+          <wt-foot-button-bar layout="row">
+            <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+              ${t("action.cancel")}
+            </wt-button>
+            ${hasAuthorizers ? this.#renderAuthorize(locked) : nothing}
+          </wt-foot-button-bar>
+        </div>
+      </wt-full-screen-panel>
+    </wt-dialog>`;
   }
 }
 

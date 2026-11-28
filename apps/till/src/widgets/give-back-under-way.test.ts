@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import { deferred } from "../../test/clock-app.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formatMoney } from "@waitron/shared";
@@ -734,6 +735,9 @@ describe("cash", () => {
 
     press(el, "cash");
     const pin = await pinDialog(el);
+    await expect
+      .element(page.getByRole("dialog", { name: "Supervisor approval required" }))
+      .toBeVisible();
     expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund", {
       signal: expect.any(AbortSignal),
     });

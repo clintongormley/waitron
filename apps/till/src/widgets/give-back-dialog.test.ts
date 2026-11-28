@@ -15,6 +15,7 @@ import type {
   GiveBackWrite,
 } from "../api/give-back-types.js";
 import { GiveBackSession } from "../state/give-back.js";
+import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import {
   APPROVERS,
@@ -1567,6 +1568,44 @@ describe("sending", () => {
     },
   );
 
+  it("lets the supervisor approve the refund from the PIN sheet", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    const el = await press(api);
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    const sheet = page.getByRole("dialog", { name: "Supervisor approval required" });
+    await expect.element(sheet).toBeVisible();
+    const refundDialog = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+    const originalBackdrop = () => getComputedStyle(refundDialog, "::backdrop").backgroundColor;
+    const approvalDialog = approval(el)!
+      .shadowRoot!.querySelector("wt-dialog")!
+      .shadowRoot!.querySelector("dialog")!;
+    expect(originalBackdrop()).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(approvalDialog, "::backdrop").backgroundColor).toBe(
+      "rgba(0, 0, 0, 0.4)",
+    );
+    await expect
+      .element(page.getByRole("heading", { name: "Supervisor approval required" }))
+      .toHaveTextContent("Supervisor approval required");
+    await expect
+      .element(page.getByText("Refunds need a supervisor or manager. Hand them the phone."))
+      .toBeVisible();
+    await userEvent.click(page.getByRole("combobox", { name: /Who approves/ }));
+    await userEvent.click(page.getByRole("option", { name: "Boss" }));
+    const panel = approval(el)!.shadowRoot!.querySelector("wt-full-screen-panel[rising]")!;
+    expect(panel.querySelectorAll("[data-pin-dot]")).toHaveLength(4);
+    expect(panel.querySelectorAll("[data-pin-dot][data-filled]")).toHaveLength(0);
+
+    for (const digit of ["0", "1", "2", "3", "4", "5"]) {
+      await userEvent.click(page.getByRole("button", { name: digit, exact: true }));
+    }
+    expect(panel.querySelectorAll("[data-pin-dot][data-filled]")).toHaveLength(6);
+    await userEvent.click(page.getByRole("button", { name: "Authorize", exact: true }));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 refunded in cash."));
+    expect(originalBackdrop()).toBe("rgba(0, 0, 0, 0.4)");
+    expect(sent(api).override).toEqual({ personId: "boss", pin: "012345" });
+  });
+
   it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();
     answering(api, { needs: ["sale.refund", "sale.rectify"] });
@@ -3050,6 +3089,31 @@ describe("opened filled in after a cancel (D9)", () => {
 });
 
 describe("a give-back still under way", () => {
+  it("restores the Refund backdrop when the under-way approval is cancelled", async () => {
+    const api = withView({ underWay: UNDER_WAY });
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+    const { el } = await mount(api);
+    el.corrections = new InvoiceCorrectionSession(SCOPE, api);
+    const refundDialog = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+    const backdrop = (dialog: HTMLDialogElement) =>
+      getComputedStyle(dialog, "::backdrop").backgroundColor;
+    const cash = () => underWay(el)!.shadowRoot!.querySelector("[data-choice=cash]");
+    await vi.waitFor(() => expect(cash()).not.toBeNull());
+    await userEvent.click(page.elementLocator(cash()!));
+
+    const sheet = page.getByRole("dialog", { name: "Supervisor approval required" });
+    await expect.element(sheet).toBeVisible();
+    expect(backdrop(refundDialog)).toBe("rgba(0, 0, 0, 0)");
+    expect(backdrop(sheet.element() as HTMLDialogElement)).toBe("rgba(0, 0, 0, 0.4)");
+
+    await userEvent.click(page.getByRole("button", { name: "Cancel", exact: true }));
+    await expect.element(sheet).not.toBeInTheDocument();
+    expect(backdrop(refundDialog)).toBe("rgba(0, 0, 0, 0.4)");
+  });
+
   it("opens straight onto what is left to do, titled Money back under way", async () => {
     const api = withView({ underWay: UNDER_WAY });
     const { el } = await mount(api);

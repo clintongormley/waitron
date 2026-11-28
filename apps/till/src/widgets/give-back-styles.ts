@@ -2,6 +2,10 @@ import { css } from "lit";
 
 /** The Give money back window's look, shared by its steps and the under-way view. */
 export const giveBackStyles = css`
+  wt-dialog[data-approval-covered] {
+    --wt-dialog-scrim: transparent;
+  }
+
   .body {
     display: flex;
     flex-direction: column;

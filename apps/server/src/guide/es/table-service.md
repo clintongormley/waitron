@@ -449,8 +449,9 @@ dice entonces qué pasa: en efectivo se abre el cajón y entregas el dinero al c
 tarjeta se devuelve por el lector de tarjetas. Si el pago elegido no admite todo, la ventana dice
 cuánto queda en curso para los demás pagos.
 
-Elige **Devolver** con el importe. Si tú no puedes devolver dinero, un responsable o encargado lo
-aprueba con un solo PIN.
+Elige **Devolver** con el importe. Si aparece **Hace falta la aprobación de un responsable**,
+pásale el teléfono a un responsable o encargado. Esa persona elige su nombre en **Quién
+aprueba**, introduce su PIN y pulsa **Autorizar**.
 
 En una tarjeta tecleada en un datáfono aparte, la ventana te pide que la devuelvas antes en ese
 datáfono. Hazlo, marca **He devuelto … en el datáfono aparte** y elige **Registrar la
