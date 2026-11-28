@@ -600,6 +600,27 @@ it("draws each part of a card sale's row", async () => {
   expect(words(sale.querySelector("[data-number]"))).toBe("T-0412");
   expect(sale.querySelector("[data-amount] .hl")).toBeNull();
 });
+it("sets a row's time on its first line beside the place, pads its label and draws a 16 px Days chevron, as the frame does", async () => {
+  const { el } = await mount(answering([transactionRow({ type: "full-invoice" })]));
+  await ready(el);
+  const sale = row(el);
+  const middle = (part: Element) => {
+    const rect = part.getBoundingClientRect();
+    return (rect.top + rect.bottom) / 2;
+  };
+  const time = sale.querySelector("[data-time]")!;
+  const place = sale.querySelector("[data-place]")!;
+  const way = sale.querySelector("[data-way]")!;
+  expect(Math.abs(middle(time) - middle(place))).toBeLessThanOrEqual(1);
+  expect(time.getBoundingClientRect().bottom).toBeLessThanOrEqual(way.getBoundingClientRect().top);
+  const tag = getComputedStyle(sale.querySelector("[data-tag]")!);
+  expect([tag.paddingTop, tag.paddingBottom]).toEqual(["1px", "1px"]);
+  const chevron = el
+    .shadowRoot!.querySelector("[data-days]")!
+    .querySelector('wt-icon[name="chevron-down"]')!
+    .getBoundingClientRect();
+  expect([chevron.width, chevron.height]).toEqual([16, 16]);
+});
 const LONG_NUMBER = "A-0CNNY/9007199254740993";
 const overlap = (a: DOMRect, b: DOMRect) =>
   Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 &&

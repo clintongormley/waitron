@@ -88,6 +88,10 @@ export class TillFindBillScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-1);
       }
+      .days [slot="trigger"] wt-icon {
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+      }
       .dates {
         display: grid;
         grid-template-columns: minmax(0, 1fr);

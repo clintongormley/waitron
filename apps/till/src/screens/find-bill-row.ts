@@ -123,7 +123,6 @@ export const findBillRowStyles = css`
     outline-offset: calc(-1 * var(--wt-focus-offset));
   }
   .time {
-    grid-row: 1 / 3;
     color: var(--wt-color-text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -164,7 +163,7 @@ export const findBillRowStyles = css`
   .tag {
     min-inline-size: 0;
     overflow-wrap: anywhere;
-    padding: 0 calc(var(--wt-space-1) + var(--wt-space-1) / 2);
+    padding: calc(var(--wt-space-1) / 4) calc(var(--wt-space-1) + var(--wt-space-1) / 2);
     border-radius: var(--wt-radius-full);
     background: var(--wt-color-surface-sunken);
     color: var(--wt-color-text);

@@ -9138,18 +9138,18 @@ export class TillApp extends LitElement {
 
   #findBillBody(): TemplateResult | typeof nothing {
     if (this.drill?.kind !== "find-bill" && this.historicalReceipt === null) return nothing;
-    return html`<div slot="drill" ?hidden=${this.drill?.kind !== "find-bill"}>
-      <till-find-bill-screen
-        .api=${this.api}
-        .busy=${this.findBillBusy}
-        .active=${this.drill?.kind === "find-bill"}
-        .backKey=${this.#homeScreen() === "counter" ? "find_page.back" : "action.back"}
-        @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
-        @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
-        @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
-        @find-correction-open=${(event: CustomEvent<{ correction: OpenInvoiceCorrection }>) => void this.#onFindCorrectionOpen(event)}
-      ></till-find-bill-screen>
-    </div>`;
+    return html`<till-find-bill-screen
+      slot="drill"
+      ?hidden=${this.drill?.kind !== "find-bill"}
+      .api=${this.api}
+      .busy=${this.findBillBusy}
+      .active=${this.drill?.kind === "find-bill"}
+      .backKey=${this.#homeScreen() === "counter" ? "find_page.back" : "action.back"}
+      @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
+      @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
+      @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
+      @find-correction-open=${(event: CustomEvent<{ correction: OpenInvoiceCorrection }>) => void this.#onFindCorrectionOpen(event)}
+    ></till-find-bill-screen>`;
   }
 
   /** A table bill's own way as the party's bills read it; a bill not read yet starts as the zone

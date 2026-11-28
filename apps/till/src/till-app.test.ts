@@ -33,6 +33,7 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
+  pageAt,
   resetPage,
   servedMenus,
   startCounterBasket,
@@ -26705,6 +26706,77 @@ describe("A737 Find a bill page", () => {
       { page: 1, q: "0091 " },
     ]);
     expect(search.value).toBe("0091 ");
+  });
+  it("on a phone keeps the top bar and search in place while only the list scrolls, and brings a sale opened after Show more back into that list", async () => {
+    await pageAt(390, 844);
+    try {
+      const sales = Array.from({ length: 51 }, (_, index) =>
+        transactionRow({ transactionId: `sale-${index + 1}` }),
+      );
+      const { el } = await mountApp({
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
+        listBills: vi.fn().mockResolvedValue(listPage([])),
+        listTransactions: vi.fn(async (query: { page: number }) => ({
+          ...listPage(query.page === 0 ? sales.slice(0, 50) : sales.slice(50), 51, query.page),
+          dates: resolvedDates,
+        })),
+        getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      });
+      el.parentElement!.style.blockSize = "100%";
+      await toCounter(el);
+      emit(shell(el)!, "find-bill");
+      await flush(el);
+      const view = pageOf(el)!;
+      const more = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>("[data-list-more]");
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      const list = view
+        .shadowRoot!.querySelector("wt-full-screen-panel")!
+        .shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const drill = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".drill")!;
+      const bar = view.shadowRoot!.querySelector("wt-top-bar")!;
+      const field = view.shadowRoot!.querySelector('wt-input[name="search"]')!;
+      const barTop = bar.getBoundingClientRect().top;
+      const fieldTop = field.getBoundingClientRect().top;
+      const seen = () =>
+        `screen ${view.getBoundingClientRect().height} tall, list scrollTop ${list.scrollTop}, page scrollTop ${drill.scrollTop}, bar ${bar.getBoundingClientRect().top}`;
+      expect(view.getBoundingClientRect().height, seen()).toBeLessThanOrEqual(drill.clientHeight);
+      more.scrollIntoView({ block: "center" });
+      expect(list.scrollTop, seen()).toBeGreaterThan(1000);
+      expect(drill.scrollTop, seen()).toBe(0);
+      expect(bar.getBoundingClientRect().top, seen()).toBe(barTop);
+      expect(field.getBoundingClientRect().top, seen()).toBe(fieldTop);
+      await userEvent.click(page.elementLocator(more));
+      const last = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>(
+          'button[data-transaction="sale-51"]',
+        );
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      last.scrollIntoView({ block: "center" });
+      await userEvent.click(page.elementLocator(last));
+      await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+      expect(view.checkVisibility(), "Find a bill is hidden under the receipt").toBe(false);
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      expect(view.checkVisibility()).toBe(true);
+      await vi.waitFor(() => {
+        const row = view.shadowRoot!.querySelector('button[data-transaction="sale-51"]');
+        expect(row).not.toBeNull();
+        const box = row!.getBoundingClientRect();
+        const shown = list.getBoundingClientRect();
+        expect(box.top, seen()).toBeGreaterThanOrEqual(shown.top);
+        expect(box.bottom, seen()).toBeLessThanOrEqual(shown.bottom);
+      });
+      expect(drill.scrollTop, seen()).toBe(0);
+      expect(bar.getBoundingClientRect().top, seen()).toBe(barTop);
+    } finally {
+      await resetPage();
+    }
   });
   it("ignores a historical receipt answered after Back", async () => {
     let resolve!: (value: TillSaleResult) => void;
