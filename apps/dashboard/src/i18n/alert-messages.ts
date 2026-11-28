@@ -211,6 +211,11 @@ export const ALERT_MESSAGES: Readonly<
     en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Open Backups and press Start the copy again. If it stops again, choose Change bucket there and press Test to check the bucket.",
     es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Abre Copias de seguridad y pulsa Volver a iniciar la copia. Si se vuelve a detener, elige allí Cambiar de bucket y pulsa Probar para comprobar el bucket.",
     variants: {
+      numberedKeyRequired: {
+        mode: "replace",
+        en: "The bucket copy needs a new backup key. In Backups, open the Recovery pack card and choose Change the backup key. If the card offers only Make a new master key, choose that instead.",
+        es: "La copia en el bucket necesita una nueva clave de las copias. En Copias de seguridad, abre la tarjeta del paquete de recuperación y elige Cambiar la clave de las copias. Si la tarjeta solo ofrece Crear una clave maestra nueva, elige esa opción.",
+      },
       toSpare: {
         mode: "replace",
         en: "The copy to the standby box is not running, so new changes are not reaching the standby box. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",

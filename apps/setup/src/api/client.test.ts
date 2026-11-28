@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
 import type { ProvisionBody } from "./client.js";
-import { REVIEWED_CREDENTIALS as CREDENTIALS } from "../widgets/test-helpers.js";
+import { REVIEWED_BUCKET, REVIEWED_CREDENTIALS as CREDENTIALS } from "../widgets/test-helpers.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -427,17 +427,16 @@ describe("SetupApi", () => {
     ).toEqual(["1", "0"]);
   });
 
-  it("restoreFromBucket POSTs the kit as JSON and leaves out a venue not yet confirmed", async () => {
+  it("restoreFromBucket POSTs the bucket source as JSON and leaves out a venue not yet confirmed", async () => {
     const staged = { restoreStaged: true, restarting: true };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(staged, true, 202))
       .mockResolvedValueOnce(jsonResponse(staged, true, 202));
     const api = new SetupApi("", fetchImpl);
-    const kit = "WAITRON-RECOVERY-KIT-2:abc";
     expect(
       await api.restoreFromBucket({
-        kit,
+        ...REVIEWED_BUCKET,
         environment: "production",
         oldBoxGone: false,
         venueConfirmed: null,
@@ -445,7 +444,7 @@ describe("SetupApi", () => {
       }),
     ).toEqual(staged);
     await api.restoreFromBucket({
-      kit,
+      ...REVIEWED_BUCKET,
       environment: "preproduction",
       oldBoxGone: true,
       venueConfirmed: "89890001K",
@@ -461,9 +460,9 @@ describe("SetupApi", () => {
       },
     ];
     expect(fetchImpl.mock.calls).toEqual([
-      post({ kit, environment: "production", oldBoxGone: false, ...CREDENTIALS }),
+      post({ ...REVIEWED_BUCKET, environment: "production", oldBoxGone: false, ...CREDENTIALS }),
       post({
-        kit,
+        ...REVIEWED_BUCKET,
         environment: "preproduction",
         oldBoxGone: true,
         ...CREDENTIALS,
@@ -486,7 +485,7 @@ describe("SetupApi", () => {
     const api = new SetupApi("", fetchImpl);
     await expect(
       api.restoreFromBucket({
-        kit: "k",
+        ...REVIEWED_BUCKET,
         environment: "production",
         oldBoxGone: false,
         venueConfirmed: null,
@@ -646,7 +645,7 @@ describe("SetupApi calls the fetch it was given as a free function", () => {
       "restoreFromBucket",
       (api) =>
         api.restoreFromBucket({
-          kit: "k",
+          ...REVIEWED_BUCKET,
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: null,

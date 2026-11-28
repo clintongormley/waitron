@@ -29,7 +29,7 @@ import { ALL_MODULES } from "./modules.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { writeStreamRestore } from "./restore-stream.js";
-import { encodeRecoveryKit } from "@waitron/stream";
+import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { restoreFromArtifactFile, writeValidated, type PlacementDeps } from "./restore.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -425,28 +425,23 @@ it.each(["archive", "bucket"] as const)(
       }),
     );
     const file = join(f.deps.stagingDir, "command-input");
-    const kit = {
-      version: 2 as const,
-      streamId: "c0000000-0000-4000-8000-000000000002",
-      bucket: {
-        endpoint: "https://s3.example.net",
-        region: "eu-west-1",
-        bucket: "venue-copy",
-        prefix: "waitron/",
-        accessKeyId: "AKIAEXAMPLE",
-        secretAccessKey: "not-a-real-secret-0123456789",
-      },
-      recoveryKey: "recovery-key-one-strong",
-      pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
+    const bucket = {
+      endpoint: "https://s3.example.net",
+      region: "eu-west-1",
+      bucket: "venue-copy",
+      prefix: "waitron/",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "not-a-real-secret-0123456789",
     };
-    await writeFile(file, kind === "bucket" ? encodeRecoveryKit(kit) : "encrypted artifact");
+    if (kind === "archive") await writeFile(file, "encrypted artifact");
     const apply = async (args: { withModuleOperations?: PlacementDeps["withModuleOperations"] }) =>
       writeValidated(f.validated, { ...f.deps, withModuleOperations: args.withModuleOperations });
     const lines: string[] = [];
     expect(
       await runRestore({
-        argv: kind === "archive" ? ["restore", file] : ["restore", "--from-bucket", file],
+        argv: kind === "archive" ? ["restore", file] : bucketRestoreArgs(bucket),
         env: {
+          ...(kind === "bucket" ? bucketRestoreEnv(bucket, nodeKey) : {}),
           WAITRON_BACKUP_RECOVERY_KEY: "backup-key",
           WAITRON_STATE_DIR: f.deps.stateDir,
           WAITRON_VENUE_DIR: f.deps.venueDir,

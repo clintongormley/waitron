@@ -1,3 +1,9 @@
+import {
+  TEST_BUCKET,
+  TEST_BUCKET_KEY,
+  TEST_MASTER_KEY,
+  bucketRecovery,
+} from "../test/bucket-restore-command.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
@@ -168,7 +174,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     await writeSealedStateRow(
       suite.db,
       nodeId,
-      await sealNodeState(entries, "bucket-key"),
+      await sealNodeState(entries, TEST_BUCKET_KEY),
       new Date("2026-10-01T08:00:00Z"),
     );
     const source = join(scratch, "venue.db");
@@ -190,25 +196,15 @@ it("binds a bucket copy with an older venue schema before private preview migrat
           nodeId,
           generation,
           writtenAt: "2026-10-01T08:00:00.000Z",
+          recovery: bucketRecovery(signer.publicKey),
         },
         signer.privateKey,
       ),
       null,
     );
     const preview = await previewRecoveryStream({
-      kit: {
-        version: 2 as const,
-        streamId,
-        bucket: {
-          region: "local",
-          bucket: "copy",
-          prefix: "",
-          accessKeyId: "unused",
-          secretAccessKey: "unused",
-        },
-        recoveryKey: "bucket-key",
-        pointerSignerPublicKey: signer.publicKey,
-      },
+      bucket: TEST_BUCKET,
+      masterKey: TEST_MASTER_KEY,
       stateDir: scratch,
       stagingDir: scratch,
       migrationsRoot: codeRoot,

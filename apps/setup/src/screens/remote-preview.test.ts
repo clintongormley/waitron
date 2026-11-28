@@ -1,8 +1,14 @@
 import { LitElement } from "lit";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  enterBucket,
+  mountWidget,
+  REVIEWED_BUCKET,
+} from "../widgets/test-helpers.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./recovery-copy.js";
@@ -34,10 +40,8 @@ const child = (screen: Screen) =>
   screen.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
 const click = (screen: Screen) =>
   child(screen).shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-async function kit(screen: Screen, text = "private-kit") {
-  screen
-    .shadowRoot!.querySelector("[data-test=kit]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: text } }));
+async function folder(screen: Screen, text = "private-folder") {
+  enterBucket(screen, { ...REVIEWED_BUCKET.bucket, prefix: text });
   await screen.updateComplete;
   await child(screen).updateComplete;
 }
@@ -53,7 +57,7 @@ async function mount(kind: string, transport: typeof fetch) {
         });
   await el.updateComplete;
   expect(child(el)).not.toBeNull();
-  if (kind === "bucket") await kit(el);
+  if (kind === "bucket") await folder(el);
   await child(el).updateComplete;
   return { el, host };
 }
@@ -85,13 +89,13 @@ it.each(["bucket", "cloud"])(
     expect(child(el).shadowRoot!.textContent).toContain(
       "Keep older master keys until no older backup remains.",
     );
-    expect(child(el).shadowRoot!.textContent).not.toContain("private-kit");
+    expect(child(el).shadowRoot!.textContent).not.toContain(REVIEWED_BUCKET.bucket.secretAccessKey);
     expect(transport.mock.calls.map(([url]) => String(url))).toEqual([
       kind === "bucket" ? "/setup-api/restore-bucket/preview" : "/setup-api/cloud-recovery/preview",
     ]);
   },
 );
-it.each(["bucket-kit", "bucket-environment", "cloud-point", "cloud-request"])(
+it.each(["bucket-folder", "bucket-environment", "cloud-point", "cloud-request"])(
   "drops a late preview when %s changes",
   async (changed) => {
     let complete!: (response: Response) => void;
@@ -105,7 +109,7 @@ it.each(["bucket-kit", "bucket-environment", "cloud-point", "cloud-request"])(
     const { el } = await mount(kind, transport);
     click(el);
     await vi.waitFor(() => expect(transport).toHaveBeenCalledOnce());
-    if (changed === "bucket-kit") await kit(el, "other-kit");
+    if (changed === "bucket-folder") await folder(el, "other-folder");
     else if (changed === "bucket-environment") {
       el.shadowRoot!.querySelector("[data-test=environment]")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "preproduction" } }),
@@ -158,13 +162,45 @@ it("asks the bucket's old-box question after a live-source preview refusal, then
   click(el);
   await vi.waitFor(() => expect(child(el).shadowRoot!.textContent).toContain("Amber Hill"));
   expect(JSON.parse(transport.mock.calls[1]![1].body)).toEqual({
-    kit: "private-kit",
+    bucket: { ...REVIEWED_BUCKET.bucket, prefix: "private-folder" },
+    masterKey: REVIEWED_BUCKET.masterKey,
     environment: "production",
     oldBoxGone: true,
   });
-  await kit(el, "other-kit");
+  await folder(el, "other-folder");
   expect(el.shadowRoot!.querySelector("[data-test=old-box-gone]")).toBeNull();
 });
+it("reviews the folder the owner chooses when the bucket holds several copies", async () => {
+  const transport = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json(
+        {
+          error: {
+            code: "restore.stream_folder_required",
+            params: { folders: ["restaurant/old-box", "restaurant/other-box"] },
+          },
+        },
+        { status: 409 },
+      ),
+    )
+    .mockImplementation(async () => Response.json(saved));
+  const { el } = await mount("bucket", transport);
+  click(el);
+  const choice = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=folder-choice]")!;
+  await vi.waitFor(() => expect(choice()).not.toBeNull());
+  expect(transport).toHaveBeenCalledTimes(1);
+  await chooseOption(choice(), "restaurant/old-box");
+  await el.updateComplete;
+  await child(el).updateComplete;
+  click(el);
+  await vi.waitFor(() => expect(child(el).shadowRoot!.textContent).toContain("Amber Hill"));
+  expect(JSON.parse(transport.mock.calls[1]![1].body)).toMatchObject({
+    bucket: { prefix: "restaurant/old-box" },
+    masterKey: REVIEWED_BUCKET.masterKey,
+  });
+});
+
 it.each(["bucket", "cloud"])("discards the %s preview after leaving", async (kind) => {
   let complete!: (response: Response) => void;
   const transport = vi.fn(
@@ -188,7 +224,7 @@ it.each(["bucket", "cloud"])("discards the %s preview after leaving", async (kin
 });
 
 it.each([
-  ["backup.stream_kit_invalid", {}, "kit", "Check the recovery pack or kit file."],
+  ["setup.request_invalid", { field: "bucket" }, "bucket", "Check the bucket details."],
   [
     "restore.environment_mismatch",
     { backup: "production", target: "preproduction" },

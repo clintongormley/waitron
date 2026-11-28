@@ -58,6 +58,7 @@ const markerOf = (generation: string) => markerKey(generation);
 const hex16 = (n: number) => n.toString(16).padStart(16, "0");
 
 interface HarnessOptions {
+  recovery?: SupervisorDeps["recovery"];
   persistPointers?: (entries: string[]) => Promise<void>;
   preserveBucketProblemSince?: boolean;
   term?: number;
@@ -125,6 +126,7 @@ async function harness(options: HarnessOptions = {}) {
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const sentPointers = new SentPointers(options.persistPointers);
   const deps: SupervisorDeps = {
+    recovery: options.recovery,
     preserveBucketProblemSince: options.preserveBucketProblemSince,
     litestreamBin: options.litestreamBin ?? "litestream",
     venueDbPath,
@@ -343,7 +345,12 @@ const pointerFrom = (nodeId: string, term: number, generation: string): SignedPo
 
 describe("opening a generation", () => {
   it("claims the marker, starts Litestream, and moves the pointer only once the first full copy is in the bucket", async () => {
-    const h = await harness();
+    const recovery = {
+      signerPublicKey: "box-public-key",
+      keyNumber: 2,
+      masterKeyId: "0123456789abcdef",
+    };
+    const h = await harness({ recovery });
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
     const generation = h.supervisor.status().generation!;
@@ -366,6 +373,7 @@ describe("opening a generation", () => {
       nodeId: NODE,
       generation,
       writtenAt: expect.any(String),
+      recovery,
     });
     const order = h.events.filter(
       (event) =>
@@ -380,6 +388,24 @@ describe("opening a generation", () => {
       `upload ${fullCopyOf(generation)}`,
       expect.stringMatching(/^put .*current\.json$/),
     ]);
+  });
+
+  it("refuses to open the owner's bucket when its pointer predates numbered keys", async () => {
+    const h = await harness({
+      recovery: {
+        signerPublicKey: "box-public-key",
+        keyNumber: 2,
+        masterKeyId: "0123456789abcdef",
+      },
+    });
+    const old = pointerFrom(NODE, 2, "gen-2-node-a-20260923T110000Z");
+    await writePointer(h.store, VENUE, old, null);
+    await h.supervisor.start();
+    await h.clock.until(
+      () => h.supervisor.status().state === "refused" || h.litestream.running() !== undefined,
+    );
+    expect(h.supervisor.status()).toMatchObject({ state: "refused", reason: "folder_in_use" });
+    expect((await readPointer(h.store, VENUE))?.pointer).toEqual(old);
   });
 
   it("gives Litestream the bucket key through its environment and nowhere else", async () => {

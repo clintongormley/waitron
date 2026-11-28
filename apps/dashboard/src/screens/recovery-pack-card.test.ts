@@ -136,8 +136,6 @@ const STATES = {
   }),
   "out of date": status({
     latest: latest(),
-    reasons: [{ part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" }],
-    keep: [{ number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" }],
   }),
   incomplete: status({
     latest: latest({
@@ -301,31 +299,16 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
-  it("says the last pack is out of date, why, and which packs to keep until when", async () => {
+  it("says the last pack is out of date and offers a reprint", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES["out of date"]));
     expect(line(el)).toBe(
       [
         fill("recovery_pack.out_of_date", { number: "3", date: day.made }),
-        fill("recovery_pack.reason.key_changed", { date: day.changed }),
         t("recovery_pack.make_new"),
-        fill("recovery_pack.keep_backup_key", { number: "3", date: day.made, until: day.until }),
       ].join(" "),
     );
     expect(row(el, "backup-key")).toBe(day.backupKey);
-  });
-
-  it("names the pack to keep for the bucket copy, and draws no archives reason", async () => {
-    setLocale(locale);
-    const el = await mount(stubApi(STATES["out of date"]));
-    expect(line(el)).toContain(
-      locale === "en-GB"
-        ? "Keep pack 3, made on 12 October, until about 19 November: the bucket copy made before the backup key changed needs it."
-        : "Guarda el paquete 3, hecho el 12 de octubre, hasta aproximadamente el 19 de noviembre: la copia en el bucket hecha antes del cambio de la clave de las copias lo necesita.",
-    );
-    expect(line(el)).not.toMatch(/archiv/i);
-    const catalogue: Record<string, string> = locale === "en-GB" ? en : es;
-    expect(Object.keys(catalogue).filter((key) => key.includes("reason.archives"))).toEqual([]);
   });
 
   it("says the box's backups still use the older key in the bucket copy's words", async () => {
@@ -333,8 +316,8 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
     expect(line(el)).toContain(
       locale === "en-GB"
-        ? "The box's backups still use the backup key from before the last change, because the box could not load the new settings. Keep the older pack too while the Recovery pack card says this."
-        : "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+        ? "The box's backups still use the backup key from before the last change, because the box could not load the new settings."
+        : "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos.",
     );
   });
 
@@ -374,28 +357,6 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(line(el)).toBe("");
   });
 
-  it("explains that a newly configured bucket needs an updated setup pack", async () => {
-    setLocale(locale);
-    const el = await mount(
-      stubApi(
-        status({
-          latest: latest({ number: 1, madeByName: null, received: false }),
-          unreceived: {
-            number: 1,
-            madeAt: MADE_AT,
-            offeredAtSetup: true,
-            holdsCurrentMasterKey: true,
-          },
-          reasons: [{ part: "bucket", kind: "set_up_after" }],
-        }),
-      ),
-    );
-    expect(line(el)).toContain(t("recovery_pack.reason.bucket_set_up"));
-    expect(line(el)).toContain(t("recovery_pack.make_new"));
-    const offered = el.shadowRoot!.querySelector("[data-test=setup-pack-offered]");
-    expect(offered?.classList.contains("warn")).toBe(false);
-  });
-
   it("names a newest pack no browser confirmed receiving", async () => {
     setLocale(locale);
     const el = await mount(
@@ -403,18 +364,10 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
         status({
           latest: latest({ number: 4, received: false }),
           unreceived: { number: 4, madeAt: MADE_AT },
-          keep: [
-            { number: 1, madeAt: FIRST_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" },
-          ],
         }),
       ),
     );
-    expect(line(el)).toBe(
-      `${fill("recovery_pack.not_received", { number: "4", date: day.made })} ${fill(
-        "recovery_pack.keep_backup_key",
-        { number: "1", date: day.first, until: day.until },
-      )}`,
-    );
+    expect(line(el)).toBe(fill("recovery_pack.not_received", { number: "4", date: day.made }));
   });
 
   it("names an unconfirmed pack that shows the current master key in the master key's words, though a later pack was received", async () => {
@@ -462,11 +415,10 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
   it("says the box's backups still use the older key after a failed reload", async () => {
     setLocale(locale);
     const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
-    expect(line(el)).toContain(t("recovery_pack.older_key"));
-    expect(t("recovery_pack.older_key")).toContain(
+    expect(line(el)).toContain(
       locale === "en-GB"
-        ? "Keep the older pack too while the Recovery pack card says this."
-        : "Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+        ? "because the box could not load the new settings."
+        : "porque el servidor no pudo cargar los ajustes nuevos.",
     );
   });
 });
@@ -1381,9 +1333,6 @@ it.each([
   },
 );
 
-const KEY_CHANGED: RecoveryPackStatus["reasons"] = [
-  { part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
-];
 const FAILED_PART = latest({
   parts: [
     { part: "bucket", state: "included" },
@@ -1395,8 +1344,7 @@ it.each([
   [
     "en-GB",
     {
-      outOfDate:
-        "Recovery pack 3, made on 12 October, is out of date. The backup key changed on 20 October. Make a new master key.",
+      outOfDate: "Recovery pack 3, made on 12 October, is out of date. Make a new master key.",
       incomplete:
         "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. Make a new master key once the cause is fixed.",
       notReceived:
@@ -1407,7 +1355,7 @@ it.each([
     "es-ES",
     {
       outOfDate:
-        "El paquete de recuperación 3, hecho el 12 de octubre, está desactualizado. La clave de las copias cambió el 20 de octubre. Crea una clave maestra nueva.",
+        "El paquete de recuperación 3, hecho el 12 de octubre, está desactualizado. Crea una clave maestra nueva.",
       incomplete:
         "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Crea una clave maestra nueva cuando se haya resuelto la causa.",
       notReceived:
@@ -1418,9 +1366,7 @@ it.each([
   "with no master key the status line sends the person to Make a new master key, the card's only button (%s)",
   async (locale, sentences) => {
     setLocale(locale);
-    const outOfDate = await mount(
-      stubApi(status({ latest: latest(), reasons: KEY_CHANGED, masterKey: null })),
-    );
+    const outOfDate = await mount(stubApi(status({ latest: latest(), masterKey: null })));
     expect(line(outOfDate)).toBe(sentences.outOfDate);
     const incomplete = await mount(
       stubApi(status({ latest: FAILED_PART, incomplete: true, masterKey: null })),
@@ -1479,14 +1425,14 @@ it.each([
 it.each([
   [
     "en-GB",
-    "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. The backup key changed on 20 October. The pack has no Waitron Cloud QR code. Print the recovery pack once the cause is fixed.",
+    "Recovery pack 3, made on 12 October, is incomplete: a page could not be drawn, and that page says why. The pack has no Waitron Cloud QR code. Print the recovery pack once the cause is fixed.",
   ],
   [
     "es-ES",
-    "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. La clave de las copias cambió el 20 de octubre. El paquete no tiene el código QR de Waitron Cloud. Imprime el paquete de recuperación cuando se haya resuelto la causa.",
+    "El paquete de recuperación 3, hecho el 12 de octubre, está incompleto: no se pudo dibujar una página, y esa página explica por qué. El paquete no tiene el código QR de Waitron Cloud. Imprime el paquete de recuperación cuando se haya resuelto la causa.",
   ],
 ] as const)(
-  "an incomplete pack's line lists the missing Cloud QR code with its other reasons (%s)",
+  "an incomplete pack's line lists the missing Cloud QR code (%s)",
   async (locale, sentence) => {
     setLocale(locale);
     const el = await mount(
@@ -1494,7 +1440,7 @@ it.each([
         status({
           latest: FAILED_PART,
           incomplete: true,
-          reasons: [...KEY_CHANGED, { part: "emergency", kind: "set_up_after" }],
+          reasons: [{ part: "emergency", kind: "set_up_after" }],
         }),
       ),
     );
@@ -1623,11 +1569,7 @@ it.each([
   "calls it the backup key in the card's own sentences, as its row does (%s)",
   async (locale, name, old) => {
     setLocale(locale);
-    for (const sentence of [
-      fill("recovery_pack.reason.key_changed", { date: "x" }),
-      fill("recovery_pack.keep_backup_key", { number: "1", date: "x", until: "y" }),
-      t("recovery_pack.older_key"),
-    ]) {
+    for (const sentence of [t("recovery_pack.older_key")]) {
       expect(sentence.toLowerCase()).toContain(name);
       expect(sentence).not.toContain(old);
     }

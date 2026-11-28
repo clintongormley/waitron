@@ -1,9 +1,10 @@
 import { AppError, type ErrorParams } from "@waitron/shared";
-import type { ObjectStore, StoreCall } from "@waitron/stream";
+import type { ObjectStore, S3ObjectStore, StoreCall } from "@waitron/stream";
 // The registry of the code this file throws.
 import "@waitron/stream";
 
 type BucketOperation = ErrorParams["backup.stream_request_failed"]["operation"];
+type FolderCapableStore = ObjectStore & Partial<Pick<S3ObjectStore, "listFolders">>;
 
 /** A bound on each bucket call a restore makes; a `list` is one call however many pages it reads. */
 export const BUCKET_CALL_TIMEOUT_MS = 60_000;
@@ -15,9 +16,9 @@ export const BUCKET_CALL_TIMEOUT_MS = 60_000;
  * the store's own error.
  */
 export function boundObjectStore(
-  store: ObjectStore,
+  store: FolderCapableStore,
   timeoutMs: number = BUCKET_CALL_TIMEOUT_MS,
-): ObjectStore {
+): FolderCapableStore {
   const bounded = <T>(
     operation: BucketOperation,
     key: string,
@@ -52,11 +53,18 @@ export function boundObjectStore(
       );
     });
   };
+  const listFolders = store.listFolders?.bind(store);
   return {
     get: (key, call) => bounded("get", key, call, (c) => store.get(key, c)),
     put: (key, body, condition, call) =>
       bounded("put", key, call, (c) => store.put(key, body, condition, c)),
     list: (prefix, call) => bounded("list", prefix, call, (c) => store.list(prefix, c)),
+    ...(listFolders === undefined
+      ? {}
+      : {
+          listFolders: (prefix, call) =>
+            bounded("list", prefix, call, (c) => listFolders(prefix, { ...call, ...c })),
+        }),
     delete: (key, call) => bounded("delete", key, call, (c) => store.delete(key, c)),
     deleteMany: (keys, call) =>
       bounded("delete", keys[0] ?? "", call, (c) => store.deleteMany(keys, c)),

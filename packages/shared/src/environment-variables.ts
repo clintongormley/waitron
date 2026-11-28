@@ -183,6 +183,8 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_BREAKGLASS_PASSWORD: variable("command", "text", ["break-glass"], secret),
   WAITRON_BREAKGLASS_PIN: variable("command", "text", ["break-glass"], secret),
   WAITRON_MASTER_KEY: variable("command or start input", "key", ["server", "restore"]),
+  WAITRON_RESTORE_BUCKET_ACCESS_KEY_ID: variable("command", "text", ["restore"], secret),
+  WAITRON_RESTORE_BUCKET_SECRET_ACCESS_KEY: variable("command", "key", ["restore"]),
   WAITRON_RECOVERY_OPERATION_FILE: variable("command or start input", "path", [
     "server",
     "restore",

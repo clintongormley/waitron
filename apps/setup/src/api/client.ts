@@ -226,17 +226,27 @@ export type RecoveryPreparationSource =
       masterKey: string;
       environment: "production" | "preproduction";
     }
-  | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
+  | ({ kind: "bucket" } & BucketRestoreSource)
   | { kind: "cloud"; pointId: string }
   | { kind: "staged"; stagedId: string };
 
-export interface BucketRestoreBody extends RecoveryRestoreCredentials {
-  /**
-   * The recovery kit as pasted, read from its file, or read from a recovery pack PDF's attached
-   * file; as sensitive as the recovery key.
-   */
-  kit: string;
+export interface RecoveryBucket {
+  endpoint?: string;
+  bucket: string;
+  region: string;
+  prefix: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+export interface BucketRestoreSource {
+  bucket: RecoveryBucket;
+  masterKey: string;
   environment: "production" | "preproduction";
+}
+
+export interface BucketRestoreBody extends BucketRestoreSource, RecoveryRestoreCredentials {
+  selectedSourceId: string;
   oldBoxGone: boolean;
   venueConfirmed: string | null;
 }
@@ -699,15 +709,10 @@ export class SetupApi {
   }
 
   previewBucketRestore(
-    kit: string,
-    environment: "production" | "preproduction",
+    source: BucketRestoreSource,
     oldBoxGone = false,
   ): Promise<RecoveryBackupPreview> {
-    return this.#request("/setup-api/restore-bucket/preview", "POST", {
-      kit,
-      environment,
-      oldBoxGone,
-    });
+    return this.#request("/setup-api/restore-bucket/preview", "POST", { ...source, oldBoxGone });
   }
   async prepareRecovery(
     source: RecoveryPreparationSource,

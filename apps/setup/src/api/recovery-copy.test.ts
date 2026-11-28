@@ -1,3 +1,4 @@
+import { REVIEWED_BUCKET } from "../widgets/test-helpers.js";
 import { expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
 
@@ -47,9 +48,11 @@ it.each(["bucket", "cloud"])(
     const metadata = { nodeRecoveryKeyName: "Amber Hill" };
     const transport = vi.fn(async () => Response.json(metadata));
     const api = new SetupApi("", transport);
+    const { bucket, masterKey } = REVIEWED_BUCKET;
+    const source = { bucket, masterKey, environment: "preproduction" as const };
     const outcome =
       kind === "bucket"
-        ? await api.previewBucketRestore("private-kit", "preproduction", true)
+        ? await api.previewBucketRestore(source, true)
         : await api.previewCloudRestore("selected-point");
     expect(outcome).toEqual(metadata);
     expect(transport).toHaveBeenCalledWith(
@@ -59,9 +62,7 @@ it.each(["bucket", "cloud"])(
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          kind === "bucket"
-            ? { kit: "private-kit", environment: "preproduction", oldBoxGone: true }
-            : { pointId: "selected-point" },
+          kind === "bucket" ? { ...source, oldBoxGone: true } : { pointId: "selected-point" },
         ),
       },
     );

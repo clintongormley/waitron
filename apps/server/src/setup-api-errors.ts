@@ -123,12 +123,12 @@ const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
 };
 /**
  * The bucket rebuild's own refusals, beside the shared ones. The bucket or Litestream failing is
- * this box's upstream failing (502, as `mirror.bundle_fetch_failed` is for adopt); a pointer the kit
- * cannot open is 422; an unconfirmed venue is 409.
+ * this box's upstream failing (502, as `mirror.bundle_fetch_failed` is for adopt).
  */
 export const BUCKET_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...ARCHIVE_RESTORE_STATUS,
-  "backup.stream_kit_invalid": 400,
+  "restore.stream_folder_required": 409,
+  "restore.stream_copy_changed": 409,
   "restore.stream_pointer_missing": 422,
   "restore.stream_pointer_unverified": 422,
   "backup.stream_pointer_invalid": 422,

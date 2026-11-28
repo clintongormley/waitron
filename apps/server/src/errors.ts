@@ -1707,9 +1707,7 @@ declare module "@waitron/shared" {
     "backup.spare_stream_active": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is unset (or, for a join, too short to use) where one is
      * needed: a backup destination is configured (refused at load so an unattended backup can
-     * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket page is
-     * drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
-     * or a spare asks this box to join while its `backup.env` holds no usable key
+     * never write an unencrypted or box-key-encrypted artifact), or a spare asks this box to join while its `backup.env` holds no usable key
      * (`mirror-bundle-api.ts`), refused on this box before anything is reserved; or a backups
      * Save or the bucket copy's Save finds no key held, which only "Change the backup key" then
      * writes. */
@@ -1805,9 +1803,6 @@ declare module "@waitron/shared" {
      * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
      * the provider's message. */
     "backup.archive_test_failed": { reason: string };
-    /** A recovery pack's bucket page was drawn on a node with no membership public key
-     * (`nodes.public_key`), so a rebuild could not verify the pointer this node signs. */
-    "backup.stream_signer_missing": Record<string, never>;
     /**
      * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,
      * or names a host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over
@@ -1915,7 +1910,7 @@ declare module "@waitron/shared" {
      * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording
      * of its own. `reason` is the status's short tag. Built as data by the backups alert source,
      * never thrown. */
-    "backup.stream_stopped": { reason: string | null; toSpare?: true };
+    "backup.stream_stopped": { reason: string | null; toSpare?: true; numberedKeyRequired?: true };
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. `errorCode` is the failure's cause, `unknown` when unnamed. Built
      * as data by the sealed-state alert source, never thrown. */
@@ -2091,10 +2086,12 @@ declare module "@waitron/shared" {
      * restore-file-placement.ts). They may be the venue's only copy, so the folder is kept and the
      * start refused until they are moved back or a restore is run again. */
     "restore.database_set_aside": { folder: string };
-    /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
+    /** The owner's bucket holds no current pointer to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;
+    "restore.stream_folder_required": { folders: string[] };
+    "restore.stream_copy_changed": Record<string, never>;
     "restore.stream_pointer_unverified": {
-      reason: "signature" | "venue_mismatch" | "key_or_access";
+      reason: "signature" | "key_or_access";
     };
     /** The live generation received a change within the last ten minutes on the bucket's own
      * clock, so the old box may still be selling; refused until the operator confirms it is gone.

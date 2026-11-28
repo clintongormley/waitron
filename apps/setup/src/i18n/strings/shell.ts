@@ -139,23 +139,18 @@ export const shellEn = {
     "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   "shell.bucket.refused_code":
     "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
-  "shell.bucket.kit_damaged":
-    "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
-  "shell.bucket.kit_invalid":
-    "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
-  "shell.bucket.kit_old_version":
-    "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
   "shell.bucket.unopenable":
-    "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+    "The bucket copy could not be opened. Check the master key or choose Restore from backup to use a backup file.",
   "shell.bucket.other_version":
     "The copy in the bucket was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
-  "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
-  "shell.bucket.pointer_unverified":
-    "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+  "shell.bucket.copy_changed":
+    "The bucket copy changed after review. Review it again before restoring.",
   "shell.bucket.key_or_access":
-    "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
-  "shell.bucket.venue_mismatch":
-    "This recovery kit belongs to a different bucket copy. Choose the recovery pack or kit made for this copy and try again. Nothing was changed.",
+    "The bucket refused this copy. Check the access keys and use the master key for this backup.",
+  "shell.bucket.pointer_missing":
+    "No copy was found here. Check the bucket name and folder, then review the backup again.",
+  "shell.bucket.pointer_unverified":
+    "The copy’s signature could not be verified. Check the folder or choose another backup.",
   "shell.bucket.venue_unconfirmed":
     "The copy in the bucket names no business tax id, so it cannot be confirmed or restored.",
   "shell.bucket.pointer_invalid":
@@ -169,7 +164,7 @@ export const shellEn = {
   "shell.bucket.restore_failed":
     "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
   "shell.bucket.request_failed":
-    "The bucket did not answer, or refused the key in this kit. Check this box's internet connection and that the bucket and its key still exist, then try again.",
+    "The bucket did not answer or refused access. Check the connection and the bucket’s access keys, then try again.",
   "shell.bucket.disk_full":
     "This box's disk filled while the copy was downloading. Nothing on this box was changed. Free some space and try again.",
   "shell.bucket.environment_mismatch":
@@ -361,24 +356,18 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.bucket.refused_code":
     "No se ha podido restaurar la copia. ({code}) Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
-  "shell.bucket.kit_damaged":
-    "Este kit de recuperación está incompleto o dañado; quizá se cortó al copiarlo. Elige tu paquete de recuperación o el archivo del kit tal como se guardó, o pega el kit completo.",
-  "shell.bucket.kit_invalid":
-    "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
-  "shell.bucket.kit_old_version":
-    "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
   "shell.bucket.unopenable":
-    "No se ha podido abrir la copia más reciente del bucket. Está dañada, o la clave de cifrado de copias de este kit no la abre. Si se cambió la clave de cifrado de copias, usa el último paquete de recuperación o el último kit. Si no, elige Volver y después Restaurar desde una copia de seguridad para restaurar desde un archivo de copia de seguridad.",
+    "No se ha podido abrir la copia del bucket. Comprueba la clave maestra o elige Restaurar desde una copia de seguridad para usar un archivo.",
   "shell.bucket.other_version":
     "La copia del bucket se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
-  "shell.bucket.pointer_missing":
-    "El bucket de este kit no guarda ninguna copia de este restaurante.",
-  "shell.bucket.pointer_unverified":
-    "La copia del bucket no la escribió el servidor al que pertenece este kit. Comprueba que el kit es el más reciente de este restaurante. No se ha cambiado nada.",
+  "shell.bucket.copy_changed":
+    "La copia del bucket cambió después de revisarla. Vuelve a revisarla antes de restaurarla.",
   "shell.bucket.key_or_access":
-    "El paquete de recuperación no corresponde a esta copia, o el acceso al bucket no permite leerla. Usa el paquete que corresponda a esta copia, o corrige el acceso al bucket y vuelve a intentarlo.",
-  "shell.bucket.venue_mismatch":
-    "Este kit de recuperación corresponde a otra copia del bucket. Elige el paquete o kit de recuperación creado para esta copia y vuelve a intentarlo. No se ha cambiado nada.",
+    "El bucket rechazó el acceso a esta copia. Comprueba las claves de acceso y usa la clave maestra de esta copia.",
+  "shell.bucket.pointer_missing":
+    "No se ha encontrado ninguna copia. Comprueba el nombre del bucket y la carpeta y revisa la copia de nuevo.",
+  "shell.bucket.pointer_unverified":
+    "No se ha podido verificar la firma de la copia. Comprueba la carpeta o elige otra copia.",
   "shell.bucket.venue_unconfirmed":
     "La copia del bucket no indica ningún NIF del negocio, así que no se puede confirmar ni restaurar.",
   "shell.bucket.pointer_invalid":
@@ -392,7 +381,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.restore_failed":
     "No se ha podido descargar la copia del bucket. Comprueba la conexión a internet de este servidor y que el bucket sigue existiendo, e inténtalo de nuevo.",
   "shell.bucket.request_failed":
-    "El bucket no ha respondido o ha rechazado la clave de este kit. Comprueba la conexión a internet de este servidor y que el bucket y su clave siguen existiendo, e inténtalo de nuevo.",
+    "El bucket no ha respondido o ha rechazado el acceso. Comprueba la conexión y las claves de acceso del bucket y vuelve a intentarlo.",
   "shell.bucket.disk_full":
     "El disco de este servidor se ha llenado mientras se descargaba la copia. No se ha cambiado nada en este servidor. Libera espacio e inténtalo de nuevo.",
   "shell.bucket.environment_mismatch":

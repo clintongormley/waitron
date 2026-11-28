@@ -71,8 +71,9 @@ function bodyOf(out: GetObjectCommandOutput) {
 }
 
 export interface S3ObjectStore extends ObjectStore {
-  /** Child folders relative to the configured root, with their trailing slash removed. */
-  listFolders(prefix: string, call?: StoreCall): Promise<string[]>;
+  /** Child folders relative to the configured root, without their trailing slash. A positive limit
+   * returns at most that many folders and ends the listing as soon as they are found. */
+  listFolders(prefix: string, call?: StoreCall & { limit?: number }): Promise<string[]>;
 }
 
 export function createS3ObjectStore(
@@ -252,6 +253,7 @@ export function createS3FolderStore(
           if (!folder.startsWith(wanted)) throw strayListedKey();
           if (folder.slice(wanted.length, -1).includes("/")) throw refuse("IncompleteListing");
           folders.push(folder.slice(root.length, -1));
+          if (folders.length === call?.limit) return folders;
         }
       }
       return folders;

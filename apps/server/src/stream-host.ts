@@ -309,7 +309,9 @@ export interface StreamHostDeps {
   now: () => Date;
   /** Read at each start, so a promotion is followed. */
   isPrimary: () => boolean;
-  readRecoveryKey: () => Promise<string | undefined>;
+  readRecoveryKey: () => Promise<
+    { key: string; numbered?: { keyNumber: number; masterKeyId: string } } | undefined
+  >;
   refreshSealedState: () => Promise<SealedStateOutcome>;
   /** False while a restored box's first start is unfinished (`rebuild-first-start.ts`). Read at
    * each start, so a reload after a settings save is held too. Default: always true. */
@@ -467,12 +469,20 @@ export class StreamHost {
         return;
       }
       const recoveryKey = await this.#deps.readRecoveryKey();
+      const superseded = () =>
+        this.#stopped || this.#supervisor !== undefined || this.#reloadCount !== reloadCount;
+      if (superseded()) return;
       if (recoveryKey === undefined) {
         this.#notStartedFor("reseal_required");
         return;
       }
-      const superseded = () =>
-        this.#stopped || this.#supervisor !== undefined || this.#reloadCount !== reloadCount;
+      const numbered = recoveryKey.numbered;
+      if ("bucket" in target && numbered === undefined) {
+        this.#notStartedFor("numbered_key_required");
+        return;
+      }
+      const readSigningKey = () => readNodeIdentityKey(this.#deps.node, ring, this.#deps.nodeId);
+      const bucketSigningKey = "bucket" in target ? await readSigningKey() : undefined;
       // A supervisor still stopping may still have Litestream running; and a stop() or an
       // overlapping start() may land while this waits.
       await this.#retiring;
@@ -508,12 +518,20 @@ export class StreamHost {
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),
         bucket,
-        streamKey: deriveStreamKey(recoveryKey, target.streamId),
+        streamKey: deriveStreamKey(recoveryKey.key, target.streamId),
         streamId: target.streamId,
         nodeId: this.#deps.nodeId,
         term: membership.body.term,
-        sign: async (message) =>
-          signBytes(message, await readNodeIdentityKey(this.#deps.node, ring, this.#deps.nodeId)),
+        sign: async (message) => signBytes(message, bucketSigningKey ?? (await readSigningKey())),
+        ...(bucketSigningKey === undefined || numbered === undefined
+          ? {}
+          : {
+              recovery: {
+                signerPublicKey: nodeSigningPublicKey(bucketSigningKey),
+                keyNumber: numbered.keyNumber,
+                masterKeyId: numbered.masterKeyId,
+              },
+            }),
         foldBack: () => db.checkpointTruncate(),
         walBytes: () => fileBytes(`${venueDbPath}${WAL_SUFFIX}`),
         walLimitBytes: this.#deps.walLimitBytes ?? DEFAULT_WAL_LIMIT_BYTES,

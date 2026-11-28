@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi, type RecoveryPreparationRequest } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { REVIEWED_BUCKET, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import type { SetupRecoveryAllocation } from "./recovery-allocation.js";
 
@@ -306,7 +306,7 @@ it("keeps a newer event's copy when an older event's upload is refused after it"
   expect(sentIds(calls)).toEqual([stagedIds[0], stagedIds[0]]);
 });
 
-it("drops a bucket copy's clock answer that arrives after the kit changed", async () => {
+it("drops a bucket copy's clock answer that arrives after the folder changed", async () => {
   const answer = deferred<Response>();
   const sent: string[] = [];
   const api = new SetupApi("", async (input) => {
@@ -317,7 +317,8 @@ it("drops a bucket copy's clock answer that arrives after the kit changed", asyn
   });
   const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", {
     api,
-    bucketKit: "selected kit",
+    bucket: REVIEWED_BUCKET.bucket,
+    masterKey: REVIEWED_BUCKET.masterKey,
     environment: "preproduction",
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
@@ -328,7 +329,7 @@ it("drops a bucket copy's clock answer that arrives after the kit changed", asyn
     "setup-recovery-allocation",
   )!.prepare!(request());
   await vi.waitFor(() => expect(sent).toContain("/setup-api/recovery/preparation"));
-  el.bucketKit = "another kit";
+  el.bucket = { ...REVIEWED_BUCKET.bucket, prefix: "another-folder" };
   await el.updateComplete;
   answer.resolve(new Response(JSON.stringify({ id: "challenge" })));
   await expect(pending).rejects.toMatchObject(changed);
@@ -419,7 +420,8 @@ it.each([
     "es-ES",
     "provisioning.database_ahead",
     (el: SetupRecoveryCopy) => {
-      el.bucketKit = "kit";
+      el.bucket = REVIEWED_BUCKET.bucket;
+      el.masterKey = REVIEWED_BUCKET.masterKey;
     },
     t("shell.bucket.other_version", "es-ES"),
   ],

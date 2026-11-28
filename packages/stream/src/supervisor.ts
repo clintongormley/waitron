@@ -33,6 +33,7 @@ import {
   pointerMessage,
   readPointer,
   writePointer,
+  type BucketPointerRecovery,
   type SentPointers,
   type SignedPointer,
   type StreamPointer,
@@ -102,6 +103,7 @@ export interface SupervisorDeps {
   configDir: string;
   bucket: BucketConfig;
   streamKey: string;
+  recovery?: BucketPointerRecovery;
   streamId: string;
   nodeId: string;
   /** The membership term this box holds: written into every generation name and the pointer. */
@@ -456,7 +458,7 @@ export class StreamSupervisor {
 
   /** Opens a generation and moves the pointer to it; null when refused. */
   async #open(signal: AbortSignal): Promise<string | null> {
-    const { streamId, nodeId, term } = this.#deps;
+    const { streamId, nodeId, term, recovery } = this.#deps;
     for (;;) {
       signal.throwIfAborted();
       this.#set("opening", null, null);
@@ -471,7 +473,10 @@ export class StreamSupervisor {
         }
         this.#noteBucketProblem(null);
         this.#lastProbeAt = this.#monotonic();
-        const previous = await readPointer(this.#store, streamId, { signal });
+        const previous = await readPointer(this.#store, streamId, {
+          signal,
+          requireRecovery: recovery !== undefined,
+        });
         signal.throwIfAborted();
         if (previous !== null && previous.pointer.body.term > term) {
           this.#refuse("pointer_newer_term");
@@ -504,6 +509,7 @@ export class StreamSupervisor {
           nodeId,
           generation,
           writtenAt: this.#deps.now().toISOString(),
+          ...(recovery === undefined ? {} : { recovery }),
         };
         const signature = await this.#unlessStopped(signal, this.#deps.sign(pointerMessage(body)));
         const pointer: SignedPointer = { body, signature };
@@ -526,7 +532,7 @@ export class StreamSupervisor {
         if (
           isAppError(error) &&
           hasCode(error, "backup.stream_pointer_invalid") &&
-          error.params.reason === "other_venue"
+          (error.params.reason === "other_venue" || error.params.reason === "recovery")
         ) {
           this.#refuse("folder_in_use");
           return null;

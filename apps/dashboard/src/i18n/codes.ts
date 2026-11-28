@@ -1465,10 +1465,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "The saved settings for the bucket copy can't be read.",
     es: "No se pueden leer los ajustes guardados de la copia en el bucket.",
   },
-  "backup.stream_signer_missing": {
-    en: "This box has no signing key, so it cannot put the bucket copy in a recovery pack.",
-    es: "Este servidor no tiene clave de firma, así que no puede incluir la copia en el bucket en un paquete de recuperación.",
-  },
   "backup.stream_request_failed": {
     en: "The bucket did not answer. Check this box's internet connection and the bucket's address.",
     es: "El bucket no ha respondido. Revisa la conexión a internet de este servidor y la dirección del bucket.",

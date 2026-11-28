@@ -34,7 +34,7 @@ export {
   verifyPointer,
   writePointer,
 } from "./pointer.js";
-export type { SignedPointer, StreamPointer } from "./pointer.js";
+export type { BucketPointerRecovery, SignedPointer, StreamPointer } from "./pointer.js";
 export { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 export { bucketClockOffset, levelFolder, newestUpload } from "./bucket-times.js";
 export { PROBE_PREFIX, probeBucket } from "./probe.js";
@@ -71,8 +71,6 @@ export type {
 } from "./supervisor.js";
 export { COMMIT_GRANULARITY_MS, CommitLog, computeLag } from "./freshness.js";
 export type { LagInput } from "./freshness.js";
-export { KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit } from "./kit.js";
-export type { RecoveryKit } from "./kit.js";
 export { RESTORE_CEILING_MS, RESTORE_STALL_MS, restoreGeneration } from "./restore.js";
 export type { RestoreGenerationArgs } from "./restore.js";
 

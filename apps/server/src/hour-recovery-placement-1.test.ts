@@ -58,7 +58,6 @@ import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { encodeRecoveryKit } from "@waitron/stream";
 import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
@@ -583,7 +582,7 @@ describe("selected-hour admission before archive placement", () => {
   });
 
   it("the bucket command reconstructs selected-hour admission from the downloaded exact point", async () => {
-    const { f, deps, kitPath } = await bucketCommand();
+    const { f, deps } = await bucketCommand();
     const journal = await readModulePreparationHistory(f.roots, binding.module);
     const output: string[] = [];
     const downloader = join(root, "synthetic-litestream.cjs");
@@ -598,7 +597,7 @@ describe("selected-hour admission before archive placement", () => {
       restoreStream: undefined,
       out: (line) => output.push(line),
     });
-    expect(output.at(-1)).toBe(`restored from the bucket named in ${kitPath}`);
+    expect(output.at(-1)).toBe("restored from the bucket");
     expect(result).toBe(0);
     const restored = await openVenueDatabase(f.roots.venueDir);
     try {
@@ -632,11 +631,10 @@ describe("selected-hour admission before archive placement", () => {
     ["old seller", "sif.allocation_invalid"],
     ["missing sole confirmation", "sif.allocation_invalid"],
     ["wrong master key", "promotion.break_glass_invalid"],
-    ["wrong bucket password", "recovery.passphrase_invalid"],
     ["changed point", "module.operation_invalid"],
     ["unconfirmed venue", "restore.stream_venue_unconfirmed"],
   ])("the bucket command retains the destination after %s", async (reason, code) => {
-    const { f, command, kitPath, kit, deps, failures } = await bucketCommand();
+    const { f, command, recoveryKey, deps, failures } = await bucketCommand();
     if (reason === "offline")
       external.internet.mockResolvedValue({
         source: "internet",
@@ -659,8 +657,6 @@ describe("selected-hour admission before archive placement", () => {
     if (reason === "missing sole confirmation")
       deps.argv = deps.argv.filter((arg) => arg !== "--confirm-sole-recovery");
     if (reason === "wrong master key") command.env.WAITRON_MASTER_KEY = WRONG_MASTER_KEY;
-    if (reason === "wrong bucket password")
-      await writeFile(kitPath, encodeRecoveryKit({ ...kit, recoveryKey: "wrong bucket password" }));
     if (reason === "unconfirmed venue")
       deps.argv[deps.argv.indexOf("--confirm-venue") + 1] = "another taxpayer";
     await advanceSeriesTo(suite.db, node.nodeId, 456);
@@ -691,7 +687,7 @@ describe("selected-hour admission before archive placement", () => {
     );
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
     expect(output.join("\n")).not.toContain(key.secret);
-    expect(output.join("\n")).not.toContain(kit.recoveryKey);
+    expect(output.join("\n")).not.toContain(recoveryKey);
     expect(
       (await readdir(join(f.roots.stateDir, "scratch"))).filter((name) =>
         name.startsWith("stream-restore-"),

@@ -1,3 +1,9 @@
+import {
+  TEST_BUCKET,
+  TEST_BUCKET_KEY,
+  TEST_MASTER_KEY,
+  bucketRecovery,
+} from "../test/bucket-restore-command.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
@@ -282,6 +288,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
         nodeId: NODE,
         generation,
         writtenAt: "2026-10-01T08:00:00.000Z",
+        recovery: bucketRecovery(signer.publicKey),
       },
       signer.privateKey,
     ),
@@ -293,31 +300,16 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   await writeSealedStateRow(
     suite.db,
     NODE,
-    await sealNodeState(entries, "bucket-key-separate"),
+    await sealNodeState(entries, TEST_BUCKET_KEY),
     new Date("2026-10-01T08:00:00.000Z"),
   );
   const database = join(scratch, "bucket-copy.db");
   await suite.db.archiveTo(database);
   const liveName = (await mintMasterKey(suite.db)).name;
   const stateDir = join(scratch, "bucket-preview");
-  const preview = (
-    previewModule as unknown as { previewRecoveryStream: (deps: unknown) => Promise<unknown> }
-  ).previewRecoveryStream;
-  expect(typeof preview).toBe("function");
   const selection = {
-    kit: {
-      version: 2 as const,
-      streamId: LOCATION,
-      bucket: {
-        region: "local",
-        bucket: "copy",
-        prefix: "",
-        accessKeyId: "unused",
-        secretAccessKey: "unused",
-      },
-      recoveryKey: "bucket-key-separate",
-      pointerSignerPublicKey: signer.publicKey,
-    },
+    bucket: TEST_BUCKET,
+    masterKey: TEST_MASTER_KEY,
     stateDir,
     stagingDir: stateDir,
     migrationsRoot: null,
@@ -332,7 +324,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
       await copyFile(database, outPath);
     },
   } as const;
-  const result = await preview(selection);
+  const result = await previewModule.previewRecoveryStream(selection);
   const preparedDirectory = join(scratch, "prepared-baseline");
   await mkdir(preparedDirectory);
   const preparedDatabase = join(preparedDirectory, "venue.db");
@@ -348,7 +340,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     await recoveryStreamSourceId(preparedDatabase, entries),
   );
   expect(result).toMatchObject({
-    sourceId: `stream:${LOCATION}:${generation}`,
+    sourceId: expect.stringMatching(/^stream:[a-f0-9]{64}$/),
     createdAt: "2026-10-01T08:00:00.000Z",
     nodeId: NODE,
     nodeRecoveryKeyName: oldName,
@@ -369,7 +361,12 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   };
   const typed = encodeMasterKeyCode(makeMasterKey());
   const credential = { recoveryOperation, nodeRecoverySecret: typed };
-  await stageStreamRestore({ ...selection, ...credential, venueConfirmed: "89890001K" });
+  await stageStreamRestore({
+    ...selection,
+    ...credential,
+    selectedSourceId: result.sourceId,
+    venueConfirmed: "89890001K",
+  });
   expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
     authorityKey(decodeMasterKeyCode(typed)).toString("hex"),
   );
@@ -408,10 +405,14 @@ it("the real setup listener reaches both private download previews without stagi
       ...client.via,
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kit: "synthetic-invalid-private-kit", environment: "preproduction" }),
+      body: JSON.stringify({
+        bucket: { ...TEST_BUCKET, endpoint: "synthetic-invalid-private-address" },
+        masterKey: TEST_MASTER_KEY,
+        environment: "preproduction",
+      }),
     });
     expect(bucket.status).toBe(400);
-    expect((await bucket.json()).error.code).toBe("backup.stream_kit_invalid");
+    expect((await bucket.json()).error.code).toBe("setup.request_invalid");
     const cloud = await fetch(`https://127.0.0.1:${port}/setup-api/cloud-recovery/preview`, {
       ...client.via,
       method: "POST",
@@ -424,7 +425,7 @@ it("the real setup listener reaches both private download previews without stagi
       code: "ENOENT",
     });
     expect(await readFile(join(scratch, "remote-logs/waitron.log"), "utf8")).not.toContain(
-      "synthetic-invalid-private-kit",
+      "synthetic-invalid-private-address",
     );
     expect((await fetch(`http://127.0.0.1:${configuredPort}`)).status).toBe(503);
   } finally {

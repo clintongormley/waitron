@@ -46,9 +46,6 @@ declare module "@waitron/shared" {
     /** A value bound for Litestream could not be written into its configuration safely
      * (`litestream.ts`). `field` names the value, never its content. */
     "backup.stream_config_unsafe": { field: string };
-    /** Never carries the offered text: a kit holds the recovery and bucket keys.
-     * `version` identifies a retired prefix; an unsupported body version under the current prefix uses `shape`. */
-    "backup.stream_kit_invalid": { reason: "not_found" | "encoding" | "shape" | "version" };
     /** `litestream restore` did not produce the database: its exit code, or `null` when it gave
      * none — abandoned, never started, or ended by a signal; `diskFull` when its output carries the
      * system's own "no space left on device", or its configuration could not be written for lack of

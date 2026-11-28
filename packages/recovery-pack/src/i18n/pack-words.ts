@@ -85,10 +85,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         what: "The backup key is too short to use.",
         todo: "Use Backups → Recovery pack → Change the backup key: the new key replaces the short one. Then print the recovery pack.",
       },
-      "backup.stream_signer_missing": {
-        what: "The box could not find the key that signs its bucket copy.",
-        todo: "Check Backups and print the recovery pack.",
-      },
     },
     general: {
       what: "This part could not be read when this pack was made.",
@@ -118,10 +114,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       "backup.recovery_key_too_short": {
         what: "La clave de las copias es demasiado corta para usarla.",
         todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias: la clave nueva sustituye a la corta. Después imprime el paquete de recuperación.",
-      },
-      "backup.stream_signer_missing": {
-        what: "El servidor no encontró la clave que firma su copia en el bucket.",
-        todo: "Revisa Copias de seguridad e imprime el paquete de recuperación.",
       },
     },
     general: {

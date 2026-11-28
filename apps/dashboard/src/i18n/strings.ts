@@ -1740,19 +1740,13 @@ export const en = {
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new master key.",
   "recovery_pack.master_key_not_received":
     "The current master key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
-  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
-  "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
-  "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
-  "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
   "recovery_pack.reason.cloud_missing": "The pack has no Waitron Cloud QR code.",
   "recovery_pack.make_new": "Print the recovery pack.",
   "recovery_pack.make_new_master_key": "Make a new master key.",
   "recovery_pack.make_new_once_fixed": "Print the recovery pack once the cause is fixed.",
   "recovery_pack.make_new_master_key_once_fixed": "Make a new master key once the cause is fixed.",
-  "recovery_pack.keep_backup_key":
-    "Keep pack {number}, made on {date}, until about {until}: the bucket copy made before the backup key changed needs it.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. Keep the older pack too while the Recovery pack card says this.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.last_none": "None yet",
@@ -6661,11 +6655,6 @@ export const es: Record<StringKey, string> = {
     "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, crea una clave maestra nueva.",
   "recovery_pack.master_key_not_received":
     "La clave maestra actual está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
-  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
-  "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
-  "recovery_pack.reason.bucket_set_up":
-    "La copia en el bucket se configuró después de este paquete.",
-  "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
   "recovery_pack.reason.cloud_missing": "El paquete no tiene el código QR de Waitron Cloud.",
   "recovery_pack.make_new": "Imprime el paquete de recuperación.",
   "recovery_pack.make_new_master_key": "Crea una clave maestra nueva.",
@@ -6673,10 +6662,8 @@ export const es: Record<StringKey, string> = {
     "Imprime el paquete de recuperación cuando se haya resuelto la causa.",
   "recovery_pack.make_new_master_key_once_fixed":
     "Crea una clave maestra nueva cuando se haya resuelto la causa.",
-  "recovery_pack.keep_backup_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}: la copia en el bucket hecha antes del cambio de la clave de las copias lo necesita.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.last_none": "Ninguno todavía",

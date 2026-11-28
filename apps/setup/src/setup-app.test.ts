@@ -26,6 +26,8 @@ import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import {
+  REVIEWED_BUCKET,
+  enterBucket,
   REVIEWED_CREDENTIALS,
   REVIEWED_PREVIEW,
   enterRecoveryDetails,
@@ -161,7 +163,7 @@ function bucketRequest(el: SetupApp, request: Partial<BucketRestoreRequestDetail
     new CustomEvent("bucket-restore-requested", {
       detail: {
         request: {
-          kit: "k",
+          ...REVIEWED_BUCKET,
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: null,
@@ -323,12 +325,10 @@ function messageUnder(screen: HTMLElement, name: string): string | null {
   return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
 }
 
-/** The kit file, kit and environment are shared fields, whose invalid marking is inside their own
- * shadow roots, where a `[aria-invalid=true]` query of the screen cannot see it. */
+/** A shared field marks its own control inside its shadow root. */
 async function expectBucketSharedFieldsUnmarked(screen: HTMLElement): Promise<void> {
   for (const [field, control] of [
-    ["kit-file", "input[type=file]"],
-    ["kit", "textarea"],
+    ["prefix", "input"],
     ["environment", ".trigger"],
   ] as const) {
     const box = screen.shadowRoot!.querySelector<
@@ -4366,7 +4366,7 @@ describe("restore from my bucket", () => {
     await flush(el);
     await flush(el);
     expect(restoreFromBucket).toHaveBeenCalledWith({
-      kit: "k",
+      ...REVIEWED_BUCKET,
       environment: "production",
       oldBoxGone: false,
       venueConfirmed: null,
@@ -4411,18 +4411,18 @@ describe("restore from my bucket", () => {
       status: 409,
     });
     const el = await mountSetupApp(stubApi({ restoreFromBucket }));
-    bucketRequest(el, { kit: "WAITRON-RECOVERY-KIT-2:abc", environment: "preproduction" });
+    bucketRequest(el, { environment: "preproduction" });
     await flush(el);
     await flush(el);
     const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
     expect(screen.request).toEqual({
-      kit: "WAITRON-RECOVERY-KIT-2:abc",
+      ...REVIEWED_BUCKET,
       environment: "preproduction",
       oldBoxGone: false,
       venueConfirmed: null,
     });
-    expect(screen.shadowRoot!.querySelector<HTMLTextAreaElement>("[data-test=kit]")!.value).toBe(
-      "WAITRON-RECOVERY-KIT-2:abc",
+    expect(screen.shadowRoot!.querySelector<HTMLInputElement>("[data-test=prefix]")!.value).toBe(
+      REVIEWED_BUCKET.bucket.prefix,
     );
   });
 
@@ -4472,64 +4472,26 @@ describe("restore from my bucket", () => {
     expect(screen.liveUnknown).toBe(true);
   });
 
-  // Review Focus 2: the wrong kit is refused before anything changes, and the owner is told which
-  // way it is wrong. (The server refuses; these pin the words the wizard puts on each refusal.)
   // A refusal about a field the screen shows is told under that field.
   const FIELD_OF_BUCKET_REFUSAL: Record<string, string | undefined> = {
-    "backup.stream_kit_invalid": "kit",
     "restore.environment_mismatch": "environment",
-    "setup.request_invalid": "kit",
+    "setup.request_invalid": "prefix",
   };
   it.each([
     [
-      "backup.stream_kit_invalid",
-      undefined,
-      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
-    ],
-    [
-      "backup.stream_kit_invalid",
-      { reason: "not_found" },
-      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
-    ],
-    [
-      "backup.stream_kit_invalid",
-      { reason: "version" },
-      "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
-    ],
-    [
-      "backup.stream_kit_invalid",
-      { reason: "encoding" },
-      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
-    ],
-    [
-      "backup.stream_kit_invalid",
-      { reason: "shape" },
-      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
-    ],
-    [
       "restore.stream_pointer_missing",
       undefined,
-      "The bucket in this kit holds no copy of this restaurant.",
+      "No copy was found here. Check the bucket name and folder, then review the backup again.",
     ],
     [
       "restore.stream_pointer_unverified",
       undefined,
-      "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+      "The copy’s signature could not be verified. Check the folder or choose another backup.",
     ],
     [
       "restore.stream_pointer_unverified",
       { reason: "signature" },
-      "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
-    ],
-    [
-      "restore.stream_pointer_unverified",
-      { reason: "venue_mismatch" },
-      "This recovery kit belongs to a different bucket copy. Choose the recovery pack or kit made for this copy and try again. Nothing was changed.",
-    ],
-    [
-      "restore.stream_pointer_unverified",
-      { reason: "key_or_access" },
-      "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
+      "The copy’s signature could not be verified. Check the folder or choose another backup.",
     ],
     [
       "backup.stream_pointer_invalid",
@@ -4554,22 +4516,22 @@ describe("restore from my bucket", () => {
     [
       "recovery.passphrase_invalid",
       undefined,
-      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The bucket copy could not be opened. Check the master key or choose Restore from backup to use a backup file.",
     ],
     [
       "backup.artifact_invalid",
       { reason: "magic" },
-      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The bucket copy could not be opened. Check the master key or choose Restore from backup to use a backup file.",
     ],
     [
       "backup.archive_invalid",
       { reason: "magic" },
-      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The bucket copy could not be opened. Check the master key or choose Restore from backup to use a backup file.",
     ],
     [
       "backup.archive_key_invalid",
       { input: "backup_key" },
-      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The bucket copy could not be opened. Check the master key or choose Restore from backup to use a backup file.",
     ],
     [
       "backup.stream_restore_failed",
@@ -4579,7 +4541,7 @@ describe("restore from my bucket", () => {
     [
       "backup.stream_request_failed",
       { operation: "get", key: "k", status: 403, name: "AccessDenied" },
-      "The bucket did not answer, or refused the key in this kit. Check this box's internet connection and that the bucket and its key still exist, then try again.",
+      "The bucket did not answer or refused access. Check the connection and the bucket’s access keys, then try again.",
     ],
     [
       "restore.environment_mismatch",
@@ -4607,7 +4569,7 @@ describe("restore from my bucket", () => {
       undefined,
       "This box holds saved setup work that does not match this request, so it did not do this one.",
     ],
-    ["setup.request_invalid", { field: "kit" }, "Check the recovery pack or kit file."],
+    ["setup.request_invalid", { field: "prefix" }, "Check the bucket details."],
     [
       "restore.hook_failed",
       { module: "fiscal", code: "x.y" },
@@ -4634,15 +4596,14 @@ describe("restore from my bucket", () => {
     }
   });
 
-  it("explains an old bucket code in Spanish", async () => {
+  it("explains a bucket copy that changed after review in Spanish", async () => {
     const previous = currentLocale();
     try {
       const el = await mountSetupApp(
         stubApi({
           restoreFromBucket: vi.fn().mockRejectedValue({
-            code: "backup.stream_kit_invalid",
-            params: { reason: "version" },
-            status: 400,
+            code: "restore.stream_copy_changed",
+            status: 409,
           }),
         }),
       );
@@ -4652,7 +4613,7 @@ describe("restore from my bucket", () => {
       await flush(el);
       const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
       expect(screen.errorMessage).toBe(
-        "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
+        "La copia del bucket cambió después de revisarla. Vuelve a revisarla antes de restaurarla.",
       );
     } finally {
       setLocale(previous);
@@ -4797,7 +4758,7 @@ describe("restore from my bucket", () => {
     );
   });
 
-  it("forgets the kit once the rebuild is staged", async () => {
+  it("forgets the bucket credentials once the rebuild is staged", async () => {
     const restoreFromBucket = vi
       .fn()
       .mockRejectedValueOnce({ code: "restore.stream_disk_full", status: 507 })
@@ -4813,8 +4774,8 @@ describe("restore from my bucket", () => {
     expect(readState(el, ["bucketRequest"])).toEqual({ bucketRequest: undefined });
   });
 
-  // An answer the server asked for belongs to the kit it checked; another kit is another copy.
-  it("drops the old-server time and the venue it held for another kit", async () => {
+  // An answer the server asked for belongs to the kit it checked; another copy is another copy.
+  it("drops the old-server time and the venue it held for another copy", async () => {
     const restoreFromBucket = vi
       .fn()
       .mockRejectedValueOnce({
@@ -4829,17 +4790,17 @@ describe("restore from my bucket", () => {
       })
       .mockRejectedValueOnce({ code: "restore.stream_disk_full", status: 507 });
     const el = await mountSetupApp(stubApi({ restoreFromBucket }));
-    bucketRequest(el, { kit: "first" });
+    bucketRequest(el, { selectedSourceId: "first" });
     await flush(el);
-    bucketRequest(el, { kit: "first", oldBoxGone: true });
+    bucketRequest(el, { selectedSourceId: "first", oldBoxGone: true });
     await flush(el);
     let screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
-    // Same kit: the answered question is kept, so the next send still carries the answer.
+    // Same copy: the answered question is kept, so the next send still carries the answer.
     expect({ liveSince: screen.liveSince, venue: screen.venue }).toEqual({
       liveSince: "2026-09-23T11:58:00.000Z",
       venue: VENUE,
     });
-    bucketRequest(el, { kit: "second" });
+    bucketRequest(el, { selectedSourceId: "second" });
     await flush(el);
     screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
     expect({
@@ -6694,7 +6655,7 @@ describe("a recovery request refused because another setup holds the server", ()
     if (source === "archive") {
       host.artifact = new File(["encrypted selected copy"], "backup.waitron");
       host.masterKey = "archive password";
-    } else if (source === "bucket") host.kit = "private selected kit";
+    } else if (source === "bucket") enterBucket(host);
     await (host as unknown as LitElement).updateComplete;
     const copy = host.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
     await copy.updateComplete;
@@ -6821,7 +6782,7 @@ describe("a recovery request refused because another setup holds the server", ()
       const { host, copy } = await recoveryApp(source, "preparation", "server.internal", {
         prepareRecovery,
       });
-      if (source === "archive") {
+      if (source !== "cloud") {
         await typeMasterKey(host, MASTER_KEY.replaceAll(" ", "").toLowerCase());
         await (host as unknown as LitElement).updateComplete;
         await copy.updateComplete;
@@ -6830,7 +6791,7 @@ describe("a recovery request refused because another setup holds the server", ()
       await fillRecoveryHour(copy);
       await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalled());
       const entryFields = fiscalEntry(copy).shadowRoot!.querySelectorAll("wt-master-key-input");
-      if (source === "archive") {
+      if (source !== "cloud") {
         expect(entryFields).toHaveLength(0);
         expect(keyFields(host.shadowRoot!)).toEqual([
           host.shadowRoot!.querySelector("[data-test=master-key]"),

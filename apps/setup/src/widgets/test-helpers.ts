@@ -145,6 +145,32 @@ export const REVIEWED_PREVIEW = {
   taxpayer: { legalName: "Saved venue", taxId: "89890001K" },
   venueName: "Saved venue",
 } as const;
+export const REVIEWED_BUCKET = {
+  bucket: {
+    endpoint: "https://storage.example.test",
+    bucket: "my-backups",
+    region: "local",
+    prefix: "restaurant/box",
+    accessKeyId: "backup-user",
+    secretAccessKey: "private-bucket-key",
+  },
+  masterKey: encodeMasterKeyCode(new Uint8Array(16).fill(9)),
+  selectedSourceId: REVIEWED_PREVIEW.sourceId,
+};
+
+export function enterBucket(screen: HTMLElement, bucket = REVIEWED_BUCKET.bucket): void {
+  const root = screen.shadowRoot!;
+  for (const [field, value] of Object.entries(bucket))
+    root
+      .querySelector(`[data-test=${field}]`)!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  root
+    .querySelector("wt-master-key-input")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { masterKey: REVIEWED_BUCKET.masterKey } }),
+    );
+}
+
 export const REVIEWED_CREDENTIALS = {
   recoveryOperation: {
     binding: {

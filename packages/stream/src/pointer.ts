@@ -6,12 +6,19 @@ import { putOwnBytes } from "./conditional.js";
 import { isKeySegment, parseGenerationName } from "./names.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
 
+export interface BucketPointerRecovery {
+  signerPublicKey: string;
+  keyNumber: number;
+  masterKeyId: string;
+}
+
 export interface StreamPointer {
   streamId: string;
   term: number;
   nodeId: string;
   generation: string;
   writtenAt: string;
+  recovery?: BucketPointerRecovery;
 }
 
 export interface SignedPointer {
@@ -43,7 +50,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function bodyProblem(body: unknown): string | null {
   if (
     !isRecord(body) ||
-    Object.keys(body).length !== BODY_KEYS ||
+    Object.keys(body).length !== BODY_KEYS + (Object.hasOwn(body, "recovery") ? 1 : 0) ||
     typeof body.streamId !== "string" ||
     typeof body.term !== "number" ||
     typeof body.nodeId !== "string" ||
@@ -51,6 +58,21 @@ function bodyProblem(body: unknown): string | null {
     typeof body.writtenAt !== "string"
   ) {
     return "shape";
+  }
+  if (
+    Object.hasOwn(body, "recovery") &&
+    (!isRecord(body.recovery) ||
+      Object.keys(body.recovery).length !== 3 ||
+      typeof body.recovery.signerPublicKey !== "string" ||
+      body.recovery.signerPublicKey.length === 0 ||
+      typeof body.recovery.keyNumber !== "number" ||
+      !Number.isInteger(body.recovery.keyNumber) ||
+      body.recovery.keyNumber < 1 ||
+      body.recovery.keyNumber > 0xffffffff ||
+      typeof body.recovery.masterKeyId !== "string" ||
+      !/^[a-f0-9]{16}$/.test(body.recovery.masterKeyId))
+  ) {
+    return "recovery";
   }
   if (!isKeySegment(body.streamId)) return "venue_id";
   if (!Number.isSafeInteger(body.term) || body.term < 0) return "term";
@@ -75,10 +97,7 @@ export function signPointer(body: StreamPointer, privateKeyPkcs8: string): Signe
   return { body, signature: signBytes(pointerMessage(body), privateKeyPkcs8) };
 }
 
-/**
- * True only for a well-formed pointer signed by `publicKeySpki`. A restore checks against the key the
- * recovery kit carries, never one read from the bucket.
- */
+/** Readers with an established signer pass that key regardless of what the pointer carries. */
 export function verifyPointer(pointer: SignedPointer, publicKeySpki: string): boolean {
   return (
     pointerProblem(pointer) === null &&
@@ -90,14 +109,11 @@ function encode(pointer: SignedPointer): Uint8Array {
   return new TextEncoder().encode(canonicalize(pointer as unknown as CanonicalValue));
 }
 
-/**
- * The live pointer and its version tag, shape-checked but NOT signature-checked — the writer needs the
- * version tag whoever signed it, and a restore must call `verifyPointer` with the kit's key.
- */
+/** The writer needs the version tag whoever signed the pointer. Readers check the signature separately. */
 export async function readPointer(
   store: ObjectStore,
-  streamId: string,
-  call?: StoreCall,
+  streamId: string | undefined,
+  call?: StoreCall & { requireRecovery?: boolean },
 ): Promise<{ pointer: SignedPointer; etag: string } | null> {
   const stored = await store.get(pointerKey(), call);
   if (stored === null) return null;
@@ -110,7 +126,8 @@ export async function readPointer(
   const problem = pointerProblem(parsed);
   if (problem !== null) throw invalid(problem);
   const pointer = parsed as SignedPointer;
-  if (pointer.body.streamId !== streamId) throw invalid("other_venue");
+  if (streamId !== undefined && pointer.body.streamId !== streamId) throw invalid("other_venue");
+  if (call?.requireRecovery && pointer.body.recovery === undefined) throw invalid("recovery");
   return { pointer, etag: stored.etag };
 }
 

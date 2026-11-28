@@ -1,3 +1,9 @@
+import {
+  TEST_BUCKET,
+  TEST_BUCKET_KEY,
+  TEST_MASTER_KEY,
+  bucketRecovery,
+} from "../test/bucket-restore-command.js";
 import { seedModuleDocument } from "../test/module-settings.js";
 import { sql } from "drizzle-orm";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -131,7 +137,7 @@ it("derives the bucket selection from the sealed point rather than the replaceme
   await writeSealedStateRow(
     suite.db,
     NODE,
-    await sealNodeState(f.entries, "bucket-password"),
+    await sealNodeState(f.entries, TEST_BUCKET_KEY),
     new Date(createdAt),
   );
   await suite.db.archiveTo(f.database);
@@ -142,26 +148,22 @@ it("derives the bucket selection from the sealed point rather than the replaceme
     store,
     LOCATION,
     signPointer(
-      { streamId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
+      {
+        streamId: LOCATION,
+        term: 0,
+        nodeId: NODE,
+        generation,
+        writtenAt: createdAt,
+        recovery: bucketRecovery(signer.publicKey),
+      },
       signer.privateKey,
     ),
     null,
   );
   const preview = await previewRecoveryStream({
     ...deps(f.artifact),
-    kit: {
-      version: 2 as const,
-      streamId: LOCATION,
-      bucket: {
-        region: "local",
-        bucket: "copy",
-        prefix: "",
-        accessKeyId: "unused",
-        secretAccessKey: "unused",
-      },
-      recoveryKey: "bucket-password",
-      pointerSignerPublicKey: signer.publicKey,
-    },
+    bucket: TEST_BUCKET,
+    masterKey: TEST_MASTER_KEY,
     litestreamBin: "/unused",
     oldBoxGone: true,
     now: () => new Date("2026-10-17T12:00:00Z"),
@@ -172,7 +174,7 @@ it("derives the bucket selection from the sealed point rather than the replaceme
     },
   });
   expect(preview).toHaveProperty("fiscalSelection", expectedSelection);
-  expect(preview.sourceId).toBe(`stream:${LOCATION}:${generation}`);
+  expect(preview.sourceId).toMatch(/^stream:[a-f0-9]{64}$/);
   expect(preview.activationSourceId).toMatch(/^stream-sha256:[0-9a-f]{64}$/);
 });
 
@@ -374,7 +376,7 @@ it("reads public hour evidence from the exact sealed bucket point", async () => 
   await writeSealedStateRow(
     suite.db,
     NODE,
-    await sealNodeState(f.entries, "bucket-password"),
+    await sealNodeState(f.entries, TEST_BUCKET_KEY),
     new Date(createdAt),
   );
   await suite.db.archiveTo(f.database);
@@ -385,26 +387,22 @@ it("reads public hour evidence from the exact sealed bucket point", async () => 
     store,
     LOCATION,
     signPointer(
-      { streamId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
+      {
+        streamId: LOCATION,
+        term: 0,
+        nodeId: NODE,
+        generation,
+        writtenAt: createdAt,
+        recovery: bucketRecovery(signer.publicKey),
+      },
       signer.privateKey,
     ),
     null,
   );
   const preview = await previewRecoveryStream({
     ...deps(f.artifact),
-    kit: {
-      version: 2 as const,
-      streamId: LOCATION,
-      bucket: {
-        region: "local",
-        bucket: "copy",
-        prefix: "",
-        accessKeyId: "unused",
-        secretAccessKey: "unused",
-      },
-      recoveryKey: "bucket-password",
-      pointerSignerPublicKey: signer.publicKey,
-    },
+    bucket: TEST_BUCKET,
+    masterKey: TEST_MASTER_KEY,
     litestreamBin: "/unused",
     oldBoxGone: true,
     now: () => new Date("2026-10-17T12:00:00Z"),

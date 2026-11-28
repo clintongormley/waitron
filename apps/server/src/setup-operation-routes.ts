@@ -63,6 +63,7 @@ import {
   MAX_RESTORE_UPLOAD_BYTES,
   asObject,
   asMasterKey,
+  bucketRestoreSource,
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -102,8 +103,6 @@ function recoveryCredentials(
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 // Finish joining reads nothing from its body, so every resend counts as the same request.
 const JOIN_ADOPT_REQUEST_HASH = createHash("sha256").update("adopt-joined").digest("hex");
-/** A kit is short text; this refuses a mistaken paste of something else before it is parsed. */
-const MAX_KIT_BYTES = 64 * 1024;
 
 export function mountSetupOperationRoutes(
   app: Hono,
@@ -646,12 +645,12 @@ export function mountSetupOperationRoutes(
     return runBucketRestore(c, log, async () => {
       try {
         const body = await readJsonBody<{
-          kit?: unknown;
+          bucket?: unknown;
+          masterKey?: unknown;
           environment?: unknown;
           oldBoxGone?: unknown;
         }>(c);
-        const kit = asString(body.kit, "kit");
-        if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
+        const source = bucketRestoreSource(body);
         const environment = body.environment;
         if (environment !== "production" && environment !== "preproduction")
           invalidRequest("environment");
@@ -660,7 +659,7 @@ export function mountSetupOperationRoutes(
         c.header("Cache-Control", "no-store");
         return c.json(
           await preview(
-            { kit, environment, oldBoxGone: body.oldBoxGone === true },
+            { ...source, environment, oldBoxGone: body.oldBoxGone === true },
             c.req.raw.signal,
           ),
           200,
@@ -883,7 +882,9 @@ export function mountSetupOperationRoutes(
       restartAfterReply(c, requestRestart, async (mustRestart) => {
         try {
           const body = await readJsonBody<{
-            kit?: unknown;
+            bucket?: unknown;
+            masterKey?: unknown;
+            selectedSourceId?: unknown;
             environment?: unknown;
             oldBoxGone?: unknown;
             venueConfirmed?: unknown;
@@ -891,8 +892,9 @@ export function mountSetupOperationRoutes(
             nodeRecoverySecret?: unknown;
             recoveryContext?: unknown;
           }>(c);
-          const kit = asString(body.kit, "kit");
-          if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
+          const source = bucketRestoreSource(body);
+          const selectedSourceId = asString(body.selectedSourceId, "selectedSourceId");
+          if (Buffer.byteLength(selectedSourceId) > 4096) invalidRequest("selectedSourceId");
           const environment = body.environment;
           if (environment !== "production" && environment !== "preproduction") {
             invalidRequest("environment");
@@ -912,7 +914,8 @@ export function mountSetupOperationRoutes(
           c.header("Cache-Control", "no-store");
           const input: BucketRestoreInput = {
             ...credentials,
-            kit,
+            ...source,
+            selectedSourceId,
             environment,
             oldBoxGone: body.oldBoxGone === true,
             venueConfirmed: typeof body.venueConfirmed === "string" ? body.venueConfirmed : null,
@@ -924,7 +927,8 @@ export function mountSetupOperationRoutes(
                 environment,
                 input.oldBoxGone,
                 input.venueConfirmed,
-                kit,
+                source,
+                selectedSourceId,
                 credentials,
               ]),
             )

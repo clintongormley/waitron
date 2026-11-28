@@ -7,39 +7,16 @@ const BUCKET_COPY_KEEP = 7 * DAY;
 
 export type StatusRecord = RecoveryPackRecord & { madeByName: string | null };
 
-/** What each part's checks read now. */
-export type CurrentChecks = {
-  /** The backup key's latest change time; `undefined` when nothing has changed it. */
-  keyChangedAt: string | undefined;
-  /** True only when a fresh Cloud read says emergency start is open with an address. */
-  cloudOpen?: boolean;
-  /** `null` when the box has no bucket copy. */
-  bucket: { revision: string } | null;
-};
-
 export type PackStatusInput = {
   /** This node's packs, newest first. */
   records: StatusRecord[];
-  current: CurrentChecks;
+  current: { cloudOpen?: boolean };
   backupsUseOlderKey: boolean;
   /** The packs in `records` that showed the current master key, newest first. */
   masterKeyPacks: readonly number[];
-  now: Date;
 };
 
-/** Each reason names only the parts it is given for. */
-type Reason =
-  | { part: "bucket"; kind: "key_changed"; at: string }
-  | { part: "bucket"; kind: "settings_changed" }
-  | { part: "bucket" | "emergency"; kind: "set_up_after" }
-  | { part: "bucket"; kind: "removed" };
-
-type Keep = {
-  number: number;
-  madeAt: string;
-  until: string;
-  why: "backup_key";
-};
+type Reason = { part: "emergency"; kind: "set_up_after" };
 
 export type PackStatus = {
   latest: null | {
@@ -61,39 +38,17 @@ export type PackStatus = {
     holdsCurrentMasterKey?: true;
   };
   reasons: Reason[];
-  keep: Keep[];
+  keep: [];
   backupsUseOlderKey: boolean;
 };
 
 const partOf = (record: RecoveryPackRecord, part: RecoveryPackPartRecord["part"]) =>
   record.parts.find((p) => p.part === part);
 
-const later = (a: string, b: string) => Date.parse(a) > Date.parse(b);
-
-function bucketReasons(record: RecoveryPackRecord, current: CurrentChecks): Reason[] {
-  const part = "bucket";
-  const recorded = partOf(record, part);
-  const now = current.bucket;
-  if (recorded === undefined || recorded.state === "failed") return [];
-  if (recorded.state !== "included") return now === null ? [] : [{ part, kind: "set_up_after" }];
-  if (now === null) return [{ part, kind: "removed" }];
-  const reasons: Reason[] = [];
-  if (recorded.settingsRevision !== now.revision) reasons.push({ part, kind: "settings_changed" });
-  if (
-    current.keyChangedAt !== undefined &&
-    recorded.keyChangedAt !== undefined &&
-    later(current.keyChangedAt, recorded.keyChangedAt)
-  ) {
-    reasons.push({ part, kind: "key_changed", at: current.keyChangedAt });
-  }
-  return reasons;
-}
-
-function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[] {
-  const reasons = bucketReasons(record, current);
-  if (current.cloudOpen === true && partOf(record, "emergency")?.state !== "included")
-    reasons.push({ part: "emergency", kind: "set_up_after" });
-  return reasons;
+function reasonsFor(record: RecoveryPackRecord, current: PackStatusInput["current"]): Reason[] {
+  return current.cloudOpen === true && partOf(record, "emergency")?.state !== "included"
+    ? [{ part: "emergency", kind: "set_up_after" }]
+    : [];
 }
 
 /** The longest wait between two backups the schedule asks for. */
@@ -128,38 +83,6 @@ export function keepOldPackUntil(input: {
     until = Math.max(until, gone);
   }
   return new Date(until).toISOString();
-}
-
-function keepList(input: PackStatusInput): Keep[] {
-  const { records, current, now } = input;
-  const keep: Keep[] = [];
-  const seenKeys = new Set<string>();
-  for (const record of records.filter((r) => r.receivedAt !== null)) {
-    const bucket = partOf(record, "bucket");
-    const facts = bucket?.state === "included" ? bucket : undefined;
-    const recorded = facts?.keyChangedAt;
-    // Nothing records a change before the first rotation, so packs made before it count as one key.
-    const key = facts?.keyNeverChanged === true ? "never-changed" : recorded;
-    if (
-      recorded === undefined ||
-      key === undefined ||
-      current.keyChangedAt === undefined ||
-      !later(current.keyChangedAt, recorded) ||
-      seenKeys.has(key)
-    ) {
-      continue;
-    }
-    seenKeys.add(key);
-    const until = Date.parse(current.keyChangedAt) + BUCKET_COPY_KEEP;
-    if (until <= now.getTime()) continue;
-    keep.push({
-      number: record.number,
-      madeAt: record.madeAt.toISOString(),
-      until: new Date(until).toISOString(),
-      why: "backup_key",
-    });
-  }
-  return keep.sort((a, b) => a.number - b.number);
 }
 
 const holdersIn = (records: readonly RecoveryPackRecord[], numbers: readonly number[]) =>
@@ -216,7 +139,7 @@ export function packStatus(input: PackStatusInput): PackStatus {
     incomplete,
     unreceived: unreceivedOf(input),
     reasons,
-    keep: keepList(input),
+    keep: [],
     backupsUseOlderKey: input.backupsUseOlderKey,
   };
 }

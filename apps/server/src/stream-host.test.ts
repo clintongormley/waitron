@@ -80,6 +80,10 @@ const RING: KeyRing = loadKeyRing({
 });
 const NODE_ID = "node-a";
 const AT = new Date("2026-09-15T11:00:00.000Z");
+const RECOVERY_KEY = {
+  key: "backup-key-for-test-0123456789",
+  numbered: { keyNumber: 2, masterKeyId: "0123456789abcdef" },
+};
 const SETTINGS = {
   endpoint: undefined,
   region: "eu-south-2",
@@ -114,7 +118,7 @@ describe("the live copy's wiring", () => {
       log: (_level, event) => logs.push(event),
       now: () => new Date(),
       isPrimary: () => true,
-      readRecoveryKey: async () => "backup-key-for-test-0123456789",
+      readRecoveryKey: async () => RECOVERY_KEY,
       refreshSealedState: async () => "sealed",
       ...overrides,
     });
@@ -752,6 +756,22 @@ describe("the live copy's wiring", () => {
         );
       });
 
+      it("tells the owner to change an unnumbered key before writing to their bucket", async () => {
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store: new SwitchableStore(() => AT),
+          readRecoveryKey: async () => ({ key: "unnumbered-backup-key-for-test" }),
+        });
+        try {
+          await rt.start();
+          expect(rt.status()).toMatchObject({ state: "off", reason: "numbered_key_required" });
+          expect(litestream.children).toHaveLength(0);
+        } finally {
+          await rt.stop();
+        }
+      });
+
       it("publishes bucket copy state transitions to open dashboards", async () => {
         const bus = new LiveEvents();
         const states: string[] = [];
@@ -835,9 +855,9 @@ describe("the live copy's wiring", () => {
             readRecoveryKey: async () => {
               if (++readCount === 1) {
                 keyRead();
-                return oldKey;
+                return { ...RECOVERY_KEY, key: await oldKey };
               }
-              return rawKey;
+              return { ...RECOVERY_KEY, key: rawKey };
             },
           });
           const started = rt.start();
@@ -1202,6 +1222,11 @@ describe("the live copy's wiring", () => {
             expect(pointer!.pointer.body).toMatchObject({
               streamId: "c0000000-0000-4000-8000-000000000002",
               nodeId: NODE_ID,
+              recovery: {
+                signerPublicKey: keys.publicKey,
+                keyNumber: 2,
+                masterKeyId: "0123456789abcdef",
+              },
             });
           } finally {
             await rt.stop();
@@ -1263,7 +1288,7 @@ describe("the live copy's wiring", () => {
         let rt = runtime({
           spawn: litestream.spawn,
           store,
-          readRecoveryKey: async () => recoveryKey,
+          readRecoveryKey: async () => ({ ...RECOVERY_KEY, key: recoveryKey }),
         });
         try {
           await rt.start();
@@ -1280,7 +1305,7 @@ describe("the live copy's wiring", () => {
             rt = runtime({
               spawn: litestream.spawn,
               store,
-              readRecoveryKey: async () => recoveryKey,
+              readRecoveryKey: async () => ({ ...RECOVERY_KEY, key: recoveryKey }),
             });
             await rt.start();
           }
@@ -1666,7 +1691,9 @@ describe("the live copy's wiring", () => {
         const generation = generationOf(rt.status());
         store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
         await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
-        expect((await readPointer(store, "venue-7"))!.pointer.body.streamId).toBe("venue-7");
+        const pointer = await readPointer(store, "venue-7");
+        expect(pointer!.pointer.body.streamId).toBe("venue-7");
+        expect(pointer!.pointer.body.recovery).toBeUndefined();
         expect(url.searchParams.get("region")).toBe("us-east-1");
         const endpoint = url.searchParams.get("endpoint")!;
         expect(endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);

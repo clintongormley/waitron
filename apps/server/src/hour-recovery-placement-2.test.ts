@@ -41,7 +41,6 @@ import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import { createHash } from "node:crypto";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { encodeRecoveryKit } from "@waitron/stream";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
@@ -755,7 +754,12 @@ describe("selected-hour admission before archive placement", () => {
         () => {},
       );
       const source = bucket
-        ? { kind: "bucket", kit: encodeRecoveryKit(bucket.kit), environment: "preproduction" }
+        ? {
+            kind: "bucket",
+            bucket: bucket.bucket,
+            masterKey: key.secret,
+            environment: "preproduction",
+          }
         : kind === "cloud"
           ? { kind: "cloud", pointId }
           : { kind: "archive", masterKey: key.secret, environment: "preproduction" };
@@ -765,9 +769,7 @@ describe("selected-hour admission before archive placement", () => {
       const request = {
         binding: { ...prior, eventId: "browser-http" },
         context: {
-          selectedSourceId: bucket
-            ? `stream:${node.streamId}:gen-0-${node.nodeId}-20261016T124000Z`
-            : f.options.selected.sourceId,
+          selectedSourceId: bucket ? bucket.selected.sourceId : f.options.selected.sourceId,
           oldBoxGone: true,
           soleRecovery: true,
         },

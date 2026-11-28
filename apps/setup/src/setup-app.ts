@@ -543,14 +543,19 @@ function restoreRefusedField(
 
 const BUCKET_FIELD_CODES: Record<string, BucketField> = {
   "promotion.break_glass_invalid": "nodeRecoverySecret",
-  "backup.stream_kit_invalid": "kit",
   "restore.environment_mismatch": "environment",
 };
 
 const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
   recoveryOperation: "recoveryOperation",
   nodeRecoverySecret: "nodeRecoverySecret",
-  kit: "kit",
+  masterKey: "masterKey",
+  endpoint: "endpoint",
+  bucket: "bucket",
+  region: "region",
+  prefix: "prefix",
+  accessKeyId: "accessKeyId",
+  secretAccessKey: "secretAccessKey",
   environment: "environment",
   oldBoxGone: "oldBoxGone",
   venueConfirmed: "venueConfirmed",
@@ -573,7 +578,13 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
 const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
-  kit: "restore_bucket.check.kit",
+  masterKey: "restore.check.master_key",
+  endpoint: "restore_bucket.check.bucket",
+  bucket: "restore_bucket.check.bucket",
+  region: "restore_bucket.check.bucket",
+  prefix: "restore_bucket.check.bucket",
+  accessKeyId: "restore_bucket.check.bucket",
+  secretAccessKey: "restore_bucket.check.bucket",
   environment: "restore_bucket.check.environment",
   oldBoxGone: "restore_bucket.check.old_box",
   venueConfirmed: "restore_bucket.check.venue",
@@ -590,7 +601,8 @@ const CLOUD_FIELD_CHECKS: Record<CloudField | "pointId", StringKey> = {
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
 const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
-  "backup.stream_kit_invalid": "shell.bucket.kit_invalid",
+  "restore.stream_copy_changed": "shell.bucket.copy_changed",
+  "restore.stream_folder_required": "restore_bucket.folder_required",
   "restore.stream_pointer_missing": "shell.bucket.pointer_missing",
   "restore.stream_pointer_unverified": "shell.bucket.pointer_unverified",
   "backup.stream_pointer_invalid": "shell.bucket.pointer_invalid",
@@ -665,15 +677,6 @@ function describeBucketRefusal(
   if (manifestKey !== undefined) return say(manifestKey);
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
-  if (code === "backup.stream_kit_invalid" && params?.reason === "version")
-    return say("shell.bucket.kit_old_version");
-  if (
-    code === "backup.stream_kit_invalid" &&
-    (params?.reason === "encoding" || params?.reason === "shape")
-  )
-    return say("shell.bucket.kit_damaged");
-  if (code === "restore.stream_pointer_unverified" && params?.reason === "venue_mismatch")
-    return say("shell.bucket.venue_mismatch");
   if (code === "restore.stream_pointer_unverified" && params?.reason === "key_or_access")
     return say("shell.bucket.key_or_access");
   if (code === "restore.stream_venue_unconfirmed") return say("shell.bucket.venue_unconfirmed");
@@ -1248,7 +1251,7 @@ export class SetupApp extends LitElement {
   @state() private bucketLiveSince?: string;
   @state() private bucketLiveUnknown = false;
   @state() private bucketVenue?: RestoredVenue;
-  /** Held only in this tab's memory: the kit inside it is as sensitive as the recovery key. */
+  /** Held only in this tab’s memory. */
   @state() private bucketRequest?: KeptBucketRestoreRequest;
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private restored: "bucket" | "archive" | "cloud" | undefined;
@@ -1600,7 +1603,7 @@ export class SetupApp extends LitElement {
     this.connectError = undefined;
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
-    // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
+    // An answer belongs to the copy it was given for; leaving the screen may mean another source.
     this.restoreLiveSince = undefined;
     this.restoreLiveUnknown = false;
     this.restoreRequest = undefined;
@@ -2465,8 +2468,7 @@ export class SetupApp extends LitElement {
       attempt === this.#bucketRestoreAttempt &&
       this.screen === "provisioning";
     const request = event.detail.request;
-    // The server checked the old server and named the copy for the kit it was sent, not for another.
-    if (request.kit !== this.bucketRequest?.kit) {
+    if (request.selectedSourceId !== this.bucketRequest?.selectedSourceId) {
       this.bucketLiveSince = undefined;
       this.bucketLiveUnknown = false;
       this.bucketVenue = undefined;
@@ -2507,17 +2509,14 @@ export class SetupApp extends LitElement {
       } else if (code === "restore.stream_venue_unconfirmed" && venue !== undefined) {
         this.bucketVenue = venue;
       } else {
-        this.bucketInvalidField = refusedField(
-          code,
-          params,
-          BUCKET_FIELD_CODES,
-          BUCKET_FIELD_PATHS,
-        );
-        // The kit's and environment's own refusals already say what is wrong with that field.
+        this.bucketInvalidField =
+          code === "promotion.break_glass_invalid" && params?.keyNumber !== undefined
+            ? "masterKey"
+            : refusedField(code, params, BUCKET_FIELD_CODES, BUCKET_FIELD_PATHS);
         this.bucketRestoreError =
           keyNamedInRefusal(code, params) ??
           (code === "promotion.break_glass_invalid"
-            ? say(BUCKET_FIELD_CHECKS.nodeRecoverySecret)
+            ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField ?? "nodeRecoverySecret"])
             : code === "setup.request_invalid" && this.bucketInvalidField !== undefined
               ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
               : describeBucketRefusal(code, params));

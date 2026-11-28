@@ -11,7 +11,6 @@ import {
 import type { MadeMasterKey } from "@waitron/provisioning";
 import { renderRecoveryPack, type PackLocale, type RenderPackInput } from "@waitron/recovery-pack";
 import { isAppError } from "@waitron/shared";
-import { notSetUp, type BuiltPart } from "./backup-recovery-pack-parts.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import type { Logger } from "./logger.js";
 
@@ -50,17 +49,16 @@ export async function drawRecoveryPack(
   details: {
     nodeId: string;
     madeBy: string | null;
-    parts: BuiltPart[];
     masterKey: PackMasterKey;
     cloudAddress?: string | null;
   },
 ): Promise<{ pdf: Uint8Array<ArrayBuffer>; record: Omit<RecoveryPackRecord, "receivedAt"> }> {
   const { number, madeAt } = input.pack;
-  const { nodeId, madeBy, parts, cloudAddress } = details;
+  const { nodeId, madeBy, cloudAddress } = details;
   const pdf = await renderRecoveryPack({
     ...input,
     ...(typeof cloudAddress === "string" ? { cloudAddress } : {}),
-    parts: parts.map((part) => part.part),
+    parts: [],
     file: {
       kind: "waitron-recovery-pack",
       version: 2,
@@ -70,7 +68,6 @@ export async function drawRecoveryPack(
       masterKey: details.masterKey.masterKey,
       masterKeyName: details.masterKey.masterKeyName,
       masterKeyHeldBy: null,
-      ...Object.assign({}, ...parts.map((part) => part.file)),
     },
   });
   return {
@@ -89,7 +86,6 @@ export async function drawRecoveryPack(
                 state: cloudAddress === null ? ("absent" as const) : ("included" as const),
               },
             ]),
-        ...parts.map((p) => p.record),
         {
           part: "master-key",
           state: "included",
@@ -126,7 +122,6 @@ export async function makeMasterKeyRecoveryPack(
         {
           nodeId,
           madeBy: null,
-          parts: [notSetUp("bucket")],
           masterKey: { ...shown.made, number: masterKeyNumber },
         },
       );

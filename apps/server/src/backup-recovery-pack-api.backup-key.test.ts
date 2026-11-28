@@ -17,7 +17,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode } from "@waitron/module";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { parseRecoveryKit } from "@waitron/stream";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
@@ -175,7 +174,7 @@ const keyFile = async (stateDir: string) =>
   parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
 
 describe("Make a new master key moves the backup key to N+1 of the new master key", () => {
-  it("the new pack's bucket page prints key N+1", async () => {
+  it("confirmation installs key N+1 for the master key printed in the pack", async () => {
     const stateDir = await stateFolder(3);
     const f = fixture(stateDir);
     const response = await f.make(true);
@@ -183,7 +182,10 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const next = heldBackupKey(shownBytes(response), 4);
     const shownName = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
-    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(next.key);
+    expect(file).toMatchObject({
+      bucketCode: null,
+      masterKey: encodeMasterKeyCode(shownBytes(response)),
+    });
     expect((await f.confirm(response)).status).toBe(204);
     const held = await keyFile(stateDir);
     expect(held).toMatchObject({
@@ -210,7 +212,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const response = await f.make(encodeMasterKeyCode(OLD_MASTER));
     expect(response.status).toBe(200);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
-    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(heldBackupKey(OLD_MASTER, 3).key);
+    expect(file).toMatchObject({ bucketCode: null, masterKey: encodeMasterKeyCode(OLD_MASTER) });
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
     expect(f.steps).toEqual([]);
   });
@@ -294,7 +296,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     });
   });
 
-  it("after a failed backup.env write, Change the backup key with the new master key writes the key the pack prints", async () => {
+  it("after a failed backup.env write, Change the backup key with the new master key writes the next backup key from the pack’s master key", async () => {
     const stateDir = await stateFolder(3);
     const f = fixture(stateDir);
     const response = await f.make(true);
@@ -305,7 +307,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const confirmed = await f.confirm(response);
     await chmod(stateDir, 0o700);
     expect(confirmed.status).toBe(204);
-    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    const printed = heldBackupKey(decodeMasterKeyCode(file.masterKey!), 4).key;
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
       heldBackupKey(OLD_MASTER, 3).key,
     );
@@ -603,7 +605,7 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     expect((await f.status()).newKeyWaiting).toBe(true);
   });
 
-  it("the confirm with the shown key makes it current with the pack's time, writes the printed backup key and reloads backups", async () => {
+  it("the confirm with the shown key makes it current with the pack's time, writes the backup key derived from the printed master key and reloads backups", async () => {
     const stateDir = await stateFolder(3);
     let at = Date.parse(MADE_AT);
     const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
@@ -612,7 +614,7 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     const shown = shownBytes(made);
     const shownName = decodeURIComponent(made.headers.get("x-waitron-master-key-name")!);
     const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
-    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    const printed = heldBackupKey(decodeMasterKeyCode(file.masterKey!), 4).key;
     expect(f.steps).toEqual([]);
 
     const confirmed = await f.confirm(made);
@@ -668,7 +670,7 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     const f = fixture(stateDir);
     const made = await f.make(true);
     const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
-    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    const printed = heldBackupKey(decodeMasterKeyCode(file.masterKey!), 4).key;
     const refused = await (
       await rotateApp(stateDir, f.waitingMasterKey)
     ).post("/api/backup/rotate", { masterKey: encodeMasterKeyCode(makeMasterKey()) });
@@ -691,7 +693,7 @@ describe("a new master key takes over only once its pack's arrival is confirmed"
     const plain = await f.make(encodeMasterKeyCode(OLD_MASTER));
     expect(plain.headers.get("x-waitron-recovery-pack")).toBe("2");
     const file = await readRecoveryPackPdf(new Uint8Array(await plain.arrayBuffer()));
-    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(heldBackupKey(OLD_MASTER, 3).key);
+    expect(file).toMatchObject({ bucketCode: null, masterKey: encodeMasterKeyCode(OLD_MASTER) });
     expect((await f.received(2)).status).toBe(204);
     expect((await f.status()).newKeyWaiting).toBeUndefined();
     const before = await snapshot(stateDir, f);

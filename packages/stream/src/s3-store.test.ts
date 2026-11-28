@@ -358,6 +358,16 @@ describe("list", () => {
     ]);
   });
 
+  it("stops fetching folder pages when the caller's folder limit is reached", async () => {
+    const next = "<IsTruncated>true</IsTruncated><NextContinuationToken>t2</NextContinuationToken>";
+    const { store, sent } = storeOver([
+      { status: 200, headers: xml, body: listing(folder("waitron/venue-a/"), next) },
+      { status: 200, headers: xml, body: listing(folder("waitron/venue-b/")) },
+    ]);
+    await expect(store.listFolders("", { limit: 1 })).resolves.toEqual(["venue-a"]);
+    expect(sent).toHaveLength(1);
+  });
+
   it.each([folder("elsewhere/gen-10-node/"), entry("elsewhere/gen-10-node")])(
     "refuses an entry outside the requested prefix without exposing its name (%s)",
     async (body) => {

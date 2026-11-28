@@ -16,7 +16,7 @@ describe("AWS rehearsal: the stream loop against Amazon S3", () => {
     await rehearsal?.stop();
   });
 
-  it("box A streams, dies, box B is rebuilt from the kit and its generation restores to its database", async () => {
+  it("box A streams, dies, box B is rebuilt with the master key and its generation restores to its database", async () => {
     const litestream = await resolveLitestream(process.env);
     if (!litestream.ok) {
       throw new Error(

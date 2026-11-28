@@ -21,6 +21,8 @@ import type { StartedServer } from "./boot.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { heldBackupKey } from "./testing/backup-key.js";
 import { httpsVia } from "./testing/boot-harness.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -253,6 +255,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       now: () => new Date(),
       makeKeyRing: () => ({ key: KEY_ENV.WAITRON_CREDENTIALS_KEY, version: 1 }),
     });
+    await writeBackupKey(scratch, heldBackupKey(Buffer.alloc(16, 17)));
     await writeFile(join(scratch, "trading.env"), "");
     const { via, close } = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
     closeHttp = close;
@@ -265,7 +268,6 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     await seedModuleSettings(suite.db, { "fiscal-none": false });
     const env: Record<string, string> = {
       ...KEY_ENV,
-      WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789",
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_ORIGIN: MANAGEMENT_ORIGIN,
       WAITRON_MANAGEMENT_RP_ID: RP_ID,

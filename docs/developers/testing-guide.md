@@ -1408,7 +1408,7 @@ The script and its output are `error-names.mts` and `error-names.log` in the sam
 
 `apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream
 and a real S3-compatible server started as a plain child process, because no package suite starts a
-container. Box A streams to the bucket and dies; box B is rebuilt from the recovery kit, sells under a
+container. Box A streams to the bucket and dies. Box B is rebuilt with the bucket credentials and master key, sells under a
 fresh installation number, opens a generation of its own and moves the pointer; and a restore of B's
 generation must equal B's database, every table but Litestream's own two
 ([conventions-data.md](conventions-data.md), the last section). Then B adds a spare, box C

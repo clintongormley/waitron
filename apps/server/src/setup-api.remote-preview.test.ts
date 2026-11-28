@@ -4,6 +4,15 @@ import { AppError } from "@waitron/shared";
 import { mountSetup } from "./setup-api.js";
 
 const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+const bucket = {
+  region: "test-region",
+  bucket: "saved-copies",
+  prefix: "restaurant/box",
+  accessKeyId: "storage-user",
+  secretAccessKey: "private-storage-key",
+};
+const masterKey = "private-master-key";
+const source = { bucket, masterKey, environment: "preproduction" };
 const selected = {
   sourceId: "copy",
   createdAt: "2026-10-01T08:00:00.000Z",
@@ -43,10 +52,7 @@ it.each(["bucket", "cloud"])(
   "previews the %s copy without staging, restart, cache or credentials in logs",
   async (kind) => {
     const f = fixture();
-    const body =
-      kind === "bucket"
-        ? { kit: "private-kit", environment: "preproduction", oldBoxGone: true }
-        : { pointId };
+    const body = kind === "bucket" ? { ...source, oldBoxGone: true } : { pointId };
     const response = await send(f.app, kind, body);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(selected);
@@ -55,15 +61,16 @@ it.each(["bucket", "cloud"])(
     else expect(f.readCloud).toHaveBeenCalledWith(pointId);
     expect(f.stage).not.toHaveBeenCalled();
     expect(f.restart).not.toHaveBeenCalled();
-    expect(JSON.stringify(f.log.mock.calls)).not.toContain("private-kit");
+    for (const secret of [bucket.secretAccessKey, masterKey])
+      expect(JSON.stringify(f.log.mock.calls)).not.toContain(secret);
   },
 );
 it.each([
-  [{ kit: "", environment: "preproduction" }, "kit"],
-  [{ kit: "x".repeat(65537), environment: "preproduction" }, "kit"],
-  [{ kit: "private", environment: null }, "environment"],
-  [{ kit: "private", environment: "preproduction", oldBoxGone: null }, "oldBoxGone"],
-  [{ kit: "private", environment: "preproduction", oldBoxGone: "yes" }, "oldBoxGone"],
+  [{ ...source, masterKey: "" }, "masterKey"],
+  [{ ...source, masterKey: "x".repeat(4097) }, "masterKey"],
+  [{ ...source, environment: null }, "environment"],
+  [{ ...source, oldBoxGone: null }, "oldBoxGone"],
+  [{ ...source, oldBoxGone: "yes" }, "oldBoxGone"],
 ] as const)("rejects invalid bucket preview input %j", async (body, field) => {
   const f = fixture();
   const response = await send(f.app, "bucket", body);
@@ -87,7 +94,7 @@ it.each(["bucket", "cloud"])("releases %s preview's gate after failure", async (
   (kind === "bucket" ? f.readBucket : f.readCloud).mockRejectedValueOnce(
     new AppError("restore.environment_mismatch", { backup: "production", target: "preproduction" }),
   );
-  const body = kind === "bucket" ? { kit: "private", environment: "preproduction" } : { pointId };
+  const body = kind === "bucket" ? source : { pointId };
   const refused = await send(f.app, kind, body);
   expect(refused.status).toBe(409);
   expect(await refused.json()).toEqual({
@@ -107,7 +114,7 @@ it("holds the shared setup gate while a copy is downloaded", async () => {
         resolve = done;
       }),
   );
-  const pending = send(f.app, "bucket", { kit: "private", environment: "preproduction" });
+  const pending = send(f.app, "bucket", source);
   await vi.waitFor(() => expect(f.readBucket).toHaveBeenCalledOnce());
   const response = await send(f.app, "cloud", { pointId });
   expect(response.status).toBe(409);

@@ -12,18 +12,19 @@ import { looksLikePdf, RecoveryPackFileError, type RecoveryPackFile } from "@wai
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { AppError, diskFullIn, hasCode, readVariable } from "@waitron/shared";
 import {
-  createS3ObjectStore,
-  parseRecoveryKit,
+  createS3FolderStore,
+  readBucketConfig,
   resolveLitestreamBin,
   type BucketConfig,
   type ObjectStore,
-  type RecoveryKit,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { headerOpeningKey } from "./backup-file-key.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
+import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -49,6 +50,8 @@ import { createRecoveryEntryRunner } from "./recovery-entry.js";
 
 type Env = NodeJS.ProcessEnv;
 type RestoreStream = (deps: Parameters<typeof restoreFromStream>[0]) => Promise<void>;
+type BucketLocation = Omit<BucketConfig, "accessKeyId" | "secretAccessKey">;
+type RestoreBucketStore = ObjectStore & Partial<Pick<S3ObjectStore, "listFolders">>;
 
 interface CommandDeps {
   argv: string[];
@@ -56,8 +59,8 @@ interface CommandDeps {
   out: (line: string) => void;
   restore?: (args: RestoreFileDeps) => Promise<void>;
   restoreStream?: RestoreStream;
-  /** Opens the bucket; every call on what it returns is bounded. Default {@link createS3ObjectStore}. */
-  openStore?: (bucket: BucketConfig) => ObjectStore;
+  /** Opens the bucket; every call on what it returns is bounded. */
+  openStore?: (bucket: BucketConfig) => RestoreBucketStore;
   bucketTimeoutMs?: number;
   withModuleOperations?: RestoreOperationRunner;
   /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreTarget}. */
@@ -71,7 +74,13 @@ const CONFIRM_SOLE_RECOVERY = "--confirm-sole-recovery";
 const FROM_BUCKET = "--from-bucket";
 const CONFIRM_VENUE = "--confirm-venue";
 const MASTER_KEY_FILE = "--master-key-file";
-const VALUED_FLAGS: ReadonlySet<string> = new Set([FROM_BUCKET, CONFIRM_VENUE, MASTER_KEY_FILE]);
+const BUCKET_FILE = "--bucket-credentials-file";
+const BUCKET_OPTIONS = ["--bucket", "--region", "--prefix", "--endpoint", BUCKET_FILE];
+const VALUED_FLAGS: ReadonlySet<string> = new Set([
+  CONFIRM_VENUE,
+  MASTER_KEY_FILE,
+  ...BUCKET_OPTIONS,
+]);
 const clock = (): Date => new Date();
 
 /**
@@ -88,11 +97,8 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
- * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead. A backup file opens with the
- * master key, from `--master-key-file` or `WAITRON_MASTER_KEY`; a Waitron Cloud copy (version 1)
- * with `WAITRON_BACKUP_RECOVERY_KEY`. No key is ever taken from argv: an argv element leaks into
- * `ps`.
+ * A backup file or bucket copy opens with the master key. A Waitron Cloud copy (version 1) opens
+ * with `WAITRON_BACKUP_RECOVERY_KEY`. Keys stay out of argv because argv is visible in `ps`.
  *
  * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
  */
@@ -100,11 +106,11 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--master-key-file <path>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--master-key-file <path>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket --bucket <name> --region <region> [--endpoint <url>] [--prefix <folder>] [--bucket-credentials-file <path>] [--master-key-file <path>] [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
-  if ("kitPath" in args) return runBucketRestore(deps, args);
+  if ("bucket" in args) return runBucketRestore(deps, args);
   const { artifactPath, masterKeyFile, oldBoxGone, soleRecovery } = args;
 
   const masterKey = await readMasterKey(deps, masterKeyFile);
@@ -228,7 +234,9 @@ type ParsedArgs =
       soleRecovery: boolean;
     }
   | {
-      kitPath: string;
+      bucket: BucketLocation;
+      credentialsFile: string | undefined;
+      masterKeyFile: string | undefined;
       confirmedTaxId: string | undefined;
       oldBoxGone: boolean;
       soleRecovery: boolean;
@@ -239,6 +247,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
   if (cmd !== "restore") return null;
   const valued: Record<string, string | undefined> = {};
   let artifactPath: string | undefined;
+  let fromBucket = false;
   let oldBoxGone = false;
   let soleRecovery = false;
   for (let i = 0; i < rest.length; i++) {
@@ -249,6 +258,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
     } else if (arg === CONFIRM_SOLE_RECOVERY) {
       if (soleRecovery) return null;
       soleRecovery = true;
+    } else if (arg === FROM_BUCKET) {
+      if (fromBucket) return null;
+      fromBucket = true;
     } else if (VALUED_FLAGS.has(arg)) {
       const value = rest[++i];
       if (value === undefined || value.startsWith("--") || arg in valued) return null;
@@ -259,16 +271,24 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
       artifactPath = arg;
     }
   }
-  const kitPath = valued[FROM_BUCKET];
   const confirmedTaxId = valued[CONFIRM_VENUE];
   const masterKeyFile = valued[MASTER_KEY_FILE];
-  if (masterKeyFile !== undefined && artifactPath === undefined) return null;
-  if (kitPath !== undefined) {
-    return artifactPath === undefined
-      ? { kitPath, confirmedTaxId, oldBoxGone, soleRecovery }
-      : null;
+  if (fromBucket) {
+    const bucket = valued["--bucket"];
+    const region = valued["--region"];
+    if (artifactPath !== undefined || !bucket || !region) return null;
+    return {
+      bucket: { bucket, region, endpoint: valued["--endpoint"], prefix: valued["--prefix"] ?? "" },
+      credentialsFile: valued[BUCKET_FILE],
+      masterKeyFile,
+      confirmedTaxId,
+      oldBoxGone,
+      soleRecovery,
+    };
   }
-  return artifactPath !== undefined && confirmedTaxId === undefined
+  return artifactPath !== undefined &&
+    confirmedTaxId === undefined &&
+    !BUCKET_OPTIONS.some((flag) => flag in valued)
     ? { artifactPath, masterKeyFile, oldBoxGone, soleRecovery }
     : null;
 }
@@ -296,7 +316,7 @@ async function readMasterKey(
   }
   let source: Source;
   try {
-    source = await sourceText(await readFile(masterKeyFile), "masterKey");
+    source = await sourceText(await readFile(masterKeyFile));
   } catch {
     deps.out(
       "cannot read the master key file: give a readable file holding the master key, or the recovery pack PDF",
@@ -546,13 +566,13 @@ function sharedRefusal(err: unknown): string {
   return "restore failed";
 }
 
-function boundedOpener(deps: CommandDeps): (bucket: BucketConfig) => ObjectStore {
+function boundedOpener(deps: CommandDeps): (bucket: BucketConfig) => RestoreBucketStore {
   return (bucket) =>
-    boundObjectStore((deps.openStore ?? createS3ObjectStore)(bucket), deps.bucketTimeoutMs);
+    boundObjectStore((deps.openStore ?? createS3FolderStore)(bucket), deps.bucketTimeoutMs);
 }
 
 const KEY_DOES_NOT_OPEN =
-  "restore failed: the recovery key in this kit does not open the copy's locked secrets, or they are damaged";
+  "restore failed: the backup's locked secrets could not be opened; try another backup copy";
 
 /** The words for a refusal of the bucket path; null for one it reports as the archive path does. */
 function bucketRefusal(err: AppError): string | null {
@@ -567,16 +587,18 @@ function bucketRefusal(err: AppError): string | null {
   }
   if (hasCode(err, "restore.stream_pointer_unverified")) {
     if (err.params.reason === "key_or_access")
-      return `${failed}the recovery pack does not match this copy, or the bucket login cannot read it; use the pack matching this copy, or correct the bucket access and try again`;
-    return err.params.reason === "signature"
-      ? `${failed}the copy in the bucket was not signed by the key in this kit, so it is not trusted; check that the kit is this venue's newest`
-      : `${failed}the bucket's record of its newest copy names a different venue from this kit`;
+      return `${failed}check that this copy matches the master key and the storage credentials can read it`;
+    return `${failed}the backup's pointer did not pass its signature check; choose another backup`;
+  }
+  if (hasCode(err, "restore.stream_folder_required")) {
+    const advice = `${failed}give the backup's specific folder with --prefix, then run the command again`;
+    const folders = err.params.folders.map((folder) => JSON.stringify(folder)).join(", ");
+    return folders === "" ? advice : `${advice}. Folders found: ${folders}`;
   }
   const words: Partial<Record<string, string>> = {
     "restore.stream_disk_full":
       "the disk filled while the copy was downloading; nothing on this server changed. Free some space and run it again",
-    "restore.stream_pointer_missing":
-      "the bucket holds no copy for the venue this kit names; check that the kit is this venue's",
+    "restore.stream_pointer_missing": "no backup copy was found; check the bucket and folder",
     "restore.stream_integrity_failed":
       "the downloaded copy did not pass its checks; try again, or choose another backup",
     "restore.stream_state_missing":
@@ -588,46 +610,61 @@ function bucketRefusal(err: AppError): string | null {
     "backup.stream_restore_failed":
       "the copy could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket, and that this server's disk and state folder can be written, then run it again",
     "backup.stream_request_failed":
-      "the bucket did not answer, or refused the kit's key; check this server's network and that the bucket and its key still exist",
+      "the bucket did not answer or refused access; check the network, bucket and storage credentials",
   };
   const said = words[err.code];
   return said === undefined ? null : failed + said;
 }
 
-/** The recovery key and the bucket's secret come from the kit; no printed line carries its text. */
+async function commandBucket(
+  deps: CommandDeps,
+  location: BucketLocation,
+  credentialsFile: string | undefined,
+): Promise<BucketConfig | null> {
+  let environment: Env = deps.env;
+  if (credentialsFile !== undefined) {
+    try {
+      environment = parseEnvFile(await readFile(credentialsFile, "utf8"));
+    } catch {
+      deps.out("restore failed: give a readable bucket credentials file");
+      return null;
+    }
+  }
+  const accessKeyId = readVariable(environment, "WAITRON_RESTORE_BUCKET_ACCESS_KEY_ID");
+  const secretAccessKey = readVariable(environment, "WAITRON_RESTORE_BUCKET_SECRET_ACCESS_KEY");
+  if (isUnset(accessKeyId) || isUnset(secretAccessKey)) {
+    deps.out(
+      "restore failed: set WAITRON_RESTORE_BUCKET_ACCESS_KEY_ID and WAITRON_RESTORE_BUCKET_SECRET_ACCESS_KEY in the environment or bucket credentials file",
+    );
+    return null;
+  }
+  try {
+    return readBucketConfig({ ...location, accessKeyId, secretAccessKey }, (field) => {
+      throw new AppError("backup.stream_config_unsafe", { field });
+    });
+  } catch (error) {
+    deps.out(
+      error instanceof AppError && hasCode(error, "backup.stream_config_unsafe")
+        ? `restore failed: check the bucket setting ${error.params.field}`
+        : sharedRefusal(error),
+    );
+    return null;
+  }
+}
+
 async function runBucketRestore(
   deps: CommandDeps,
-  args: Extract<ParsedArgs, { kitPath: string }>,
+  args: Extract<ParsedArgs, { bucket: BucketLocation }>,
 ): Promise<number> {
-  const { kitPath, confirmedTaxId, oldBoxGone, soleRecovery } = args;
-  let source: Source;
-  try {
-    source = await sourceText(await readFile(kitPath), "bucketCode");
-  } catch {
-    deps.out(`cannot read recovery pack or kit file: ${kitPath}`);
+  const { confirmedTaxId, oldBoxGone, soleRecovery } = args;
+  const bucket = await commandBucket(deps, args.bucket, args.credentialsFile);
+  if (bucket === null) return 1;
+  const masterKey = await readMasterKey(deps, args.masterKeyFile);
+  if (masterKey === null) return 1;
+  if (masterKey === undefined) {
+    deps.out("restore failed: set WAITRON_MASTER_KEY or give --master-key-file");
     return 1;
   }
-  if ("refused" in source) {
-    deps.out(source.refused);
-    return 1;
-  }
-  const kitText = source.text;
-  let kit: RecoveryKit;
-  try {
-    kit = parseRecoveryKit(kitText);
-  } catch (err) {
-    deps.out(
-      hasCode(err as AppError, "backup.stream_kit_invalid") &&
-        (err as AppError<"backup.stream_kit_invalid">).params.reason === "not_found"
-        ? "restore failed: backup.stream_kit_invalid — the file holds no recovery kit; give the recovery pack PDF or kit file saved for this venue"
-        : hasCode(err as AppError, "backup.stream_kit_invalid") &&
-            (err as AppError<"backup.stream_kit_invalid">).params.reason === "version"
-          ? "restore failed: backup.stream_kit_invalid — this bucket recovery code was made before this version of Waitron and cannot be used; choose a newer recovery pack, or restore an archive backup"
-          : "restore failed: backup.stream_kit_invalid — the recovery kit in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole kit file as it was saved",
-    );
-    return 1;
-  }
-  const masterKey = envMasterKey(deps);
   const resolved = await resolveRestoreTarget(deps, masterKey);
   if (typeof resolved === "number") return resolved;
   const { target, hold } = resolved;
@@ -638,7 +675,8 @@ async function runBucketRestore(
     try {
       await (deps.restoreStream ?? restoreFromStream)({
         ...target,
-        kit,
+        bucket,
+        masterKey,
         oldBoxGone,
         litestreamBin: resolveLitestreamBin(deps.env),
         openStore: boundedOpener(deps),
@@ -670,7 +708,7 @@ async function runBucketRestore(
       deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));
       return 1;
     }
-    deps.out(`restored from the bucket named in ${kitPath}`);
+    deps.out("restored from the bucket");
     return 0;
   } finally {
     hold.release();
@@ -679,18 +717,10 @@ async function runBucketRestore(
 
 type Source = { text: string } | { refused: string };
 
-const NO_CODE: Record<"bucketCode" | "masterKey", string> = {
-  bucketCode:
-    "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
-  masterKey:
-    "restore failed: the recovery pack PDF does not hold the master key; give the pack that holds it, or a file with the key",
-};
-
 /**
- * A kit or pack text file as it is; a recovery pack PDF answers the one code this path needs,
- * read from its attached file — never from its drawn text, where a long code wraps.
+ * Read the key from a text file or the PDF's attachment, where it stays whole.
  */
-async function sourceText(bytes: Uint8Array, code: keyof typeof NO_CODE): Promise<Source> {
+async function sourceText(bytes: Uint8Array): Promise<Source> {
   if (!looksLikePdf(bytes)) return { text: Buffer.from(bytes).toString("utf8") };
   let pack: RecoveryPackFile;
   try {
@@ -699,10 +729,14 @@ async function sourceText(bytes: Uint8Array, code: keyof typeof NO_CODE): Promis
     return {
       refused:
         err instanceof RecoveryPackFileError && err.reason === "not_a_pack"
-          ? "restore failed: the PDF is not a Waitron recovery pack; give the venue's recovery pack PDF, or the kit or pack file saved for this venue"
+          ? "restore failed: the PDF is not a Waitron recovery pack; give the venue's recovery pack PDF or a file with the master key"
           : "restore failed: the recovery pack PDF is damaged, or was changed after it was made; use the pack PDF as it was saved",
     };
   }
-  const text = pack[code];
-  return text === null ? { refused: NO_CODE[code] } : { text };
+  return pack.masterKey === null
+    ? {
+        refused:
+          "restore failed: the recovery pack PDF does not hold the master key; give the pack that holds it, or a file with the key",
+      }
+    : { text: pack.masterKey };
 }

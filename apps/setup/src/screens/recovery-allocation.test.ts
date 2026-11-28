@@ -5,7 +5,9 @@ import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import {
   REVIEWED_CREDENTIALS,
   REVIEWED_PREVIEW,
+  REVIEWED_BUCKET,
   cleanupWidgets,
+  enterBucket,
   enterRecoveryDetails,
   mountWidget,
   typeMasterKey,
@@ -29,10 +31,7 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-/**
- * Reviews a copy on the file restore screen, whose master key normally also authorises, or on the
- * bucket screen, where the allocation asks for the copy's master key itself.
- */
+/** Reviews a copy on the file or bucket screen. */
 async function selected(extra: Record<string, unknown> = {}, kind: "file" | "bucket" = "file") {
   const api = new SetupApi("", async () => new Response(JSON.stringify({ ...preview, ...extra })));
   const { el, host } =
@@ -45,7 +44,7 @@ async function selected(extra: Record<string, unknown> = {}, kind: "file" | "buc
       new File(["encrypted"], "selected.backup"),
     );
     await typeMasterKey(el, nodeKey);
-  } else change(el, "kit", "outside-recovery-kit");
+  } else enterBucket(el);
   await el.updateComplete;
   const copy = el.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
   await copy.updateComplete;
@@ -56,6 +55,17 @@ async function selected(extra: Record<string, unknown> = {}, kind: "file" | "buc
   await entry!.updateComplete;
   return { el, host, copy, entry: entry! };
 }
+
+async function selectedWithSeparateKey() {
+  const selectedCopy = await selected({}, "bucket");
+  const { el, copy, entry } = selectedCopy;
+  Object.assign(el, { invalidField: "nodeRecoverySecret" });
+  await el.updateComplete;
+  await copy.updateComplete;
+  await entry.updateComplete;
+  return selectedCopy;
+}
+
 function change(el: LitElement, field: string, value: string) {
   const input = el.shadowRoot!.querySelector(`[data-test=${field}]`)!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
@@ -79,7 +89,7 @@ async function keyField(entry: LitElement) {
 }
 
 it("pairs the public recovery record with the selected copy's separate master key", async () => {
-  const { entry } = await selected({}, "bucket");
+  const { entry } = await selectedWithSeparateKey();
   expect(entry.readCredentials()).toBeNull();
   await fill(entry);
   expect(entry.readCredentials()).toEqual({
@@ -130,7 +140,7 @@ it("uses the prepared stream digest rather than the generation's display locator
   expect(entry.readCredentials()).toBeNull();
 });
 it("requires the master key and both operator confirmations after entering a record", async () => {
-  const { entry } = await selected({}, "bucket");
+  const { entry } = await selectedWithSeparateKey();
   change(entry, "record", JSON.stringify(operation));
   expect(entry.readCredentials()).toBeNull();
   await entry.updateComplete;
@@ -248,7 +258,7 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
             point: { id: "point", venueId: "venue", capturedAt: preview.createdAt, modules: {} },
           },
         });
-  if (kind === "bucket") change(el, "kit", "outside-recovery-kit");
+  if (kind === "bucket") enterBucket(el);
   await el.updateComplete;
   const copy = el.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
   await copy.updateComplete;
@@ -278,10 +288,16 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
     recoveryOperation: operation,
     nodeRecoverySecret: nodeKey,
   });
+  if (kind === "bucket")
+    expect(detail.request).toMatchObject({
+      bucket: REVIEWED_BUCKET.bucket,
+      masterKey: REVIEWED_BUCKET.masterKey,
+      selectedSourceId: "stream:generation",
+    });
 });
 
 it("allocation draws the master-key field labelled Master key with no hint, and sends its printed key", async () => {
-  const { entry } = await selected({}, "bucket");
+  const { entry } = await selectedWithSeparateKey();
   const key = entry.shadowRoot!.querySelector<
     LitElement & { keyName?: string; maxPdfBytes?: number }
   >("wt-master-key-input");
@@ -333,5 +349,5 @@ it("a key refused twice shows the refusal's line both times", async () => {
   Object.assign(el, { invalidField: undefined });
   await el.updateComplete;
   await refuse();
-  await vi.waitFor(() => expect(field.error).toBe(WRONG_KEY));
+  await vi.waitFor(async () => expect((await keyField(entry)).error).toBe(WRONG_KEY));
 });

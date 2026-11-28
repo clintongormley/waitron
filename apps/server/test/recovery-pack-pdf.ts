@@ -103,7 +103,7 @@ export function withDigest(pdf: Uint8Array, digest: string): Uint8Array {
 }
 
 export const NOT_A_PACK =
-  "restore failed: the PDF is not a Waitron recovery pack; give the venue's recovery pack PDF, or the kit or pack file saved for this venue";
+  "restore failed: the PDF is not a Waitron recovery pack; give the venue's recovery pack PDF or a file with the master key";
 export const PACK_DAMAGED =
   "restore failed: the recovery pack PDF is damaged, or was changed after it was made; use the pack PDF as it was saved";
 
