@@ -1,7 +1,7 @@
 # CORRECT-FULL-INVOICE: giving money back on a full invoice files a corrective full invoice
 
 Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Give money
-back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b landed as #4483 (`30fc335b78`); PR 4a is built on `feat/correct-full-invoice-goes-out`. Design:
+back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448 (`059f606cd9`); PR 3 landed as #4496 (`8e8349ba4d`); PR 2b landed as #4483 (`30fc335b78`); PR 4a is built on `feat/correct-full-invoice-goes-out`, and PR 4a-choice (staff choose the way on the give-back form, not stored; the owner's ask of 2026-11-28 05:53, cleared by the watcher 06:02) on `feat/correct-full-invoice-choose-way`. Design:
 [2026-11-25-correct-full-invoice-design.md](../specs/2026-11-25-correct-full-invoice-design.md), with the
 owner's answers at the end of its section 6. FISCAL: the owner lands every pull request.
 
@@ -319,6 +319,8 @@ corrective. Failing first: email, retry, each refused where an F1's button is. *
 no till screen sends them until PR 5.
 
 ## PR 5 — staff can change it (till)
+
+_2026-11-28 (PR 4a-choice): the give-back form already offers **Change** for a corrective full invoice, and the press carries `correctiveDelivery`; it is not stored, so until PR 4b only a corrective filed during the press goes the chosen way._
 
 **Task 16.** The Delivery field and email box move from `invoice-recipient-dialog.ts` to
 `widgets/invoice-delivery-choice.ts`; that dialog's tests pass unedited.

@@ -336,8 +336,11 @@ unit price) are built, and with PR 4a the corrective goes out once, when it is f
 filing till: by email to the address the invoice went to, when the box can send invoice email then;
 on that till's own A4 invoice printer when the invoice went on A4 and the printer is switched on;
 otherwise on that till's receipt printer when its profile may print receipts, and otherwise not at
-all; PR 4b (staff's choice stored and tried again) and PR 5 (staff can change it on the
-till) are still to come.
+all. Since PR 4a-choice, staff can choose another printer or email address on the give-back form,
+and the choice holds only when the corrective is filed during the Give back press; one filed later
+(a late card answer, the background check, File now) still goes the original's way, because the
+choice is not stored. PR 4b (staff's choice stored and tried again) and the rest of PR 5 are still
+to come.
 
 ## When the business e-invoicing regime starts
 
