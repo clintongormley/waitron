@@ -802,7 +802,7 @@ describe("till-menu-browser", () => {
       );
     });
 
-    it("breaks a word longer than the tile inside the tile, rather than letting it spill out", async () => {
+    it("ends a word longer than the tile in a whole “…” inside the tile, on one line, rather than breaking it or letting it spill out", async () => {
       const long = product("long", "Supercalifragilisticexpialidocious");
       const { el, host } = await mount({
         menu: lunch({ structure: { members: [member("long")] } }),
@@ -814,11 +814,22 @@ describe("till-menu-browser", () => {
         "structure",
         "Supercalifragilisticexpialidocious",
       ).getBoundingClientRect();
+      const name = entries(el, "structure")[0]!.querySelector<HTMLElement>(".name")!;
+      const own = name.getBoundingClientRect();
       const text = document.createRange();
-      text.selectNodeContents(entries(el, "structure")[0]!.querySelector(".name")!);
-      const name = text.getBoundingClientRect();
-      expect(name.left).toBeGreaterThanOrEqual(tile.left);
-      expect(name.right).toBeLessThanOrEqual(tile.right);
+      text.selectNodeContents(name);
+      const boxes = [...text.getClientRects()].filter((box) => box.width > 0);
+      expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1);
+      // Chromium draws a cut line's text as a second, shortened box, the "…" after it.
+      expect(boxes).toHaveLength(2);
+      const drawn = boxes.reduce((a, b) => (a.width < b.width ? a : b));
+      const pen = document.createElement("canvas").getContext("2d")!;
+      pen.font = getComputedStyle(name).font;
+      expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+      expect(drawn.left).toBeGreaterThanOrEqual(own.left);
+      expect(drawn.right + pen.measureText("…").width).toBeLessThanOrEqual(own.right);
+      expect(own.left).toBeGreaterThanOrEqual(tile.left);
+      expect(own.right).toBeLessThanOrEqual(tile.right);
     });
 
     it("shows fewer columns where a tile would be too narrow, in the same order", async () => {
@@ -1069,16 +1080,16 @@ describe("till-menu-browser", () => {
     const original = currentContentLanguages();
     afterEach(() => setContentLanguages(original));
 
-    it("a product button's name carries the venue's default content language and hyphenates", async () => {
+    it("a product button's name carries the venue's default content language and is never hyphenated", async () => {
       setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
       const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
       const productName = root(el).querySelector<HTMLElement>(
         '[data-region="shortcuts"] wt-button[data-kind="product"] .name',
       )!;
       expect(productName.getAttribute("lang")).toBe("es");
-      expect(getComputedStyle(productName).hyphens).toBe("auto");
-      // A word under 8 letters is never hyphenated, so it stays whole where it fits.
-      expect(getComputedStyle(productName).getPropertyValue("hyphenate-limit-chars")).toBe("8");
+      expect(getComputedStyle(productName).hyphens).toBe("manual");
+      expect(getComputedStyle(productName).overflowWrap).toBe("normal");
+      expect(getComputedStyle(productName).wordBreak).toBe("normal");
       const sectionName = root(el).querySelector<HTMLElement>(
         '[data-region="shortcuts"] wt-button[data-kind="section"] .name',
       )!;
@@ -3218,7 +3229,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       await page.viewport(viewport.width, viewport.height);
     }
   });
-  it("a colour tile's name keeps clear of its number: narrowed on both sides only while counted, still centred, at most two lines, its tile no taller", async () => {
+  it("a colour tile's name keeps clear of its number: its first line narrowed only while counted and centred in what is left, later lines centred, at most two lines, its tile no taller", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -3257,7 +3268,21 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
             const box = words.getBoundingClientRect();
             const outer = tile.getBoundingClientRect();
             // Lines past the second are laid out but hidden; the cut line has a second box.
-            const shown = [...words.getClientRects()].filter((line) => line.top < own.bottom);
+            const shown = [...words.getClientRects()].filter(
+              (line) => line.width > 0 && line.top < own.bottom,
+            );
+            const top = Math.min(...shown.map((line) => line.top));
+            const first = shown.filter((line) => Math.abs(line.top - top) < 1);
+            const later = shown.filter((line) => Math.abs(line.top - top) >= 1);
+            const look = getComputedStyle(name);
+            // The room the first line is centred in: the name's, less the count's room beside it.
+            const firstRoomCentre =
+              (own.left +
+                parseFloat(look.paddingLeft) +
+                own.right -
+                parseFloat(look.paddingRight) -
+                (parseFloat(getComputedStyle(name, "::before").width) || 0)) /
+              2;
             return {
               name: dish.name,
               width: Math.round(box.width),
@@ -3268,6 +3293,16 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
               clearStart: box.left - outer.left,
               clearEnd: outer.right - box.right,
               inside: box.left >= own.left && box.right <= own.right,
+              firstClearEnd: outer.right - Math.max(...first.map((line) => line.right)),
+              firstOffCentre:
+                (Math.min(...first.map((line) => line.left)) +
+                  Math.max(...first.map((line) => line.right))) /
+                  2 -
+                firstRoomCentre,
+              laterFromCentre: later.map(
+                (line) => (line.left + line.right - outer.left - outer.right) / 2,
+              ),
+              cut: name.scrollHeight > name.clientHeight,
               clearOfNumber: badge(tile)
                 ? shown.every((line) => !overlaps(badge(tile)!.getBoundingClientRect(), line))
                 : null,
@@ -3297,17 +3332,18 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       expect(reach).toBeGreaterThan(0);
       for (const [index, dish] of counted.entries()) {
         const before = uncounted[index]!;
-        expect(dish.clearStart, `${dish.name} clear of the number's reach`).toBeGreaterThanOrEqual(
-          reach,
-        );
-        expect(dish.clearEnd, `${dish.name} clear of the number's reach`).toBeGreaterThanOrEqual(
-          reach,
-        );
-        expect(Math.abs(dish.clearStart - dish.clearEnd), dish.name).toBeLessThan(1);
+        expect(
+          dish.firstClearEnd,
+          `${dish.name}'s first line clear of the number's reach`,
+        ).toBeGreaterThanOrEqual(reach);
+        // Off the tile's centre by half the count's room: centred in the room the count leaves.
+        expect(Math.abs(dish.firstOffCentre), dish.name).toBeLessThan(1);
+        if (!dish.cut)
+          for (const offset of dish.laterFromCentre)
+            expect(Math.abs(offset), dish.name).toBeLessThan(1);
         expect(dish.inside, `${dish.name} inside its tile`).toBe(true);
         expect(dish.width, dish.name).toBeLessThanOrEqual(before.width);
         expect(dish.lines, dish.name).toBeLessThanOrEqual(2);
-        expect(dish.fromCentre, dish.name).toBe(0);
         expect(dish.height, dish.name).toBe(before.height);
         expect(dish.clearOfNumber, `${dish.name} clear of its number`).toBe(true);
       }

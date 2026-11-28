@@ -82,50 +82,48 @@ export const menuTileStyles: CSSResult = css`
     align-items: center;
     min-width: 0;
     text-align: center;
-    overflow-wrap: break-word;
   }
 
   /* A centred column item is as wide as its longest word, so without this a word wider than the
-     tile would spill out of it instead of breaking. */
+     tile would widen the name past the tile instead of ending in "…". */
   .label > * {
     max-width: 100%;
   }
 
   /* Two lines at most, so a tile never grows; the whole name stays in the text that screen readers
-     and the information window read. */
+     and the information window read. A word is never broken: one too wide for a line ends in "…". */
   .name {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
+    text-overflow: ellipsis;
+    /* Chromium centres a cut line without its "…", which then reaches up to half its width past
+       the line; even room on both sides keeps it inside and the name centred. */
     --name-ellipsis-room: calc(var(--wt-font-size-md) / 2);
-    padding-inline-start: var(--name-ellipsis-room);
+    padding-inline: var(--name-ellipsis-room);
     font-size: var(--wt-font-size-md);
     font-weight: var(--wt-font-weight-bold);
   }
 
-  /* Chromium centres a cut line without its "…", which then reaches up to half its width past the
-     line; this strip and the start padding keep it inside (end padding would count as overflow). */
-  .name::before {
+  /* With the end padding, the count's reach into the tile, from the width the count publishes,
+     beside the first line only; the tile's own padding covers the ring. */
+  .tile[data-in-order] .name::before {
     content: "";
     float: inline-end;
-    width: var(--name-ellipsis-room);
-    height: 100vh;
+    width: max(
+      0px,
+      var(--count-badge-width, var(--wt-space-5)) - var(--count-outside) - var(--name-ellipsis-room)
+    );
+    height: 1lh;
   }
 
-  /* The count's reach into the tile, from the width the count publishes, on both sides so the name
-     stays centred; the tile's own padding covers the ring. */
-  .tile[data-in-order] .name {
-    --name-count-room: calc(var(--count-badge-width, var(--wt-space-5)) - var(--count-outside));
-    padding-inline: calc(var(--name-count-room) + var(--name-ellipsis-room)) var(--name-count-room);
-  }
-
-  .name[lang] {
-    hyphens: auto;
-    /* No hyphen in a word under 8 letters, so a short word that fits a line stays whole; a longer
-       one can still be hyphenated where it would fit on the next line. */
-    hyphenate-limit-chars: 8 auto auto;
+  /* Something for the first line to hold, so a first word too wide to sit beside the count starts
+     the second line instead of pushing every line below the count. */
+  .name-start {
+    display: inline-block;
+    vertical-align: top;
   }
 
   /* A set leading, not the font's own, which is taller in some fonts (Noto Sans's is 1.36 of the

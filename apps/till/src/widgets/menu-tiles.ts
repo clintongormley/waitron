@@ -67,7 +67,9 @@ export function dishTile(
           : nothing
       }
       <span class="name" lang=${currentContentLanguages().defaultLanguage}
-        >${productName(product)}</span
+        >${counted > 0 ? html`<span class="name-start"></span>` : nothing}${productName(
+          product,
+        )}</span
       >
       <span class="price">${productTilePrice(product)}</span>
       ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}

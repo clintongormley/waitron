@@ -48,9 +48,14 @@ describe("menu tile styles", () => {
   it("keeps a counted name clear of a count at its narrowest until the count says how wide it is", async () => {
     const name = (await drawTile(390, true)).querySelector<HTMLElement>(".name")!;
     const style = getComputedStyle(name);
-    // 24 px count less the 6 px outside the tile, plus half the 14 px name size at the start for "…".
-    expect(style.paddingInlineEnd).toBe("18px");
-    expect(style.paddingInlineStart).toBe("25px");
+    const room = getComputedStyle(name, "::before");
+    // Half the 14 px name size each side for "…"; beside the first line, the rest of the 24 px
+    // count less the 6 px outside the tile.
+    expect(style.paddingInlineStart).toBe("7px");
+    expect(style.paddingInlineEnd).toBe("7px");
+    expect(room.float).toBe("inline-end");
+    expect(room.width).toBe("11px");
+    expect(room.height).toBe(`${name.getBoundingClientRect().height}px`);
   });
 });
 

@@ -65,7 +65,8 @@ it.each(
         const bounds = content.getBoundingClientRect();
         expect(bounds.left).toBeGreaterThanOrEqual(box.left);
         expect(bounds.right).toBeLessThanOrEqual(box.right);
-        expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+        if (content.classList.contains("name")) expectNameDrawnInside(content);
+        else expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
       }
     }
   },
@@ -1558,3 +1559,26 @@ it("keeps the staff unit abbreviation on a menu preview tile with empty customer
     `${formatMoney("3.00", currentLocale())}/ss`,
   );
 });
+
+/** Whatever `name` draws stays inside it: an end padding is the room it keeps for a "…", which
+ * Chromium counts as overflow, and a word too wide for any line ends in a "…" drawn after the
+ * shortened box Chromium gives the cut text. */
+function expectNameDrawnInside(name: HTMLElement): void {
+  const look = getComputedStyle(name);
+  const room = name.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+  const pen = document.createElement("canvas").getContext("2d")!;
+  pen.font = look.font;
+  const words = name.textContent!.match(/\S+/g)!;
+  if (words.every((word) => pen.measureText(word).width <= room)) {
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth + parseFloat(look.paddingRight));
+    return;
+  }
+  const own = name.getBoundingClientRect();
+  const text = document.createRange();
+  text.selectNodeContents(name);
+  const shown = [...text.getClientRects()].filter((box) => box.width > 0 && box.top < own.bottom);
+  const drawn = shown.reduce((a, b) => (a.width < b.width ? a : b));
+  expect(look.textOverflow).toBe("ellipsis");
+  expect(drawn.left).toBeGreaterThanOrEqual(own.left);
+  expect(drawn.right + pen.measureText("…").width).toBeLessThanOrEqual(own.right);
+}

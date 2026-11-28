@@ -289,24 +289,37 @@ describe("menu tiles", () => {
         const own = name.getBoundingClientRect();
         const words = document.createRange();
         words.selectNodeContents(name);
-        const shown = [...words.getClientRects()].filter((line) => line.top < own.bottom);
+        const shown = [...words.getClientRects()].filter(
+          (line) => line.width > 0 && line.top < own.bottom,
+        );
         expect(new Set(shown.map((line) => Math.round(line.top))).size).toBe(2);
         for (const line of shown) {
           const overlap = Math.min(line.right, drawn.right) - Math.max(line.left, drawn.left);
           const apart = overlap <= 0 || drawn.bottom <= line.top || line.bottom <= drawn.top;
           expect(apart, `line overlaps the count by ${overlap.toFixed(1)} px`).toBe(true);
         }
-        // However the words wrap, no line can reach past the name's padding.
+        // However the words wrap, no line can reach under the count: the first beside the room
+        // kept for it, a later one below that room.
         const look = getComputedStyle(name);
+        const room = getComputedStyle(name, "::before");
         const textRight = own.right - parseFloat(look.paddingRight);
+        const firstRight = textRight - parseFloat(room.width);
         expect(
-          textRight <= drawn.left || drawn.bottom <= own.top,
-          `the name's text room overlaps the count by ${(textRight - drawn.left).toFixed(1)} px`,
+          firstRight <= drawn.left || drawn.bottom <= own.top,
+          `the first line's room overlaps the count by ${(firstRight - drawn.left).toFixed(1)} px`,
+        ).toBe(true);
+        expect(
+          drawn.bottom <= own.top + parseFloat(room.height) || textRight <= drawn.left,
+          `later lines' room overlaps the count by ${(drawn.bottom - own.top - parseFloat(room.height)).toFixed(1)} px`,
         ).toBe(true);
         const outer = dish.getBoundingClientRect();
         const first = shown[0]!;
+        // Centred in the room the count leaves it, so off the tile's centre by half that room.
         expect(
-          Math.abs((first.left + first.right) / 2 - (outer.left + outer.right) / 2),
+          Math.abs(
+            (first.left + first.right) / 2 -
+              (own.left + parseFloat(look.paddingLeft) + firstRight) / 2,
+          ),
         ).toBeLessThan(1);
         expect(Math.abs((own.left + own.right) / 2 - (outer.left + outer.right) / 2)).toBeLessThan(
           1,
@@ -315,6 +328,93 @@ describe("menu tiles", () => {
         expect(drawn.top).toBeGreaterThanOrEqual(grid.top);
         expect(drawn.right).toBeLessThanOrEqual(grid.right);
         if (scale === 100) expect(outer.height).toBe(width < 720 ? 76 : 84);
+      } finally {
+        cleanupWidgets();
+        await resetPage();
+      }
+    },
+  );
+
+  it.each(
+    [
+      { width: 390, height: 844, pane: undefined },
+      // A pane as narrow as the till's beside its order, for tiles about 105 px wide.
+      { width: 844, height: 390, pane: 340 },
+      { width: 1280, height: 800, pane: undefined },
+    ].flatMap((size) => [100, 130].map((scale) => ({ ...size, scale }))),
+  )(
+    "never splits a counted name inside a word, keeping a word that fits a line whole and ending one that does not in a whole “…”, at $width px (pane $pane) and $scale% text",
+    async ({ width, height, pane, scale }) => {
+      const names = [
+        "Bravas",
+        "Croquettes",
+        "House red",
+        "Golden prawns",
+        "Tomato toast",
+        "Hamburguesa completa",
+        "Extraordinariamenteextralargapalabra",
+      ];
+      const dishes = names.map((name, index) => product(`n${index}`, name));
+      try {
+        await pageAt(width, height, scale);
+        const { el, host } = await inPhoneFont(
+          mountWidget<TillMenuBrowser>("till-menu-browser", {
+            menu: {
+              ...menu,
+              structure: { members: dishes.map((dish) => member(dish.id.slice(2))) },
+            },
+            products: dishes,
+            store: new WorkingOrderStore(),
+            inOrder: new Map(dishes.map((dish, index) => [dish.id, index === 1 ? 12 : 2])),
+          }),
+        );
+        if (pane !== undefined) host.style.width = `${pane}px`;
+        await nextPaint();
+        for (const dish of dishes) {
+          const shown = tile(el, dish.name);
+          const name = shown.querySelector<HTMLElement>(".name")!;
+          const own = name.getBoundingClientRect();
+          const look = getComputedStyle(name);
+          const room =
+            name.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+          const pen = document.createElement("canvas").getContext("2d")!;
+          pen.font = look.font;
+          const text = [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+          expect(text.textContent).toBe(dish.name);
+          const tops = new Set<number>();
+          for (const word of dish.name.matchAll(/\S+/g)) {
+            const range = document.createRange();
+            range.setStart(text, word.index);
+            range.setEnd(text, word.index + word[0].length);
+            const boxes = [...range.getClientRects()].filter(
+              (box) => box.width > 0 && box.top < own.bottom,
+            );
+            const lines = new Set(boxes.map((box) => Math.round(box.top)));
+            expect(lines.size, `${dish.name}: "${word[0]}" on one line`).toBeLessThanOrEqual(1);
+            for (const top of lines) tops.add(top);
+            const drawn = Math.min(...boxes.map((box) => box.width));
+            if (dish.name === word[0] && pen.measureText(word[0]).width <= room) {
+              // A one-word name that fits a line is never cut, beside the count or below it.
+              expect(lines.size, dish.name).toBe(1);
+              expect(drawn, `${dish.name}: "${word[0]}" whole`).toBeGreaterThan(
+                pen.measureText(word[0]).width - 1,
+              );
+            }
+            if (boxes.length > 0 && pen.measureText(word[0]).width > room) {
+              // Chromium draws a cut line's text as a second, shortened box, the "…" after it.
+              const cut = boxes.find((box) => box.width === drawn)!;
+              expect(drawn, `${dish.name} cut`).toBeLessThan(room);
+              expect(cut.left, dish.name).toBeGreaterThanOrEqual(own.left);
+              expect(cut.right + pen.measureText("…").width, dish.name).toBeLessThanOrEqual(
+                own.right,
+              );
+            }
+          }
+          expect(tops.size, dish.name).toBeGreaterThan(0);
+          expect(tops.size, dish.name).toBeLessThanOrEqual(2);
+          if (scale === 100)
+            expect(shown.getBoundingClientRect().height, dish.name).toBe(width < 720 ? 76 : 84);
+        }
       } finally {
         cleanupWidgets();
         await resetPage();
@@ -386,7 +486,15 @@ describe("menu tiles", () => {
         const outer = shown.getBoundingClientRect();
         const reach = outer.right - box.left;
         expect(box.width, dish.name).toBe(24);
-        expect(getComputedStyle(shown.querySelector(".name")!).paddingInlineEnd).toBe(`${reach}px`);
+        const name = shown.querySelector(".name")!;
+        const room = getComputedStyle(name, "::before");
+        expect(parseFloat(getComputedStyle(name).paddingInlineEnd) + parseFloat(room.width)).toBe(
+          reach,
+        );
+        expect(parseFloat(room.height)).toBeCloseTo(
+          [...lines.getClientRects()].find((line) => line.width > 0)!.height,
+          0,
+        );
         expect(outer.height, dish.name).toBe(height);
         cleanupWidgets();
       }

@@ -300,6 +300,8 @@ interface DrawnName {
   /** The name's own box, which its text must stay inside. */
   box: HTMLElement;
   text: HTMLElement;
+  /** A tile's name, which ends a line it cannot fit in "…" rather than breaking a word. */
+  tile: boolean;
 }
 
 function drawnNames(el: HTMLElement): DrawnName[] {
@@ -312,22 +314,36 @@ function drawnNames(el: HTMLElement): DrawnName[] {
       name: `tile ${text.textContent!.trim()}`,
       box: text,
       text,
+      tile: true,
     })),
     ...lines.map((text) => ({
       name: `bill ${text.textContent!.trim()}`,
       box: text.closest<HTMLElement>(".name")!,
       text,
+      tile: false,
     })),
   ];
 }
 
-/** Each name whose text runs outside its own box, with that box's width. */
+/** Each name whose drawn text runs outside its own box, with that box's width. Chromium draws a
+ * line a tile cuts as a second, shortened box, its "…" after it. */
 function overflows(names: DrawnName[]): string[] {
-  return names.flatMap(({ name, box: own, text }) => {
+  return names.flatMap(({ name, box: own, text, tile }) => {
     const edge = own.getBoundingClientRect();
-    const out = textRects(text).some(
-      (rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5,
-    );
+    const pen = document.createElement("canvas").getContext("2d")!;
+    pen.font = getComputedStyle(text).font;
+    const lines = new Map<number, DOMRect[]>();
+    for (const rect of textRects(text).filter((each) => !tile || each.top < edge.bottom)) {
+      const top = Math.round(rect.top);
+      lines.set(top, [...(lines.get(top) ?? []), rect]);
+    }
+    const out = [...lines.values()].some((boxes) => {
+      if (!tile)
+        return boxes.some((rect) => rect.left < edge.left - 0.5 || rect.right > edge.right + 0.5);
+      const drawn = boxes.reduce((a, b) => (a.width < b.width ? a : b));
+      const end = drawn.right + (boxes.length > 1 ? pen.measureText("…").width : 0);
+      return drawn.left < edge.left - 0.5 || end > edge.right + 0.5;
+    });
     return out ? [`${name} (box ${Math.round(edge.width)}px)`] : [];
   });
 }
@@ -356,7 +372,7 @@ it.each([
   [1280, 800],
   [1024, 768],
 ])(
-  "at %ix%i and 130%, long names under Spanish break only with a hyphen",
+  "at %ix%i and 130%, long names under Spanish stay inside their boxes, a bill line breaking a word only with a hyphen and a tile never",
   async (width, height) => {
     const el = await mountLongNames(width, height, "es");
     const names = drawnNames(el);
@@ -369,15 +385,19 @@ it.each([
       `words on two lines: ${broken.join(", ") || "none"}`,
     ].join("; ");
     expect(over.length, seen).toBe(0);
-    expect(broken.length, seen).toBeGreaterThan(0);
+    expect(
+      broken.filter((word) => word.startsWith("tile ")),
+      seen,
+    ).toEqual([]);
   },
 );
 
-it("the same names under English overflow their boxes", async () => {
+it("the same names under English stay inside their boxes too, no tile breaking a word", async () => {
   const el = await mountLongNames(1280, 800, "en");
   const names = drawnNames(el);
   expect(names.length, "tiles and bill lines drawn").toBe(LONG_NAMES.length + 3);
-  expect(overflows(names).length, navigator.userAgent).toBeGreaterThan(0);
+  expect(overflows(names), navigator.userAgent).toEqual([]);
+  expect(brokenWords(names).filter((word) => word.startsWith("tile "))).toEqual([]);
 });
 
 it("on a 390 px phone, puts the basket under the menu at its width, with each line's price and remove button, the total and the pay buttons whole", async () => {
