@@ -239,6 +239,47 @@ it("reads and approves another person's finished day from a manager's clock-only
   ).toMatchObject([{ personId: venue.personId, recordedByPersonId: managerId }]);
 });
 
+it("sends a change from a manager’s till to the worker without changing their recorded day", async () => {
+  const itemId = await pending();
+  const { cookie } = await managerCookie();
+  const personId = venue.personId;
+  const date = "2026-01-05";
+  const dayPath = `manager/day?personId=${personId}&date=${date}`;
+  const day = await (await request(dayPath, undefined, cookie)).json();
+  const changes = [
+    { target: { entryId: targetId }, at: "2026-01-05T17:30:00.000Z", offsetMinutes: 60 },
+  ];
+  const response = await request(
+    "manager/commands",
+    {
+      action: "propose",
+      personId,
+      date,
+      replaces: itemId,
+      changes,
+      commandId: randomUUID(),
+      expectedRevision: day.revision,
+      reason: "Closed at half past",
+    },
+    cookie,
+  );
+  expect(response.status).toBe(200);
+  const inbox = (await (await request("inbox")).json()) as AttendanceInbox;
+  expect(inbox.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: itemId, status: "overtaken" }),
+      expect.objectContaining({
+        status: "waiting-worker",
+        changes,
+        reason: "Closed at half past",
+        requestedByPersonId: managerId,
+      }),
+    ]),
+  );
+  const after = await (await request(dayPath, undefined, cookie)).json();
+  expect(after.record.sessions).toEqual(day.record.sessions);
+});
+
 it("settles a worker's request as the signed-in manager and scopes receipt recovery to that manager", async () => {
   const itemId = await pending();
   const { cookie } = await managerCookie();

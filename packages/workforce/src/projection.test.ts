@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { dayEditorRows, previewDayMinutes } from "./attendance-day-edit.js";
+import { projectTimeRecord } from "./record-projection.js";
+import type { AttendanceDayView } from "./attendance-contract.js";
 import {
   dailyContractedTargetMinutes,
   localWallClock,
@@ -43,6 +46,48 @@ function entry(
     correctionStatus: opts.correctionStatus,
   };
 }
+
+it("previews corrections to an overnight day using its effective times and paid break rule", () => {
+  const date = "2026-01-05";
+  const initial = entry("p1", "in", "2026-01-05T20:00:00Z", { entryId: "in" });
+  const start = entry("p1", "correction", "2026-01-05T20:30:00Z", {
+    entryId: "corrected-in",
+    correctsEntryId: initial.entryId,
+    correctionStatus: "approved",
+  });
+  const end = entry("p1", "out", "2026-01-06T03:00:00Z", { entryId: "out" });
+  const paidBreakPolicy = { thresholdMinutes: 360, allowanceMinutes: 15, splitGapMinutes: 120 };
+  const record = projectTimeRecord(
+    [initial, start, end].map((time) => ({
+      ...time,
+      recordedByPersonId: "p1",
+      extension: {
+        authorKind: "worker",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    })),
+  );
+  const view: AttendanceDayView = {
+    personId: "p1",
+    date,
+    timeZone: "UTC",
+    revision: "day",
+    record,
+    items: [],
+    paidBreakPolicy,
+  };
+  const rows = dayEditorRows(view, [
+    { target: { entryId: "out" }, at: "2026-01-06T04:00:00Z", offsetMinutes: 0 },
+    { target: { missingKind: "break_start" }, at: "2026-01-06T00:00:00Z", offsetMinutes: 0 },
+    { target: { missingKind: "break_end" }, at: "2026-01-06T00:30:00Z", offsetMinutes: 0 },
+  ]);
+  expect(rows).toHaveLength(4);
+  expect(rows[0]?.target).toEqual({ entryId: "corrected-in" });
+  expect(previewDayMinutes(view, rows)).toBe(435);
+});
 
 describe("localWallClock", () => {
   it("renders the local time with a +01:00 offset, crossing into the next day (art. 34.9 concrete local start)", () => {

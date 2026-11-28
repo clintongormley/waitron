@@ -256,8 +256,9 @@ solicitud. Se envía a los encargados. Consulta su estado en **Mis horas**.
 
 En tu caja, abre **Más** y elige **Por aprobar**. El número indica las solicitudes, los
 desacuerdos y los días terminados que puedes atender desde la caja. En la sección **En desacuerdo**,
-compara el cambio del responsable con la respuesta de la persona. Para editar toda una jornada,
-ábrela en el panel de gestión.
+compara el cambio del responsable con la respuesta de la persona. Para cambiar las horas, pulsa
+**Editar** en una solicitud o un desacuerdo, o abre una fila en **Días terminados**. Cambia las
+horas, comprueba el nuevo total e indica el **Motivo**. Pulsa **Guardar y enviar a** la persona.
 
 En el menú del panel, abre **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
 revisar una solicitud. Pulsa **Editar** para ver toda la jornada, cambiar las horas e indicar el

@@ -13,6 +13,9 @@ import type {
 } from "@waitron/workforce/attendance-contract";
 import "@waitron/ui/src/components/wt-full-screen-panel.js";
 import "@waitron/ui/src/components/wt-top-bar.js";
+import "@waitron/ui/src/components/wt-icon-button.js";
+import "../widgets/attendance-correction-dialog.js";
+import type { ManagerDay } from "./till-hours-day-editor.js";
 import { isNetworkFailure, type TillApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -196,6 +199,9 @@ export class TillHoursApprovalScreen extends LitElement {
         gap: var(--wt-space-2);
         min-block-size: calc(var(--wt-tap-min) - var(--wt-space-1));
       }
+      .day-facts:has([data-edit-day]) {
+        grid-template-columns: calc(3 * var(--wt-space-6)) minmax(0, 1fr) auto auto;
+      }
       .day-facts time,
       .time-range,
       [data-worked] {
@@ -223,6 +229,8 @@ export class TillHoursApprovalScreen extends LitElement {
   @state() private readError = "";
   @state() private actionError = "";
   @state() private pending: AttendanceCommand | null = null;
+  @state() private editor: ManagerDay | null = null;
+  @state() private reasonRefusal = "";
   #lifetime = new AbortController();
 
   override disconnectedCallback(): void {
@@ -235,9 +243,11 @@ export class TillHoursApprovalScreen extends LitElement {
       this.#lifetime.abort();
       this.#lifetime = new AbortController();
       this.queue = this.lookups = this.pending = null;
+      this.editor = null;
       this.readError = this.actionError = "";
       this.reading = this.busy = false;
     }
+    if (!this.active) this.editor = null;
     if (this.active && (changed.has("active") || changed.has("api") || changed.has("personId")))
       void this.refresh();
   }
@@ -330,7 +340,7 @@ export class TillHoursApprovalScreen extends LitElement {
         "hours-approval-count",
         queue.finishedDays.filter((day) => this.#canApprove(day.personId)).length +
           queue.items.filter(
-            (item) => this.#canSettle(item, "approve") || this.#canSettle(item, "decline"),
+            (item) => item.personId !== this.personId || this.#canSettle(item, "approve"),
           ).length,
       );
     } catch (error) {
@@ -347,15 +357,22 @@ export class TillHoursApprovalScreen extends LitElement {
     if (!this.isConnected || !this.active || this.busy || this.reading) return;
     const lifetime = this.#lifetime.signal;
     this.busy = true;
-    this.actionError = "";
+    this.actionError = this.reasonRefusal = "";
     try {
       await operation(lifetime);
     } catch (error) {
       if (lifetime.aborted) return;
-      this.actionError = this.#message(error, false);
-      const code = (error as { code?: string } | null)?.code;
-      if (code === "attendance.state_changed" || code === "correction.not_pending")
+      const refusal = error as { code?: string; params?: { field?: string } } | null;
+      if (this.editor && refusal?.params?.field === "reason")
+        this.reasonRefusal = t("attendance.check_reason");
+      else this.actionError = this.#message(error, false);
+      if (
+        refusal?.code === "attendance.state_changed" ||
+        refusal?.code === "correction.not_pending"
+      ) {
+        this.editor = null;
         await this.refresh();
+      }
     } finally {
       if (!lifetime.aborted) this.busy = false;
     }
@@ -371,6 +388,37 @@ export class TillHoursApprovalScreen extends LitElement {
     if (view.personId !== personId || view.date !== date)
       throw new TypeError("Hours belong to another day");
     return view;
+  }
+
+  #editDay(selection: DaySelection, item?: CorrectionItem): void {
+    if (this.pending || this.editor || selection.personId === this.personId) return;
+    void this.#perform(async (lifetime) => {
+      const view = await this.#readDay(lifetime, selection);
+      if (lifetime.aborted || !this.active) return;
+      const current = view.items.find(
+        ({ id, status }) => id === item?.id && status === item.status,
+      );
+      if (item && !current) throw { code: "attendance.state_changed" };
+      this.editor = { view, item: current, name: this.#name(view.personId).split(" ")[0]! };
+    });
+  }
+
+  #propose(event: CustomEvent<{ changes: AttendanceChange[]; reason: string }>): void {
+    event.stopPropagation();
+    const editor = this.editor;
+    if (!editor || this.pending || editor.view.personId === this.personId) return;
+    void this.#perform((lifetime) =>
+      this.#send(lifetime, {
+        action: "propose",
+        commandId: crypto.randomUUID(),
+        expectedRevision: editor.view.revision,
+        personId: editor.view.personId,
+        date: editor.view.date,
+        ...(editor.item && { replaces: editor.item.id }),
+        changes: event.detail.changes,
+        reason: event.detail.reason,
+      }),
+    );
   }
 
   #settle(item: CorrectionItem, action: "approve" | "decline"): void {
@@ -421,6 +469,7 @@ export class TillHoursApprovalScreen extends LitElement {
     }
     if (lifetime.aborted) return;
     this.pending = null;
+    this.editor = null;
     await this.refresh();
   }
 
@@ -474,16 +523,33 @@ export class TillHoursApprovalScreen extends LitElement {
           : html`${changes}
               <p class="muted">${quotedReason(item.reason)}</p>`
       }
-      ${
-        disputed && !this.#canSettle(item, "approve") && item.personId !== this.personId
-          ? html`<p>${t("hours.edit_in_dashboard")}</p>`
-          : nothing
-      }
       <div class="actions">
         ${this.#canSettle(item, "approve") ? html`<wt-button data-approve-request variant=${blocked || disputed ? "secondary" : "primary"} .disabled=${blocked} @click=${() => this.#settle(item, "approve")}>${disputed ? fill(t("hours.take_worker_time"), { name: firstName }) : t("hours.approve")}</wt-button>` : nothing}
+        ${item.personId !== this.personId ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#editDay({ personId: item.personId, date }, item)}>${t("hours.edit")}</wt-button>` : nothing}
         ${this.#canSettle(item, "decline") ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#settle(item, "decline")}>${t("hours.decline")}</wt-button>` : nothing}
       </div>
     </article>`;
+  }
+
+  #renderEditor() {
+    return this.editor
+      ? html`<till-attendance-correction-dialog
+          .open=${true}
+          .managerDay=${this.editor}
+          .timeZone=${this.editor.view.timeZone}
+          .busy=${this.busy}
+          .blocked=${this.pending !== null}
+          .recovery=${this.pending ? "retry" : null}
+          .error=${this.actionError}
+          .reasonRefusal=${this.reasonRefusal}
+          @correction-save=${this.#propose}
+          @correction-cancel=${() => {
+            this.editor = null;
+            this.actionError = "";
+          }}
+          @retry-attendance-command=${this.#retryCommand}
+        ></till-attendance-correction-dialog>`
+      : nothing;
   }
 
   override render() {
@@ -555,7 +621,7 @@ export class TillHoursApprovalScreen extends LitElement {
                       .join(" · ");
                     const minutes = day.workedMinutes;
                     return html`<li>
-                      <p class="day-facts">
+                      <div class="day-facts">
                         <strong>${this.#name(day.personId)}</strong>
                         <span>
                           <time datetime=${day.date}>${weekdayAndDay(day.date)}</time>
@@ -575,7 +641,18 @@ export class TillHoursApprovalScreen extends LitElement {
                                 >
                               </strong>`
                         }
-                      </p>
+                        ${
+                          day.personId !== this.personId
+                            ? html`<wt-icon-button
+                                data-edit-day
+                                icon="chevron-right"
+                                .label=${fill(t("hours.edit_day"), { name: this.#name(day.personId), date: shortDate(day.date) })}
+                                .disabled=${blocked}
+                                @click=${() => this.#editDay(day)}
+                              ></wt-icon-button>`
+                            : nothing
+                        }
+                      </div>
                       ${
                         !this.#canApprove(day.personId)
                           ? html`<p class="muted">${t("hours.cannot_approve_own")}</p>`
@@ -588,6 +665,7 @@ export class TillHoursApprovalScreen extends LitElement {
             : nothing
         }
       </div>
+      ${this.#renderEditor()}
     </wt-full-screen-panel>`;
   }
 }
