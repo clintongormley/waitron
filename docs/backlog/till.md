@@ -1762,22 +1762,20 @@ finished sales only), is:
   guests left without paying and **Counter orders** the counter orders parked, presented, or paid
   and not handed over; tapping one opens it where it can be paid or handed over. A seated table's
   bill is reached from its table.
-- **The sales list** shows paid sales, full invoices and refunds, newest first, today by default:
-  when, invoice number, type, table or name, method (card with its last four digits), staff,
-  amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
-  card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,
-  and Refund. (2026-11-27, R2a of the [Find a bill plan](../superpowers/plans/2026-11-27-o-r2-find-a-bill.md):
-  search also reads the order number and an amount, and `/api/transactions`'s `type` accepts
-  `corrective`.)
-- **The same table as everywhere else** (owner): `wt-data-table`'s toolbar, search, Filters panel
-  and Customise. The date range is new: a quick list (Today, Yesterday, This business day, Last 7
-  days, This month) plus From and To, as the first control in the Filters panel (its
-  `filters-start` slot). Each active filter also shows as a chip above the table, so the chosen
-  dates stay visible.
-- **Paging, which no table has today** (owner: there could be thousands of rows, never all loaded
-  into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
-  plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
-  table keeps loading everything.
+- **The sales list** shows paid sales, full invoices and refunds, newest first, today by default.
+  Each row shows the time, the table or name, how it was paid (card with its last four digits) and
+  who took it, or a full invoice's customer, and the amount over the invoice number. Search reads
+  invoice number, name, table and the card's last four digits. Tapping a row opens the receipt
+  with Reprint, print in another language, and Refund. (2026-11-27, R2a of the
+  [Find a bill plan](../superpowers/plans/2026-11-27-o-r2-find-a-bill.md): search also reads the
+  order number and an amount, and `/api/transactions`'s `type` accepts `corrective`.)
+- **One search box and a Days chip, not a table** (since R2b-2 of that plan; the handheld design
+  §7.12 replaced the owner's earlier "same table as everywhere else"). The chip offers Today,
+  Yesterday, This business day, Last 7 days, This month, From / To and Any date. Staff and kind
+  filters return as chips in R2b-3; there are no columns, sorting or Customise.
+- **Paging** (owner: there could be thousands of rows, never all loaded into memory). The server
+  does the search, filters and paging and answers one page (50 rows) plus the total count; **Show
+  more** adds the next page, and coming back from a receipt reads the pages shown again.
 
 **2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
 with the original invoice reference, Reprint and access to the original invoice. Refund is offered

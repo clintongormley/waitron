@@ -206,7 +206,9 @@ recibes uno por un cambio que nadie de tu personal ha hecho, revisa la cuenta en
 ## Buscar cuenta {#find-a-bill}
 
 **Buscar cuenta** muestra las ventas terminadas, de la más reciente a la más antigua. Busca por
-número, mesa, nombre, últimas cifras de una tarjeta o un importe, como 80,52. Encima de las ventas,
+número, mesa, nombre, últimas cifras de una tarjeta o un importe, como 80,52. Se abre con las ventas
+de hoy: para una anterior, elige los días en el botón junto a la búsqueda, como **Cualquier fecha** o
+**Desde / Hasta**. **Mostrar más**, al final de la lista, añade las ventas siguientes. Encima de las ventas,
 **Cuentas sin pagar** muestra las cuentas de clientes que se fueron sin pagar, y **Pedidos de
 mostrador**, los pedidos de mostrador aún sin terminar: elige uno para abrirlo.
 

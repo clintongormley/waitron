@@ -10,6 +10,7 @@ import type {
   FindBillDates,
   FindBillOptions,
   TransactionRow,
+  TransactionsPage,
 } from "../api/find-bill-types.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -173,6 +174,7 @@ export class TillFindBillScreen extends LitElement {
       if (changed.has("api") && changed.get("api") !== undefined) {
         this.options = undefined;
         this.rows = [];
+        this.#page = 0;
         this.total = 0;
         this.more = false;
         this.listError = null;
@@ -182,7 +184,7 @@ export class TillFindBillScreen extends LitElement {
         this.corrections = [];
       }
       if (this.active && this.api) {
-        if (this.options) void this.#read();
+        if (this.options) void this.#reread();
         else void this.#loadOptions();
       }
       void this.#loadCorrections();
@@ -202,7 +204,7 @@ export class TillFindBillScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated && this.active) {
-      if (this.options) void this.#read();
+      if (this.options) void this.#reread();
       else void this.#loadOptions();
       void this.#loadCorrections();
       void this.#loadOwed();
@@ -417,6 +419,7 @@ export class TillFindBillScreen extends LitElement {
     this.#cancel();
     this.listError = null;
     this.rows = [];
+    this.#page = 0;
     if (!this.active || !this.options || this.dateInvalid) return;
     this.listLoading = "list";
     if (debounce)
@@ -434,33 +437,63 @@ export class TillFindBillScreen extends LitElement {
     const page = more ? this.#page + 1 : 0;
     this.listError = null;
     this.listLoading = more ? "more" : "list";
-    if (!more) this.rows = [];
+    if (!more) {
+      this.rows = [];
+      this.#page = 0;
+    }
     try {
-      const result = await this.api.listTransactions(
-        {
-          q: this.search,
-          page,
-          sort: { key: "when", direction: "descending" },
-          dates: this.dates,
-        },
-        { signal: controller.signal },
-      );
+      const result = await this.#readPage(page, controller.signal);
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
-      // Paging is by offset, so a sale recorded between reads would come back a second time.
-      const held = new Set(more ? this.rows.map((row) => row.transactionId) : []);
-      this.rows = [
-        ...(more ? this.rows : []),
-        ...result.rows.filter((row) => !held.has(row.transactionId)),
-      ];
-      this.total = result.total;
-      this.#page = page;
-      this.more = (page + 1) * result.pageSize < result.total;
+      this.#take(result, page, more ? this.rows : []);
     } catch {
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
       this.listError = more ? "more" : "list";
     } finally {
       if (generation === this.#generation) this.listLoading = null;
     }
+  }
+  /** Reads every page shown before again, in turn, so a return to the screen keeps staff's place. */
+  async #reread(): Promise<void> {
+    if (!this.options || !this.active || !this.isConnected || this.dateInvalid) return;
+    this.#cancel();
+    const generation = this.#generation;
+    const controller = (this.#controller = new AbortController());
+    const through = this.#page;
+    this.listError = null;
+    this.listLoading = "list";
+    this.rows = [];
+    const read: { result: TransactionsPage; page: number }[] = [];
+    let failed = false;
+    try {
+      for (let page = 0; page <= through; page++) {
+        const result = await this.#readPage(page, controller.signal);
+        if (generation !== this.#generation || !this.active || !this.isConnected) return;
+        read.push({ result, page });
+        if ((page + 1) * result.pageSize >= result.total) break;
+      }
+    } catch {
+      if (generation !== this.#generation || !this.active || !this.isConnected) return;
+      failed = true;
+    } finally {
+      if (generation === this.#generation) this.listLoading = null;
+    }
+    // A visit ended part-way leaves #page alone, so the next visit reads the same pages again.
+    for (const { result, page } of read) this.#take(result, page, this.rows);
+    if (failed) this.listError = read.length === 0 ? "list" : "more";
+  }
+  #readPage(page: number, signal: AbortSignal) {
+    return this.api.listTransactions(
+      { q: this.search, page, sort: { key: "when", direction: "descending" }, dates: this.dates },
+      { signal },
+    );
+  }
+  #take(result: TransactionsPage, page: number, shown: TransactionRow[]): void {
+    // Paging is by offset, so a sale recorded between reads would come back a second time.
+    const held = new Set(shown.map((row) => row.transactionId));
+    this.rows = [...shown, ...result.rows.filter((row) => !held.has(row.transactionId))];
+    this.total = result.total;
+    this.#page = page;
+    this.more = (page + 1) * result.pageSize < result.total;
   }
   #onSearch(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();

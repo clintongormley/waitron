@@ -737,6 +737,117 @@ it("Show more appends the next page once, leaving out a sale it already shows", 
   expect(requests(fetcher).map((url) => url.searchParams.get("page"))).toEqual(["0", "1"]);
   expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
 });
+const pagedSale = (n: number) => transactionRow({ transactionId: `sale-${n}` });
+/** Pages of two of six sales; page 1 repeats page 0's last sale, as an arrival between reads would. */
+const pagedAnswer = (page: number) => ({
+  rows:
+    page === 0
+      ? [pagedSale(1), pagedSale(2)]
+      : page === 1
+        ? [pagedSale(2), pagedSale(3)]
+        : [pagedSale(4), pagedSale(5)],
+  total: 6,
+  page,
+  pageSize: 2,
+  dates: resolvedDates,
+});
+async function showMore(el: Screen, count: number) {
+  const more = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<HTMLElement>("[data-list-more]");
+    expect(found).not.toBeNull();
+    expect(found!.hasAttribute("loading")).toBe(false);
+    return found!;
+  });
+  await userEvent.click(more);
+  await vi.waitFor(() => expect(shown(el)).toHaveLength(count));
+}
+it("a new visit after Show more reads every page shown again in turn, with the same search and days, without repeats", async () => {
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage([])
+          : pagedAnswer(Number(url.searchParams.get("page"))),
+    ),
+  );
+  const { el, fetcher } = await mount(source);
+  await ready(el);
+  await choose(el, "yesterday");
+  await type(el, "fish");
+  await vi.waitFor(() => expect(requests(fetcher).at(-1)!.searchParams.get("q")).toBe("fish"));
+  await ready(el);
+  await showMore(el, 3);
+  await showMore(el, 5);
+  const ids = ["sale-1", "sale-2", "sale-3", "sale-4", "sale-5"];
+  expect(shown(el).map((b) => b.dataset.transaction)).toEqual(ids);
+  expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
+  const before = requests(fetcher).length;
+  const dates = requests(fetcher).at(-1)!.searchParams.get("preset");
+  expect(dates).toBe("yesterday");
+  el.active = false;
+  await el.updateComplete;
+  el.active = true;
+  await el.updateComplete;
+  await vi.waitFor(() => expect(requests(fetcher).length).toBe(before + 3));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const again = requests(fetcher).slice(before);
+  expect(again.map((url) => url.searchParams.get("page"))).toEqual(["0", "1", "2"]);
+  for (const url of again) {
+    expect(url.searchParams.get("q")).toBe("fish");
+    expect(url.searchParams.get("preset")).toBe(dates);
+  }
+  await vi.waitFor(() => expect(shown(el).map((b) => b.dataset.transaction)).toEqual(ids));
+  expect(el.shadowRoot!.querySelector("[data-list-more]")).toBeNull();
+});
+it("a visit ended while its pages are read again ignores their late answers, and the next visit reads them all again", async () => {
+  const pending: {
+    page: number;
+    resolve: (response: Response) => void;
+    signal?: AbortSignal | null;
+  }[] = [];
+  let hold = false;
+  const source = findBillApi(async (url, signal) => {
+    if (url.pathname.endsWith("options")) return json(billOptions);
+    if (url.pathname === "/api/bills") return json(listPage([]));
+    const page = Number(url.searchParams.get("page"));
+    if (!hold) return json(pagedAnswer(page));
+    return new Promise((resolve) => pending.push({ page, resolve, signal }));
+  });
+  const { el, fetcher } = await mount(source);
+  await ready(el);
+  await showMore(el, 3);
+  hold = true;
+  el.active = false;
+  await el.updateComplete;
+  el.active = true;
+  await el.updateComplete;
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
+  pending[0]!.resolve(json(pagedAnswer(0)));
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  expect(pending[1]!.page).toBe(1);
+  el.active = false;
+  await el.updateComplete;
+  expect(pending[1]!.signal!.aborted).toBe(true);
+  pending[1]!.resolve(json(pagedAnswer(1)));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await el.updateComplete;
+  expect(pending).toHaveLength(2);
+  hold = false;
+  const before = requests(fetcher).length;
+  el.active = true;
+  await el.updateComplete;
+  await vi.waitFor(() => expect(requests(fetcher).length).toBe(before + 2));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(
+    requests(fetcher)
+      .slice(before)
+      .map((url) => url.searchParams.get("page")),
+  ).toEqual(["0", "1"]);
+  await vi.waitFor(() =>
+    expect(shown(el).map((b) => b.dataset.transaction)).toEqual(["sale-1", "sale-2", "sale-3"]),
+  );
+});
 it("offers no Show more when every sale is shown, and says when nothing matches", async () => {
   const { el } = await mount(answering([transactionRow()], 1));
   await ready(el);

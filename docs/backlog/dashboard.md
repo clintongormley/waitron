@@ -70,7 +70,7 @@ Observed on 25 November 2026 on the box at `https://waitron.local`. On a Mac, a 
 - Products stays on its current read. The nested extras editor uses the whole catalogue for its
   picker and for saved items. Folder counts, move selections and delete warnings also use
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
-- Find a bill retains its existing request state until its own adoption.
+- Find a bill no longer uses a table: it pages its own list with Show more (R2b-2).
 
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 

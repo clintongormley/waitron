@@ -26611,7 +26611,7 @@ describe("A737 Find a bill page", () => {
     expect(pageOf(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
   });
-  it("reads an orderless historical receipt by sale ID and returns to the same search without altering the basket", async () => {
+  it("reads an orderless historical receipt by sale ID and returns to the same search and rows without altering the basket", async () => {
     const getTransactionReceipt = vi.fn().mockResolvedValue({
       ...saleResult,
       invoiceType: "F1",
@@ -26620,7 +26620,11 @@ describe("A737 Find a bill page", () => {
     });
     const originalRead = vi.fn();
     const listTransactions = vi.fn(async (query: { page: number }) => ({
-      ...listPage([transactionRow()], 101, query.page),
+      ...listPage(
+        [query.page === 0 ? transactionRow({ transactionId: "sale-0" }) : transactionRow()],
+        101,
+        query.page,
+      ),
       dates: resolvedDates,
     }));
     const { el, counter, view } = await open({
@@ -26656,11 +26660,15 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() =>
       expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, q: "0091 " }),
     );
-    await userEvent.click(
-      page.elementLocator(
-        view.shadowRoot!.querySelector<HTMLElement>('button[data-transaction="sale-1"]')!,
-      ),
-    );
+    const later = await vi.waitFor(() => {
+      const found = view.shadowRoot!.querySelector<HTMLElement>(
+        'button[data-transaction="sale-1"]',
+      );
+      expect(found, "the row Show more added").not.toBeNull();
+      return found!;
+    });
+    const calledBefore = listTransactions.mock.calls.length;
+    await userEvent.click(page.elementLocator(later));
     await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
     expect(getTransactionReceipt.mock.calls[0]![0]).toBe("sale-1");
     const receipt = ticket(el)!;
@@ -26686,9 +26694,16 @@ describe("A737 Find a bill page", () => {
     expect(view.shadowRoot!.querySelector('wt-input[name="search"]')).toBe(field);
     expect(counter.store.lines[0]!.quantity).toBe("2");
     await vi.waitFor(() =>
-      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 0, q: "0091 " }),
+      expect(
+        [...view.shadowRoot!.querySelectorAll<HTMLElement>("button[data-transaction]")].map(
+          (row) => row.dataset.transaction,
+        ),
+      ).toEqual(["sale-0", "sale-1"]),
     );
-    expect(search.value).toBe("0091 ");
+    expect(listTransactions.mock.calls.slice(calledBefore).map(([query]) => query)).toMatchObject([
+      { page: 0, q: "0091 " },
+      { page: 1, q: "0091 " },
+    ]);
     expect(search.value).toBe("0091 ");
   });
   it("ignores a historical receipt answered after Back", async () => {
@@ -28648,12 +28663,19 @@ describe("A737 post-invoice refund integration", () => {
       },
     );
 
-    it("money given back keeps the search and days, reading their first page again, while leaving the basket intact", async () => {
+    it("money given back keeps the search, days and rows shown while leaving the basket intact", async () => {
       let searchRequested!: () => void;
       const searchRequest = new Promise<void>((resolve) => (searchRequested = resolve));
       const listTransactions = vi.fn(async (query: { page: number; q: string }) => {
         if (query.q === "0091 ") searchRequested();
-        return { ...listPage([transactionRow()], 101, query.page), dates: resolvedDates };
+        return {
+          ...listPage(
+            [query.page === 0 ? transactionRow({ transactionId: "sale-0" }) : transactionRow()],
+            101,
+            query.page,
+          ),
+          dates: resolvedDates,
+        };
       });
       const { el, view, basket } = await open({ ...giving(), listTransactions });
       emit(ticket(el)!, "back-to-find-bill");
@@ -28681,11 +28703,15 @@ describe("A737 post-invoice refund integration", () => {
         sort: { key: "when", direction: "descending" },
         dates: { preset: "today" },
       });
-      await userEvent.click(
-        page.elementLocator(
-          view.shadowRoot!.querySelector<HTMLElement>('button[data-transaction="sale-1"]')!,
-        ),
-      );
+      const later = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>(
+          'button[data-transaction="sale-1"]',
+        );
+        expect(found, "the row Show more added").not.toBeNull();
+        return found!;
+      });
+      const calledBefore = listTransactions.mock.calls.length;
+      await userEvent.click(page.elementLocator(later));
       await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
       await pressGoodwill(el);
       await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
@@ -28695,9 +28721,15 @@ describe("A737 post-invoice refund integration", () => {
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
       expect(view.shadowRoot!.querySelector('wt-input[name="search"]')).toBe(field);
-      await vi.waitFor(() =>
-        expect(listTransactions.mock.calls.at(-1)![0]).toEqual({ ...before, page: 0 }),
-      );
+      const rows = () =>
+        [...view.shadowRoot!.querySelectorAll<HTMLElement>("button[data-transaction]")].map(
+          (row) => row.dataset.transaction,
+        );
+      await vi.waitFor(() => expect(rows()).toEqual(["sale-0", "sale-1"]));
+      expect(listTransactions.mock.calls.slice(calledBefore).map(([query]) => query)).toEqual([
+        { ...before, page: 0 },
+        before,
+      ]);
       expect(search.value).toBe("0091 ");
       expect(basket.store.lines[0]!.quantity).toBe("2");
     });

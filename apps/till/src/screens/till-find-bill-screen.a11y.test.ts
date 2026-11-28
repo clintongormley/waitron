@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui/src/components/wt-icon.js";
 import { DROPDOWN_ICONS } from "@waitron/ui/src/components/wt-combobox.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   billOptions,
   billRow,
@@ -102,6 +102,59 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
       await choose("this-month");
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector("[data-list-error]")).not.toBeNull(),
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+  it.each(["en-GB", "es-ES"])(
+    "a search matching sales by their amount, with the amount highlighted, in %s",
+    async (language) => {
+      setLocale(language);
+      await page.viewport(390, 844);
+      const { api } = findBillApi(async (url) =>
+        url.pathname.endsWith("options")
+          ? json(billOptions)
+          : url.pathname === "/api/bills"
+            ? json(listPage([]))
+            : json({
+                ...listPage(
+                  url.searchParams.get("q") === "80.52"
+                    ? [
+                        transactionRow({
+                          transactionId: "amount",
+                          amountMatch: "amount",
+                          amount: "80.52",
+                        }),
+                        transactionRow({
+                          transactionId: "amount-2",
+                          amountMatch: "amount",
+                          amount: "80.52",
+                          type: "sale",
+                          methods: [{ method: "cash", last4: null }],
+                          tableName: "Terrace 4",
+                        }),
+                      ]
+                    : [transactionRow()],
+                  url.searchParams.get("q") === "80.52" ? 2 : 1,
+                ),
+                dates: resolvedDates,
+              }),
+      );
+      const { el, host } = await mountWidget<TillFindBillScreen>(
+        "till-find-bill-screen",
+        { api, active: true },
+        theme,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelectorAll("button[data-transaction]")).toHaveLength(1),
+      );
+      const field = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+      await userEvent.fill(field.shadowRoot!.querySelector("input")!, "80.52");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelectorAll("button[data-transaction] .hl")).toHaveLength(2),
+      );
+      expect(el.shadowRoot!.querySelector("[data-order-label]")!.textContent).toBe(
+        t("find_page.amount_match"),
       );
       await expectNoA11yViolations(host);
     },
