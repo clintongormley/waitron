@@ -3917,11 +3917,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export assigns tables to a counter. On the original box, choose Table service for that zone or remove its tables in Floor plans. Export the configuration again.",
+      "This export assigns tables to a counter. On the original box, set each zone with tables to Table service, then export the configuration again.",
     ],
     [
       "es-ES",
-      "Esta exportación asigna mesas a un mostrador. En el servidor de origen, elige Servicio de mesa para esa zona o retira sus mesas en Planos de sala. Vuelve a exportar la configuración.",
+      "Esta exportación asigna mesas a un mostrador. En el servidor de origen, elige Servicio de mesa para cada zona con mesas y vuelve a exportar la configuración.",
     ],
   ] as const)(
     "shows how to fix tables assigned to a counter in an export (%s)",

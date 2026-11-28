@@ -3015,6 +3015,19 @@ describe("till-app", () => {
         el.shadowRoot!.querySelector<HTMLElement>(`[data-refresh-notice="${list}"]`)!;
       const stationsOf = (el: TillApp) => (el as unknown as { stations: unknown[] }).stations;
 
+      it("says there are no open orders only after both Counter lists answer", async () => {
+        const held = deferred<HeldOrderSummary[]>();
+        const el = await logIn("till", { listWorkingOrders: vi.fn(() => held.promise) });
+        try {
+          await openCounterFloor(el);
+          expect(counterFloor(el)).not.toBeUndefined();
+          expect(counterFloor(el)!.textContent).not.toContain(t("counter.floor_empty"));
+        } finally {
+          held.resolve([]);
+        }
+        await expect.poll(() => counterFloor(el)?.textContent).toContain(t("counter.floor_empty"));
+      });
+
       it("a held-orders read that never answers still installs the kitchen stations, waiting list and staff at sign-in", async () => {
         let release!: (rows: HeldOrderSummary[]) => void;
         const held = new Promise<HeldOrderSummary[]>((done) => (release = done));

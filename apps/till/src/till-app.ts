@@ -4153,6 +4153,7 @@ export class TillApp extends LitElement {
   /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
   @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = NO_REFRESH_RETRIES;
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
+  readonly #counterListsAnswered = new Set<RefreshList>();
   #refreshGeneration: Record<RefreshList, number> = {
     held: 0,
     waiting: 0,
@@ -6193,6 +6194,7 @@ export class TillApp extends LitElement {
       limit?.done();
     }
     if (request !== this.#refreshGeneration[list] || replaced()) return;
+    this.#counterListsAnswered.add(list);
     install();
     this.#endRefreshRetry(list);
   }
@@ -6315,6 +6317,7 @@ export class TillApp extends LitElement {
   #abandonListRefreshes(): void {
     this.#refreshGeneration.held++;
     this.#refreshGeneration.waiting++;
+    this.#counterListsAnswered.clear();
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
     this.refreshRetries = NO_REFRESH_RETRIES;
@@ -23663,6 +23666,7 @@ export class TillApp extends LitElement {
         .selectedFilters=${this.selectedFilters}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
+        .ordersAnswered=${this.#counterListsAnswered.size === 2 && this.refreshRetries.held === undefined && this.refreshRetries.waiting === undefined}
         .counterFloor=${this.showCounterFloor}
         .live=${this.#live}
         .refreshFloorOrders=${this.#refreshCounterFloorOrders}

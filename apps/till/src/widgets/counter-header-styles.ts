@@ -51,6 +51,10 @@ export const counterHeaderStyles = css`
       flex: 1 0 max-content;
       max-inline-size: 100%;
     }
+
+    .head[data-counter-transfers] .session {
+      margin-inline-start: auto;
+    }
   }
 
   .counter-shortcuts.edge-fade {

@@ -233,6 +233,7 @@ export class TillCounterScreen extends LitElement {
   @state() private floorBasket = false;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
+  @property({ type: Boolean }) ordersAnswered = false;
   /** The floor, which a held order's Move to table lists. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
@@ -503,6 +504,7 @@ export class TillCounterScreen extends LitElement {
         .tables=${this.tables}
         .zones=${this.zones}
         .waiting=${this.counterWaiting}
+        .ordersAnswered=${this.ordersAnswered}
         .canEditKitchenNote=${this.canEditKitchenNote}
         .canMoveStation=${this.canMoveStation}
         @counter-new-order=${() => {

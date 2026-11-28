@@ -950,13 +950,15 @@ export class TillShell extends LitElement {
     if (this.#zonePopup()?.matches(":popover-open")) return;
     const head = this.renderRoot.querySelector<HTMLElement>(".head");
     const strip = head?.querySelector<HTMLElement>(".till-strip");
+    const session = head?.querySelector<HTMLElement>(".session");
     const box = head?.querySelector<HTMLElement>(":scope > wt-venue-logo.counter-logo");
-    if (!head || !strip || !box) {
+    if (!head || !strip || !session || !box) {
       this.counterLogoRoom = false;
       return;
     }
     const logoWidth = box.getBoundingClientRect().width;
-    const gap = parseFloat(getComputedStyle(head).columnGap) || 0;
+    const style = getComputedStyle(head);
+    const gap = parseFloat(style.columnGap) || 0;
     const rects = [...head.querySelectorAll(counterStripItems)].map((child) =>
       child.getBoundingClientRect(),
     );
@@ -964,8 +966,16 @@ export class TillShell extends LitElement {
       rects.length === 0
         ? 0
         : Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+    // Wrapping can give the strip a whole row; the logo must still fit beside the session.
     const stripWidth =
-      strip.getBoundingClientRect().width + (box.hasAttribute("data-room") ? logoWidth + gap : 0);
+      head.hasAttribute("data-counter-transfers") && style.flexWrap === "wrap"
+        ? head.clientWidth -
+          parseFloat(style.paddingInlineStart) -
+          parseFloat(style.paddingInlineEnd) -
+          session.getBoundingClientRect().width -
+          gap
+        : strip.getBoundingClientRect().width +
+          (box.hasAttribute("data-room") ? logoWidth + gap : 0);
     this.counterLogoRoom = logoWidth > 0 && content + logoWidth + gap <= stripWidth;
   }
 

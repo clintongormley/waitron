@@ -52,11 +52,15 @@ export function fit(
     parseFloat(styles.getPropertyValue("--wt-space-1"));
   const minimum = tap / smallestEdge;
   const widthFit = (size.width - 2 * inset) / crop.width;
+  const heightFit = (size.height - 2 * inset) / crop.height;
   const preferred =
-    size.width > size.height
-      ? (size.height - 2 * inset) / crop.height
-      : Math.max(fitScale(crop, size), 2.5 * minimum);
-  const scale = Math.max(minimum, Math.min(widthFit, preferred));
+    size.width > size.height ? heightFit : Math.max(fitScale(crop, size), 2.5 * minimum);
+  // A small plan can fit without growing its smallest seat to fill the screen.
+  const seatScale = (2 * tap + parseFloat(styles.getPropertyValue("--wt-space-2"))) / smallestEdge;
+  const scale = Math.max(
+    minimum,
+    Math.min(widthFit, preferred, heightFit >= seatScale ? seatScale : Infinity),
+  );
   return { scale, minimum, inset };
 }
 

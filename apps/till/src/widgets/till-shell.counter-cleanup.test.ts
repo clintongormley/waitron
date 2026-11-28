@@ -112,6 +112,11 @@ it.each([
         const shown = transfer.closest(".till-strip")!.getBoundingClientRect();
         expect(button.left).toBeGreaterThanOrEqual(shown.left);
         expect(button.right).toBeLessThanOrEqual(shown.right + 0.5);
+        const head = el.shadowRoot!.querySelector("header")!;
+        const session = head.querySelector(".session")!;
+        const right =
+          head.getBoundingClientRect().right - parseFloat(getComputedStyle(head).paddingRight);
+        expect(session.getBoundingClientRect().right).toBeCloseTo(right, 0);
       });
     } finally {
       setLocale(before.locale);
