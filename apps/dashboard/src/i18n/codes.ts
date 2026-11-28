@@ -18,6 +18,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Another menu already uses this address.",
     es: "Otra carta ya usa esta dirección.",
   },
+  "customer_menu.style_name_taken": {
+    en: "Another style already uses this name.",
+    es: "Otro estilo ya usa este nombre.",
+  },
   "customer_menu.not_published": {
     en: "Publish the menu from Preview before switching it on.",
     es: "Publica la carta desde Vista previa antes de activarla.",

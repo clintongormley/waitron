@@ -243,14 +243,19 @@ export class MenuApi {
       "GET",
     );
   }
-  getCustomerStyle(id: string): Promise<CustomerMenuStyle> {
+  getCustomerStyles(id: string): Promise<CustomerMenuStyle[]> {
     return this.#request(`/management-api/menus/${encodeURIComponent(id)}/customer-style`, "GET");
   }
-  saveCustomerStyle(id: string, appearance: CustomerMenuAppearance): Promise<CustomerMenuStyle> {
+  saveCustomerStyle(
+    id: string,
+    styleId: string,
+    appearance: CustomerMenuAppearance,
+    name?: string,
+  ): Promise<CustomerMenuStyle> {
     return this.#request(
       `/management-api/menus/${encodeURIComponent(id)}/customer-style`,
-      "PUT",
-      appearance,
+      name === undefined ? "PUT" : "POST",
+      { styleId, appearance, name },
     );
   }
   getMenuHome(menuId: string): Promise<MenuHome> {

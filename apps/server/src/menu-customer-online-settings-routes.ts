@@ -13,15 +13,20 @@ import {
 import type { Hono } from "hono";
 import type { GatedWork } from "./content-translations-api.js";
 import { run } from "./menu-api-errors.js";
-import { object, requireUuidParam } from "./menu-request-fields.js";
+import { bodyId, object, requireUuidParam } from "./menu-request-fields.js";
 
 function settingsOf(value: unknown): CustomerMenuOnlineSettings {
-  const { enabled, address, photos } = object(value, "body");
+  const { enabled, address, photos, styleId } = object(value, "body");
   if (typeof enabled !== "boolean")
     throw new AppError("management.request_invalid", { field: "enabled" });
   if (address !== null && typeof address !== "string")
     throw new AppError("management.request_invalid", { field: "address" });
-  return { enabled, address, photos: requireEnum(photos, "photos", CUSTOMER_MENU_PHOTO_SIZES) };
+  return {
+    enabled,
+    address,
+    photos: requireEnum(photos, "photos", CUSTOMER_MENU_PHOTO_SIZES),
+    styleId: styleId === null ? null : bodyId(styleId, "styleId"),
+  };
 }
 
 export function mountMenuCustomerOnlineSettingsRoutes(

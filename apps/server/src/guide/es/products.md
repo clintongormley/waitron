@@ -452,9 +452,14 @@ Publica la carta desde su pestaña **Vista previa** antes de activarla. Elige **
 o **Grandes** para ver cómo quedan las fotos y pulsa **Guardar**. En el móvil, alterna entre
 **Ajustes** y **Vista previa** dentro de **Carta para clientes**.
 
-Elige **Cambiar…** en **Estilo** para editar los colores y tipos de letra predeterminados.
-Comprueba la vista previa y los nombres de las otras cartas que cambiarán. Después pulsa
-**Guardar estilo**. Puedes conservar la edición publicada.
+Elige **Cambiar…** en **Estilo** para probar un estilo en la vista previa. Para aplicarlo,
+pulsa **Usar estilo** y luego **Guardar** en la pestaña. Elige **Usar el estilo predeterminado
+del local** para seguir el estilo del local.
+
+Si cambias los colores o los tipos de letra, comprueba qué otras cartas comparten el estilo
+antes de pulsar **Guardar estilo**. Si elegiste otro estilo, guarda la pestaña para aplicarlo.
+Elige **Guardar como estilo nuevo…** para dar un nombre a otro estilo y aplicarlo a esta carta en
+el momento. Puedes cambiar el estilo sin volver a publicar la carta.
 
 En la vista previa para clientes, elige **Ordenador** para ver la carta más ancha o **Móvil** para
 revisar la lista. En el móvil, desplaza la vista **Ordenador** hacia los

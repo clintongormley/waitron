@@ -2,7 +2,11 @@ import { LeaveController, registerIcons } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { CustomerMenuAppearance, CustomerMenuOnlineSettings } from "@waitron/shared";
+import type {
+  CustomerMenuAppearance,
+  CustomerMenuOnlineSettings,
+  CustomerMenuStyle,
+} from "@waitron/shared";
 import type { DashboardApi } from "../api/client.js";
 import type { MenuReadPart } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -32,7 +36,12 @@ class OnlineSettingsLeaveApp extends LitElement {
 }
 customElements.define("online-settings-leave-app", OnlineSettingsLeaveApp);
 
-const initial: CustomerMenuOnlineSettings = { enabled: false, address: "lunch", photos: "large" };
+const initial: CustomerMenuOnlineSettings = {
+  enabled: false,
+  address: "lunch",
+  photos: "large",
+  styleId: null,
+};
 const status = {
   state: "current",
   version: 1,
@@ -43,15 +52,26 @@ const status = {
 
 async function open(
   save = vi.fn(async (_id: string, value: CustomerMenuOnlineSettings) => value),
-  getSettings: () => Promise<CustomerMenuOnlineSettings> = async () => initial,
+  getSettings?: () => Promise<CustomerMenuOnlineSettings>,
   tag = "online-settings-leave-app",
 ) {
-  let appearance: CustomerMenuAppearance = { pageColor: "#fbf7ef" };
-  const style = () => ({
-    name: "Default",
-    appearance,
-    affectedMenus: [{ id: "dinner", name: "Dinner" }],
-  });
+  let stored = initial;
+  const styles: CustomerMenuStyle[] = [
+    {
+      id: "default",
+      isDefault: true,
+      name: "Default",
+      appearance: { pageColor: "#fbf7ef" },
+      affectedMenus: [{ id: "dinner", name: "Dinner" }],
+    },
+    {
+      id: "terrace",
+      isDefault: false,
+      name: "Terrace",
+      appearance: { pageColor: "#1f2928" },
+      affectedMenus: [],
+    },
+  ];
   const api = {
     listMenus: async () => [{ id: "menu", name: "Lunch", active: true }],
     listLibraryProducts: async () => [],
@@ -70,22 +90,38 @@ async function open(
     getMenuRead(id: string, parts: readonly MenuReadPart[]) {
       return menuReadFixture(this as unknown as DashboardApi, id, parts);
     },
-    getCustomerOnlineSettings: getSettings,
-    saveCustomerOnlineSettings: save,
-    getCustomerStyle: async () => style(),
-    saveCustomerStyle: async (_id: string, value: CustomerMenuAppearance) => {
-      appearance = value;
-      return style();
+    getCustomerOnlineSettings: () => getSettings?.() ?? Promise.resolve(stored),
+    saveCustomerOnlineSettings: async (id: string, value: CustomerMenuOnlineSettings) => {
+      stored = await save(id, value);
+      return stored;
+    },
+    getCustomerStyles: async () => [...styles],
+    saveCustomerStyle: async (
+      _id: string,
+      styleId: string,
+      appearance: CustomerMenuAppearance,
+      name?: string,
+    ) => {
+      if (name !== undefined) {
+        const copy = { id: "white-terrace", isDefault: false, name, appearance, affectedMenus: [] };
+        styles.push(copy);
+        stored = { ...stored, styleId: copy.id };
+        return copy;
+      }
+      const index = styles.findIndex(({ id }) => id === styleId);
+      const style = { ...styles[index]!, appearance };
+      styles[index] = style;
+      return style;
     },
     getCustomerPreview: async () => ({
       state: "published",
-      appearance,
+      appearance: styles.find(({ id }) => id === (stored.styleId ?? "default"))?.appearance,
       menu: { name: "Lunch for guests", language: "en", languages: ["en"], members: [] },
     }),
   } as unknown as DashboardApi;
   history.replaceState(null, "", "/menus/menu/menu/view/customer-menu");
   const { el: app, host } = await mountWidget<OnlineSettingsLeaveApp>(tag, { api });
-  return { app, host, save };
+  return { app, host, save, styles };
 }
 
 const online = () => page.getByRole("switch", { name: "Online", exact: true });
@@ -112,6 +148,9 @@ it("previews the default style draft and updates the tab after Save style", asyn
   const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
   const save = page.getByRole("button", { name: "Save style", exact: true });
   await expect.element(dialog).toBeVisible();
+  await expect
+    .element(page.getByText(t("form.fix_fields")), { timeout: 1500 })
+    .not.toBeInTheDocument();
   await expect
     .poll(() => {
       const menu = editor
@@ -445,4 +484,91 @@ it("takes no change into the draft while a save is being sent", async () => {
   written.resolve({ ...initial, address: "dinner" });
   await expect.element(saveButton()).toBeDisabled();
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
+async function discardTabChanges(app: OnlineSettingsLeaveApp): Promise<void> {
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+}
+
+async function chooseStyle(name: string): Promise<void> {
+  await styleButton().click();
+  await page.getByRole("combobox", { name: "Style Use venue default", exact: true }).click();
+  await page.getByRole("option", { name, exact: true }).click();
+}
+
+it("previews a draft choice, restores it on Cancel, and reads the saved style on reload", async () => {
+  const { app, save, styles } = await open();
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+  const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
+  await chooseStyle("Terrace");
+  await expect.poll(() => canvasColor(editor)).toBe("rgb(31, 41, 40)");
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(251, 247, 239)");
+  await page.getByRole("button", { name: "Use style", exact: true }).click();
+  await expect.element(styleDialog()).not.toBeInTheDocument();
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(31, 41, 40)");
+  await discardTabChanges(app);
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(251, 247, 239)");
+  await expect.element(saveButton()).toBeDisabled();
+  expect(save).not.toHaveBeenCalled();
+
+  await chooseStyle("Terrace");
+  await page.getByRole("button", { name: "Use style", exact: true }).click();
+  await expect.element(styleDialog()).not.toBeInTheDocument();
+  await saveButton().click();
+  await expect.element(saveButton()).toBeDisabled();
+  expect(save).toHaveBeenCalledExactlyOnceWith("menu", { ...initial, styleId: "terrace" });
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(31, 41, 40)");
+  const terrace = styles.find(({ id }) => id === "terrace")!;
+  terrace.appearance = { pageColor: "#ffffff" };
+  await screen.querySelector("dashboard-menu-online-preview")!.reload();
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+});
+
+it.each([
+  { name: "Terrace", styleId: "terrace" },
+  { name: "Default", styleId: "default" },
+])(
+  "stages the explicitly picked $name style when its colours are saved",
+  async ({ name, styleId }) => {
+    const { app, save } = await open();
+    const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+    await chooseStyle(name);
+    await pageColor().fill("#ffffff");
+    await page.getByRole("button", { name: "Save style", exact: true }).click();
+    await expect.element(styleDialog()).not.toBeInTheDocument();
+    await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+    expect(save).not.toHaveBeenCalled();
+    await saveButton().click();
+    expect(save).toHaveBeenCalledExactlyOnceWith("menu", { ...initial, styleId });
+  },
+);
+
+it("uses a newly named style immediately and keeps an unsaved address", async () => {
+  const { app, save } = await open();
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+  await address().fill("lunch-today");
+  await styleButton().click();
+  await pageColor().fill("#ffffff");
+  await page.getByRole("button", { name: "Save as new style…", exact: true }).click();
+  await page.getByRole("textbox", { name: "Style name" }).fill("White terrace");
+  await page.getByRole("button", { name: "Save as new style", exact: true }).click();
+  await expect.element(styleDialog()).not.toBeInTheDocument();
+  await expect.element(page.getByText("White terrace", { exact: true })).toBeVisible();
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+  await expect.element(address()).toHaveValue("lunch-today");
+  await discardTabChanges(app);
+  await expect.element(address()).toHaveValue("lunch");
+  await expect.element(page.getByText("White terrace", { exact: true })).toBeVisible();
+  await expect.element(saveButton()).toBeDisabled();
+  expect(save).not.toHaveBeenCalled();
+  await address().fill("lunch-today");
+  await saveButton().click();
+  expect(save).toHaveBeenCalledExactlyOnceWith("menu", {
+    ...initial,
+    address: "lunch-today",
+    styleId: "white-terrace",
+  });
 });

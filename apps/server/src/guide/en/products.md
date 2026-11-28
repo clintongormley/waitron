@@ -416,9 +416,13 @@ menu's **Preview** tab before switching it on. Choose **None**, **Small** or **L
 photos will look, then choose **Save**. On a phone, switch between **Settings** and **Preview**
 within **Customer menu**.
 
-Choose **Change…** in **Style** to edit the default colours and fonts. Check the preview and
-the names of the other menus that will change, then choose **Save style**. You can keep the
-published edition as it is.
+Choose **Change…** in **Style** to try a style in the preview. Choose **Use style**, then
+**Save** on the tab to apply it. Choose **Use venue default** to follow the venue’s default style.
+
+After editing colours or fonts, check which other menus share the style before choosing
+**Save style**. If you picked a different style, save the tab to apply your choice. Choose
+**Save as new style…** to name a separate style and apply it to this menu straight away. You can
+change styles without publishing the menu again.
 
 In the customer menu preview, choose **Computer** for a wider view or **Phone** to review the list.
 On a phone, scroll the **Computer** preview sideways to see the full menu width.

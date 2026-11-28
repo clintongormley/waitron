@@ -173,7 +173,8 @@ export {
 export {
   checkedCustomerMenuAppearance,
   customerMenuAppearanceFor,
-  defaultCustomerMenuStyle,
+  readCustomerMenuStyles,
+  writeCustomerMenuStyle,
 } from "./customer-menu-styles.js";
 export { duplicateMenu } from "./menu-copy.js";
 export {

@@ -1,7 +1,9 @@
 import {
   CUSTOMER_MENU_PHOTO_SIZES,
   isCustomerMenuAddress,
+  type CustomerMenuAppearance,
   type CustomerMenuOnlineSettings,
+  type CustomerMenuStyle,
   type CustomerMenuPhotoSize,
 } from "@waitron/shared";
 import {
@@ -80,12 +82,19 @@ export const menuOnlineStyles = css`
   }
 `;
 
+export interface CustomerStyleChange {
+  action: "pick" | "copy" | "edit";
+  styleId: string | null;
+  style: CustomerMenuStyle;
+}
+
 type OnlineView = "settings" | "preview";
 
 export class MenuOnlineSave implements ReactiveController {
   #menuId: string | null = null;
   #generation = 0;
   #saved: CustomerMenuOnlineSettings | null = null;
+  #pickedStyle?: { id: string | null; appearance: CustomerMenuAppearance };
   #scope?: DraftScope<boolean>;
   #refusal: unknown;
   #loadFailed = false;
@@ -127,7 +136,8 @@ export class MenuOnlineSave implements ReactiveController {
       saved !== null &&
       (draft.enabled !== saved.enabled ||
         draft.address !== saved.address ||
-        draft.photos !== saved.photos)
+        draft.photos !== saved.photos ||
+        draft.styleId !== saved.styleId)
     );
   }
 
@@ -161,6 +171,7 @@ export class MenuOnlineSave implements ReactiveController {
     this.#generation++;
     this.pendingWrite = undefined;
     this.#saved = null;
+    this.#pickedStyle = undefined;
     this.#loadFailed = false;
     this.view = "preview";
     this.#restore();
@@ -182,6 +193,24 @@ export class MenuOnlineSave implements ReactiveController {
       this.#loadFailed = true;
       this.host.requestUpdate();
     }
+  }
+
+  get savedStyleId(): string | null | undefined {
+    return this.#saved?.styleId;
+  }
+
+  get draftAppearance(): CustomerMenuAppearance | undefined {
+    const id = this.draft?.styleId;
+    return id !== this.savedStyleId && this.#pickedStyle?.id === id
+      ? this.#pickedStyle?.appearance
+      : undefined;
+  }
+
+  styleChanged({ action, styleId, style }: CustomerStyleChange): void {
+    if (!this.draft || !this.#saved || this.pendingWrite) return;
+    this.#pickedStyle = { id: styleId, appearance: style.appearance };
+    if (action === "copy") this.#saved = { ...this.#saved, styleId };
+    this.#edit({ styleId });
   }
 
   #edit(change: Partial<CustomerMenuOnlineSettings>): void {

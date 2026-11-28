@@ -6330,7 +6330,9 @@ Another tab drops that segment. Returning to Structure puts the remembered selec
 current address without a new history entry. Leaving a dirty Structure tab asks before discarding
 its draft.
 
-Customer menu shows the published Online preview. On a wide editor, Computer fits the column beside
+Customer menu shows the published Online preview. **Use style** stages the choice for the tab’s
+Save and updates the preview. **Save as new style…** assigns the new style immediately and keeps
+other edits on the tab. On a wide editor, Computer fits the column beside
 Settings. In the narrow editor, Computer can scroll inside the preview to show its wider layout.
 Phone uses the narrower canvas. The language picker changes the content and
 its price formatting. Search matches displayed dish and set-menu names. Top-level section links

@@ -1392,29 +1392,41 @@ describe("DashboardApi routes", () => {
   });
 
   it("reads and saves a menu's customer settings, preview and style on its encoded routes", async () => {
-    const settings = { enabled: true, address: "lunch", photos: "large" as const };
+    const settings = {
+      enabled: true,
+      address: "lunch",
+      photos: "large" as const,
+      styleId: "style",
+    };
     const preview = { state: "unpublished" as const };
     const style = {
+      id: "style",
+      isDefault: true,
       name: "Default",
       appearance: { pageColor: "#ffffff" },
       affectedMenus: [{ id: "m 2", name: "Dinner" }],
     };
+    const copy = { ...style, id: "terrace", isDefault: false, name: "Terrace", affectedMenus: [] };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(settings))
       .mockResolvedValueOnce(jsonResponse(settings))
       .mockResolvedValueOnce(jsonResponse(preview))
       .mockResolvedValueOnce(jsonResponse(preview))
+      .mockResolvedValueOnce(jsonResponse([style]))
       .mockResolvedValueOnce(jsonResponse(style))
-      .mockResolvedValueOnce(jsonResponse(style));
+      .mockResolvedValueOnce(jsonResponse(copy));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getCustomerOnlineSettings("m/1")).resolves.toEqual(settings);
     await expect(api.saveCustomerOnlineSettings("m/1", settings)).resolves.toEqual(settings);
     await expect(api.getCustomerPreview("m/1", "es")).resolves.toEqual(preview);
     await expect(api.getCustomerPreview("m/1", "")).resolves.toEqual(preview);
-    await expect(api.getCustomerStyle("m/1")).resolves.toEqual(style);
-    await expect(api.saveCustomerStyle("m/1", { pageColor: "#ffffff" })).resolves.toEqual(style);
+    await expect(api.getCustomerStyles("m/1")).resolves.toEqual([style]);
+    await expect(api.saveCustomerStyle("m/1", style.id, style.appearance)).resolves.toEqual(style);
+    await expect(
+      api.saveCustomerStyle("m/1", style.id, style.appearance, copy.name),
+    ).resolves.toEqual(copy);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/menus/m%2F1/customer-online-settings", "GET", undefined],
@@ -1422,7 +1434,16 @@ describe("DashboardApi routes", () => {
       ["/management-api/menus/m%2F1/customer-preview?language=es", "GET", undefined],
       ["/management-api/menus/m%2F1/customer-preview", "GET", undefined],
       ["/management-api/menus/m%2F1/customer-style", "GET", undefined],
-      ["/management-api/menus/m%2F1/customer-style", "PUT", { pageColor: "#ffffff" }],
+      [
+        "/management-api/menus/m%2F1/customer-style",
+        "PUT",
+        { styleId: "style", appearance: { pageColor: "#ffffff" } },
+      ],
+      [
+        "/management-api/menus/m%2F1/customer-style",
+        "POST",
+        { styleId: "style", appearance: { pageColor: "#ffffff" }, name: "Terrace" },
+      ],
     ]);
   });
 

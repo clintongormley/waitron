@@ -1,6 +1,7 @@
 import { menus, refusalOn, UNIQUE_VIOLATION, type Transaction } from "@waitron/db";
 import { AppError, isCustomerMenuAddress, type CustomerMenuOnlineSettings } from "@waitron/shared";
 import { eq } from "drizzle-orm";
+import { requireCustomerMenuStyle } from "./customer-menu-styles.js";
 import { assertMenuWritable } from "./delete.js";
 import { liveVersions } from "./menu-publication.js";
 import { refuseSetMenu } from "./set-menus.js";
@@ -10,6 +11,7 @@ const selection = {
   enabled: menus.onlineEnabled,
   address: menus.onlineAddress,
   photos: menus.onlinePhotos,
+  styleId: menus.customerMenuStyleId,
 };
 
 export async function readCustomerMenuOnlineSettings(
@@ -29,15 +31,21 @@ export async function saveCustomerMenuOnlineSettings(
 ): Promise<CustomerMenuOnlineSettings> {
   await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
-  const { enabled, address, photos } = settings;
+  const { enabled, address, photos, styleId } = settings;
   if (address === null ? enabled : !isCustomerMenuAddress(address))
     throw new AppError("customer_menu.address_invalid", { field: "address" });
   if (enabled && !(await liveVersions(tx, [menuId], "format")).has(menuId))
     throw new AppError("customer_menu.not_published", { menuId });
+  if (styleId !== null) await requireCustomerMenuStyle(tx, styleId);
   try {
     const [saved] = await tx
       .update(menus)
-      .set({ onlineEnabled: enabled, onlineAddress: address, onlinePhotos: photos })
+      .set({
+        onlineEnabled: enabled,
+        onlineAddress: address,
+        onlinePhotos: photos,
+        customerMenuStyleId: styleId,
+      })
       .where(eq(menus.id, menuId))
       .returning(selection);
     return saved!;

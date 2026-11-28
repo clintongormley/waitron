@@ -4816,7 +4816,7 @@ describe("publishing a menu", () => {
     const path = `/management-api/menus/${menuId}/customer-style`;
     const initial = await send(app, "GET", path);
     expect(initial.status).toBe(200);
-    const style = (await initial.json()) as CustomerMenuStyle;
+    const [style] = (await initial.json()) as CustomerMenuStyle[];
     expect(style).toMatchObject({
       name: "Default",
       appearance: {},
@@ -4825,11 +4825,11 @@ describe("publishing a menu", () => {
         { id: set.id, name: "Chef's lunch" },
       ]),
     });
-    const affectedIds = style.affectedMenus.map(({ id }) => id);
+    const affectedIds = style!.affectedMenus.map(({ id }) => id);
     expect(affectedIds).not.toContain(menuId);
     expect(affectedIds).not.toContain(removed);
     const appearance = { pageColor: "#fbf7ef", headingFont: "serif" };
-    const saved = await send(app, "PUT", path, { body: appearance });
+    const saved = await send(app, "PUT", path, { body: { styleId: style!.id, appearance } });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toMatchObject({ appearance });
     const online = await send(app, "GET", `/management-api/menus/${menuId}/customer-preview`);
@@ -4842,17 +4842,20 @@ describe("publishing a menu", () => {
     const app = mountApp();
     const menuId = await createMenuVia(app, "Customer style permissions");
     const path = `/management-api/menus/${menuId}/customer-style`;
+    const styleId = "0193b4cc-984a-7f73-8cab-b5373af6720f";
     for (const method of ["GET", "PUT"] as const) {
       const denied = await send(app, method, path, {
         cookie: staffCookie,
-        ...(method === "PUT" && { body: {} }),
+        ...(method === "PUT" && { body: { styleId, appearance: {} } }),
       });
       expect(denied.status).toBe(403);
       expect(await denied.json()).toMatchObject({
         error: { code: "authorization.not_permitted" },
       });
     }
-    const invalid = await send(app, "PUT", path, { body: { logo: `${"a".repeat(64)}.webp` } });
+    const invalid = await send(app, "PUT", path, {
+      body: { styleId, appearance: { logo: `${"a".repeat(64)}.webp` } },
+    });
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "logo" } },

@@ -60,6 +60,8 @@ export interface CustomerMenuAppearance {
 }
 
 export interface CustomerMenuStyle {
+  id: string;
+  isDefault: boolean;
   name: string;
   appearance: CustomerMenuAppearance;
   affectedMenus: { id: string; name: string }[];
@@ -76,6 +78,7 @@ export interface CustomerMenuOnlineSettings {
   enabled: boolean;
   address: string | null;
   photos: CustomerMenuPhotoSize;
+  styleId: string | null;
 }
 
 export function isCustomerMenuAddress(address: string): boolean {

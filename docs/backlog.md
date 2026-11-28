@@ -455,7 +455,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Print brings the Online/Print selector to the Customer menu tab.
-  Add named styles and their menu selection, logos, capitals, lines between dishes and uploaded fonts.
+  Add style renaming, default selection and deletion, then logos, capitals, lines between dishes and uploaded fonts.
   Delivery 6 still needs Cloud's live test gateway pairing and qualification, shareable dish links,
   the Menus list Online column, Copy link, QR code and Embed, and a warning before address changes or
   turning a live menu off. [Box pairing contract](developers/cloud-connection.md#pair-a-test-gateway-with-the-customer-menu)

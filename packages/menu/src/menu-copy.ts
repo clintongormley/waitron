@@ -67,6 +67,7 @@ export async function duplicateMenu(
     .set({
       homeOrder: details.homeOrder,
       onlinePhotos: details.onlinePhotos,
+      customerMenuStyleId: details.customerMenuStyleId,
     })
     .where(eq(menus.id, copy.id));
   for (const batch of batches(items))
