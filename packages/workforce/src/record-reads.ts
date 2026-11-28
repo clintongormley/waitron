@@ -1,5 +1,5 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
-import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { nodes, type Database, type Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
@@ -13,6 +13,7 @@ import { readClosures } from "./pay-period-reads.js";
 import "./errors.js";
 import { isRecordDate } from "./record-dates.js";
 import { compareEvents, effectiveClockEntries, liveClockEntries } from "./effective-entries.js";
+import { readRecordDayStatuses } from "./record-day-statuses.js";
 
 export interface TimeRecordQuery {
   period: Period;
@@ -24,6 +25,25 @@ export async function readTimeRecord(
   policy: PaidBreakPolicy | null = null,
   loadedClosures?: readonly PayPeriodClosure[],
 ): Promise<TimeRecord> {
+  return (await timeRecordContext(tx, query, policy, loadedClosures)).record;
+}
+
+export async function readTimeRecordWithDayStatuses(
+  tx: Transaction,
+  query: TimeRecordQuery,
+  policy: PaidBreakPolicy | null,
+) {
+  const { record, entries } = await timeRecordContext(tx, query, policy);
+  const dayStatuses = await readRecordDayStatuses(tx, record, entries, query.period);
+  return { record, dayStatuses };
+}
+
+async function timeRecordContext(
+  tx: Database | Transaction,
+  query: TimeRecordQuery,
+  policy: PaidBreakPolicy | null,
+  loadedClosures?: readonly PayPeriodClosure[],
+) {
   if (
     (query.personId !== undefined && (typeof query.personId !== "string" || !query.personId)) ||
     query.period === null ||
@@ -41,7 +61,7 @@ export async function readTimeRecord(
     if (closure.period.end > period.end) period.end = closure.period.end;
   }
   const entries = await readPeriodEntries(tx, { period, personId });
-  return recordInPeriod(
+  const record = recordInPeriod(
     projectTimeRecord(
       entries,
       personId === undefined
@@ -51,6 +71,7 @@ export async function readTimeRecord(
     ),
     query.period,
   );
+  return { record, entries };
 }
 
 // Correct only while projecting one person's record reads no other person's rows of a closure's
@@ -83,6 +104,14 @@ export async function readRecordedEntries(
         scope.personId === undefined ? undefined : eq(timeEntries.personId, scope.personId),
       ),
     );
+  return rows.map(recordFromRow);
+}
+
+export async function readRecordedEntriesForPeople(
+  tx: Transaction,
+  personIds: string[],
+): Promise<TimeEntryRecord[]> {
+  const rows = await tx.select().from(timeEntries).where(inArray(timeEntries.personId, personIds));
   return rows.map(recordFromRow);
 }
 

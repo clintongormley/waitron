@@ -11,7 +11,7 @@ import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
 import { renderAttendanceXlsx } from "./attendance-export-xlsx.js";
-import { worksheetText } from "./testing/xlsx-rows.js";
+import { worksheetRows, worksheetText } from "./testing/xlsx-rows.js";
 
 async function rendered(input = attendanceExportFixture()) {
   const bytes = await renderAttendancePdf(input);
@@ -207,6 +207,12 @@ describe("real provider document bytes", () => {
       expect(metadata).not.toContain("ID-NUMBER-CANARY");
       expect(output.text).toContain("540");
       expect(sheet).toContain(">540<");
+      expect(output.text).toContain("Day approval");
+      expect(output.text).toContain("Not approved");
+      const [headers, ...rows] = worksheetRows(sheet);
+      const approval = rows.find(([section]) => section === "day-approvals");
+      expect(approval?.[headers!.indexOf("date")]).toBe("2026-01-05");
+      expect(approval?.[headers!.indexOf("dayApproval")]).toBe("Not approved");
     }
   });
 });
