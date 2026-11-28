@@ -89,7 +89,7 @@ const coffee = (over: Partial<TabLine> = {}) =>
 const q = <T extends HTMLElement = HTMLElement>(el: TillTableOrderScreen, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector);
 
-/** Opens the Sent window of `lineId`, unfolding `fold` first. */
+/** Opens the Sent window of `lineId`, from its wholly served row when `fold` is `served`. */
 async function openRow(
   over: Partial<TillTableOrderScreen>,
   lineId = "l-flan",
@@ -106,12 +106,10 @@ async function openRow(
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  if (fold !== null) {
-    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(`[data-${fold}-toggle]`)!);
-    await panel.updateComplete;
-  }
   await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
+    panel.shadowRoot!.querySelector<HTMLElement>(
+      `${fold === "served" ? `[data-served-line="${lineId}"] ` : ""}[data-sent-info="${lineId}"]`,
+    )!,
   );
   await el.updateComplete;
   expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
@@ -410,10 +408,6 @@ async function openInApp(lines?: TabLine[], lineId = "l-flan") {
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  if (lineId === "l-flan") {
-    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-    await panel.updateComplete;
-  }
   await userEvent.click(
     panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
   );
@@ -1156,6 +1150,141 @@ it("moves focus to the count when Change dish is pressed with a lower one", asyn
   const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
   const field = picker.shadowRoot!.querySelector('[name="quantity"]');
   await expect.poll(() => picker.shadowRoot!.activeElement).toBe(field);
+});
+
+it.each([
+  ["to serve", null, "Bravas ×3", "€9.00", "1 of 3 served"],
+  ["cancelled", "served", "Bravas ×1", "€3.00", null],
+] as const)(
+  "speaks in a dish's %s row's window, the dish served and cancelled in part, for that row alone",
+  async (_row, fold, heading, total, served) => {
+    const el = await openRow(
+      {
+        currentOrders: current({
+          ungrouped: [
+            row("l-patatas", "Bravas", "4.000", {
+              servedQuantity: "1.000",
+              cancelledQuantity: "1.000",
+              netAmount: "12.00",
+              extras: [],
+            }),
+          ],
+        }),
+      },
+      "l-patatas",
+      fold,
+    );
+    const sheet = q(el, "[data-sent-line-dialog]")!;
+    const words = (node: Element | null) => node?.textContent!.replace(/\s+/g, " ").trim() ?? null;
+    expect(words(sheet.querySelector(".move-dish"))).toBe(heading);
+    const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+    expect([...last.children].map(words)).toEqual(["Total", total]);
+    expect(words(sheet.querySelector("[data-sent-line-served]"))).toBe(served);
+  },
+);
+
+it("heads the Serve window of a dish served and cancelled in part on one line for its row", async () => {
+  const el = await openRow(
+    {
+      currentOrders: current({
+        ungrouped: [
+          row("l-patatas", "Bravas", "4.000", {
+            servedQuantity: "1.000",
+            cancelledQuantity: "1.000",
+            netAmount: "12.00",
+            extras: [],
+          }),
+        ],
+      }),
+    },
+    "l-patatas",
+    null,
+  );
+  const events: unknown[] = [];
+  el.addEventListener("serve-lines", (event) => events.push((event as CustomEvent).detail));
+  await userEvent.click(q(el, "[data-sent-line-serve]")!);
+  await el.updateComplete;
+  const words = (selector: string) => q(el, selector)!.textContent!.replace(/\s+/g, " ").trim();
+  expect(words("[data-serve-dialog] .move-dish")).toBe("Bravas ×3");
+  expect(words("[data-serve-dialog] .serve-so-far")).toBe("1 of 3 served");
+  expect(words("[data-serve-count]")).toBe("2");
+  await userEvent.click(q(el, "[data-serve-confirm]")!);
+  expect(events).toEqual([{ items: [{ lineId: "l-patatas", quantity: "2" }] }]);
+});
+
+it.each([
+  ["an odd cent split in half", "2.000", "1.000", 0, "11.25", [], "€11.25"],
+  ["a weighed half", "1.000", "0.500", 3, "7.49", [], "€7.49"],
+  ["an odd-cent extra", "2.000", "1.000", 0, "13.26", ["2.01"], "€11.25"],
+] as const)(
+  "prices a dish served in part on one line to the cent of its row, with %s",
+  async (_case, quantity, servedQuantity, unitPrecision, netAmount, extras, dish) => {
+    const el = await openRow(
+      {
+        currentOrders: current({
+          ungrouped: [
+            row("l-patatas", "Bravas", quantity, {
+              servedQuantity,
+              unitPrecision,
+              netAmount,
+              extras: extras.map((amount, at) => ({
+                lineId: `extra-${at}`,
+                name: "Aioli",
+                quantity: "1.000",
+                netAmount: amount,
+                unitPriceGross: amount,
+                priceQuantity: "1.000",
+              })),
+            }),
+          ],
+        }),
+      },
+      "l-patatas",
+      null,
+    );
+    const sheet = q(el, "[data-sent-line-dialog]")!;
+    const words = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+    expect(words(sheet.querySelector("[data-sent-line-amount]")!)).toBe(dish);
+    expect(sheet.querySelector("[data-sent-extra] .amount")?.textContent ?? null).toBe(
+      extras.length === 0 ? null : "€2.01",
+    );
+    const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+    expect([...last.children].map(words)).toEqual(["Total", `€${netAmount}`]);
+  },
+);
+
+it("adds up a dish's to-serve row's window to its Total, the rest cancelled but charged, with an odd-cent extra", async () => {
+  const el = await openRow(
+    {
+      currentOrders: current({
+        ungrouped: [
+          row("l-patatas", "Bravas", "2.000", {
+            cancelledQuantity: "1.000",
+            netAmount: "13.27",
+            extras: [
+              {
+                lineId: "extra-0",
+                name: "Aioli",
+                quantity: "1.000",
+                netAmount: "2.01",
+                unitPriceGross: "2.01",
+                priceQuantity: "1.000",
+              },
+            ],
+          }),
+        ],
+      }),
+    },
+    "l-patatas",
+    null,
+  );
+  const sheet = q(el, "[data-sent-line-dialog]")!;
+  const words = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+  // The row takes €6.63 of €13.27, and the extra €1.01 of €2.01; the dish is the rest.
+  expect(words(sheet.querySelector("[data-sent-line-amount]")!)).toBe("€5.62");
+  expect(words(sheet.querySelector("[data-sent-extra] .amount")!)).toBe("€1.01");
+  const last = [...sheet.querySelectorAll(".total-row")].at(-1)!;
+  expect([...last.children].map(words)).toEqual(["Total", "€6.63"]);
 });
 
 it("localises the sent dish, extras and served quantity", async () => {

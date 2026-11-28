@@ -121,12 +121,13 @@ counter stays until the order is handed over (below). The pass has no separate D
 party, their paid bills' food stays on the pass until the surviving party finishes.
 
 On the table, a ready dish stays **Ready** in its detail window until you mark it served.
-The Sent list keeps showing how long it has been ready so you can see what still needs serving.
+The sent dishes at the top of the order show how long each has been ready, so you can see what
+still needs serving. **Serve all** in a fired heading marks the dishes under it served.
 
 Use each station’s ready chip on the floor to choose what to collect there. A weighed or measured
 serving shows **1**, and three whole portions show **3**.
 If a dish has parts at two stations, collect them from both; each station counts it once.
-In **Sent**, wait for **Ready** to see when all its parts are ready.
+In the sent dishes at the top of the order, wait for **Ready** to see when all its parts are ready.
 
 When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
 the served quantity without restarting the station's preparation or ready time. A cancelled
@@ -398,7 +399,7 @@ Request held food from the table's order screen. Station queues and the pass sho
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
 tapping them; on the pass, a card whose dishes are all held sits under **Held** at the bottom of
 **To fire**, or in **Held** if the pass shows that column. On the table's order screen, a dish says
-**at the pass** while it, or one of its extras, waits for the pass to fire it.
+**At the pass** while it, or one of its extras, waits for the pass to fire it.
 Once released, a dish can move through preparation to Ready at its station. A dish whose [station
 waits for the pass](kitchen-service.md#station-waits) goes to the pass's **To fire** column
 instead: see

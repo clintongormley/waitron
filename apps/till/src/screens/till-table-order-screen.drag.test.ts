@@ -331,7 +331,13 @@ it.each(["first", "last"] as const)(
     await el.updateComplete;
     const source = destination === "first" ? "new:2" : "new:1";
     const gap = destination === "first" ? "new:1" : "end";
-    await drop(el, q(el, `[data-draft-group="${source}"] h3`), q(el, `[data-draft-gap="${gap}"]`));
+    // The sent rows above can push the end gap under the sticky draft bar: bring it into view,
+    // as staff would, and drop only where it is the element hit.
+    const target = q(el, `[data-draft-gap="${gap}"]`);
+    target.scrollIntoView({ block: "center" });
+    const { x, y } = point(target);
+    expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(target);
+    await drop(el, q(el, `[data-draft-group="${source}"] h3`), target);
     expect(places(draft)).toEqual([
       { kind: "new", slot: destination === "first" ? 1 : 2 },
       { kind: "new", slot: 2 },
@@ -362,15 +368,10 @@ it("a row dropped directly on a sent held group joins it without sending the dra
   el.addEventListener("submit-draft", sends);
   const panel = q(el, "till-sent-orders") as TillSentOrders;
   await panel.updateComplete;
-  const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!;
-  if (toggle.getAttribute("aria-expanded") === "false") {
-    await userEvent.click(toggle);
-    await panel.updateComplete;
-  }
   await drop(
     el,
     lead(el, 0),
-    panel.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g4"] .heading')!,
+    panel.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g4"] wt-course-heading')!,
   );
   expect(places(draft)).toEqual([
     { kind: "join", groupId: "g4" },

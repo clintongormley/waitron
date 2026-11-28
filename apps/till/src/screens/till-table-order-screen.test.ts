@@ -188,9 +188,9 @@ const tableMenuOpen = (el: TillTableOrderScreen) =>
     .shadowRoot!.querySelector("[data-table-menu]")!
     .shadowRoot!.querySelector("[popover]")!
     .matches(":popover-open");
-/** One portion, so the Sent summary's quantities equal its line count, as the Tab badge's did. */
+/** One unit of the same dish as {@link servedLine}; neither is a portion, so Sent keeps two rows. */
 const onePortionUnserved: TabLine = { ...pendingLine, quantity: "1.000" };
-/** The service read listing `lines` ungrouped, so Sent draws them and its summary. */
+/** The service read listing `lines` ungrouped, so Sent draws them. */
 const sentRows = (lines: TabLine[]) =>
   current({
     groups: [],
@@ -204,15 +204,17 @@ const sentRows = (lines: TabLine[]) =>
       }),
     ),
   });
-const sentCounts = (ready: number, firing: number, held: number, served: number) =>
-  t("table.sent_counts")
-    .replace("{ready}", String(ready))
-    .replace("{firing}", String(firing))
-    .replace("{held}", String(held))
-    .replace("{served}", String(served));
-async function sentSummary(el: TillTableOrderScreen): Promise<string | null | undefined> {
-  return (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-panel] .summary")
-    ?.textContent;
+/** Each sent row as staff read it: which line it serves, which it shows as served, its words. */
+async function sentRowsShown(el: TillTableOrderScreen) {
+  const panel = await sentPanelFor(el);
+  return [...panel.shadowRoot!.querySelectorAll<HTMLElement>(".sent-row")].map((row) => ({
+    fired: row.dataset.firedLine ?? null,
+    served: row.dataset.servedLine ?? null,
+    words: [".row-qty", ".row-name", ".row-more", ".row-price"]
+      .map((part) => row.querySelector(part)?.textContent!.replace(/\s+/g, " ").trim())
+      .filter((part) => part !== undefined)
+      .join(" "),
+  }));
 }
 
 async function sentFallbackFor(el: TillTableOrderScreen): Promise<HTMLElement> {
@@ -561,7 +563,7 @@ describe("till-table-order-screen", () => {
       expect(action.hasAttribute("disabled")).toBe(false);
   });
 
-  it("A803 to serve: the Sent summary counts what is still to serve, with no Tab badge", async () => {
+  it("A803 to serve: Sent's row says how much is still to serve, with no Tab badge", async () => {
     const unserved = onePortionUnserved;
     const { el } = await mount({
       orderId: "wo-4",
@@ -569,13 +571,19 @@ describe("till-table-order-screen", () => {
       currentOrders: sentRows([unserved, servedLine]),
     });
     expect(el.shadowRoot!.querySelector(".head-actions .badge, .drawer-handle")).toBeNull();
-    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
+    expect(await sentRowsShown(el)).toEqual([
+      { fired: "line-1", served: null, words: "1 Café €1.50" },
+      { fired: null, served: "line-2", words: "1 Café Served €1.50" },
+    ]);
 
     const servedNow = { ...unserved, servedAt: servedLine.servedAt };
     el.lines = [servedNow, servedLine];
     el.currentOrders = sentRows([servedNow, servedLine]);
     await el.updateComplete;
-    expect(await sentSummary(el)).toBe(sentCounts(0, 0, 0, 2));
+    expect(await sentRowsShown(el)).toEqual([
+      { fired: null, served: "line-1", words: "1 Café Served €1.50" },
+      { fired: null, served: "line-2", words: "1 Café Served €1.50" },
+    ]);
   });
 
   it("draws no Tab drawer or handle", async () => {
@@ -584,26 +592,25 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector(".drawer-handle")).toBeNull();
   });
 
-  it("counts the dishes still to serve in the Sent summary", async () => {
+  it("offers to serve only what is still to serve in Sent, under a heading named Sent", async () => {
     const { el } = await mount({
       orderId: "wo-4",
       lines: [onePortionUnserved, servedLine],
       currentOrders: sentRows([onePortionUnserved, servedLine]),
     });
-    // One un-served line ⇒ 1 firing (the served line does not count).
-    expect(await sentSummary(el)).toBe(sentCounts(0, 1, 0, 1));
-  });
-
-  it("names the Sent toggle by its title and its counts", async () => {
-    const { el } = await mount({
-      orderId: "wo-4",
-      lines: [onePortionUnserved, servedLine],
-      currentOrders: sentRows([onePortionUnserved, servedLine]),
-    });
-    const toggle = (await sentPanelFor(el)).shadowRoot!.querySelector("[data-sent-toggle]")!;
+    const panel = await sentPanelFor(el);
+    const serve = panel.shadowRoot!.querySelector<HTMLButtonElement>("[data-serve-line]")!;
+    expect(serve.dataset.serveLine).toBe("line-1");
+    expect(serve.disabled).toBe(false);
+    expect(panel.shadowRoot!.querySelectorAll("[data-serve-line]")).toHaveLength(1);
+    const serves: unknown[] = [];
+    el.addEventListener("serve-lines", (event) => serves.push((event as CustomEvent).detail));
+    await userEvent.click(serve);
+    // The served line's portion is not served again.
+    expect(serves).toEqual([{ items: [{ lineId: "line-1", quantity: "1" }] }]);
     await expect
-      .element(page.elementLocator(toggle))
-      .toHaveAccessibleName(`${t("table.sent_title")} ${sentCounts(0, 1, 0, 1)}`);
+      .element(page.elementLocator(panel.shadowRoot!.querySelector("[data-sent-panel] > h2")!))
+      .toHaveAccessibleName(t("table.sent_title"));
   });
 
   it("keeps a pending dish in Sent alone, before and after it is served", async () => {
@@ -641,7 +648,7 @@ describe("till-table-order-screen", () => {
     const panel = await sentPanelFor(el);
     expect(panel.shadowRoot!.querySelectorAll("[data-fired-line]")).toHaveLength(1);
     expect(panel.shadowRoot!.querySelectorAll("[data-served-line]")).toHaveLength(1);
-    expect(panel.shadowRoot!.textContent).toContain(t("table.served_title"));
+    expect(panel.shadowRoot!.textContent).toContain(t("table.row_served"));
     const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
     const closed = new Promise<void>((resolve) =>
       dialog.addEventListener("wt-close", () => resolve(), { once: true }),
@@ -802,7 +809,7 @@ describe("till-table-order-screen", () => {
   it("handles an empty tab: no Sent counts or pending-dishes card, zero total", async () => {
     const { el } = await mount({ orderId: "wo-4", lines: [], currentOrders: sentRows([]) });
     await openPartyMenu(el);
-    expect(await sentSummary(el)).toBeUndefined();
+    expect(await sentRowsShown(el)).toEqual([]);
     expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
     const panel = await sentPanelFor(el);
@@ -1628,7 +1635,7 @@ describe("till-table-order-screen", () => {
     parentProductId: null,
   };
 
-  describe("the party's groups in the Sent panel", () => {
+  describe("the party's groups in the sent rows", () => {
     const at = "2026-09-27T10:00:00.000Z";
     /** A dish line of this bill in group `groupId`, held (never sent) unless `fired`. */
     function dishLine(
@@ -1819,13 +1826,6 @@ describe("till-table-order-screen", () => {
         await mounted.el.updateComplete;
       }
       const panel = await sentPanelFor(mounted.el);
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
-        if (toggle?.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       return { ...mounted, panel };
     }
 
@@ -1837,6 +1837,14 @@ describe("till-table-order-screen", () => {
     }
 
     const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+    /** Like `text`, but keeps the non-breaking spaces a time phrase holds. */
+    const words = (node: Element) => node.textContent!.replace(/[ \t\n\r]+/g, " ").trim();
+    /** A sent row's quantity, then its name, as the row draws them in two cells. */
+    const qtyName = (row: Element) =>
+      `${text(row.querySelector(".row-qty")!)} ${text(row.querySelector(".row-name")!)}`;
+    /** The group a held heading's Fire names, since the heading itself reads "Held". */
+    const fireLabel = (row: Element) =>
+      row.querySelector("[data-group-fire]")!.getAttribute("aria-label");
     const control = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
 
@@ -1852,11 +1860,15 @@ describe("till-table-order-screen", () => {
       });
       const rows = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")];
       expect(rows.map((row) => row.dataset.heldGroup)).toEqual(["g5", "g4", "g3"]);
-      expect(rows.map((row) => text(row.querySelector("[data-group-drag]")!))).toEqual(
+      expect(rows.map(fireLabel)).toEqual(
         [5, 4, 3].map(
-          (n) => t("table.group_n").replace("{n}", String(n)) + (n === 5 ? " · Terrace 7" : ""),
+          (n) =>
+            `${t("table.group_fire")} · ${t("table.group_n").replace("{n}", String(n))}` +
+            (n === 5 ? " · Terrace 7" : ""),
         ),
       );
+      for (const row of rows)
+        expect(text(row.querySelector("[data-group-drag]")!)).toContain(t("table.group_held"));
       expect(
         [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map(
           (row) => row.dataset.firedLine,
@@ -1874,21 +1886,29 @@ describe("till-table-order-screen", () => {
       const { panel } = await mountSentGroups();
       const rows = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")];
       expect(rows.map((row) => row.dataset.heldGroup)).toEqual(["g3", "g4", "g5"]);
-      expect(rows.map((row) => text(row.querySelector("[data-group-drag]")!))).toEqual(
-        [3, 4, 5].map((n) => t("table.group_n").replace("{n}", String(n))),
+      expect(rows.map(fireLabel)).toEqual(
+        [3, 4, 5].map(
+          (n) => `${t("table.group_fire")} · ${t("table.group_n").replace("{n}", String(n))}`,
+        ),
       );
       const fired = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")];
       expect(fired.map((row) => row.dataset.firedLine)).toEqual(["l-beer", "l-salad"]);
       for (const row of fired) {
         expect(row.querySelector("[data-group-fire], [data-group-more]")).toBeNull();
       }
-      expect(text(panel.shadowRoot!.querySelector("[data-held-toggle]")!)).toContain(
-        t("table.group_held"),
-      );
-      expect(text(panel.shadowRoot!.querySelector("h3")!)).toContain(t("table.group_fired"));
+      for (const row of rows)
+        expect(text(row.querySelector("[data-section-title]")!)).toContain(t("table.group_held"));
+      const firedHeadings = [
+        ...panel.shadowRoot!.querySelectorAll("[data-sent-section]:not([data-held-group])"),
+      ];
+      expect(firedHeadings.length).toBeGreaterThan(0);
+      for (const section of firedHeadings)
+        expect(text(section.querySelector("[data-section-title]")!)).toContain(
+          t("table.group_fired"),
+        );
     });
 
-    it("sits above the bill total and hides an empty Sent panel", async () => {
+    it("sits above the bill total and hides empty sent rows", async () => {
       const { el, panel } = await mountSentGroups();
       const list = el.shadowRoot!.querySelector("[data-sent-orders]")!;
       const total = el.shadowRoot!.querySelector("[data-order-total]");
@@ -1908,18 +1928,18 @@ describe("till-table-order-screen", () => {
       expect(
         [...mains.querySelectorAll("[data-held-line]")].map((row) => [
           (row as HTMLElement).dataset.heldLine,
-          text(row.querySelector(".what")!),
+          qtyName(row),
         ]),
       ).toEqual([
-        ["l-steak", "Steak ×2"],
-        ["l-fish", "Fish ×1"],
+        ["l-steak", "2 Steak"],
+        ["l-fish", "1 Fish"],
       ]);
       const companion = mains.querySelector('[data-companion="l-wine-elsewhere"]')!;
-      expect(text(companion.querySelector(".what")!)).toBe("Wine ×1");
-      expect(text(companion.querySelector(".bill")!)).toBe(t("table.sent_other_bill"));
-      expect(companion.querySelector(".amount, button, wt-button, input")).toBeNull();
-      expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-beer"] .what')!)).toContain(
-        "Beer ×1",
+      expect(qtyName(companion)).toBe("1 Wine");
+      expect(text(companion.querySelector(".row-more")!)).toBe(t("table.sent_other_bill"));
+      expect(companion.querySelector(".row-price, button, wt-button, input")).toBeNull();
+      expect(qtyName(panel.shadowRoot!.querySelector('[data-fired-line="l-beer"]')!)).toBe(
+        "1 Beer",
       );
     });
 
@@ -2260,12 +2280,17 @@ describe("till-table-order-screen", () => {
     describe("the kitchen's progress in Sent", () => {
       const firedAt = "2026-09-27T10:00:00.000Z";
       const minutesLater = (n: number) => Date.parse(firedAt) + n * 60_000;
-      const state = (panel: TillSentOrders, lineId: string) =>
-        text(
-          panel.shadowRoot!.querySelector(
-            `[data-${lineId === "l-croq" ? "held" : "fired"}-line="${lineId}"] .status`,
-          )!,
+      /** What a row's state reads: its own second line, or its heading's when the row does not
+       * repeat it. */
+      const state = (panel: TillSentOrders, lineId: string) => {
+        const row = panel.shadowRoot!.querySelector(
+          `[data-${lineId === "l-croq" ? "held" : "fired"}-line="${lineId}"]`,
+        )!;
+        const own = row.querySelector(".row-more");
+        return words(
+          own ?? row.closest("[data-sent-section]")!.querySelector("[data-section-title]")!,
         );
+      };
 
       async function mountProgress(
         over: Partial<CurrentOrderRow> = {},
@@ -2276,19 +2301,23 @@ describe("till-table-order-screen", () => {
             reminder: null,
             ungrouped: [],
             groups: [
-              currentGroup("g1", 1, "fired", [
-                currentRow("l-beer", "Beer", "1.000", {
-                  firedAt,
-                  netAmount: "10.00",
-                  kitchen: {
-                    stationId: null,
-                    movable: false,
-                    state: "queued",
+              // A fired group's heading reads its own fired time, which its dishes share.
+              {
+                ...currentGroup("g1", 1, "fired", [
+                  currentRow("l-beer", "Beer", "1.000", {
                     firedAt,
-                  },
-                  ...over,
-                }),
-              ]),
+                    netAmount: "10.00",
+                    kitchen: {
+                      stationId: null,
+                      movable: false,
+                      state: "queued",
+                      firedAt,
+                    },
+                    ...over,
+                  }),
+                ]),
+                firedAt: over.firedAt === undefined ? firedAt : over.firedAt,
+              },
               currentGroup("g3", 3, "held", [
                 currentRow("l-croq", "Croquetas", "1.000", { released: false, netAmount: "10.00" }),
               ]),
@@ -2357,21 +2386,27 @@ describe("till-table-order-screen", () => {
           toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"],
         });
         try {
-          const { panel } = await mountProgress();
-          const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-          await vi.advanceTimersByTimeAsync(300);
-          expect(vi.getTimerCount()).toBe(0);
-          await userEvent.click(toggle);
-          await panel.updateComplete;
+          const { el, panel } = await mountProgress();
           await vi.advanceTimersByTimeAsync(300);
           const ages = panel.shadowRoot!.querySelectorAll("till-fired-ago").length;
           expect(ages).toBeGreaterThan(0);
-          expect(vi.getTimerCount()).toBe(ages + 1);
-          await userEvent.click(toggle);
+          // Each fired age keeps its own clock; the list redraws itself only while a Ready shows.
+          expect(vi.getTimerCount()).toBe(ages);
+          // With only a held group left, no fired dish's age is on screen.
+          el.currentOrders = current({
+            reminder: null,
+            ungrouped: [],
+            groups: [
+              currentGroup("g3", 3, "held", [
+                currentRow("l-croq", "Croquetas", "1.000", { released: false, netAmount: "10.00" }),
+              ]),
+            ],
+          });
+          await el.updateComplete;
           await panel.updateComplete;
           await vi.advanceTimersByTimeAsync(300);
+          expect(panel.shadowRoot!.querySelector("[data-held-line]")).not.toBeNull();
+          expect(panel.shadowRoot!.querySelectorAll("till-fired-ago")).toHaveLength(0);
           expect(vi.getTimerCount()).toBe(0);
         } finally {
           vi.useRealTimers();
@@ -2784,13 +2819,6 @@ describe("till-table-order-screen", () => {
         courses,
       });
       const panel = await sentPanelFor(el);
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       await openPartyMenu(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
@@ -5785,12 +5813,12 @@ describe("A668 nutrition after table-order names", () => {
     await showView(el, "order", { scripted: true });
     expect(
       draftRows(el.shadowRoot!).filter(
-        (row) => row.querySelector('.draft-row-name wt-icon[name="allergen-milk"]') !== null,
+        (row) => row.querySelector('.row-name wt-icon[name="allergen-milk"]') !== null,
       ),
     ).toHaveLength(1);
     expect(
       draftRows(el.shadowRoot!).filter(
-        (row) => row.querySelector('.draft-row-name wt-icon[name="diet-no_meat"]') !== null,
+        (row) => row.querySelector('.row-name wt-icon[name="diet-no_meat"]') !== null,
       ),
     ).toHaveLength(1);
   });
@@ -5893,8 +5921,6 @@ describe("A668 nutrition after table-order names", () => {
     el.orderId = "other-bill";
     await el.updateComplete;
     panel = await sentPanelFor(el);
-    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-    await panel.updateComplete;
     const row = panel.shadowRoot!.querySelector('[data-fired-line="other-bill-line"]')!;
     const nuts = row.querySelector('wt-icon[name="allergen-nuts"]');
     expect(nuts?.getAttribute("role")).toBe("img");

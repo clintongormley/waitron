@@ -83,13 +83,6 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       if (width < 1280) await showView(el, "order");
       const panel = q("till-sent-orders") as TillSentOrders;
       await panel.updateComplete;
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       expect(
         panel.shadowRoot!.querySelector('[data-held-line="stored-dish"]')!.textContent,
       ).toContain("Recorded dish");

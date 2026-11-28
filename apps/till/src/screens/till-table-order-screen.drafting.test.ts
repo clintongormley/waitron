@@ -131,8 +131,8 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(rows(el)).toEqual(["Jamón ×0.250"]);
     expect(barText(el)).toContain("Jamón 0.250 kg");
     const weighed = draftRow(el, 0)!;
-    expect(weighed.querySelector(".draft-row-name .product-name")!.textContent).toBe("Jamón");
-    expect(weighed.querySelector(".draft-row-qty")!.textContent).toBe("0.250 kg");
+    expect(weighed.querySelector(".row-name .product-name")!.textContent).toBe("Jamón");
+    expect(weighed.querySelector(".row-qty")!.textContent).toBe("0.250 kg");
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
   });
 
@@ -175,8 +175,8 @@ describe("till-table-order-screen: the last-added bar", () => {
     await el.updateComplete;
     expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
     const measured = draftRow(el, 0)!;
-    expect(measured.querySelector(".draft-row-name .product-name")!.textContent).toBe("Juice");
-    expect(measured.querySelector(".draft-row-qty")!.textContent).toBe("250 ml");
+    expect(measured.querySelector(".row-name .product-name")!.textContent).toBe("Juice");
+    expect(measured.querySelector(".row-qty")!.textContent).toBe("250 ml");
     expect(el.shadowRoot!.querySelector("[data-split-draft-line]")).toBeNull();
     expect(barText(el)).toContain("Juice 250 ml");
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();

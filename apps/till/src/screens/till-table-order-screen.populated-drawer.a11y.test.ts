@@ -10,7 +10,7 @@ import {
 import { openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
 import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -94,13 +94,19 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         const sent = q("till-sent-orders") as TillSentOrders;
         await sent.updateComplete;
         // Two still to serve: the dish's two portions (the Tab badge counted it and its extra).
-        expect(sent.shadowRoot!.querySelector("[data-sent-panel] .summary")!.textContent).toBe(
-          t("table.sent_counts")
-            .replace("{ready}", "0")
-            .replace("{firing}", "2")
-            .replace("{held}", "0")
-            .replace("{served}", "1"),
-        );
+        expect(
+          [...sent.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-panel] .sent-row")].map(
+            (each) => [
+              each.dataset.firedLine ?? null,
+              each.dataset.servedLine ?? null,
+              each.querySelector(".row-qty")!.textContent,
+            ],
+          ),
+        ).toEqual([
+          ["stored-dish", null, "2"],
+          [null, "stored-served", "1"],
+        ]);
+        expect(sent.shadowRoot!.querySelector("[data-held-line], .row-ready")).toBeNull();
         await expectNoA11yViolations(host);
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
@@ -109,11 +115,6 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         if (q("[data-draft-pane]").hidden) await showView(el, "order");
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
         const info = panel.shadowRoot!.querySelector<HTMLElement>(
           '[data-sent-info="stored-dish"]',
         )!;

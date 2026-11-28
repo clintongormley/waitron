@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/kitchen-api.js";
 import type { SentSlice } from "./sent-panel.js";
-import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "./portion-groups.js";
+import {
+  portionGroups,
+  sentRowId,
+  sentRowPortionKey,
+  tabLinePortionKey,
+} from "./portion-groups.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine {
@@ -171,7 +176,7 @@ describe("A803 portion grouping: bill lines", () => {
   });
 });
 
-describe("A803 portion grouping: Sent panel rows", () => {
+describe("A803 portion grouping: sent rows", () => {
   function row(id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
     return withRowRequestedAt({
       billStatus: "open",
@@ -210,11 +215,18 @@ describe("A803 portion grouping: Sent panel rows", () => {
   });
   const lines = [line("b1", 1), line("b2", 2)];
   const group = (slices: SentSlice[], known = lines) =>
-    portionGroups(
-      slices,
-      (entry) => sentSlicePortionKey(entry, known),
-      (entry) => entry.row.lineNo,
-    ).map((members) => members.map((entry) => entry.row.lineId));
+    slices
+      .reduce<SentSlice[][]>((rows, entry) => {
+        const key = sentRowPortionKey(entry, known);
+        const same = rows.find((members) => {
+          const other = sentRowPortionKey(members[0]!, known);
+          return key !== null && other !== null && sentRowId(key) === sentRowId(other);
+        });
+        if (same) same.push(entry);
+        else rows.push([entry]);
+        return rows;
+      }, [])
+      .map((members) => members.map((entry) => entry.row.lineId).sort());
 
   it("groups two identical sent portions", () => {
     expect(group([slice(row("b2", 2)), slice(row("b1", 1))])).toEqual([["b1", "b2"]]);
@@ -247,14 +259,17 @@ describe("A803 portion grouping: Sent panel rows", () => {
 
   it("never groups a slice of a line of more than one, or a row whose bill line is not known", () => {
     expect(
-      sentSlicePortionKey(slice(row("b1", 1, { quantity: "3.000" })), [
+      sentRowPortionKey(slice(row("b1", 1, { quantity: "3.000" })), [
         line("b1", 1, { quantity: "3.000" }),
       ]),
     ).toBeNull();
-    expect(sentSlicePortionKey(slice(row("b1", 1)), [line("b1", 2)])).toBeNull();
-    expect(sentSlicePortionKey(slice(row("b1", 1, { quantity: "3.000" })), lines)).toBeNull();
+    expect(sentRowPortionKey(slice(row("b1", 1)), [line("b1", 2)])).toBeNull();
+    expect(sentRowPortionKey(slice(row("b1", 1, { quantity: "3.000" })), lines)).toBeNull();
     expect(
-      sentSlicePortionKey(
+      sentRowPortionKey(slice(row("b1", 1)), [line("b1", 1, { quantity: "2.000" })]),
+    ).toBeNull();
+    expect(
+      sentRowPortionKey(
         slice(row("b1", 1, { servedQuantity: "0.500" }), { quantity: "0.5" }),
         lines,
       ),
@@ -263,6 +278,72 @@ describe("A803 portion grouping: Sent panel rows", () => {
       ["b1"],
       ["b2"],
     ]);
+  });
+
+  describe("one row per dish, served or not (PR 8a)", () => {
+    const servedRow = (id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}) =>
+      row(id, lineNo, {
+        servedQuantity: "1.000",
+        servedAt: "2026-10-28T12:20:00.000Z",
+        readyAt: "2026-10-28T12:15:00.000Z",
+        kitchen: {
+          state: "ready",
+          firedAt: "2026-10-28T12:00:00.000Z",
+          stationId: "grill",
+          movable: false,
+          phase: "ready",
+          requestedAt: "2026-10-28T12:00:00.000Z",
+        },
+        ...over,
+      });
+    const servedLines = [
+      line("b1", 1),
+      line("b2", 2, { servedAt: "2026-10-28T12:20:00.000Z", state: "ready" }),
+    ];
+    const key = (entry: SentSlice, known = servedLines) => sentRowPortionKey(entry, known)!;
+
+    it("gives a served portion its unserved twin's dish, however far the kitchen got with it", () => {
+      const served = key(slice(servedRow("b2", 2), { kind: "served" }));
+      const unserved = key(slice(row("b1", 1)));
+      expect(served).toEqual({ dish: unserved.dish, progress: null });
+      expect(unserved.progress).not.toBeNull();
+    });
+
+    it("joins two served portions that became ready at different times", () => {
+      const first = key(slice(servedRow("b1", 1), { kind: "served" }));
+      const later = servedRow("b2", 2, { readyAt: "2026-10-28T12:18:00.000Z" });
+      expect(sentRowId(key(slice(later, { kind: "served" })))).toBe(sentRowId(first));
+    });
+
+    it("keeps two unserved portions' progress apart when their readiness differs", () => {
+      const ready = key(slice(row("b2", 2, { readyAt: "2026-10-28T12:10:00.000Z" })), lines);
+      const queued = key(slice(row("b1", 1)), lines);
+      expect(ready.dish).toBe(queued.dish);
+      expect(ready.progress).not.toBe(queued.progress);
+    });
+
+    it.each<[string, Partial<CurrentOrderRow>, Partial<Omit<SentSlice, "row">>]>([
+      ["release", { released: false }, {}],
+      ["amount", { netAmount: "9.00" }, { amount: "9.00" }],
+      ["firing", { firedAt: "2026-10-28T12:03:00.000Z" }, {}],
+      ["bill", { workingOrderId: "bill-2" }, {}],
+      ["first send", { sentAt: "2026-10-28T12:00:00.000Z" }, {}],
+      ["kitchen record", { kitchen: null }, {}],
+      ["cancelled charge", {}, { kind: "cancelled_charged" }],
+    ])("keeps two portions' dish apart when their %s differs", (_field, rowOver, sliceOver) => {
+      expect(key(slice(row("b2", 2, rowOver), sliceOver), lines).dish).not.toBe(
+        key(slice(row("b1", 1)), lines).dish,
+      );
+    });
+
+    it("keeps a served portion's station apart from its twin's", () => {
+      const elsewhere = servedRow("b2", 2, {
+        kitchen: { ...servedRow("x", 9).kitchen!, stationId: "bar" },
+      });
+      expect(key(slice(elsewhere, { kind: "served" })).dish).not.toBe(
+        key(slice(row("b1", 1))).dish,
+      );
+    });
   });
 });
 

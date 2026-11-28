@@ -560,14 +560,6 @@ measured the same plan for the pass board's own card read (`scopedItems`,
 read. This needs a migration.
 
 
-## The table screen's sent list puts "at the pass" under a "Fired" heading (seen in A773-2 B4b's review).
-
-«en el pase» rows sit under «Marchado», and "at the pass" is lower
-case beside capitalised status words. Also: a dish asked for whose extra was recalled says
-Fired in the sent list and Held in the dish window, which the review believed predates the
-branch.
-
-
 ## A857. A booking can take a table the evening's layout puts away (2026-10-18).
 
 Bookings refuse a table that is not on the floor now, in a switched-on zone (`requireActiveTable` in
@@ -584,15 +576,6 @@ neither. Today the map hides a table's name when the table's shorter side is dra
 prints the table's name as the floor shows it — its group's or its own name for today, else its
 full name — and never its short name (`tableLabel`, from `orderTableLabels` in
 `packages/db/src/party-table-labels.ts`). Part of the owner's redesign of the table screens.
-
-
-## A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".
-
-Seen, 2026-10-25 (the
-A797 slice 1 look, `f-header-window1-1024-light-en.png` and `f-header-window1-1024-dark-es.png` in
-`~/waitron-campaign-c/a797-1-shots/`): a space before the "!" ("Sent !", «Enviado !»), and the
-Held line ends in a separator with nothing after it, where the Served line above reads
-"Served · 0 · €0.00".
 
 
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
@@ -741,7 +724,7 @@ more paid bill; when ready, the floor shows "Deliver to T3 · No. 44" under its 
 
 ## Bundle: For the owner's redesign of the table screens and review of the device screens
 
-17 entries. **Designed on 2026-11-26 in the till redesign's pass 2**: where each one went (answered
+16 entries. **Designed on 2026-11-26 in the till redesign's pass 2**: where each one went (answered
 by the design, decided, wording fixed in the build, or out of scope) is in
 [the spec's §9.12](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md). The entries below
 are built with TILL-REDESIGN-1 and deleted as each lands. They were separate entries, many of them questions, until
@@ -754,7 +737,7 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
 - **Serving part of a row (A773's physical trial, owner, 2026-11-25).** It works, in four taps: the
   row's details, **Mark served**, −, **Mark 1 served**; nothing says it will ask how many. Owner: "i think being able to
   expand/collapse the rows will be more useful but i'm going to have a big design session on this
-  with impeccable. currently it is pretty bad". Seen on the same phone screens: a **Held ·** heading with nothing held, a
+  with impeccable. currently it is pretty bad". Seen on the same phone screens: a
   **Quantity** box beside **Change dish** in Dish details, and the Served toast over the totals.
 - **A893. Review every table state and its look (owner, 2026-10-18)**, with A936 (Waiting's minutes
   on the map), A856 and A859 below.
@@ -784,14 +767,11 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   [Detail](till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 - **A1333. A table with no dishes left can still show "Another order?".**
   [Detail](till.md#a1333-a-table-with-no-dishes-left-can-still-show-another-order-left-open-by-a803-slice-4b)
-- **The table screen's sent list puts "at the pass" under a "Fired" heading.**
-  [Detail](till.md#the-table-screens-sent-list-puts-at-the-pass-under-a-fired-heading-seen-in-a773-2-b4bs-review)
-- **Wording on the floor and the order screen: A470, A1107 and A1108.** A470 also keeps an unmeasured
+- **Wording on the floor and the order screen: A470 and A1107.** A470 also keeps an unmeasured
   screen-reader activation ([detail](till.md#a470--the-tills-floor-map-follow-ups)). A1107: Spanish
   calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its List card (the A797
   slice 1 look, `g-details-window1-390-light-es.png` and `h-list-dining-390-light-es.png` in
-  `~/waitron-campaign-c/a797-1-shots/`). A1108: "Sent !" and "Held ·"
-  ([detail](till.md#a1108-the-till-order-screens-sent-panel-reads-sent--and-held-)).
+  `~/waitron-campaign-c/a797-1-shots/`).
 - **A1290. Bill actions that open low.** Back and its action can sit half below the window, and
   "+ New bill" touches Back
   ([detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)).
@@ -1266,7 +1246,7 @@ A group's display number is separate from its firing position. Reordering held g
 their display numbers; removing or moving groups does not make their original numbers available
 again. `apps/server/src/order-group-numbers.test.ts` checks these operations and both group reads.
 `apps/till/src/widgets/sent-orders.test.ts` checks that a group at position 5 with display number 7
-is shown as Group 7. This replaces Task 4's position-derived-number observation; gaps in the
+is named Group 7 in its Fire button's accessible name. This replaces Task 4's position-derived-number observation; gaps in the
 visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
@@ -1329,7 +1309,7 @@ or editor, a different warning, a removed line or a cleared warning ends that ch
 languages at 390 and 1280 px, local-to-saved identity, and those boundaries. This is an in-memory
 choice; it is not saved for another screen or session.
 
-Sent's counters, Served and Held headings, dish slices, companions and extras use the screen's
+The sent rows, companions and extras use the screen's
 decimal mark. Extras retain their stored decimal places. The fractional native-browser cases in
 `apps/till/src/widgets/sent-orders.test.ts` cover both languages, leave punctuation in names alone
 and check that serving still emits the exact dot-decimal quantity.
@@ -1353,8 +1333,8 @@ Send all, Fire and Move buttons at 390 and 1280 px in both languages and themes:
 case measures the replacement held-group controls, Fire confirmation and Move earlier/later.
 Its twice-pressed Fire/Move cases use scripted clicks.
 
-The native Sent integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
-dish, All served and group Fire on till and phone while the API reply waits. They check one
+The native sent rows integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
+dish, a group's Serve all and group Fire on till and phone while the API reply waits. They check one
 request, disabled service controls and no premature display change, then the accepted snapshot.
 A subsequent dish press or Undo uses the accepted party revision. These are application checks
 with controlled API replies, not server transaction or physical-till tests.
@@ -1805,7 +1785,9 @@ Counter order, when that changes its set menus (A1572). Stated at its site in
   2026-10-17)**, matching A738's approved order layout. (2026-11-01: the Tab drawer is gone since
   A803 slice 3; a child extras row is now drawn on its own muted, smaller line in `till-sent-orders`
   (`apps/till/src/widgets/sent-orders.ts`), and indented as well in the table screen's fallback list
-  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).)
+  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).
+  2026-11-28: till redesign PR 8a draws a sent dish's extras on the row's quiet second line, which
+  the redesign spec gives a dish's options, [§4](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen).)
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
   that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice

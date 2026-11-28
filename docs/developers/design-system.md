@@ -1014,7 +1014,7 @@ you set spacing without replacing its error and folding behaviour.
 | `wt-theme-chooser`      | `active` (`light`, `dark` or `device`; any other value draws as `device`; the parent sets it and the component never changes it, nor any `data-theme`), `labels` (property; `{ theme, light, dark, device }`, English by default). The Theme chooser for an app's top bar, placed just before `wt-language-chooser`. Its `wt-button variant="secondary"` trigger draws one large `wt-icon` for the active choice — `theme-light` (a sun), `theme-dark` (a crescent) or `theme-device` (a half-filled circle), registered by the component when it loads — and is named by `aria-label` as the label, a colon and the active choice ("Theme: Follow device", "Tema: Oscuro"). Its menu of `menuitemradio` options, each an icon and its name, runs Light, Dark, Follow device. It places, follows and dismisses its menu, and handles its keys, the way `wt-language-chooser` does, through the same helper (`packages/ui/src/menu-popover.ts`): below the trigger, lined up with its trailing edge; Escape closes it and returns focus to the trigger; a press or focus outside closes it; ArrowDown, ArrowUp, Home and End move between the options; opening focuses the checked option. Focus as `wt-language-chooser`: no `delegatesFocus` of its own; the `wt-button` delegates to its inner button. `data-test` hooks `theme-trigger`, `theme-light`, `theme-dark` and `theme-device` | `wt-theme-selected` — `detail: { choice }`; a pick closes the menu and returns focus to the trigger |
 | `wt-floor-plan-canvas`  | `tables` (property; `{ key, label, fixed, placement, refused? }[]`, the placed tables only, `placement` in grid squares), `selected` (the selected table's key, or null; set by the parent), `copy` (property; `{ label, fixed, rotate, keys?, size? }`, English by default); parts: `viewport`, `grid`, `table`, `fixed-marker`, `rotate-handle`, `resize-dot`, `resize-handle`, `resize-corner`, `resize-corner-handle`, `size-badge`, `refused-reason`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `wt-table-select` (`{ key }`, `null` for a click on empty grid), `wt-table-move` (`{ key, x, y }`), `wt-table-resize` (`{ key, x, y, width, height }`), `wt-table-rotate` (`{ key, rotation, x, y }`)                                                                                                                               |
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
-| `wt-course-heading` | `mark` (`""` draws none; `sent` draws a fully rounded pill, a `--wt-color-success` `check` before the word, on `--wt-color-tab-ready-tint` in `--wt-color-text`), `markLabel` (attribute `mark-label`; the mark's word, which the page passes in its own language), `level` (the heading level for assistive technology: a whole number from 1 to 6, any other value drawing as 3, the default); default slot (the title, bold, uppercase, muted, `--wt-font-size-sm`, letter-spaced `--wt-letter-spacing-caps`, on `--wt-color-bg`), `end` slot (an action at the right, outside the heading); part: `mark` | — |
+| `wt-course-heading` | `mark` (`""` draws none; `sent` draws a fully rounded pill, a `--wt-color-success` `check` before the word, bold `--wt-font-size-sm` on `--wt-color-tab-ready-tint` in `--wt-color-text`), `markLabel` (attribute `mark-label`; the mark's word, which the page passes in its own language), `level` (the heading level for assistive technology: a whole number from 1 to 6, any other value drawing as 3, the default); default slot (the title, bold, uppercase, muted, `--wt-font-size-sm`, letter-spaced `--wt-letter-spacing-caps`, on `--wt-color-bg`), `end` slot (an action at the right, outside the heading); the title sits at the left and the mark just before the action at the right, `--wt-space-2` apart, on the title's line while the whole title fits there on one line; otherwise the mark and the action move together onto a line of their own under the title, at the right, `--wt-space-3` below it, and the title takes its whole line, its lines balanced, a word too long for that line broken; the drawn mark is hidden from assistive technology and its word is read as part of the heading; part: `mark` | — |
 | `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, outline, pulse, cue, allergy, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `outline` a `FloorMapOutline` or null, `pulse` a `FloorMapPulse` or null, `cue` a `FloorMapCue` (`{ icon, text }`, `icon` a `floor-*` icon name or null) or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label, allergy }`, default "Tables" and "Allergy"), `reducedMotion` (property; unset reads `prefers-reduced-motion`); sets `--floor-map-ratio` on its own host, the width ÷ height of what it fits (1 with no tables), for its parent's CSS to read, so a parent must not overwrite its `style` attribute; parts: `table`, `shape`, `caption`, `name`, `cue`, `allergy`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 A `wt-row-actions` selection returns focus to its trigger before the action runs, so an action
@@ -1236,7 +1236,7 @@ New order's lines. A line the till scrolls into view (a dish just added while th
 above the bar rather than under it: the screen measures
 the bar's height into `--draft-bar-size`, which the basket's lines keep clear below them
 (`scroll-margin-block-end`). Its wrappers, `[data-round-controls]` and `.round-bar`, are
-`display: contents`, so the bar can rise anywhere in the order pane, over an open Sent panel too.
+`display: contents`, so the bar can rise anywhere in the order pane, over the sent rows too.
 While a round is being sent the outer wrapper stays `inert`, and the fade is drawn on each of its
 parts and on the bar's buttons, since a `display: contents` element paints nothing. The screen's
 `:host` is `isolation: isolate`, as the Floor's is, so the bar's `z-index: 1` never draws it over
@@ -1278,7 +1278,7 @@ buttons) in place of side by side,
 and its `view` state says which is shown; browsing is hidden, never removed, on Order. Order's
 button carries the New order's item count after a " · " hidden from screen readers. A table opens
 on Order when the bill on screen has sent lines and on Menu otherwise; a bill switch shows Menu;
-widening shows Menu. Showing Order, by the switch or by the Menu bar's words or Send all, shows its
+narrowing back from side by side shows Order if Order was showing before the widening, and Menu otherwise. Showing Order, by the switch or by the Menu bar's words or Send all, shows its
 top with the switch in view: the basket scrolls to a dish only when it is added while Order shows
 (`revealAdded`), and one added on Menu counts as seen. When showing Order hides the control that
 showed it, such as the Menu bar's words, focus moves to the switch's Order button. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
@@ -6558,9 +6558,9 @@ already separates it. Correction and MOVED slips print none.
 
 An order, at a table or the counter, stores each dish as its own portion, so two identical burgers
 are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
-would stand, its members in line order: the till's Sent panel, its sent-line fallback list and the
+would stand, its members in line order: the till's sent-line fallback list and the
 Move dishes picker, Items in Pay (`portionGroups`, `tabLinePortionKey`,
-`sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the station screen's cards and the
+`apps/till/src/state/portion-groups.ts`), the station screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
 paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
 order detail (`readBillLines`, `apps/server/src/orders-detail.ts`). Two rows stay apart when anything
@@ -6574,7 +6574,11 @@ always stand alone.
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
-or a count of it. Fire now releases every member of the row with its extras in one group.
+or a count of it. On a sent row that joins served portion lines to lines with dishes left, Void and
+Comp act on the lines left, and Void served and Comp served on the served lines alone (named by
+their own lines). A single line partly served is one line, so there Comp takes the whole line and Void the whole
+line on an open bill (on a settled bill Void's count leaves the served portions out), and Void
+served and Comp served are not offered. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
 setting. On the station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: the counter basket
@@ -6618,6 +6622,38 @@ a `checkbox` named by the dish, its quantity, its guest and its second line, wit
 its question (“Doneness: Medium”), so rows of one dish that differ in any of those read differently.
 Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.
 
+### The order's sent rows (till)
+
+Above a table's New order, the bill's sent dishes are drawn always, with no box to open
+(`till-sent-orders`, `apps/till/src/widgets/sent-orders.ts`; the sections and rows come from
+`sentSections`, `apps/till/src/state/sent-sections.ts`). Each fire group is a section under a
+`wt-course-heading`, in firing order, then the dishes sent outside any group under one of their
+own. A heading's title is its courses' names, then its state: "Fired 12 min ago", "At the pass"
+when every dish still to serve waits at the pass, or "Held" while any of the group's dishes, on any
+bill, still waits for Fire. A fired or at-the-pass heading carries
+the ✓ Sent mark and **Serve all**, which serves the section's released dishes still to serve; a held
+heading carries no mark and **Fire**, with **Serve all** beside it when some of this bill's dishes under it are released and still to serve, and its other bills' held dishes stand under it as ordinary
+rows with no price, their second line the bill's name ("Bill 2"). **Serve all**, named after its group for a screen reader as **Fire** is, is a word, not a
+block: a `ghost` `wt-button`, `md` and bold, in `--wt-color-primary-text` when it can be pressed, whose 44 px tap area
+spills into the heading's padding so the heading stays about 44 px tall, its word level with the
+mark's and **Fire**'s, on the title's line or on a line of its own, where its tap area spills into the gap above and stays clear of the title. **Fire** is outlined
+(`secondary`). The time in a title ("Fired 12 min ago") never breaks across lines. The sent rows
+and their headings sit on the page colour, with `--wt-space-3` below the last row; beside the menu,
+the order layout (`apps/till/src/screens/table-order-layout.ts`) paints `till-sent-orders`
+`--wt-color-bg` out to the order column's edge, and the draft bar reaches the same edge, while the
+new dishes keep the column's `--wt-color-surface`. A row is quiet (`apps/till/src/widgets/sent-row.ts`): normal-weight muted text, the quantity
+in its own column, the name, and the price at the right, then ⓘ. Its muted second line holds the
+dish's extras and note, and the row's state only when that differs from its heading's ("Held",
+"At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
+portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
+one line of 3 or three identical lines of 1 (`sentRowPortionKey`,
+`apps/till/src/state/portion-groups.ts`); a served row joins the first row listed with something left of its dish; a cancelled but charged part stays a row of its own. Within
+a section (`compareRows`, `apps/till/src/state/sent-sections.ts`), ready rows come first, by when
+they were made ready; then the other released rows with something left, by when they were fired,
+those not yet fired after them; then rows still held, in the order the bill's read lists them,
+whether the section is held or fired; and last the rows with nothing left, served or cancelled but
+charged, in line order. Rows with the same time go by line id.
+
 ### The dish picker
 
 Move dishes draws the bill's dishes through `till-portion-picker`
@@ -6630,7 +6666,7 @@ is picked.
 
 - **A tick** is a native checkbox labelled with the dish's name, then each of its extras on a line
   of its own beneath, in the names the screen gives the bill's lines. A dish or extra adds its
-  quantity, written as the Sent list writes it ("Iberian ham ×0.32", "Onion ×2"), unless it is a
+  quantity ("Iberian ham ×0.32", "Onion ×2"), unless it is a
   single item of something counted in whole units. The − and + of a row are named by the same
   words. Ticking a row takes every member
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +

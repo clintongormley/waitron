@@ -51,12 +51,12 @@ async function openLine(kind: "held" | "served", over: Partial<TillTableOrderScr
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-toggle]`)!);
-  await panel.updateComplete;
+  const root = panel.shadowRoot!;
   await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(
-      `[data-sent-info="${kind === "held" ? "l-flan" : "l-croq"}"]`,
-    )!,
+    kind === "held"
+      ? root.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!
+      : (root.querySelector<HTMLElement>('[data-served-line="l-croq"] [data-sent-info="l-croq"]') ??
+          root.querySelector<HTMLElement>('[data-fired-line="l-croq"] [data-sent-info="l-croq"]')!),
   );
   await el.updateComplete;
   return el;
@@ -327,15 +327,26 @@ it("Void on an actually served dish still opens consent for its original parent"
   expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
 });
 
+/** Croquetas wholly served: a part-served dish is one row with what is left of it, so only a
+ * wholly served one opens a window holding served portions alone. */
+function croquetasServed(orders: ReturnType<typeof current>) {
+  Object.assign(orders.groups[0]!.rows[0]!, {
+    servedQuantity: "4.000",
+    servedAt: "2026-09-28T20:05:00.000Z",
+  });
+  return orders;
+}
+
 it("offers Void… on a paid bill's unserved slice only", async () => {
-  const paid = () => {
+  const paid = (served = false) => {
     const orders = structuredClone(current());
+    if (served) croquetasServed(orders);
     orders.groups[0]!.rows[0]!.billStatus = "settled";
     const store = new DraftStore();
     store.billStatus = "settled";
     return { currentOrders: orders, bills: [bill("settled")], draftStore: store };
   };
-  const served = await openLine("served", paid());
+  const served = await openLine("served", paid(true));
   expect(q(served, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
   expect(q(served, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
   expect(q(served, "[data-sent-line-void]")).toBeNull();
@@ -357,7 +368,7 @@ it("offers Void… on a paid bill's unserved slice only", async () => {
 it.each(["row", "bills"] as const)(
   "offers no Void… on a served dish when only the %s read says the bill is paid",
   async (source) => {
-    const orders = structuredClone(current());
+    const orders = croquetasServed(structuredClone(current()));
     if (source === "row") orders.groups[0]!.rows[0]!.billStatus = "settled";
     const el = await openLine("served", {
       currentOrders: orders,
@@ -720,7 +731,11 @@ it("Comp from the live portions of a part-cancelled dish starts at the whole dis
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   const infos = panel.shadowRoot!.querySelectorAll<HTMLElement>('[data-sent-info="l-croq"]');
   expect(infos).toHaveLength(2);
-  await userEvent.click(infos[1]!);
+  const live = panel.shadowRoot!.querySelector<HTMLElement>(
+    '[data-fired-line="l-croq"] [data-sent-info="l-croq"]',
+  )!;
+  expect([...infos]).toContain(live);
+  await userEvent.click(live);
   await el.updateComplete;
   expect(q(el, "[data-sent-line-dialog]").textContent).not.toContain("Cancelled, charged");
   const events = capture(el, "adjust");

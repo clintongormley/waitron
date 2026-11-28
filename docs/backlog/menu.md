@@ -211,8 +211,8 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 ## Remaining actions on measured dishes
 
 - **Partial adjustments and payments.** Carry the measured-line fact to the actions that let
-  staff comp, cancel or pay part of a line. `TabLine` lacks the portion flag used by the Sent
-  panel, and `adjustments-apply.ts` checks for weighed amounts without recognising whole-number ml.
+  staff comp, cancel or pay part of a line. `TabLine` has no `countsWholePortions`, the flag a sent dish's
+  Mark served count reads from `CurrentOrderRow`, and `adjustments-apply.ts` checks for weighed amounts without recognising whole-number ml.
 - **Replacing a measured set-menu dish in a draft.** `DraftStore.addProduct` drops the line to
   replace, and the amount picker also needs that line before it can save the new choice in place.
 

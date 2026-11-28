@@ -498,7 +498,7 @@ describe("New order: compact rows", () => {
     await tap(el, "Beer");
     expect(rows(el)).toEqual(["Beer ×2"]);
     const row = await rowOf(el, 0);
-    expect(row.querySelector(".draft-row-qty")!.textContent!.trim()).toBe("2");
+    expect(row.querySelector(".row-qty")!.textContent!.trim()).toBe("2");
     expect(
       [...root(el).querySelectorAll<TillBasket>("till-basket")].flatMap((basket) => [
         ...basket.shadowRoot!.querySelectorAll("[data-draft-row]"),

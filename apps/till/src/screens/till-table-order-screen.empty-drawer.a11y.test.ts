@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -77,20 +77,17 @@ describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", 
         await el.updateComplete;
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
-        expect(panel.shadowRoot!.querySelector("[data-sent-panel] .summary")!.textContent).toBe(
-          t("table.sent_counts")
-            .replace("{ready}", "0")
-            .replace("{firing}", "0")
-            .replace("{held}", "0")
-            .replace("{served}", "1"),
-        );
-        for (const selector of ["[data-sent-toggle]", "[data-served-toggle]"]) {
-          const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-          if (toggle.getAttribute("aria-expanded") === "false") {
-            await userEvent.click(toggle);
-            await panel.updateComplete;
-          }
-        }
+        expect(
+          panel.shadowRoot!.querySelector("[data-sent-panel] h2.visually-hidden")!.textContent,
+        ).toBe(t("table.sent_title"));
+        const rows = [
+          ...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-panel] .sent-row"),
+        ];
+        expect(rows.map((each) => each.dataset.servedLine)).toEqual(["stored-served"]);
+        expect(rows[0]!.querySelector(".row-qty")!.textContent).toBe("1");
+        expect(
+          panel.shadowRoot!.querySelector("[data-fired-line], [data-held-line], .row-ready"),
+        ).toBeNull();
         const served = panel.shadowRoot!.querySelector<HTMLElement>(
           '[data-served-line="stored-served"]',
         )!;

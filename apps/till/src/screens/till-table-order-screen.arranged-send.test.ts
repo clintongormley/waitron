@@ -140,7 +140,7 @@ it.each([false, true])("draft names use the content language when locked=%s", as
     await el.updateComplete;
     await showView(el, "order", { ifShown: true });
     const row = draftRow(el, 0)!;
-    const name = row.querySelector<HTMLElement>(".draft-row-name [lang]");
+    const name = row.querySelector<HTMLElement>(".row-name [lang]");
     expect(name?.lang).toBe("en");
     expect(name?.textContent).toBe("Extraordinarily long seasonal vegetables");
     expect(getComputedStyle(name!).hyphens).toBe("auto");

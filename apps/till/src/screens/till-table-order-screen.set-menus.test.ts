@@ -71,7 +71,7 @@ it("shows an unplaced dish's own price and its extra in the row and order total"
   await showView(el, "order", { ifShown: true });
   await vi.waitFor(() => {
     const row = draftRow(el, 0)!;
-    expect(row.querySelector(".draft-row-price")?.textContent?.trim()).toBe("€20.00");
+    expect(row.querySelector(".row-price")?.textContent?.trim()).toBe("€20.00");
     expect(row.querySelector(".set-menu-tag")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-order-total]")?.textContent?.trim()).toBe("€20.00");
   });

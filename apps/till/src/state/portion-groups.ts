@@ -1,7 +1,9 @@
+import type { PartyAllergySnapshot } from "@waitron/module";
 import { type BillSetMenuState, optionSnapshotNames } from "@waitron/shared";
 import type { StationQueueItem } from "../api/client.js";
 import type { ExpoItem, LineNutrition, TabLine } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
+import { allergyGuestId } from "../widgets/party-allergy-mark.js";
 import type { SentSlice } from "./sent-panel.js";
 
 /**
@@ -76,27 +78,34 @@ export function portionLineFacts(line: TabLine) {
   ];
 }
 
+/** The facts of a dish line, its extras and `shown` that serving it does not change. */
+function unservedFacts(dish: TabLine, lines: readonly TabLine[], shown: unknown) {
+  const extras = lines
+    .filter((line) => line.parentLineNo === dish.lineNo)
+    .map((extra) => JSON.stringify(portionLineFacts(extra)))
+    .sort();
+  return [
+    portionLineFacts(dish),
+    dish.courseId,
+    dish.groupId,
+    dish.stationId,
+    dish.firedAt,
+    extras,
+    shown,
+  ];
+}
+
 export function tabLinePortionKey(
   dish: TabLine,
   lines: readonly TabLine[],
   shown: unknown = null,
 ): string | null {
   if (!wholePortion(dish)) return null;
-  const extras = lines
-    .filter((line) => line.parentLineNo === dish.lineNo)
-    .map((extra) => JSON.stringify(portionLineFacts(extra)))
-    .sort();
   return JSON.stringify([
-    portionLineFacts(dish),
-    dish.courseId,
-    dish.groupId,
-    dish.stationId,
+    unservedFacts(dish, lines, shown),
     dish.state,
-    dish.firedAt,
     dish.servedAt !== null,
     dish.movable,
-    extras,
-    shown,
   ]);
 }
 
@@ -112,35 +121,68 @@ export function apartInSetMenus(
   return (dish) => (apart.has(dish.id) ? null : keyOf(dish));
 }
 
+/** What makes two sent portions one row: `dish`, the facts serving does not change, and
+ * `progress`, how far the kitchen got with an unserved portion (null once served). */
+export interface SentRowPortionKey {
+  dish: string;
+  progress: string | null;
+}
+
 /**
- * {@link tabLinePortionKey} for a slice of the Sent panel, whose rows lack the product, answers
- * and prices: those come from the bill line of the same id and number. Null when the slice is not
- * the whole of a one-portion line, or when that bill line is not known.
+ * {@link tabLinePortionKey} for a sent row's slice, which lacks the product, answers and prices:
+ * those come from the bill line of the same id and number. Null when the slice is not the whole of
+ * a one-portion line, or when that bill line is not known. Serving changes the slice's kind, the
+ * line's served time, state and movability and the kitchen's progress, so `dish` leaves them out
+ * and an unserved portion's progress travels apart, letting a dish's served and unserved portions
+ * share one row; the basket's and the kitchen's keys still keep them in.
  */
-export function sentSlicePortionKey(
+export function sentRowPortionKey(
   slice: SentSlice,
   lines: readonly TabLine[],
   shown: unknown = null,
-): string | null {
+): SentRowPortionKey | null {
   const { row } = slice;
   const dish = lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo);
-  if (dish === undefined || slice.quantity !== "1" || trimQuantity(row.quantity) !== "1")
+  if (
+    dish === undefined ||
+    !wholePortion(dish) ||
+    slice.quantity !== "1" ||
+    trimQuantity(row.quantity) !== "1"
+  )
     return null;
-  const bill = tabLinePortionKey(dish, lines, shown);
-  return bill === null
-    ? null
-    : JSON.stringify([
-        bill,
-        slice.kind,
-        row.workingOrderId,
-        row.netAmount,
-        row.released,
-        row.readyAt,
-        row.firedAt,
-        row.kitchen,
-        row.sentAt !== undefined,
-        nutritionFacts(row.nutrition),
-      ]);
+  return {
+    dish: JSON.stringify([
+      unservedFacts(dish, lines, shown),
+      slice.kind === "cancelled_charged",
+      row.workingOrderId,
+      row.netAmount,
+      row.released,
+      row.firedAt,
+      row.kitchen === null ? null : row.kitchen.stationId,
+      row.sentAt !== undefined,
+      nutritionFacts(row.nutrition),
+    ]),
+    progress:
+      slice.kind === "served"
+        ? null
+        : JSON.stringify([dish.state, dish.movable, row.readyAt, row.kitchen]),
+  };
+}
+
+/** Equal exactly when two keys' parts are: `dish` is a JSON array, so where it ends is never in
+ * doubt, and `progress` is null or another. */
+export const sentRowId = (key: SentRowPortionKey): string => key.dish + (key.progress ?? "");
+
+/** What besides the dish keeps sent portions apart, as {@link sentRowPortionKey}'s `shown`: each
+ * one's guest allergy and set menu. */
+export function sentPortionsApart(
+  allergy: PartyAllergySnapshot | null,
+  setMenuDishes: ReadonlyMap<string, { setMenuId: string }>,
+): (slice: SentSlice) => unknown[] {
+  return ({ row: { lineId: id } }) => [
+    allergyGuestId(allergy, { kind: "working", id }),
+    setMenuDishes.get(id)?.setMenuId,
+  ];
 }
 
 /** The facts a kitchen screen draws for a dish, shared by the station queue's items and the pass's. */

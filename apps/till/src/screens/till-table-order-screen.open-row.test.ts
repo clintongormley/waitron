@@ -16,6 +16,7 @@ import {
   mount,
   resized,
   showView,
+  shownView,
 } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { OrderLine } from "../state/working-order.js";
@@ -115,7 +116,7 @@ it("+ and − change the dish's count, its row's price and the order total at on
   const { el, draft } = await open();
   const total = () =>
     el.shadowRoot!.querySelector("[data-order-total]")!.textContent!.replace(/\s/g, "");
-  const price = () => row(el, 0).querySelector(".draft-row-price")!.textContent!.trim();
+  const price = () => row(el, 0).querySelector(".row-price")!.textContent!.trim();
   expect(price()).toBe("€6.00");
   expect(total()).toBe("€9.00");
   await tapRow(el, 0);
@@ -636,6 +637,51 @@ describe("opening a row near the window's foot", () => {
     const top = barTop(el);
     expectGapAboveBar(el, box, top);
     expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+  });
+
+  it("a box opened upright, turned sideways and back upright, is on Order with the box above the bar", async () => {
+    await page.viewport(390, 844);
+    try {
+      const draft = new DraftStore();
+      draft.loadFrom(
+        "draft",
+        many.map((product) => ({ product, quantity: "2", place: { kind: "fire" } })),
+      );
+      const { el, host } = await mount({
+        products: many,
+        menus: menuOf(many),
+        draftStore: draft,
+        handheld: true,
+      });
+      host.style.width = "100vw";
+      host.style.height = "100vh";
+      host.style.overflowY = "auto";
+      await resized(el);
+      await showView(el, "order", { scripted: true });
+      await settled(el);
+      await resized(el);
+      host.scrollTop = 0;
+      await scrollSettled(host);
+      await lastShowing(el, host, 8);
+      await tapRow(el, 8);
+      await scrollSettled(host);
+      expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(barTop(el));
+      for (const [width, height] of [
+        [844, 390],
+        [390, 844],
+      ] as const) {
+        await page.viewport(width, height);
+        await resized(el);
+        await settled(el);
+        await resized(el);
+        await scrollSettled(host);
+      }
+      expect(shownView(el)).toBe("order");
+      expect(controls(el, 8)).not.toBeNull();
+      expectGapAboveBar(el, row(el, 8).closest(".entry")!.getBoundingClientRect(), barTop(el));
+    } finally {
+      await page.viewport(1280, 1800);
+    }
   });
 
   it("a row whose opened box already shows whole does not move the list", async () => {

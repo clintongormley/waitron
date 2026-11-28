@@ -108,7 +108,7 @@ function steakLines(id: string, lineNo: number, kind: Kind): TabLine[] {
 }
 
 /** `count` identical one-unit steaks (two unless said), each with two limes, shown as one
- * "Steak ×count" row, with that row's sheet open. */
+ * "count Steak" row, with that row's sheet open. */
 async function openGrouped(kind: Kind, over: Partial<TillTableOrderScreen> = {}, count = 2) {
   const numbers = Array.from({ length: count }, (_, index) => count - index);
   const rows = numbers.map((lineNo) => steakRow(`s-${lineNo}`, lineNo, kind));
@@ -131,17 +131,10 @@ async function openGrouped(kind: Kind, over: Partial<TillTableOrderScreen> = {},
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  for (const name of ["sent", kind]) {
-    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${name}-toggle]`);
-    if (toggle?.getAttribute("aria-expanded") === "false") {
-      await userEvent.click(toggle);
-      await panel.updateComplete;
-    }
-  }
-  const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="s-1"] .what`)!;
-  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toMatch(
-    new RegExp(`^Steak ×${count} Lime ×`),
-  );
+  const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="s-1"]`)!;
+  expect(shown.querySelector(".row-qty")!.textContent!.trim()).toBe(String(count));
+  expect(shown.querySelector(".row-name")!.textContent!.trim()).toBe("Steak");
+  expect(shown.querySelector(".row-more")!.textContent!.trim()).toMatch(/^Lime ×2/);
   await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-1"]')!);
   await el.updateComplete;
   return el;
@@ -361,6 +354,229 @@ it("A803 portion grouping: Undo served on a grouped row asks how many and takes 
     },
   ]);
 });
+
+it("A803 portion grouping: a served row whose portions became ready at different times keeps its window's actions", async () => {
+  const rows = [2, 1].map((lineNo) => ({
+    ...steakRow(`s-${lineNo}`, lineNo, "served"),
+    readyAt: `2026-09-28T20:0${lineNo}:00.000Z`,
+  }));
+  const currentOrders = current({
+    reminder: null,
+    groups: [currentGroup("g1", 3, "fired", rows)],
+    ungrouped: [],
+  });
+  const el = await openGrouped("served", { currentOrders });
+  expect(text(q(el, "[data-sent-line-dialog] .move-dish"))).toBe("Steak ×2");
+  const events = capture(el, "unserve-lines");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-unserve]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  expect(events).toEqual([
+    {
+      items: [
+        { lineId: "s-1", quantity: "1" },
+        { lineId: "s-2", quantity: "1" },
+      ],
+    },
+  ]);
+});
+
+/** Three identical steaks drawn as one row, s-1 (and s-2 when `served` is 2) served and the rest
+ * not, with its window open. */
+async function openPartServed(over: Partial<TillTableOrderScreen> = {}, served = 1) {
+  const kindOf = (lineNo: number): Kind => (lineNo <= served ? "served" : "fired");
+  const numbers = [3, 2, 1];
+  const orders = current({
+    reminder: null,
+    groups: [
+      currentGroup(
+        "g1",
+        3,
+        "fired",
+        numbers.map((lineNo) => steakRow(`s-${lineNo}`, lineNo, kindOf(lineNo))),
+      ),
+    ],
+    ungrouped: [],
+  });
+  const { el } = await mount({
+    currentOrders: orders,
+    groups,
+    now,
+    bills: [bill],
+    lines: numbers.flatMap((lineNo) => steakLines(`s-${lineNo}`, lineNo, kindOf(lineNo))),
+    ...over,
+  });
+  el.style.width = "1280px";
+  await resized(el);
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  expect(panel.shadowRoot!.querySelectorAll("[data-sent-info]")).toHaveLength(1);
+  await userEvent.click(
+    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="s-${served + 1}"]`)!,
+  );
+  await el.updateComplete;
+  return el;
+}
+
+it("A803 portion grouping: a part-served row's window is headed with the row's count and price", async () => {
+  const el = await openPartServed();
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  const rowPrice = text(panel.shadowRoot!.querySelector('[data-fired-line="s-2"] .row-price')!);
+  const sheet = q(el, "[data-sent-line-dialog]");
+  expect(text(sheet.querySelector(".move-dish")!)).toBe("Steak ×3");
+  expect(text(sheet.querySelector("[data-sent-line-amount]")!)).toBe("€28.50");
+  const cells = (row: Element) => [...row.children].map(text);
+  expect(cells(sheet.querySelector('[data-sent-extra="s-2-lime"]')!)).toEqual(["Lime ×2", "€3.00"]);
+  expect(cells([...sheet.querySelectorAll(".total-row")].at(-1)!)).toEqual(["Total", rowPrice]);
+  expect(rowPrice).toBe("€31.50");
+  expect(text(sheet.querySelector("[data-sent-line-served]")!)).toBe("1 of 3 served");
+  cleanupWidgets();
+
+  const served = await openGrouped("served", {}, 3);
+  expect(text(q(served, "[data-sent-line-dialog] .move-dish"))).toBe("Steak ×3");
+});
+
+it("A803 portion grouping: a part-served row's Serve window is headed with the row's count", async () => {
+  const el = await openPartServed();
+  await userEvent.click(q(el, "[data-sent-line-serve]"));
+  await el.updateComplete;
+  expect(text(q(el, "[data-serve-dialog] .move-dish"))).toBe("Steak ×3");
+  expect(text(q(el, "[data-serve-dialog] .serve-so-far"))).toBe("1 of 3 served");
+  expect(text(q(el, "[data-serve-count]"))).toBe("2");
+});
+
+it("A803 portion grouping: a part-served row takes back only its served portion and serves only what is left", async () => {
+  const el = await openPartServed();
+  const undos = capture(el, "unserve-lines");
+  const serves = capture(el, "serve-lines");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-unserve]"));
+  expect(undos).toEqual([{ items: [{ lineId: "s-1", quantity: "1" }] }]);
+  cleanupWidgets();
+
+  const again = await openPartServed();
+  const served = capture(again, "serve-lines");
+  await userEvent.click(q(again, "[data-sent-line-serve]"));
+  await again.updateComplete;
+  expect(text(q(again, "[data-serve-count]"))).toBe("2");
+  await userEvent.click(q(again, "[data-serve-confirm]"));
+  expect(served).toEqual([
+    {
+      items: [
+        { lineId: "s-2", quantity: "1" },
+        { lineId: "s-3", quantity: "1" },
+      ],
+    },
+  ]);
+  expect(serves).toEqual([]);
+});
+
+it("A803 portion grouping: a part-served row's Not served sends nothing once its served portion is another dish", async () => {
+  const el = await openPartServed();
+  const undos = capture(el, "unserve-lines");
+  await openMore(el);
+  const unserve = q(el, "[data-sent-line-unserve]");
+  const orders = structuredClone(el.currentOrders!);
+  orders.groups[0]!.rows.find((each) => each.lineId === "s-1")!.note = "Rare";
+  el.lines = el.lines.map((line) => (line.id === "s-1" ? { ...line, note: "Rare" } : line));
+  el.currentOrders = orders;
+  unserve.click();
+  await el.updateComplete;
+  expect(undos).toEqual([]);
+  expect(q(el, "[data-sent-line-unserve]")).toBeNull();
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+});
+
+it.each(["open", "settled"] as const)(
+  "A803 portion grouping: Void on a part-served row of a %s bill names only the portions left",
+  async (status) => {
+    const el = await openPartServed({ bills: [{ ...bill, status }] });
+    const events = capture(el, "cancel-item");
+    await openMore(el);
+    expect(q(el, "[data-sent-line-unserve]") === null).toBe(status === "settled");
+    await userEvent.click(q(el, "[data-sent-line-void]"));
+    expect(events).toEqual([{ lineId: "s-2", lineIds: ["s-2", "s-3"] }]);
+  },
+);
+
+it("A803 portion grouping: a part-served row's window voids and comps its served portion by itself", async () => {
+  const el = await openPartServed();
+  const cancels = capture(el, "cancel-item");
+  await openMore(el);
+  expect(text(q(el, "[data-sent-line-void-served]"))).toBe("Void served…");
+  await userEvent.click(q(el, "[data-sent-line-void-served]"));
+  expect(cancels).toEqual([{ lineId: "s-1" }]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+  cleanupWidgets();
+
+  const again = await openPartServed();
+  const comps = capture(again, "adjust");
+  await openMore(again);
+  expect(text(q(again, "[data-sent-line-comp-served]"))).toBe("Comp served…");
+  await userEvent.click(q(again, "[data-sent-line-comp-served]"));
+  expect(comps).toEqual([
+    {
+      kind: "comp",
+      target: expect.objectContaining({ lineId: "s-1", quantity: "1", total: "10.50" }),
+    },
+  ]);
+  expect((comps[0] as { target: object }).target).not.toHaveProperty("lineIds");
+});
+
+it("A803 portion grouping: two served portions of a part-served row are voided and comped together", async () => {
+  const el = await openPartServed({}, 2);
+  const cancels = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void-served]"));
+  expect(cancels).toEqual([{ lineId: "s-1", lineIds: ["s-1", "s-2"] }]);
+  cleanupWidgets();
+
+  const again = await openPartServed({}, 2);
+  const comps = capture(again, "adjust");
+  await openMore(again);
+  await userEvent.click(q(again, "[data-sent-line-comp-served]"));
+  expect(comps).toEqual([
+    {
+      kind: "comp",
+      target: expect.objectContaining({ lineIds: ["s-1", "s-2"], quantity: "2", total: "21.00" }),
+    },
+  ]);
+});
+
+it("A803 portion grouping: a paid part-served row offers no Void or Comp of its served portion", async () => {
+  const el = await openPartServed({ bills: [{ ...bill, status: "settled" }] });
+  await openMore(el);
+  expect(q(el, "[data-sent-line-void]")).not.toBeNull();
+  expect(q(el, "[data-sent-line-void-served]")).toBeNull();
+  expect(q(el, "[data-sent-line-comp-served]")).toBeNull();
+});
+
+it.each(["paid", "another dish"] as const)(
+  "A803 portion grouping: a retained served Void or Comp sends nothing once %s",
+  async (change) => {
+    for (const action of ["void", "comp"] as const) {
+      const el = await openPartServed();
+      const events = capture(el, action === "void" ? "cancel-item" : "adjust");
+      await openMore(el);
+      const button = q(el, `[data-sent-line-${action}-served]`);
+      expect(button).not.toBeNull();
+      const orders = structuredClone(el.currentOrders!);
+      if (change === "paid") {
+        for (const each of orders.groups[0]!.rows) each.billStatus = "settled";
+        el.bills = [{ ...bill, status: "settled" }];
+      } else {
+        orders.groups[0]!.rows.find((each) => each.lineId === "s-1")!.note = "Rare";
+        el.lines = el.lines.map((line) => (line.id === "s-1" ? { ...line, note: "Rare" } : line));
+      }
+      el.currentOrders = orders;
+      button.click();
+      await el.updateComplete;
+      expect(events, action).toEqual([]);
+      cleanupWidgets();
+    }
+  },
+);
 
 it("A803 portion grouping: a grouped sheet sends nothing once its members stop matching", async () => {
   const el = await openGrouped("fired");

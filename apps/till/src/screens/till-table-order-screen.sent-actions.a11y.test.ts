@@ -66,10 +66,6 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
       await panel.updateComplete;
       for (const kind of ["held", "served"] as const) {
         await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-toggle]`)!,
-        );
-        await panel.updateComplete;
-        await userEvent.click(
           panel.shadowRoot!.querySelector<HTMLElement>(
             `[data-sent-info="${kind === "held" ? "l-flan" : "l-croq"}"]`,
           )!,

@@ -720,9 +720,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **For the owner's redesign of the table screens and review of the device screens** (bundle of 17,
+- **For the owner's redesign of the table screens and review of the device screens** (bundle of 16,
   nothing to build before them). Holds A1211, A893, A936, A856, A859, A561, A562, A1101, A550, A857, A672,
-  A1333, A470, A1107, A1108, A1290.
+  A1333, A470, A1107, A1290.
   [Detail](backlog/till.md#bundle-for-the-owners-redesign-of-the-table-screens-and-review-of-the-device-screens)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out

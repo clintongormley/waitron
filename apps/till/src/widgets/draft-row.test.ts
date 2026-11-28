@@ -139,7 +139,7 @@ describe("a new dish's compact row", () => {
       `250 ml House wine ${money("5.00")}`,
       `1 Hake +${money("5.00")} ${money("5.00")}`,
     ]);
-    const second = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-row] .draft-row-more");
+    const second = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-row] .row-more");
     expect(second).toHaveLength(1);
     expect(getComputedStyle(second[0]!).color).toBe(
       tokenColour(el.shadowRoot!, "--wt-color-text-muted"),
@@ -156,16 +156,16 @@ describe("a new dish's compact row", () => {
       const style = getComputedStyle(el.shadowRoot!.querySelector(selector)!);
       return [style.fontSize, style.fontWeight];
     };
-    expect(drawn(".draft-row-qty")).toEqual([
+    expect(drawn(".row-qty")).toEqual([
       font("--wt-font-size-lg", "fontSize"),
       font("--wt-font-weight-bold", "fontWeight"),
     ]);
-    expect(drawn(".draft-row-name")).toEqual([
+    expect(drawn(".row-name")).toEqual([
       font("--wt-font-size-lg", "fontSize"),
       font("--wt-font-weight-medium", "fontWeight"),
     ]);
-    expect(drawn(".draft-row-more")[0]).toBe(font("--wt-font-size-sm", "fontSize"));
-    expect(drawn(".draft-row-price")[0]).toBe(font("--wt-font-size-md", "fontSize"));
+    expect(drawn(".row-more")[0]).toBe(font("--wt-font-size-sm", "fontSize"));
+    expect(drawn(".row-price")[0]).toBe(font("--wt-font-size-md", "fontSize"));
   });
 
   it("names the selection box with each answer after its question, so two cookings read apart", () => {
@@ -220,7 +220,7 @@ describe("a new dish's compact row", () => {
     };
     const placedPrice = () => "3.50";
     const { el } = await rows([line], { placedPrice });
-    expect(el.shadowRoot!.querySelector(".draft-row-price")!.textContent!.trim()).toBe(
+    expect(el.shadowRoot!.querySelector(".row-price")!.textContent!.trim()).toBe(
       formatMoney(draftLinePrice(line, placedPrice), currentLocale()),
     );
   });
@@ -320,7 +320,7 @@ describe("a new dish's compact row", () => {
       for (const width of ["374px", "273.6px"]) {
         el.style.width = width;
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        const prices = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".draft-row-price")];
+        const prices = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".row-price")];
         expect(prices).toHaveLength(2);
         const [withSplit, withoutSplit] = prices.map(
           (price) => price.getBoundingClientRect().right,

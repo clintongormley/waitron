@@ -543,10 +543,14 @@ Cuando tomas un pedido de 2 × Hamburguesa con queso, en una mesa o en el mostra
 dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes cancelar una hamburguesa, o en una mesa servirla o moverla, y su queso
 va con ella, y la cuenta y la estación saben siempre qué hamburguesa es cuál.
 
-Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
-**Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
-o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
-servido** en los detalles de la fila pregunta cuántos. [**Mover platos**](table-service.md#move-dishes) te deja
+Mientras los platos son iguales sigues viendo una sola fila en la cuenta y
+entre los platos enviados, arriba del pedido. La fila se separa en cuanto un plato cambia, por
+ejemplo cuando a una hamburguesa se le aplica un descuento. Entre los platos enviados, una
+hamburguesa servida sigue en su fila, que entonces dice **1 de 2 servidos**. Al tocar una fila
+enviada se marca entera como servida; **Marcar
+servido** en los detalles de la fila pregunta cuántos. Para cancelar o hacer un descuento a la
+hamburguesa ya servida, elige **Cancelar servido…** o **Descuento servido…** en el menú **Más** de
+la fila; **Cancelar…** y **Descuento…** solo toman las hamburguesas aún no servidas. [**Mover platos**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
 **Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
@@ -821,7 +825,8 @@ Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** 
 llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
 reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que
 la cocina había empezado o terminado, que se queda en ella y se cobra. Para quitar ese cobro, abre
-los detalles del plato en **Enviado** y elige **Descuento…** en el menú **Más**.
+los detalles del plato desde los platos enviados, arriba del pedido, y elige **Descuento…** en el
+menú **Más**.
 
 Si los clientes se van antes de que se sirva nada, abre **⋮** y elige **No se sirvió nada**. Se
 ofrece en una cuenta impresa que no ha recibido ningún pago y no lleva el nombre de un cliente.

@@ -154,39 +154,29 @@ async function heldGroupsList(el: TillApp) {
   await flush(el);
   const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
-    if (toggle?.getAttribute("aria-expanded") === "false") {
-      await userEvent.click(toggle);
-      await panel.updateComplete;
-    }
-  }
   const groups = [...order.groups].sort((a, b) => a.position - b.position);
   expect(
     [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")].map(
       (group) => group.dataset.heldGroup,
     ),
   ).toEqual(groups.filter((group) => group.state === "held").map((group) => group.id));
+  const dish = (row: Element) =>
+    `${row.querySelector(".product-name")!.textContent!.trim()} ×${row.querySelector(".row-qty")!.textContent!.trim()}`;
   return groups.map((group) => {
     const held = panel.shadowRoot!.querySelector(`[data-held-group="${group.id}"]`);
     if (order.currentOrders !== null) expect(held !== null).toBe(group.state === "held");
     return {
-      position:
-        held?.querySelector("[data-group-drag]")?.textContent!.split(" · ")[0] ??
-        `Group ${group.displayNumber}`,
       state: group.state,
       summary: group.summary,
       lines:
         held !== null
-          ? [...held.querySelectorAll("[data-held-line] .what, [data-companion] .what")].map(
-              (what) => what.textContent!.replace(/\s+/g, " ").trim(),
-            )
+          ? [...held.querySelectorAll("[data-held-line], [data-companion]")].map(dish)
           : group.lineIds.map((id) => {
-              const what = panel.shadowRoot!.querySelector(
-                `[data-${group.state === "held" ? "held" : "fired"}-line="${id}"] .what`,
+              const row = panel.shadowRoot!.querySelector(
+                `[data-${group.state === "held" ? "held" : "fired"}-line="${id}"]`,
               );
-              expect(what, `Sent dish ${id}`).not.toBeNull();
-              return what!.textContent!.replace(/\s+/g, " ").trim();
+              expect(row, `Sent dish ${id}`).not.toBeNull();
+              return dish(row!);
             }),
     };
   });
@@ -7254,13 +7244,6 @@ describe("till-app: the order's groups", () => {
       await flush(el);
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       return panel;
     }
 
@@ -9411,7 +9394,38 @@ describe("till-app: Current orders", () => {
     expect(notice()?.open ?? false).toBe(false);
   });
 
-  describe("native Sent panel integration", () => {
+  it("names each served dish once, in the order first served", async () => {
+    const state = structuredClone(orders);
+    const line = state.groups[0]!.rows[0]!;
+    state.groups[0]!.rows = [
+      { ...line, lineId: "line-1", name: "Bravas" },
+      { ...line, lineId: "line-2", lineNo: 2, name: "Croquettes" },
+      { ...line, lineId: "line-3", lineNo: 3, name: "Croquettes" },
+    ];
+    const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(state) });
+    const notice = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+
+    emit(await openPartyTable(el), "serve-lines", {
+      items: [
+        { lineId: "line-2", quantity: "1" },
+        { lineId: "line-3", quantity: "1" },
+      ],
+    });
+    await flush(el);
+    expect(notice().message).toBe("Croquettes · Served");
+
+    emit(tableOrder(el)!, "serve-lines", {
+      items: [
+        { lineId: "line-1", quantity: "1" },
+        { lineId: "line-2", quantity: "1" },
+        { lineId: "line-3", quantity: "1" },
+      ],
+    });
+    await flush(el);
+    expect(notice().message).toBe("Bravas · Croquettes · Served");
+  });
+
+  describe("native sent rows integration", () => {
     for (const formFactor of ["till", "phone-portrait"] as const) {
       it.each(["row", "all", "fire"] as const)(
         `native ${formFactor} repeated Sent %s presses wait for the accepted reply`,
@@ -9449,7 +9463,6 @@ describe("till-app: Current orders", () => {
                 state.groups[1]!.rows[0]!.released = true;
               } else {
                 state.groups[0]!.rows[0]!.servedQuantity = "2.000";
-                if (action === "all") state.groups[1]!.rows[0]!.servedQuantity = "3.000";
               }
               resolve({ revision: 4 });
             };
@@ -9482,15 +9495,17 @@ describe("till-app: Current orders", () => {
           try {
             let target: HTMLButtonElement;
             if (action === "fire") {
-              await userEvent.click(control("[data-held-toggle]"));
-              await panel.updateComplete;
               await userEvent.click(control('[data-group-fire="g2"]'));
               await flush(el);
               expect(send).not.toHaveBeenCalled();
               target = native(order.shadowRoot!.querySelector<HTMLElement>("[data-fire-confirm]")!);
             } else {
               target = native(
-                control(action === "row" ? '[data-serve-line="line-1"]' : "[data-serve-all]"),
+                control(
+                  action === "row"
+                    ? '[data-serve-line="line-1"]'
+                    : '[data-sent-section="g1"] [data-serve-all]',
+                ),
               );
             }
             if (action === "fire") {
@@ -9507,14 +9522,7 @@ describe("till-app: Current orders", () => {
             await flush(el);
             expect(send).toHaveBeenCalledExactlyOnceWith(
               "v1",
-              action === "fire"
-                ? "g2"
-                : action === "row"
-                  ? [{ lineId: "line-1", quantity: "1" }]
-                  : [
-                      { lineId: "line-1", quantity: "1" },
-                      { lineId: "line-2", quantity: "2" },
-                    ],
+              action === "fire" ? "g2" : [{ lineId: "line-1", quantity: "1" }],
               { submissionId: expect.any(String), expectedPartyRevision: 3 },
               ...(action === "fire" ? [{ signal: expect.any(AbortSignal) }] : []),
             );
@@ -9544,23 +9552,27 @@ describe("till-app: Current orders", () => {
               await flush(el);
               expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
                 "v1",
-                [
-                  { lineId: "line-1", quantity: "1" },
-                  { lineId: "line-2", quantity: "2" },
-                ],
+                [{ lineId: "line-1", quantity: "1" }],
                 { submissionId: expect.any(String), expectedPartyRevision: 4 },
               );
-            } else {
-              const mark = vi.mocked(api.markServed);
-              mark.mockResolvedValue({ revision: 5 });
-              await userEvent.click(native(control('[data-serve-line="line-2"]')));
-              await flush(el);
-              expect(mark).toHaveBeenCalledTimes(action === "row" ? 2 : 1);
-              expect(mark).toHaveBeenLastCalledWith("v1", [{ lineId: "line-2", quantity: "2" }], {
-                submissionId: expect.any(String),
-                expectedPartyRevision: 4,
-              });
             }
+            const mark = vi.mocked(api.markServed);
+            mark.mockResolvedValue({ revision: 5 });
+            await userEvent.click(
+              native(
+                control(
+                  action === "all"
+                    ? '[data-sent-section="g2"] [data-serve-all]'
+                    : '[data-serve-line="line-2"]',
+                ),
+              ),
+            );
+            await flush(el);
+            expect(mark).toHaveBeenCalledTimes(action === "fire" ? 1 : 2);
+            expect(mark).toHaveBeenLastCalledWith("v1", [{ lineId: "line-2", quantity: "2" }], {
+              submissionId: expect.any(String),
+              expectedPartyRevision: 4,
+            });
             expect(banner(el)).toBeNull();
             expect(drafts.saveDraft).not.toHaveBeenCalled();
             expect(drafts.takeOverDraft).not.toHaveBeenCalled();
@@ -9726,11 +9738,6 @@ describe("till-app: Current orders", () => {
       await showView(order, "order", { ifShown: true });
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-      if (toggle.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
       return panel;
     }
     it.each(["till", "phone-portrait"] as const)(
@@ -9784,8 +9791,6 @@ describe("till-app: Current orders", () => {
         });
         const order = await openPartyTable(el);
         const panel = await visiblePanel(order);
-        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-        await panel.updateComplete;
         const more = panel.shadowRoot!.querySelector<
           HTMLElement & { updateComplete: Promise<unknown> }
         >('[data-group-more="g2"]')!;
@@ -9858,8 +9863,6 @@ describe("till-app: Current orders", () => {
       });
       const order = await openPartyTable(el);
       const panel = await visiblePanel(order);
-      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-      await panel.updateComplete;
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
       );
@@ -9880,7 +9883,7 @@ describe("till-app: Current orders", () => {
         { signal: expect.any(AbortSignal) },
       );
     });
-    it("reopens ready food on re-entering the same bill after it was manually folded", async () => {
+    it("shows ready food on its row, and again on re-entering the same bill", async () => {
       const ready = {
         ...orders,
         reminder: null,
@@ -9892,11 +9895,11 @@ describe("till-app: Current orders", () => {
       const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(ready) });
       const first = await openPartyTable(el);
       const panel = await visiblePanel(first);
-      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-      await panel.updateComplete;
-      expect(
-        panel.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
-      ).toBe("false");
+      const readyOn = (sent: TillSentOrders) =>
+        sent.shadowRoot!.querySelector<HTMLElement>('[data-fired-line="line-1"] .row-ready');
+      expect(readyOn(panel)!.checkVisibility()).toBe(true);
+      expect(readyOn(panel)!.textContent!.trim()).toMatch(/^Ready /);
+      expect(panel.shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
       emit(first, "back-to-floor");
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -9905,9 +9908,9 @@ describe("till-app: Current orders", () => {
       await reopened.updateComplete;
       const next = reopened.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await next.updateComplete;
-      expect(
-        next.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
-      ).toBe("true");
+      expect(readyOn(next)!.checkVisibility()).toBe(true);
+      expect(readyOn(next)!.textContent!.trim()).toMatch(/^Ready /);
+      expect(next.shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
       expect(api.markServed).not.toHaveBeenCalled();
     });
   });

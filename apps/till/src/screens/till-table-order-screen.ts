@@ -62,7 +62,9 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
-import { sentPanel, type SentSlice } from "../state/sent-panel.js";
+import { byFiringOrder, sentPanel, type SentSlice, waitsForFire } from "../state/sent-panel.js";
+import { type SentWindowCount, partlyServed, sentWindowShare } from "../state/sent-window.js";
+import { sentLineNet } from "../state/sent-window.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -162,6 +164,7 @@ import {
   tabLineGross,
 } from "../state/adjust-target.js";
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
+import { orderLayoutStyles } from "./table-order-layout.js";
 import "../widgets/party-name-dialog.js";
 import "../widgets/party-guests-dialog.js";
 import "../widgets/table-status.js";
@@ -215,10 +218,13 @@ import "../widgets/dead-ends-section.js";
 import { payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
+  type SentRowPortionKey,
   apartInSetMenus,
-  sentSlicePortionKey,
+  sentPortionsApart,
+  sentRowPortionKey,
   tabLinePortionKey,
 } from "../state/portion-groups.js";
+import { formsOneSentRow } from "../state/sent-sections.js";
 import {
   pickGroups,
   pickRows,
@@ -684,6 +690,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   static override styles = [
+    orderLayoutStyles,
     priceWasStyles,
     billControlStyles,
     tablePartyMenuStyles,
@@ -1105,7 +1112,10 @@ export class TillTableOrderScreen extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      /* Out to the divider, like the sent part above it, so the column keeps one left edge. */
       .side-by-side .draft-bar {
+        margin-inline-start: calc(-1 * var(--wt-space-4));
+        padding-inline-start: var(--wt-space-4);
         background: var(--wt-color-surface);
       }
 
@@ -1170,49 +1180,6 @@ export class TillTableOrderScreen extends LitElement {
       .flag-kept {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .ordering {
-        flex: 1 1 auto;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-4);
-      }
-
-      .ordering.side-by-side {
-        flex-direction: row;
-        align-items: flex-start;
-      }
-
-      .browsing {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-        min-width: 0;
-      }
-
-      .side-by-side .browsing {
-        flex: 3 1 0;
-      }
-
-      .draft-pane {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-        min-width: 0;
-      }
-
-      .side-by-side .draft-pane {
-        flex: 2 1 0;
-        padding-inline-start: var(--wt-space-4);
-        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-      }
-
-      .browsing[hidden],
-      .draft-pane[hidden] {
-        display: none;
       }
 
       .draft-head {
@@ -1565,6 +1532,7 @@ export class TillTableOrderScreen extends LitElement {
   #sizedDockShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
+  #orderBeforeWide = false;
 
   @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
 
@@ -1588,6 +1556,8 @@ export class TillTableOrderScreen extends LitElement {
     undo: boolean;
     count: Decimal;
     members?: readonly CurrentOrderRow[];
+    /** The portions its heading speaks for: the row's, as the dish window counts them. */
+    shown: SentWindowCount;
   } | null = null;
 
   #serveAuthority?: {
@@ -2037,11 +2007,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#sizedDock = undefined;
   }
 
-  /** Side by side has no views, so Order left shown goes back to Menu rather than being kept for a
-   * later narrowing. */
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
-    if (this.wide && this.view === "order") void this.#showMenu();
+    const reopen = !this.wide && this.#orderBeforeWide;
+    this.#orderBeforeWide = this.wide && (this.#orderBeforeWide || this.view === "order");
+    void (this.wide ? this.#showMenu() : reopen && this.#showOrder());
     void this.updateComplete.then(() => {
       this.#placeOrderPanels();
       this.#dispatch("order-pane-resized", {});
@@ -2049,8 +2019,8 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Brings an open row back above the bar after the screen's width changes. The bar was measured when
-   * drawn, before its buttons were, and its watcher reports only after the next layout. */
+  /** Brings an open row back above the bar after the screen's width changes. The bar and its dock
+   * were measured when drawn, before the bar's buttons were; their watchers report a layout later. */
   async #revealOpenRowAgain(): Promise<void> {
     const bar = this.#sizedBar;
     await Promise.all(
@@ -2059,6 +2029,8 @@ export class TillTableOrderScreen extends LitElement {
       ),
     );
     if (bar?.isConnected) barSize(bar, bar.getBoundingClientRect().height);
+    const dock = this.#sizedDock;
+    if (dock?.isConnected) dockSize(dock, dock.getBoundingClientRect().height);
     await this.#openRow.reveal();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
@@ -2498,6 +2470,7 @@ export class TillTableOrderScreen extends LitElement {
       this.servePending = null;
       this.view = "menu";
       this.#browsingScroll = undefined;
+      this.#orderBeforeWide = false;
     }
     // A bill switch is left on Menu: the app moves `orderId` before it reads the new bill's lines.
     const opened = this.hasUpdated ? changed.get("loading") === true : true;
@@ -3371,15 +3344,15 @@ export class TillTableOrderScreen extends LitElement {
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
-        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billName(this.party?.displayName ?? "", bill)]))}
-        .busy=${this.busy || this.groupCommandBusy}
+        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billLabel(bill)]))}
+        .busy=${this.busy || this.groupCommandBusy || this.currentOrdersUnread}
         .now=${this.now}
         @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
           event.stopPropagation();
           const { expected, heldGroupIds } = event.detail;
           const held = this.groups
             .filter((group) => group.state === "held")
-            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+            .sort(byFiringOrder)
             .map((group) => group.id);
           if (
             !this.isConnected ||
@@ -3470,15 +3443,53 @@ export class TillTableOrderScreen extends LitElement {
     return this.#sentLineMembers()?.[0];
   }
 
-  /** Every row Sent lists now, as its own slice. */
+  #sentSlicesRead?: { orders: CurrentOrders; billId: string; slices: SentSlice[] };
+
+  /** Every row Sent lists now, as its own slice; worked out once per read and bill. */
   #sentSlices(orders: CurrentOrders): SentSlice[] {
-    const model = sentPanel(orders, this.orderId ?? "", this.now ?? Date.now());
-    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const billId = this.orderId ?? "";
+    const read = this.#sentSlicesRead;
+    if (read?.orders === orders && read.billId === billId) return read.slices;
+    const model = sentPanel(orders, billId);
+    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    this.#sentSlicesRead = { orders, billId, slices };
+    return slices;
   }
 
   /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
    * of a grouped row while they all still show as that one row. */
   #sentLineMembers(): SentSlice[] | undefined {
+    const info = this.#sentLineInfo();
+    return info && this.#sentPortions(info);
+  }
+
+  /** What Not served takes back: the sheet's own portions when they are served, else the served
+   * portions its row joins to them, while they are still the same dish. */
+  #sentTakeBack(
+    members: readonly SentSlice[] | undefined = this.#sentLineMembers(),
+  ): readonly SentSlice[] | undefined {
+    const info = this.#sentLineInfo();
+    if (members === undefined || info === undefined) return;
+    if (members[0]!.kind === "served") return members;
+    const served = this.#sentPortions(info, true);
+    if (served === undefined) return;
+    if (members.length === 1 && served.length === 1 && members[0]!.row === served[0]!.row)
+      return served;
+    return formsOneSentRow(members, this.#sentPortionKey(), served) ? served : undefined;
+  }
+
+  /** The served portions the sheet's row joins to other lines, for Void and Comp to take alone;
+   * `served` is {@link #sentTakeBack}'s answer for `members`. */
+  #sentServedApart(
+    members: readonly SentSlice[] | undefined,
+    served: readonly SentSlice[] | undefined,
+  ): readonly SentSlice[] | undefined {
+    return served?.some((slice) => members!.some((member) => member.row === slice.row))
+      ? undefined
+      : served;
+  }
+
+  #sentLineInfo(): SentLineInfo | undefined {
     const pending = this.sentLinePending;
     if (
       pending === null ||
@@ -3490,26 +3501,37 @@ export class TillTableOrderScreen extends LitElement {
       pending.visit !== this.serviceVisit
     )
       return;
-    const slices = this.#sentSlices(this.currentOrders);
+    return pending.info;
+  }
+
+  #sentMenuDishes?: {
+    setMenus: BillSetMenuState | undefined;
+    dishes: ReturnType<typeof sentMenuDishes>;
+  };
+
+  /** {@link sentRowPortionKey} as the sent rows draw it, with each portion's allergy and set menu. */
+  #sentPortionKey(): (slice: SentSlice) => SentRowPortionKey | null {
+    const setMenus = this.#setMenus;
+    let cached = this.#sentMenuDishes;
+    if (cached === undefined || cached.setMenus !== setMenus)
+      cached = this.#sentMenuDishes = { setMenus, dishes: sentMenuDishes(setMenus) };
+    const shown = sentPortionsApart(this.#allergy()?.snapshot ?? null, cached.dishes);
+    return (slice) => sentRowPortionKey(slice, this.lines, shown(slice));
+  }
+
+  /** The slices `info` names, or its served ones, by line number, while all are identical portions. */
+  #sentPortions(info: SentLineInfo, served = false): SentSlice[] | undefined {
+    const lineIds = served ? info.servedLineIds : (info.lineIds ?? [info.lineId]);
+    if (lineIds === undefined) return;
+    const slices = this.#sentSlices(this.currentOrders!);
     const members: SentSlice[] = [];
-    for (const lineId of pending.info.lineIds ?? [pending.info.lineId]) {
-      const member = findSlice(slices, pending.info.kind, pending.info.workingOrderId, lineId);
+    for (const lineId of lineIds) {
+      const member = findSlice(slices, served ? "served" : info.kind, info.workingOrderId, lineId);
       if (member === undefined) return;
       members.push(member);
     }
     members.sort((a, b) => a.row.lineNo - b.row.lineNo);
-    if (members.length > 1) {
-      const allergy = this.#allergy()?.snapshot ?? null;
-      const menus = sentMenuDishes(this.#dishSources().setMenus);
-      const keys = members.map((member) =>
-        sentSlicePortionKey(member, this.lines, [
-          allergyGuestId(allergy, { kind: "working", id: member.row.lineId }),
-          menus.get(member.row.lineId)?.setMenuId,
-        ]),
-      );
-      if (keys.some((key) => key === null || key !== keys[0])) return;
-    }
-    return members;
+    return formsOneSentRow(members, this.#sentPortionKey()) ? members : undefined;
   }
 
   #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean, asked = false): void {
@@ -3525,7 +3547,9 @@ export class TillTableOrderScreen extends LitElement {
       this.#askSentChangeLeave(() => this.#serveFromSentLine(pending, undo, true));
       return;
     }
-    const members = this.#sentLineMembers();
+    const own = this.#sentLineMembers();
+    const joined = this.#sentTakeBack(own);
+    const members = undo ? joined : own;
     if (
       members === undefined ||
       members.some(
@@ -3541,6 +3565,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#requestServe(
       members[0]!.row,
       undo,
+      sentWindowShare(own!, joined),
       members.length === 1 ? undefined : members.map((member) => member.row),
     );
   }
@@ -3747,7 +3772,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #actOnSentLine(
     pending: typeof this.sentLinePending,
-    action: "fire" | "station" | "void" | "comp",
+    action: "fire" | "station" | "void" | "comp" | "void-served" | "comp-served",
     asked = false,
   ): void {
     if (
@@ -3762,8 +3787,11 @@ export class TillTableOrderScreen extends LitElement {
       this.#askSentChangeLeave(() => this.#actOnSentLine(pending, action, true));
       return;
     }
-    const members = this.#sentLineMembers();
+    const apart = action === "void-served" || action === "comp-served";
+    const own = this.#sentLineMembers();
+    const members = apart ? this.#sentServedApart(own, this.#sentTakeBack(own)) : own;
     const slice = members?.[0];
+    if (apart) action = action === "void-served" ? "void" : "comp";
     if (
       members === undefined ||
       slice === undefined ||
@@ -3804,17 +3832,23 @@ export class TillTableOrderScreen extends LitElement {
     if (members === undefined || slice === undefined) return nothing;
     const fire = members.every((member) => this.#canFireSent(member));
     const station = members.every((member) => this.#canMoveSent(member));
+    const takeBack = this.#sentTakeBack(members);
     const unserve =
-      slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
-    if (!fire && !station && !unserve && !canVoid && !comp) return nothing;
+      takeBack !== undefined && takeBack.every((member) => this.#sentBillOpen(member.row));
+    const apart = this.#sentServedApart(members, takeBack);
+    const voidServed = apart !== undefined && this.#canVoidSent(apart[0]!);
+    const compServed = apart !== undefined && this.#sentCompTarget(apart) !== undefined;
+    if (!fire && !station && !unserve && !canVoid && !comp && !voidServed && !compServed)
+      return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button icon="menu-fire" variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
       ${station ? html`<wt-button icon="menu-move" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
       ${comp ? html`<wt-button icon="menu-discount" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+      ${compServed ? html`<wt-button icon="menu-discount" data-sent-line-comp-served ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp-served")}>${t("table.comp_served")}</wt-button>` : nothing}
       ${unserve ? html`<wt-button icon="menu-undo" data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
-      ${rowActionTail(fire || station || comp || unserve, [
+      ${rowActionTail(fire || station || comp || compServed || unserve, [
         canVoid
           ? html`<wt-button
               icon="menu-remove"
@@ -3822,6 +3856,15 @@ export class TillTableOrderScreen extends LitElement {
               ?disabled=${disabled}
               @click=${() => this.#actOnSentLine(pending, "void")}
               >${t("table.void_line")}</wt-button
+            >`
+          : nothing,
+        voidServed
+          ? html`<wt-button
+              icon="menu-remove"
+              data-sent-line-void-served
+              ?disabled=${disabled}
+              @click=${() => this.#actOnSentLine(pending, "void-served")}
+              >${t("table.void_served")}</wt-button
             >`
           : nothing,
       ])}
@@ -3852,22 +3895,19 @@ export class TillTableOrderScreen extends LitElement {
     return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
   }
 
-  /** `count` identical portions' price: `amount` is already theirs together. */
+  /** A price shown in a sent dish's window; `amount` is already its portions'. `part` takes their
+   * part of a whole line's list price, struck through only when the whole line has a price cut. */
   #sentPrice(
     row: CurrentOrderRow,
     amount: Decimal,
     extra?: CurrentOrderRow["extras"][number],
-    count = 1,
+    part: (value: Decimal) => Decimal = (value) => value,
   ): TemplateResult {
     const line = this.#sentBillLine(row, extra);
-    const before =
-      line?.listUnitPriceGross === undefined
-        ? amount
-        : multiplyDecimal(
-            listedGross({ ...line, quantity: extra?.quantity ?? row.quantity }),
-            decimal(String(count)),
-          );
-    return lineTotal(before, amount);
+    if (line?.listUnitPriceGross === undefined) return lineTotal(amount, amount);
+    const listed = listedGross({ ...line, quantity: extra?.quantity ?? row.quantity });
+    const cut = compareDecimal(listed, sentLineNet(row, extra)) !== 0;
+    return lineTotal(cut ? part(listed) : amount, amount);
   }
 
   /** Whether Change dish would move the bill: another count, or other extras. What the server
@@ -3894,9 +3934,10 @@ export class TillTableOrderScreen extends LitElement {
     const slice = members?.[0];
     const row = slice?.row;
     const count = members?.length ?? 1;
-    // Members are identical portions, so the first one's amounts, times the count, are the row's.
-    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
-    const shownQuantity = row === undefined ? "0" : times(decimal(row.quantity));
+    // The window speaks for its row's portions; its actions take only `members`.
+    const share = members && sentWindowShare(members, this.#sentTakeBack(members));
+    const shownQuantity =
+      row === undefined ? "0" : multiplyDecimal(decimal(row.quantity), decimal(String(count)));
     const disabled = this.busy || this.groupCommandBusy;
     const group =
       row === undefined
@@ -3907,13 +3948,7 @@ export class TillTableOrderScreen extends LitElement {
                 member.lineId === row.lineId && member.workingOrderId === row.workingOrderId,
             ),
           );
-    const partlyServed =
-      row !== undefined &&
-      row.servedAt === null &&
-      compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
-    const extraTotal =
-      row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
-      decimal("0");
+    const servedInPart = share !== undefined && partlyServed(share);
     const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
     const changeLines =
       pending === null || members === undefined ? undefined : this.#sentChangeLines(members);
@@ -3957,7 +3992,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${quantityText(shownQuantity)}`}
+                ${row.name}${this.#nutrition(row)}${priceMoves || share === undefined ? nothing : ` ×${quantityText(share.quantity)}`}
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
@@ -4005,23 +4040,23 @@ export class TillTableOrderScreen extends LitElement {
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, count)}</span
+                  >${this.#sentPrice(row, share!.dish(row.extras.map((extra) => decimal(extra.netAmount))), undefined, share!.of)}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, share!.of(decimal(extra.netAmount)), extra, share!.of)}</span></div>`)}
               ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>
               ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
-              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
+              ${servedInPart ? html`<p data-sent-line-served>${this.#servedOf(share!)}</p>` : nothing}
               ${
                 priceMoves
                   ? nothing
                   : html`<div class="total-row">
                       <span>${t("label.total")}</span
-                      ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
+                      ><span class="amount">${this.#money(share!.amount)}</span>
                     </div>`
               }
             `
@@ -4343,7 +4378,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #clearTopDue = false;
 
-  /** The Sent box draws after the screen does, and only then has its height. */
+  /** The sent rows draw after the screen does, and only then have their height. */
   async #clearOrderTopOnceDrawn(): Promise<void> {
     await this.renderRoot.querySelector<LitElement>("till-sent-orders")?.updateComplete;
     if (this.view === "order") this.#clearOrderTopOfDock();
@@ -5524,10 +5559,16 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-fired-ago .firedAt=${kitchen.firedAt} .now=${this.now}></till-fired-ago>`;
   }
 
-  #servedOf(row: CurrentOrderRow): string {
+  #servedOf({
+    served,
+    quantity,
+  }: {
+    served: Decimal | string;
+    quantity: Decimal | string;
+  }): string {
     return t("table.row_served_of")
-      .replace("{served}", quantityText(row.servedQuantity))
-      .replace("{quantity}", quantityText(row.quantity));
+      .replace("{served}", quantityText(served))
+      .replace("{quantity}", quantityText(quantity));
   }
 
   /** The most a press can mark served (what is left), or take back (what is served). */
@@ -5554,7 +5595,12 @@ export class TillTableOrderScreen extends LitElement {
 
   /** More than one whole unit, a grouped row's portions included, asks how many; anything else, a
    * weighed dish included, goes whole. */
-  #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
+  #requestServe(
+    row: CurrentOrderRow,
+    undo: boolean,
+    shown: SentWindowCount,
+    members?: readonly CurrentOrderRow[],
+  ): void {
     if (this.#serveRefused()) return;
     if (undo && !this.#sentBillOpen(row)) return;
     this.#takeServeAuthority();
@@ -5569,6 +5615,7 @@ export class TillTableOrderScreen extends LitElement {
         row,
         undo,
         count: most,
+        shown,
         ...(members === undefined ? {} : { members }),
       });
       return;
@@ -5723,13 +5770,11 @@ export class TillTableOrderScreen extends LitElement {
         pending === null
           ? nothing
           : html`<p class="move-dish">
-                ${pending.row.name}
-                ×${pending.members === undefined ? quantityText(pending.row.quantity) : pending.members.length}
+                ${pending.row.name} ×${quantityText(pending.shown.quantity)}
               </p>
               ${
-                pending.members === undefined &&
-                compareDecimal(decimal(pending.row.servedQuantity), decimal("0")) > 0
-                  ? html`<p class="serve-so-far">${this.#servedOf(pending.row)}</p>`
+                partlyServed(pending.shown)
+                  ? html`<p class="serve-so-far">${this.#servedOf(pending.shown)}</p>`
                   : nothing
               }
               <div class="split-stepper">
@@ -5810,21 +5855,29 @@ export class TillTableOrderScreen extends LitElement {
     const byId = new Map(rows?.map((row) => [row.lineId, row]));
     if (group.lineIds.length === 0 || !group.lineIds.every((id) => byId.has(id)))
       return group.summary;
-    const counts = new Map<string, Decimal>();
-    for (const id of group.lineIds) {
-      const row = byId.get(id)!;
-      const quantity = subtractDecimal(
-        decimal(row.quantity),
-        decimal(row.cancelledQuantity ?? "0"),
-      );
-      counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
-    }
-    const quantities = [...counts].map(
-      ([name, quantity]) => [name, trimQuantity(quantity)] as const,
-    );
+    const tally = (rows: readonly CurrentOrderRow[]) => {
+      const counts = new Map<string, Decimal>();
+      for (const row of rows) {
+        const quantity = subtractDecimal(
+          decimal(row.quantity),
+          decimal(row.cancelledQuantity ?? "0"),
+        );
+        counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
+      }
+      return [...counts].map(([name, quantity]) => [name, trimQuantity(quantity)] as const);
+    };
+    const rowsOf = group.lineIds.map((id) => byId.get(id)!);
     // The two reads can arrive separately; a stale row must not change what Fire confirms.
-    if (quantities.map(([name, quantity]) => `${quantity} × ${name}`).join(", ") !== group.summary)
+    if (
+      tally(rowsOf)
+        .map(([name, quantity]) => `${quantity} × ${name}`)
+        .join(", ") !== group.summary
+    )
       return group.summary;
+    // The server's summary also names the group's dishes already sent, which Fire does not send
+    // again.
+    const quantities = tally(rowsOf.filter(waitsForFire));
+    if (quantities.length === 0) return group.summary;
     return quantities
       .map(([name, quantity]) => `${formatDecimalInput(quantity, currentLocale())} × ${name}`)
       .join(", ");

@@ -105,6 +105,37 @@ it.each(["absent", "different-id", "different-parent", "unadjusted"] as const)(
   },
 );
 
+it.each([
+  ["no price cut", "7.49", money("3.74")],
+  ["a price cut", "8.00", `${t("table.price_was")} ${money("4.00")} ${money("3.74")}`],
+] as const)(
+  "prices a weighed dish's to-serve half, the rest cancelled but charged, with %s on its line",
+  async (_case, listUnitPriceGross, shown) => {
+    const weighed = { ...dish, quantity: "1.000", unitPrecision: 3, unitPriceGross: "7.49" };
+    const { el } = await mount({
+      lines: [{ ...weighed, listUnitPriceGross }],
+      currentOrders: current({
+        groups: [],
+        reminder: null,
+        ungrouped: [
+          {
+            ...recorded,
+            quantity: "1.000",
+            unitPrecision: 3,
+            cancelledQuantity: "0.500",
+            netAmount: "7.49",
+            extras: [],
+          },
+        ],
+      }),
+    });
+    const dialog = await openSentDish(el, "dish");
+    expect(text(dialog.querySelector("[data-sent-line-amount]")!)).toBe(shown);
+    const last = [...dialog.querySelectorAll(".total-row")].at(-1)!;
+    expect([...last.children].map(text)).toEqual(["Total", money("3.74")]);
+  },
+);
+
 it("keeps served dishes in Sent without a duplicate Served list in the table menu", async () => {
   const { el } = await mount({
     lines: [{ ...dish, servedAt: "2026-09-28T20:05:00Z" }],

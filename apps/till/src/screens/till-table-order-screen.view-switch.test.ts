@@ -197,7 +197,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(shown(browsing(el))).toBe(true);
   });
 
-  it("closes Order when the screen widens to side by side, putting browsing's scroll back", async () => {
+  it("shows browsing's scroll side by side when it widens on Order, and goes back to Order when it narrows again", async () => {
     const tapas = Array.from({ length: 40 }, (_, n) => ({
       ...beer,
       id: `tapa-${n}`,
@@ -224,8 +224,34 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(most).toBeGreaterThan(0);
     expect(host.scrollTop).toBe(Math.min(scrolled, most));
 
+    expect(shown(browsing(el))).toBe(true);
+    expect(shown(draftPane(el))).toBe(true);
+
     host.style.width = "390px";
     await resized(el);
+    await resized(el);
+    expect(shownView(el)).toBe("order");
+    expect(shown(draftPane(el))).toBe(true);
+    expect(shown(browsing(el))).toBe(false);
+
+    await showView(el, "menu", { scripted: true });
+    expect(host.scrollTop).toBe(Math.min(scrolled, most));
+  });
+
+  it("stays on Menu when it narrows again after widening on Menu", async () => {
+    const { el, host } = await mount();
+    host.style.width = "390px";
+    await resized(el);
+    await tap(el, "Beer");
+    expect(shownView(el)).toBe("menu");
+
+    host.style.width = "1280px";
+    await resized(el);
+    host.style.width = "390px";
+    await resized(el);
+    await resized(el);
+
+    expect(shownView(el)).toBe("menu");
     expect(shown(browsing(el))).toBe(true);
     expect(shown(draftPane(el))).toBe(false);
   });

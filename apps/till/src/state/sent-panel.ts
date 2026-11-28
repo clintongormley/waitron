@@ -6,18 +6,10 @@ import {
   divideDecimal,
   multiplyDecimal,
   subtractDecimal,
-  sumDecimals,
-  stringToThousandths,
   toScale,
 } from "@waitron/shared";
-import { reminderDueAt } from "./release-reminder.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import type {
-  CurrentOrderGroup,
-  CurrentOrderRow,
-  CurrentOrders,
-  ReleaseReminder,
-} from "../api/kitchen-api.js";
+import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 
 export interface SentSlice {
   row: CurrentOrderRow;
@@ -26,14 +18,17 @@ export interface SentSlice {
   amount: string;
 }
 export interface SentPanel {
-  attention: boolean;
   served: SentSlice[];
   fired: SentSlice[];
-  held: { group: CurrentOrderGroup; rows: SentSlice[]; companions: CurrentOrderRow[] }[];
-  counts: { ready: string; firing: string; held: string; served: string };
-  subtotals: { served: string; fired: string; held: string };
-  reminder: ReleaseReminder | null;
+  held: { group: CurrentOrderGroup; rows: SentSlice[] }[];
 }
+/** Fire groups in firing order. */
+export const byFiringOrder = (
+  a: { position: number; id: string },
+  b: { position: number; id: string },
+): number => a.position - b.position || a.id.localeCompare(b.id);
+export const time = (value: string | null) =>
+  value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
 const zero = decimal("0");
 const positive = (value: Decimal) => compareDecimal(value, zero) > 0;
 const bounded = (value: Decimal, max: Decimal): Decimal =>
@@ -69,34 +64,12 @@ function splitRow(row: CurrentOrderRow, held: boolean): SentSlice[] {
   });
 }
 
-export function sentItemCount(slices: readonly SentSlice[]): string {
-  const dishes = new Map<string, SentSlice[]>();
-  for (const slice of slices)
-    dishes.set(slice.row.lineId, [...(dishes.get(slice.row.lineId) ?? []), slice]);
-  let count = 0;
-  for (const parts of dishes.values()) {
-    const { row, kind } = parts[0]!;
-    const quantity = stringToThousandths(row.quantity);
-    const active = Math.max(0, quantity - stringToThousandths(row.cancelledQuantity ?? "0"));
-    const byTheUnit = row.countsWholePortions ?? (row.unitPrecision ?? 0) === 0;
-    if (!byTheUnit || (active || quantity) % 1000 !== 0) {
-      count++;
-    } else if (kind === "served" || kind === "cancelled_charged") {
-      const left =
-        row.servedAt === null
-          ? Math.max(0, active - Math.max(0, stringToThousandths(row.servedQuantity)))
-          : 0;
-      count += Math.ceil(quantity / 1000) - Math.ceil(left / 1000);
-    } else {
-      count += Math.ceil(
-        parts.reduce((sum, part) => sum + stringToThousandths(part.quantity), 0) / 1000,
-      );
-    }
-  }
-  return String(count);
-}
+/** Whether a held group's dish still waits for Fire: not released, and some of it neither served
+ * nor cancelled. */
+export const waitsForFire = (row: CurrentOrderRow): boolean =>
+  !row.released && splitRow(row, true).some((slice) => slice.kind === "held");
 
-export function sentPanel(current: CurrentOrders, billId: string, now: number): SentPanel {
+export function sentPanel(current: CurrentOrders, billId: string): SentPanel {
   const served: SentSlice[] = [];
   const fired: SentSlice[] = [];
   const held: SentPanel["held"] = [];
@@ -108,50 +81,20 @@ export function sentPanel(current: CurrentOrders, billId: string, now: number): 
       else served.push(slice);
     }
   };
-  for (const group of [...current.groups].sort(
-    (a, b) => a.position - b.position || a.id.localeCompare(b.id),
-  )) {
+  for (const group of [...current.groups].sort(byFiringOrder)) {
     const rows: SentSlice[] = [];
     for (const row of group.rows) take(row, group.state === "held" && !row.released, rows);
-    if (rows.length > 0)
-      held.push({
-        group,
-        rows,
-        companions: group.rows.filter(
-          (row) =>
-            row.workingOrderId !== billId &&
-            splitRow(row, true).some((slice) => slice.kind === "held"),
-        ),
-      });
+    if (rows.length > 0) held.push({ group, rows });
   }
   for (const row of current.ungrouped) take(row, false, []);
-  const time = (value: string | null) =>
-    value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
+  const when = new Map(
+    fired.map((slice) => [slice, time(slice.row.readyAt ?? slice.row.firedAt)] as const),
+  );
   fired.sort((a, b) => {
     const aReady = a.row.readyAt !== null;
     const bReady = b.row.readyAt !== null;
     if (aReady !== bReady) return aReady ? -1 : 1;
-    const order =
-      time(aReady ? a.row.readyAt : a.row.firedAt) - time(bReady ? b.row.readyAt : b.row.firedAt);
-    return order || a.row.lineId.localeCompare(b.row.lineId);
+    return when.get(a)! - when.get(b)! || a.row.lineId.localeCompare(b.row.lineId);
   });
-  const heldRows = held.flatMap((group) => group.rows);
-  const count = sentItemCount;
-  const amount = (rows: SentSlice[]) =>
-    toScale(sumDecimals(rows.map((slice) => decimal(slice.amount))), MONEY_SCALE);
-  const ready = fired.filter((slice) => slice.row.readyAt !== null);
-  return {
-    attention: ready.length > 0 || reminderDueAt(current.reminder) <= now,
-    served,
-    fired,
-    held,
-    counts: {
-      ready: count(ready),
-      firing: trimQuantity(subtractDecimal(decimal(count(fired)), decimal(count(ready)))),
-      held: count(heldRows),
-      served: count(served),
-    },
-    subtotals: { served: amount(served), fired: amount(fired), held: amount(heldRows) },
-    reminder: current.reminder,
-  };
+  return { served, fired, held };
 }

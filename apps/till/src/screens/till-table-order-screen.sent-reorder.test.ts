@@ -21,8 +21,6 @@ async function open(over: Partial<TillTableOrderScreen> = {}) {
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-  await panel.updateComplete;
   const more = panel.shadowRoot!.querySelector<WtRowActions>('[data-group-more="g3"]')!;
   await more.updateComplete;
   await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);

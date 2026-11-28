@@ -62,19 +62,9 @@ async function mount(undo = false) {
 async function openServing(screen: TillTableOrderScreen, undo = false) {
   const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
-  if (toggle.getAttribute("aria-expanded") === "false") {
-    expect(toggle.checkVisibility(), "Sent toggle is visible").toBe(true);
-    await userEvent.click(toggle);
-    await panel.updateComplete;
-  }
-  const served = panel.shadowRoot!.querySelector<HTMLElement>("[data-served-toggle]")!;
-  if (undo && served.getAttribute("aria-expanded") === "false") {
-    await userEvent.click(served);
-    await panel.updateComplete;
-  }
+  // A part-served dish is one row, marked fired, and its window holds Serve and Not served.
   const info = panel.shadowRoot!.querySelector<HTMLElement>(
-    `[data-${undo ? "served" : "fired"}-line="dish"] [data-sent-info]`,
+    '[data-fired-line="dish"] [data-sent-info]',
   )!;
   expect(info.checkVisibility(), "Sent dish information is visible").toBe(true);
   await userEvent.click(info);

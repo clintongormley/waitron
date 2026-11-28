@@ -51,16 +51,6 @@ it.each(["held", "fired"] as const)(
       ),
     ).toBeNull();
     await closePartyMenu(el);
-    for (const selector of [
-      "[data-sent-toggle]",
-      ...(state === "held" ? ["[data-held-toggle]"] : []),
-    ]) {
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-      if (toggle.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
-    }
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${state}-line="dish"]`)!;
     expect(shown.textContent).toContain("Recorded dish");
     expect(shown.querySelector("[data-sent-info]")).not.toBeNull();
@@ -160,16 +150,6 @@ it.each(["fired", "served"] as const)(
     const commands: CustomEvent[] = [];
     el.addEventListener("adjust", (event) => commands.push(event as CustomEvent));
     const panel = await sentPanelFor(el);
-    for (const section of [
-      "[data-sent-toggle]",
-      ...(kind === "served" ? ["[data-served-toggle]"] : []),
-    ]) {
-      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(section)!;
-      if (toggle.getAttribute("aria-expanded") === "false") {
-        await userEvent.click(toggle);
-        await panel.updateComplete;
-      }
-    }
     await openPartyMenu(el);
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line.id}"]`)!;
     expect(shown.checkVisibility()).toBe(true);

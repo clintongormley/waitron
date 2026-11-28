@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
@@ -38,13 +37,6 @@ it.each(["loaded", "fallback", "unread"] as const)(
     });
     const panel = await sentPanelFor(el);
     if (read === "loaded") {
-      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
-        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        if (toggle.getAttribute("aria-expanded") === "false") {
-          await userEvent.click(toggle);
-          await panel.updateComplete;
-        }
-      }
       expect(panel.shadowRoot!.querySelector('[data-held-line="dish"]')!.textContent).toContain(
         "Recorded flan",
       );

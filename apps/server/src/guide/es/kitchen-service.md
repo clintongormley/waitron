@@ -137,12 +137,15 @@ unido a otro grupo de comensales, la comida de sus cuentas cobradas sigue en el 
 termine el grupo que las reúne.
 
 En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
-como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
+como servido. Los platos enviados, arriba del pedido, muestran el tiempo que lleva listo cada uno
+para que veas qué falta servir. **Servir todo** en un encabezado marchado marca servidos los platos
+que tiene debajo.
 
 Usa la etiqueta de platos listos de cada estación en el plano para decidir qué recoger allí.
 Una ración vendida por peso o medida muestra **1**, y tres raciones enteras muestran **3**.
 Si un plato tiene partes en dos estaciones, recógelas en ambas; cada estación lo cuenta una vez.
-En **Enviado**, espera a que diga **Listo** para saber que todas sus partes están listas.
+En los platos enviados, arriba del pedido, espera a que diga **Listo** para saber que todas sus
+partes están listas.
 
 Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
 Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.
@@ -432,7 +435,7 @@ Pide los platos en espera desde el pedido de la mesa. Las colas de las estacione
 los órdenes de plato y los grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
 atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está bajo
 **En espera** al final de **Por marchar**, o en **En espera** si el pase muestra esa columna. En la
-pantalla del pedido de la mesa, un plato dice **en el pase** mientras él, o uno de sus extras,
+pantalla del pedido de la mesa, un plato dice **En el pase** mientras él, o uno de sus extras,
 espera a que el pase lo marche.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
 [estación espera al pase](kitchen-service.md#station-waits) va en cambio a la columna
