@@ -57,6 +57,7 @@ const DISPOSABLE_FAMILIES = [
   "till",
   "dashboard",
   "setup",
+  "customer-menu",
   "venue-service",
   "adjustments",
   "staffing",
@@ -427,7 +428,7 @@ describe("disposable server routing", () => {
     // Keep these pairs in step with Waitron Cloud's ci-canary.mjs, ci-identity.mjs and session.py.
     const singleJobs = (
       "changes server-probe lint root-guards bundle-smoke typecheck " +
-      "test-server-stream test-ui test-setup test-adjustments test-staffing test-bookings " +
+      "test-server-stream test-ui test-setup test-customer-menu test-adjustments test-staffing test-bookings " +
       "test-media test-payments-stripe test-payments-sumup test-identity test-workforce " +
       "test-light-a test-light-b mutation-shared-aggregate test-server-merge test-heavy-merge " +
       "test-fiscal-verifactu-merge test-till-merge test-dashboard-merge test-venue-service-merge " +
@@ -562,7 +563,6 @@ describe("disposable server routing", () => {
           "server-probe",
           "test-webkit-startup",
           "root-process-guards",
-          "test-customer-menu",
         ].includes(entry.id)
       )
         continue;
