@@ -20,13 +20,11 @@ import {
   searchFor,
   type NameSearch,
   arrangeHome,
-  indexDocument,
   openedSection,
   sectionTrail,
   shownMembers,
   tilePaths,
   type BillSetMenuState,
-  type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
@@ -43,48 +41,22 @@ import { productName, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../state/set-menus.js";
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
-import { dishTile, sectionTile, setMenuTile } from "./menu-tiles.js";
-import type { CountWords, DishTileHandlers } from "./menu-tiles.js";
+import {
+  dishTile,
+  sectionTile,
+  setMenuTile,
+  type CountWords,
+  type DishTileHandlers,
+} from "./menu-tiles.js";
 import { countedNameStyles } from "./counted-name.js";
 import { menuPath, menuPathStyles } from "./menu-path.js";
-
-type SectionNode = Extract<DocumentMember, { kind: "section" }>;
-
-type MenuIndex = HomeIndex<TillProduct>;
-function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
-  return members.some((member) =>
-    member.kind === "set_menu"
-      ? member.menuId === id
-      : member.kind === "section" && listsSetMenu(member.members, id),
-  );
-}
-
-type SearchResult =
-  | { kind: "product"; product: TillProduct }
-  | { kind: "set_menu"; row: OrderingCopy }
-  | { kind: "section"; section: SectionNode; path: SectionStep[]; disabled: boolean };
-
-/**
- * A product member whose offer is not among `products` is left out, and so is one not sold
- * separately, which is ordered only as an extra on another dish, and a section left with nothing
- * to order. Staff only is shown: every till screen is staff's.
- */
-function indexMenu(
-  menu: TillZoneMenu,
-  products: TillProduct[],
-  copies: readonly OrderingCopy[] = [],
-): MenuIndex {
-  const offers = new Map(
-    products
-      .filter((product) => product.ordering !== "not_sold_separately")
-      .map((product) => [product.menuItemId, product]),
-  );
-  return indexDocument(
-    menu.structure.members,
-    (id) => offers.get(id),
-    (id) => copies.some(({ copy }) => copy.menuId === id),
-  );
-}
+import {
+  indexMenu,
+  listsSetMenu,
+  type MenuIndex,
+  type SearchResult,
+  type SectionNode,
+} from "./menu-index.js";
 
 /**
  * The till's menu home: search, then the menu's Device Home Page shortcuts and the menu's own
@@ -290,7 +262,9 @@ export class TillMenuBrowser extends LitElement {
 
   /** Every served menu's offers as till products, through the same diet lens as `products`. */
   @property({ attribute: false }) servedProducts: TillProduct[] = [];
+
   @property({ attribute: false }) unfilteredServedProducts?: TillProduct[];
+
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** Product id → items of that dish in the order being taken (a table's New order or the
