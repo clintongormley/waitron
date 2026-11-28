@@ -193,8 +193,11 @@ export function draftLinePrice(
   placedPrice?: (line: OrderLine) => string | undefined,
 ): Decimal {
   if (line.setMenuId === undefined) return lineGross(line);
-  const { product } = line;
-  const priceId = product.variantId ?? product.productId ?? product.id;
-  const unitPrice = placedPrice?.(line) ?? product.productPrices?.[priceId] ?? "0.00";
+  const unitPrice = placedPrice?.(line) ?? draftSetMenuUnitPrice(line.product);
   return lineGross({ ...line, product: { ...line.product, unitPrice } });
+}
+
+export function draftSetMenuUnitPrice(product: OrderLine["product"]): string {
+  const priceId = product.variantId ?? product.productId ?? product.id;
+  return product.productPrices?.[priceId] ?? "0.00";
 }

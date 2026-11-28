@@ -26,14 +26,13 @@ import {
 import { centsToDecimal, formatMoney, sumDecimals, type BillSetMenuState } from "@waitron/shared";
 import {
   NO_ORDERING_COPIES,
-  draftPlacementId,
-  draftPlacements,
   menusWithCopies,
   sentMenuDishes,
   type OrderingCopy,
   type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { lineGross } from "../state/order-line.js";
+import { draftSetMenuUnitPrice } from "../state/draft-layout.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { notCheapestText } from "../widgets/set-menu-presentation.js";
 import "../widgets/menu-browser.js";
@@ -348,36 +347,31 @@ export class TillCounterScreen extends LitElement {
 
   #setMenuPrices() {
     const bill = this.setMenuBill;
-    if (!bill?.setMenus.length) return {};
     const lines = this.store.lines;
+    const hasSetMenus =
+      (bill?.setMenus.length ?? 0) > 0 || lines.some((line) => line.setMenuId !== undefined);
+    if (!hasSetMenus) return { hasSetMenus };
+
     const saved = sentMenuDishes(bill);
-    const draft = new Map(
-      draftPlacements(bill, lines).placed.map(({ id, priceCents }) => [
-        id,
-        centsToDecimal(priceCents),
-      ]),
+    const placedPrice = (line: (typeof lines)[number]) =>
+      line.workingOrderLineId === undefined ? undefined : saved.get(line.workingOrderLineId)?.price;
+    const ungroupedPrice = (line: (typeof lines)[number]) =>
+      line.workingOrderLineId === undefined
+        ? draftSetMenuUnitPrice(line.product)
+        : line.product.unitPrice;
+    const menuPrices = (bill === undefined ? [] : menusWithCopies(bill)).map(({ copy }) =>
+      centsToDecimal(copy.priceCents),
     );
-    const byLine = new Map(
-      lines.map((line, index) => [
-        line,
-        line.workingOrderLineId === undefined
-          ? draft.get(draftPlacementId(line, index))
-          : saved.get(line.workingOrderLineId)?.price,
-      ]),
-    );
+    const linePrices = lines.map((line) => {
+      if (line.setMenuId === undefined) return lineGross(line);
+      const unitPrice = placedPrice(line) ?? ungroupedPrice(line);
+      return lineGross({ ...line, product: { ...line.product, unitPrice } });
+    });
     return {
-      placedPrice: (line: (typeof lines)[number]) => byLine.get(line),
-      total: sumDecimals([
-        ...menusWithCopies(bill).map(({ copy }) => centsToDecimal(copy.priceCents)),
-        ...lines.map((line) => {
-          const price = byLine.get(line);
-          return lineGross(
-            price === undefined
-              ? line
-              : { ...line, product: { ...line.product, unitPrice: price } },
-          );
-        }),
-      ]),
+      hasSetMenus,
+      placedPrice,
+      ungroupedPrice,
+      total: sumDecimals([...menuPrices, ...linePrices]),
     };
   }
 
@@ -394,7 +388,7 @@ export class TillCounterScreen extends LitElement {
   }
 
   #gridBody(): TemplateResult {
-    const { placedPrice, total } = this.#setMenuPrices();
+    const { hasSetMenus, placedPrice, ungroupedPrice, total } = this.#setMenuPrices();
     const notCheapest =
       this.setMenuBill === undefined ? undefined : notCheapestText(this.setMenuBill);
     const balance = this.overpaidBalance;
@@ -423,6 +417,7 @@ export class TillCounterScreen extends LitElement {
             stacked
             .store=${this.store}
             .placedPrice=${placedPrice}
+            .ungroupedSetMenuPrice=${ungroupedPrice}
             .lineDetails=${true}
             .revealAdded=${true}
             .allowPickRemoval=${true}
@@ -458,7 +453,7 @@ export class TillCounterScreen extends LitElement {
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
             .products=${this.products}
-            .hasSetMenus=${(this.setMenuBill?.setMenus.length ?? 0) > 0}
+            .hasSetMenus=${hasSetMenus}
             .sendingTender=${this.sendingTender}
             .busy=${this.busy || this.payHeld}
             .held=${this.payHeld && !this.busy}

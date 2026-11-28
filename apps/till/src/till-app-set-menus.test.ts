@@ -38,7 +38,7 @@ import type { TabLine } from "./api/kitchen-api.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
-import { showView } from "./screens/till-table-order-screen.test-helpers.js";
+import { burger, showView } from "./screens/till-table-order-screen.test-helpers.js";
 import {
   cleanupWidgets,
   mountWidget,
@@ -49,24 +49,25 @@ import {
 beforeEach(resetAllergyFixture);
 afterEach(cleanupWidgets);
 
-it("shows the counter its set-menu folders on a takeaway order, with no count", async () => {
+async function openCounterTakeaway(copy = daily, overrides: Record<string, unknown> = {}) {
   resetBillPayDrafts();
   const zone = {
     ...offers,
     defaultMenuId: "cat-default",
     context: { ...offers.context, dining: { policy: "till_choice", startsAs: "eat_in" } },
-    setMenus: [{ ...daily, versionIds: ["v1"], orderable: true, newestOnSale: true }],
+    setMenus: [{ ...copy, versionIds: ["v1"], orderable: true, newestOnSale: true }],
     menus: offers.menus.map((menu) => ({
       ...menu,
       structure: {
         ...menu.structure,
-        members: [{ kind: "set_menu" as const, menuId: daily.menuId, name: daily.name }],
+        members: [{ kind: "set_menu" as const, menuId: copy.menuId, name: copy.name }],
       },
     })),
   };
   const api = counterApi({
     listDefaultZoneOffers: vi.fn(async () => zone),
     listZoneOffers: vi.fn(async () => zone),
+    ...overrides,
   });
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await flushCounter(el);
@@ -77,12 +78,124 @@ it("shows the counter its set-menu folders on a takeaway order, with no count", 
   await userEvent.click(page.elementLocator(counter).getByText("Take away", { exact: true }));
   await vi.waitFor(() => expect(counter.store.dining).toBe("takeaway"));
   await flushCounter(el);
+  return { api, el, counter };
+}
+
+it("shows the counter its set-menu folders on a takeaway order, with no count", async () => {
+  const { counter } = await openCounterTakeaway();
   await expect
     .element(page.elementLocator(counter).getByRole("button", { name: /Daily menu/ }))
     .toBeInTheDocument();
   expect(counter.setMenuCopies.map(({ copy }) => copy.menuId)).toEqual([daily.menuId]);
   expect(counter.shadowRoot!.querySelector("till-set-menu-counts")).toBeNull();
 });
+
+it.each(["fresh", "parked"])(
+  "shows a %s takeaway's draft charges and takes the amount confirmed in Pay",
+  async (kind) => {
+    const extrasList = burger.offeredModifiers!.find((modifier) => modifier.kind === "extras")!;
+    const item = { ...extrasList.items[0]!, price: "2.00", image: null, available: true };
+    const { productId, name, price: extraPrice } = item;
+    const extra = { listId: extrasList.id, productId, name, price: extraPrice, quantity: 1 };
+    const dish = daily.offers.find(({ id }) => id === "sirloin")!;
+    const offer = {
+      ...dish,
+      aLaCartePrices: { v1: { [dish.productId]: "24.00" } },
+      offeredModifiers: [{ ...extrasList, items: [item] }],
+    };
+    const copy = { ...daily, offers: [offer] };
+    const product = setMenuProduct({ offer, setMenuId: copy.menuId, versionId: "v1" });
+    let parked = kind === "parked";
+    const { api, el, counter } = await openCounterTakeaway(copy, {
+      parkOrder: vi.fn(async ({ id }: { id: string }) => ({ id, orderNumber: 10 })),
+      updateWorkingOrder: vi.fn(async () => {
+        parked = false;
+        return { revision: 6 };
+      }),
+      retrieveWorkingOrder: vi.fn(async (id: string) => ({
+        id,
+        orderNumber: 10,
+        revision: parked ? 5 : 6,
+        zoneId: offers.context.zoneId,
+        label: null,
+        expectedEdit: null,
+        invoiceType: "F2",
+        dining: "takeaway",
+        diningChoice: "locked",
+        kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+        setMenus: {
+          ...bill,
+          copies: [setMenuCopyOf(copy, "v1")],
+          recorded: { [copy.menuId]: "v1" },
+          setMenus: parked ? [] : [bill.setMenus[0]!],
+          dishes: parked ? [] : [{ ...bill.dishes[0]!, lineId: "sirloin-line" }],
+        },
+        setMenuCopies: [copy],
+        lines: [
+          {
+            workingOrderLineId: "sirloin-line",
+            menuItemId: offer.id,
+            menuVersionId: "v1",
+            setMenuId: copy.menuId,
+            quantity: "1.000",
+            product: parked ? { ...product, unitPrice: "23.00" } : product,
+            extras: parked ? [] : [extra],
+          },
+        ],
+      })),
+      getTabLines: vi.fn(async () => ({
+        revision: parked ? 5 : 6,
+        lines: [line({ id: "sirloin-line", unitPriceGross: parked ? "23.00" : "5.00" })],
+      })),
+      getBillBalance: vi.fn(async (id: string) =>
+        balanceOf({ workingOrderId: id, total: "21.00", outstanding: "21.00" }),
+      ),
+      previewBillPayment: vi.fn(async () => cash("21.00", "0.00")),
+      takeBillPayment: vi.fn(async () =>
+        takenOf(
+          { applied: "21.00", tendered: "21.00", change: "0.00" },
+          { total: "21.00", received: "21.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("21.00"),
+        ),
+      ),
+    });
+    const basket = page.elementLocator(counter.shadowRoot!.querySelector("till-basket")!);
+    const price = (amount: string) =>
+      expect.element(basket.getByText(money(amount), { exact: true }), { timeout: 1500 });
+    const total = () => counter.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent;
+    if (parked) {
+      emit(counter, "retrieve-order", { id: "parked-takeaway" });
+      await vi.waitFor(() => expect(counter.store.id).toBe("parked-takeaway"));
+      await price("23.00").toBeVisible();
+      counter.store.removeLine(0);
+    }
+    const id = counter.store.id;
+    counter.store.addProduct(product, "1", { setMenu: { id: copy.menuId }, extras: [extra] });
+    await price("24.00").toBeVisible();
+    await price("2.00").toBeVisible();
+    expect(total()).toContain(money("26.00"));
+
+    const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+    await userEvent.click(tender.shadowRoot!.querySelector("[data-counter-pay]")!);
+    await expect
+      .poll(() => dialog(el)?.shadowRoot?.querySelector("[data-quiet-pay-amount]")?.textContent)
+      .toContain(money("21.00"));
+    await price("5.00").toBeInTheDocument();
+    expect(total()).toContain(money("21.00"));
+    const save = kind === "fresh" ? api.parkOrder : api.updateWorkingOrder;
+    expect(vi.mocked(save).mock.lastCall?.at(-1)).toMatchObject({
+      lines: [{ setMenuId: copy.menuId, extras: [{ listId: extra.listId }] }],
+    });
+    await type(el, "tendered", "21");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(api.takeBillPayment).toHaveBeenCalledWith(
+      id,
+      expect.objectContaining({ kind: "share", shareOf: 1, method: "cash", tendered: "21" }),
+      expect.anything(),
+    );
+  },
+);
 
 it("renders a reopened set-menu dish from the recorded offer and saved price", async () => {
   resetBillPayDrafts();

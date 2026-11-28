@@ -8433,7 +8433,8 @@ export class TillApp extends LitElement {
           !listed.some((extra) => extra.parentLineNo === line.lineNo && extra.firedAt !== null),
       );
     const mustReadBack =
-      rows.some((row) => row.portionLineIds !== undefined) ||
+      (this.#currentCounterSetMenuBill?.setMenus?.setMenus.length ?? 0) > 0 ||
+      rows.some((row) => row.setMenuId !== undefined || row.portionLineIds !== undefined) ||
       // The server can keep a list's old answer alongside a new list's answer.
       rows.some((row) => {
         const stored = listed.find((line) => line.id === row.workingOrderLineId);
@@ -8496,6 +8497,10 @@ export class TillApp extends LitElement {
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
       order.revision,
     );
+    this.#counterSetMenuBill =
+      order.setMenus === undefined
+        ? undefined
+        : { id: order.id, setMenus: order.setMenus, setMenuCopies: order.setMenuCopies };
     this.#counterStoredInvoice = storedInvoiceOf(id, order);
     this.counterDiningChoice = { orderId: id, choice: order.diningChoice };
     this.counterLines = listed;
