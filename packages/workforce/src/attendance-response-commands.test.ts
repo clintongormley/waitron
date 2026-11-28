@@ -971,9 +971,60 @@ it("exports an overnight dispute on the shift's work date until it is settled", 
     }),
   );
   expect(await statuses()).toEqual([{ personId, date, status: "disputed" }]);
+  const disputedDay = await workDay(date);
+  expect(disputedDay.approval?.status).toBe("approved");
+  expect(disputedDay.items).toContainEqual(expect.objectContaining({ status: "disputed" }));
   expect(await statuses({ start: end, end: "2026-01-07" })).toEqual([]);
   await send(await command({ action: "approve", itemId: proposal.commandId }), manager);
   expect(await statuses()).toEqual([{ personId, date, status: "approved" }]);
+});
+
+it("lists a dispute without a completed shift in worker order with completed days", async () => {
+  const [disputedPerson, completedPerson] = [personId, other].sort() as [string, string];
+  const date = "2026-01-05";
+  await clock("2026-01-05T09:00:00Z", disputedPerson);
+  await clock("2026-01-05T09:00:00Z", completedPerson);
+  await run((tx) =>
+    backend.clockOut(tx, {
+      nodeId,
+      personId: completedPerson,
+      at: "2026-01-05T17:00:00Z",
+      offsetMinutes: 0,
+      origin,
+    }),
+  );
+  const proposal = await command(
+    {
+      action: "propose",
+      personId: disputedPerson,
+      date,
+      reason: "Forgot to clock out",
+      changes: [{ target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 }],
+    },
+    disputedPerson,
+  );
+  await send(proposal, manager);
+  await send(
+    await command(
+      { action: "disagree", itemId: proposal.commandId, reason: "Still working" },
+      disputedPerson,
+    ),
+    disputedPerson,
+  );
+  const { record, dayStatuses } = await run((tx) =>
+    api.readTimeRecordWithDayStatuses(
+      tx,
+      {
+        period: { start: date, end: "2026-01-06" },
+      },
+      null,
+    ),
+  );
+  expect(record.sessions.map((shift) => shift.personId)).toEqual([completedPerson]);
+  expect(dayStatuses).toEqual([
+    { personId: disputedPerson, date, status: "disputed" },
+    { personId: completedPerson, date, status: "pending" },
+  ]);
 });
 
 it("does not label the morning of an overnight dispute as a second disputed day", async () => {

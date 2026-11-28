@@ -255,7 +255,8 @@ while you review it, check the refreshed times before approving again. Open **Ho
 that are waiting for a worker’s reply.
 
 To check the status of each day in an export, look for **Day approval** in the PDF or the
-**day-approvals** rows in Excel.
+**day-approvals** rows in Excel. The total includes recorded hours while approval or a dispute is
+open.
 
 ## Close monthly hours {#monthly-hours-close}
 
