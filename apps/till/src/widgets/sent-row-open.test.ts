@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { CurrentOrders, TabLine } from "../api/kitchen-api.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import {
@@ -387,5 +388,5 @@ it("reads the count and Serve words in Spanish", async () => {
   );
   await tap(el, toggle("bravas"));
   expect(opened(el)).toEqual([["bravas", "1 de 3 servidos", ["Servir 1", "Servir 2"]]]);
-  expect(text(find(el, "[data-sent-details]")!)).toBe("Detalles del plato");
+  expect(text(find(el, "[data-sent-details]")!)).toBe(es["table.sent_info"]);
 });
