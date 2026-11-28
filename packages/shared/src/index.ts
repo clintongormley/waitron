@@ -567,6 +567,7 @@ export {
   type AdjustmentPolicySnapshot,
   type DiscountNotice,
   type DiscountNoticeWhy,
+  type PendingDiscountView,
 } from "./adjustment-policy-types.js";
 
 export {

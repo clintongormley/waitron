@@ -108,6 +108,7 @@ const detail: OrderDetailDto = {
   ],
   deliveries: null,
   invoicePdfDownloads: [],
+  discounts: [],
 };
 
 afterEach(() => {
@@ -465,6 +466,50 @@ it("shows the old unit price only when it differs from the charged price", async
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   expect(el.shadowRoot!.textContent).not.toContain("was €10.00");
+});
+
+const heldDiscount: OrderDetailDto["discounts"][number] = {
+  id: "discount-1",
+  target: { kind: "bill" },
+  action: "discount_percent",
+  percentBp: 1000,
+  amount: null,
+  takes: "1.20",
+  holds: "yes",
+  origin: "given",
+  reasonName: "Guest complaint",
+};
+
+async function shownDiscounts(shown: OrderDetailDto) {
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(shown),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  return [...el.shadowRoot!.querySelectorAll("[data-pending-discount]")].map((item) =>
+    item.textContent!.replace(/\s+/g, " ").trim(),
+  );
+}
+
+it("lists an open bill's pending discount with its name and what it takes off", async () => {
+  setLocale("en-GB");
+  expect(await shownDiscounts({ ...detail, discounts: [heldDiscount] })).toEqual([
+    "Discount: Guest complaint −€1.20",
+  ]);
+  cleanupWidgets();
+  setLocale("es-ES");
+  expect(await shownDiscounts({ ...detail, discounts: [heldDiscount] })).toEqual([
+    "Descuento: Guest complaint −1,20 €",
+  ]);
+});
+
+it("lists nothing beside the items of a bill holding no pending discount", async () => {
+  setLocale("en-GB");
+  expect(await shownDiscounts(detail)).toEqual([]);
 });
 
 it("explains payment states and an unnamed party in Spanish", async () => {

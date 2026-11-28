@@ -655,6 +655,7 @@ describe("printing a full invoice", () => {
     departure: null,
     reprints: [],
     invoicePdfDownloads: [],
+    discounts: [],
     deliveries: {
       current: null,
       originalCompleted: designation === "duplicate",

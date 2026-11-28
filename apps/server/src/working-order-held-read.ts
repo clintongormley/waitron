@@ -30,6 +30,7 @@ import {
   thousandthsToDecimal,
   centsToDecimal,
   type DiscountNotice,
+  type PendingDiscountView,
 } from "@waitron/shared";
 import { sql, eq, and, isNull, type SQL, exists, or, ne } from "drizzle-orm";
 import { type OrderEditAuthority, readBillEditState } from "./bill-editing.js";
@@ -54,6 +55,7 @@ import { readBillSignals } from "./table-signals.js";
 import type { WorkingOrderDeps } from "./working-order-context.js";
 import { optional } from "./working-order-station-queue.js";
 import { readPendingOff } from "./pending-off-sql.js";
+import { readBillPendingDiscounts } from "./bill-discounts-list.js";
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
@@ -115,6 +117,7 @@ export interface HeldOrder {
   setMenuCopies?: ServedSetMenuCopy[];
   /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
+  discounts: PendingDiscountView[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -500,6 +503,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id], "published")).get(id)! : {}),
       ...discountNoticesOf(await readBillsDiscountNotices(tx, [id]), id),
+      discounts: await readBillPendingDiscounts(tx, id),
       lines,
     };
   });

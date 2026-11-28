@@ -803,6 +803,7 @@ describe("GET /api/parties/:id/bills", () => {
         workingOrderId: tabId,
         setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [], exact: true },
         setMenuCopies: [],
+        discounts: [],
         revision: 0,
         invoiceType: "F2",
         recipient: null,

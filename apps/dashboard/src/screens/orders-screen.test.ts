@@ -52,6 +52,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getOrder: vi.fn().mockResolvedValue({
       row: ROW,
       lines: [],
+      discounts: [],
       invoices: [],
       tenders: [],
       payments: [],
@@ -74,6 +75,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       getOrder: vi.fn().mockResolvedValue({
         row: ROW,
         lines: [],
+        discounts: [],
         invoices: [],
         tenders: [],
         payments: [],
@@ -90,6 +92,7 @@ function fullDetail(row: OrderRowDto) {
   return {
     row,
     lines: [],
+    discounts: [],
     invoices: [],
     tenders: [],
     payments: [],
@@ -694,6 +697,7 @@ describe("dashboard Orders", () => {
     const detail = {
       row: full,
       lines: [],
+      discounts: [],
       invoices: [],
       tenders: [],
       payments: [],
@@ -900,6 +904,7 @@ describe("dashboard Orders", () => {
           : {
               row: shown,
               lines: [],
+              discounts: [],
               invoices: [],
               tenders: [],
               payments: [],

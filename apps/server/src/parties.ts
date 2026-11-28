@@ -30,6 +30,7 @@ import {
   type Dining,
   type ServedSetMenuCopy,
   type DiscountNotice,
+  type PendingDiscountView,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -50,6 +51,7 @@ import { readIssuedSales } from "./sale-due.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
 import { discountNoticesOf, readBillsDiscountNotices } from "./discount-notices.js";
 import { readPendingOff } from "./pending-off-sql.js";
+import { readPendingDiscountViews } from "./bill-discounts-list.js";
 import "./errors.js";
 
 /** A staged delivery choice as a bill shows it: who staged it stays on the server. */
@@ -93,6 +95,8 @@ export interface PartyBill {
   setMenus: BillSetMenuState;
   /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
+  /** Its pending discounts; none on a settled or abandoned bill. */
+  discounts: PendingDiscountView[];
   setMenuCopies: ServedSetMenuCopy[];
   revision: number;
   invoiceType: "F1" | "F2";
@@ -654,12 +658,11 @@ export async function readPartyBills(
     bills.map((bill) => bill.workingOrderId),
     "published",
   );
-  const notices = await readBillsDiscountNotices(
-    tx,
-    bills.flatMap(({ workingOrderId, status }) =>
-      status === "open" || status === "placed" ? [workingOrderId] : [],
-    ),
+  const owing = bills.flatMap(({ workingOrderId, status }) =>
+    status === "open" || status === "placed" ? [workingOrderId] : [],
   );
+  const notices = await readBillsDiscountNotices(tx, owing);
+  const discounts = await readPendingDiscountViews(tx, owing);
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -697,6 +700,7 @@ export async function readPartyBills(
       ...(choice.reopenedFrom === null ? {} : { reopenedFrom: choice.reopenedFrom }),
       ...dinings.get(bill.workingOrderId)!,
       ...discountNoticesOf(notices, bill.workingOrderId),
+      discounts: discounts.get(bill.workingOrderId) ?? [],
     };
   });
 }
@@ -729,6 +733,7 @@ export type FamilyBill = Omit<
   | "setMenus"
   | "setMenuCopies"
   | "reopenedFrom"
+  | "discounts"
 > & {
   lines: number;
 };

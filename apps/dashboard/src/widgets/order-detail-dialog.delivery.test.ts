@@ -81,6 +81,7 @@ const f1 = (
   reprints: [],
   deliveries: status,
   invoicePdfDownloads: [],
+  discounts: [],
   ...over,
 });
 
