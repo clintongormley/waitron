@@ -178,12 +178,7 @@ import type {
   AttendanceCommandPayload,
   OwnAttendanceCommand,
 } from "@waitron/workforce/attendance-contract";
-import {
-  ClockingController,
-  IDLE_CLOCK,
-  type ClockingSnapshot,
-  type TillClockAction,
-} from "./state/clocking.js";
+import { ClockingController, IDLE_CLOCK, type TillClockAction } from "./state/clocking.js";
 import {
   breakPromptCanClose,
   clockActionAfterDeferringQuestions,
@@ -3004,7 +2999,7 @@ export class TillApp extends LitElement {
   #clockAccessLost = false;
   @state() private clockPage: SignInClockAction | false = false;
   @state() private clockedOut = false;
-  @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
+  @state() private clockSnapshot = IDLE_CLOCK;
   @state() private clockOutOpen = false;
   #clockIntent?: ClockIntent;
   /** The draft of an order with no party, which is never saved. */

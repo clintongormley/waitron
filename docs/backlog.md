@@ -577,7 +577,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   shared sheet on narrow screens. The narrow floor has the zone chooser, Map/List and ☰ at the
   bottom.
   The zone and More sheets dock against that bar, and More uses shared action rows.
-  More shows your current shift's start time under your name, above **Start break** and **Clock out**.
+  While you're working, More shows when your shift started, with the clock actions below your name.
   The table name opens the shared action sheet with Finish table at the end.
   The ⋮ beside the bill picker opens the current bill's actions. Merge bills and Move this bill
   open with Back above the list of choices.
