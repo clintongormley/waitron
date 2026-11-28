@@ -10,7 +10,7 @@ import type {
 } from "./attendance-contract.js";
 import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
-import { projectTimeRecord, recordRoot } from "./record-projection.js";
+import { recordRoot } from "./record-projection.js";
 import { isRecordDate } from "./record-dates.js";
 import { localWallClock, type TimeEntryRecord } from "./projection.js";
 import { entriesFromOpenShift, openShiftsFor } from "./open-shift-context.js";
@@ -187,6 +187,10 @@ export async function readAttendanceDay(
     },
     policy,
   );
+  const approval = dayApprovalsForPerson(record.entries.map(({ entry }) => entry)).get(scope.date);
+  record.entries = record.entries.filter(({ entry }) => entry.entryKind !== "day_approval");
+  const shown = new Set(record.entries.map((e) => e.entry.entryId));
+  let clockOutPreviewEntries: TimeEntryRecord[] = [];
   const effective = effectiveClockEntries(entries).sort(compareEvents);
   const [open] = openShiftsFor(effective);
   if (
@@ -197,16 +201,10 @@ export async function readAttendanceDay(
     const roots = new Set(
       entriesFromOpenShift(effective, open).map((entry) => recordRoot(entry, byId).entryId),
     );
-    const shiftEntries = entries.filter((entry) => roots.has(recordRoot(entry, byId).entryId));
-    const shown = new Set(record.entries.map(({ entry }) => entry.entryId));
-    record.entries.push(
-      ...projectTimeRecord(shiftEntries).entries.filter(({ entry }) => !shown.has(entry.entryId)),
+    clockOutPreviewEntries = entries.filter(
+      (entry) => !shown.has(entry.entryId) && roots.has(recordRoot(entry, byId).entryId),
     );
-    record.entries.sort((a, b) => compareRecording(a.entry, b.entry));
   }
-  const approval = dayApprovalsForPerson(record.entries.map(({ entry }) => entry)).get(scope.date);
-  record.entries = record.entries.filter(({ entry }) => entry.entryKind !== "day_approval");
-  const shown = new Set(record.entries.map((e) => e.entry.entryId));
   const items = projectCorrectionItems(
     entries.filter((entry) => entry.entryKind !== "day_approval"),
     commands,
@@ -217,6 +215,7 @@ export async function readAttendanceDay(
     timeZone,
     revision: await readAttendanceRevision(tx, scope.personId),
     record,
+    ...(clockOutPreviewEntries.length > 0 && { clockOutPreviewEntries }),
     ...(policy && { paidBreakPolicy: policy }),
     ...(approval && { approval }),
     items,

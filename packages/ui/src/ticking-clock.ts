@@ -7,7 +7,11 @@ export class TickingClock implements ReactiveController {
   #intervalMs: number;
   #timer?: ReturnType<typeof setInterval>;
 
-  constructor(host: ReactiveControllerHost, intervalMs = 20_000) {
+  constructor(
+    host: ReactiveControllerHost,
+    intervalMs = 20_000,
+    private readonly shouldUpdate = () => true,
+  ) {
     this.#host = host;
     this.#intervalMs = intervalMs;
     host.addController(this);
@@ -19,7 +23,7 @@ export class TickingClock implements ReactiveController {
     this.hostDisconnected();
     this.#timer = setInterval(() => {
       this.now = Date.now();
-      this.#host.requestUpdate();
+      if (this.shouldUpdate()) this.#host.requestUpdate();
     }, this.#intervalMs);
   }
 

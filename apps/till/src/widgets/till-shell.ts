@@ -478,7 +478,15 @@ export class TillShell extends LitElement {
   @property() operatorName = "";
   /** Names the venue's logo for a screen reader. */
   @property() legalName = "";
-  readonly #clock = new TickingClock(this);
+  readonly #clock = new TickingClock(
+    this,
+    undefined,
+    () =>
+      this.narrowFloor &&
+      this.clockAvailable &&
+      this.clockState !== null &&
+      this.clockState.state !== "out",
+  );
 
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;

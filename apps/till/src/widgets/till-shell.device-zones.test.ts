@@ -785,6 +785,19 @@ it.each([
   }
 });
 
+it("does not redraw the till for elapsed time when clocking is disabled", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", { clockAvailable: false });
+    await el.updateComplete;
+    const render = vi.spyOn(el, "render");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(render).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("puts the break actions in You and keeps End break above the floor bar", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);

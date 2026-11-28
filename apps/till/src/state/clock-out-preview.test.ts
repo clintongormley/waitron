@@ -65,6 +65,7 @@ it("adds the overnight part of a split day and applies the paid break policy", (
     ["break_end", "2026-01-05T23:40:00.000Z"],
   ]);
   const end = "2026-01-06T01:00:00.000Z";
+  view.clockOutPreviewEntries = view.record.entries.splice(-2).map(({ entry }) => entry);
   const result = clockOutPreview(view, working, new Date(end));
   expect(
     result?.map((s) => [s.workDate, s.startedAt, s.endedAt, s.breakMinutes, s.workedMinutes]),
@@ -72,13 +73,7 @@ it("adds the overnight part of a split day and applies the paid break policy", (
     [date, first, "2026-01-05T11:00:00.000Z", 0, 120],
     [date, second, end, 30, 350],
   ]);
-  expect(view.record.entries.map(({ entry }) => entry.entryKind)).toEqual([
-    "in",
-    "out",
-    "in",
-    "break_start",
-    "break_end",
-  ]);
+  expect(view.record.entries.map(({ entry }) => entry.entryKind)).toEqual(["in", "out", "in"]);
 });
 
 it("counts a running break up to the proposed clock-out", () => {

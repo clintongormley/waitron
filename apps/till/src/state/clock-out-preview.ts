@@ -15,7 +15,10 @@ export function clockOutPreview(view: AttendanceDayView, state: TillClockState, 
     state.state === "out"
   )
     return null;
-  const entries = view.record.entries.map(({ entry }) => entry);
+  const entries = [
+    ...view.record.entries.map(({ entry }) => entry),
+    ...(view.clockOutPreviewEntries ?? []),
+  ];
   const eventAt = now.toISOString();
   const recordedAt = new Date(
     entries.reduce((latest, entry) => Math.max(latest, Date.parse(entry.recordedAt) + 1), +now),

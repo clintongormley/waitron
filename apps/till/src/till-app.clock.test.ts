@@ -595,6 +595,28 @@ describe("till clocking integration", () => {
     await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledOnce());
   });
 
+  it("keeps the summary closed when another till clocks the worker out and back in", async () => {
+    const stream = liveReadFixture();
+    const f = await clockApp({
+      state: clockState("working", "in"),
+      api: { readLiveEvents: stream.read },
+    });
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    await clockOutButton(f.el, "[data-confirm-clock-out]");
+    stream.event("ready");
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!;
+    f.setState(clockState("out", "other-out"));
+    stream.event("change", '[{"type":"time_entries"}]');
+    await vi.waitFor(() => expect(shell.clockState?.lastEntryId).toBe("other-out"));
+    expect(clockOutSheet(f.el)).toBeNull();
+    f.setState(clockState("working", "other-in"));
+    stream.event("change", '[{"type":"time_entries"}]');
+    await vi.waitFor(() => expect(shell.clockState?.lastEntryId).toBe("other-in"));
+    expect(clockOutSheet(f.el)).toBeNull();
+  });
+
   it("a lost Clock out response still finishes logout", async () => {
     const f = await clockApp({ state: clockState("working", "in") });
     f.api.clockOut.mockImplementationOnce(async () => {
@@ -608,6 +630,21 @@ describe("till clocking integration", () => {
     await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledTimes(1));
     expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
     expect(f.api.clockOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("still lets the worker clock out when the day read fails", async () => {
+    const shiftStart = { eventAt: "2026-10-14T09:00:00.000Z", offsetMinutes: 120 };
+    const f = await clockApp({ state: { ...clockState("working", "in"), shiftStart } });
+    f.api.getAttendanceDay.mockRejectedValueOnce(new TypeError("read lost"));
+    await signIn(f.el);
+    await working(f.el);
+    await shellAction(f.el, '[data-clock-action="out"]');
+    await vi.waitFor(() =>
+      expect(clockOutSheet(f.el)?.shadowRoot?.textContent).toContain(t("clock.out_unavailable")),
+    );
+    await userEvent.click(await clockOutButton(f.el, "[data-confirm-clock-out]"));
+    await vi.waitFor(() => expect(f.api.logout).toHaveBeenCalledOnce());
+    expect(f.api.clockOut).toHaveBeenCalledOnce();
   });
 
   it.each(["in", "out"] as const)(
