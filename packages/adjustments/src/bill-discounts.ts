@@ -300,7 +300,7 @@ export interface BillDiscountRow {
  * rows would raise the invoice's total, or lower lines' totals and leave the invoice's as it is,
  * moves no line. `cut_down`: an amount larger than what its target costs, which takes the target
  * to zero (the server's `workOutHeldBill` also marks a fixed amount whose rows together take less
- * than they were given); `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * than they were given, by `spreadTakes` and by `takes`); `set_menu_gone`: its set-menu row is gone, so it takes nothing.
  * `spreadTakes`, on a fixed amount whose `takes` the filed rows made differ from it: what its
  * shares took off the prices they were spread over (the filed rows' for a whole-bill amount, its
  * lines' otherwise).
