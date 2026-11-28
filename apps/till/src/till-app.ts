@@ -15192,10 +15192,14 @@ export class TillApp extends LitElement {
       ...(this.currentOrders?.ungrouped ?? []),
       ...(this.currentOrders?.groups.flatMap((group) => group.rows) ?? []),
     ];
-    const names = items.flatMap(({ lineId }) => {
-      const row = rows.find((row) => row.lineId === lineId);
-      return row ? [row.name] : [];
-    });
+    const names = [
+      ...new Set(
+        items.flatMap(({ lineId }) => {
+          const row = rows.find((row) => row.lineId === lineId);
+          return row ? [row.name] : [];
+        }),
+      ),
+    ];
     await this.#onServiceRequest(async (party, command) => {
       const answer = await api.markServed(party.id, items, command);
       this.#takeServedFromMealEnd(party.id, items, command.expectedPartyRevision, answer.revision);

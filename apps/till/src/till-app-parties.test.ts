@@ -9394,6 +9394,37 @@ describe("till-app: Current orders", () => {
     expect(notice()?.open ?? false).toBe(false);
   });
 
+  it("names each served dish once, in the order first served", async () => {
+    const state = structuredClone(orders);
+    const line = state.groups[0]!.rows[0]!;
+    state.groups[0]!.rows = [
+      { ...line, lineId: "line-1", name: "Bravas" },
+      { ...line, lineId: "line-2", lineNo: 2, name: "Croquettes" },
+      { ...line, lineId: "line-3", lineNo: 3, name: "Croquettes" },
+    ];
+    const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(state) });
+    const notice = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+
+    emit(await openPartyTable(el), "serve-lines", {
+      items: [
+        { lineId: "line-2", quantity: "1" },
+        { lineId: "line-3", quantity: "1" },
+      ],
+    });
+    await flush(el);
+    expect(notice().message).toBe("Croquettes · Served");
+
+    emit(tableOrder(el)!, "serve-lines", {
+      items: [
+        { lineId: "line-1", quantity: "1" },
+        { lineId: "line-2", quantity: "1" },
+        { lineId: "line-3", quantity: "1" },
+      ],
+    });
+    await flush(el);
+    expect(notice().message).toBe("Bravas · Croquettes · Served");
+  });
+
   describe("native sent rows integration", () => {
     for (const formFactor of ["till", "phone-portrait"] as const) {
       it.each(["row", "all", "fire"] as const)(
