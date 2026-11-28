@@ -2,6 +2,7 @@ import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared"
 import { carriedText, t } from "../i18n/t.js";
 import type {
   DeviceEquipment,
+  EquipmentChange,
   EquipmentHolder,
   EquipmentItem,
   EquipmentRole,
@@ -19,17 +20,30 @@ export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
   card_terminal: 0,
 });
 
-/** The roles of `equipment` that list the sticker's item among their choices; a printer's sticker
- * may set the receipt and payment slip printer at once. */
-export function stickerRoles(
-  code: EquipmentCode,
-  equipment: DeviceEquipment | null,
-): RoleEquipment[] {
+/** The name of the sticker's item where a role of `equipment` that it may set lists it among its
+ * choices, else null; a printer's sticker may set the receipt and payment slip printer at once. */
+export function stickerName(code: EquipmentCode, equipment: DeviceEquipment | null): string | null {
   const roles: EquipmentRole[] =
     code.kind === "reader" ? ["card_terminal"] : ["receipt", "payment_slip"];
-  return (equipment?.roles ?? []).filter(
-    (each) => roles.includes(each.role) && each.choices.some((item) => item.id === code.id),
-  );
+  for (const each of equipment?.roles ?? []) {
+    const item = roles.includes(each.role) && each.choices.find((choice) => choice.id === code.id);
+    if (item) return item.name;
+  }
+  return null;
+}
+
+/** The printer roles `stored` holds the printer a printer change picked under; none for any other
+ * change. */
+export function printerRolesSet(change: EquipmentChange, stored: DeviceEquipment): EquipmentRole[] {
+  if (!("kind" in change) || change.kind !== "printer") return [];
+  const id = change.selection.id;
+  return stored.roles
+    .filter(
+      (each) =>
+        (each.role === "receipt" || each.role === "payment_slip") &&
+        (each.chosenId === id || each.resolved?.id === id),
+    )
+    .map((each) => each.role);
 }
 
 /** `errors` with `message` under `role`, or with `role`'s message removed when it is null. */

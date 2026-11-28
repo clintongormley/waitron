@@ -2824,13 +2824,19 @@ describe("till-app: Pay's device sheet on a phone", () => {
     expect(slip().error).toBe("");
   });
 
-  it("a sticker for a printer not listed under Payment slip printer keeps a slip pick's refusal", async () => {
+  const SLIP_ONLY = equipmentItem("p3", "Slip printer");
+  it.each([
+    ["not listed under Payment slip printer", [BAR_PRINTER, SLIP_ONLY]],
+    [
+      "listed under Payment slip printer but set only as receipt printer",
+      [BAR_PRINTER, PORTABLE, SLIP_ONLY],
+    ],
+  ])("a sticker for a printer %s keeps a slip pick's refusal", async (_, slipChoices) => {
     camera = cameraShowing(null);
     vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
-    const SLIP_ONLY = equipmentItem("p3", "Slip printer");
     const withSlip = (printer: EquipmentItem) => {
       const equipment = equipmentOf(SECOND_READER, printer);
-      equipment.roles.push(roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER, SLIP_ONLY]));
+      equipment.roles.push(roleOf("payment_slip", BAR_PRINTER, slipChoices));
       return equipment;
     };
     let refuse!: (reason: unknown) => void;

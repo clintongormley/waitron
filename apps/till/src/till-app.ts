@@ -75,7 +75,8 @@ import {
   readerReasonOf,
   readyPayReader,
   noEquipmentPicks,
-  stickerRoles,
+  printerRolesSet,
+  stickerName,
   withRoleError,
   takenFrom,
   type FixedReader,
@@ -3708,21 +3709,17 @@ export class TillApp extends LitElement {
   }
 
   async #pickUpSticker(code: EquipmentCode): Promise<void> {
-    const roles = stickerRoles(code, this.deviceEquipment);
-    if (roles.length === 0) {
+    const name = stickerName(code, this.deviceEquipment);
+    if (name === null) {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
-    // The sticker is now the latest pick of each field whose list holds it, so no earlier refusal
-    // shows there; a field that does not list it keeps its pending pick and that pick's answer.
-    for (const { role } of roles) {
-      this.#payEquipmentPicks[role]++;
-      this.#setPayEquipmentError(role, null);
+    // A reader counts now, for the opening auto-pick; a printer clears the fields its answer set.
+    if (code.kind === "reader") {
+      this.#payEquipmentPicks.card_terminal++;
+      this.#setPayEquipmentError("card_terminal", null);
     }
-    const context = {
-      session: this.#operatorSession,
-      name: roles[0]!.choices.find((item) => item.id === code.id)!.name,
-    };
+    const context = { session: this.#operatorSession, name };
     await this.#onEquipmentChange(
       new CustomEvent<EquipmentChange>("equipment-change", {
         detail: { kind: code.kind, selection: { id: code.id }, via: "scan" },
@@ -11373,6 +11370,7 @@ export class TillApp extends LitElement {
       }
       if (nfc !== undefined) {
         this.nfcNotice = { message: pickedUpMessage(change, stored, nfc.name), tone: "info" };
+        for (const role of printerRolesSet(change, stored)) this.#setPayEquipmentError(role, null);
       }
       return stored;
     } catch (error) {

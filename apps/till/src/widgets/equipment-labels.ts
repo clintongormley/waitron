@@ -7,6 +7,7 @@ import type {
   EquipmentItem,
   RoleEquipment,
 } from "../api/device-session-api.js";
+import { printerRolesSet } from "../state/pay-equipment.js";
 
 export function optionLabel(item: EquipmentItem): string {
   if (item.busy) return fill(t("equipment.option_busy"), { item: item.name });
@@ -40,17 +41,10 @@ export function pickedUpMessage(
   item: string,
   noRole: StringKey = "equipment.no_printer_role",
 ): string {
-  const selection = change.selection;
-  const printer = "kind" in change && change.kind === "printer" && typeof selection === "object";
-  const printerFor = (name: "receipt" | "payment_slip") =>
-    printer &&
-    stored.roles.some(
-      (role) =>
-        role.role === name &&
-        (role.chosenId === selection.id || role.resolved?.id === selection.id),
-    );
-  const receipt = printerFor("receipt");
-  const slip = printerFor("payment_slip");
+  const printer = "kind" in change && change.kind === "printer";
+  const roles = printerRolesSet(change, stored);
+  const receipt = roles.includes("receipt");
+  const slip = roles.includes("payment_slip");
   if (printer && !receipt && !slip) return t(noRole);
   const picked =
     receipt === slip
