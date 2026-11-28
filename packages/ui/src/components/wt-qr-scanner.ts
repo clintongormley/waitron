@@ -44,6 +44,71 @@ export class WtQrScanner extends LitElement {
         color: var(--wt-color-text);
       }
 
+      .camera {
+        position: relative;
+        height: var(--wt-camera-height);
+        margin-inline: var(--wt-space-4);
+        border-radius: calc(var(--wt-radius-md) + var(--wt-space-1));
+        background: var(--wt-color-camera);
+        overflow: hidden;
+      }
+
+      .camera video {
+        height: 100%;
+        max-height: none;
+        border-radius: 0;
+        background: none;
+      }
+
+      .bracket {
+        position: absolute;
+        width: var(--wt-camera-bracket-size);
+        height: var(--wt-camera-bracket-size);
+        border: var(--wt-camera-bracket-line) solid var(--wt-color-on-camera);
+      }
+
+      .bracket.top-start {
+        top: var(--wt-camera-bracket-inset-block);
+        left: var(--wt-camera-bracket-inset-inline);
+        border-right: 0;
+        border-bottom: 0;
+        border-top-left-radius: var(--wt-radius-md);
+      }
+
+      .bracket.top-end {
+        top: var(--wt-camera-bracket-inset-block);
+        right: var(--wt-camera-bracket-inset-inline);
+        border-left: 0;
+        border-bottom: 0;
+        border-top-right-radius: var(--wt-radius-md);
+      }
+
+      .bracket.bottom-start {
+        bottom: var(--wt-camera-bracket-inset-block);
+        left: var(--wt-camera-bracket-inset-inline);
+        border-right: 0;
+        border-top: 0;
+        border-bottom-left-radius: var(--wt-radius-md);
+      }
+
+      .bracket.bottom-end {
+        bottom: var(--wt-camera-bracket-inset-block);
+        right: var(--wt-camera-bracket-inset-inline);
+        border-left: 0;
+        border-top: 0;
+        border-bottom-right-radius: var(--wt-radius-md);
+      }
+
+      .caption {
+        position: absolute;
+        inset-inline: var(--wt-space-2);
+        bottom: var(--wt-space-2);
+        margin: 0;
+        text-align: center;
+        color: var(--wt-color-on-camera);
+        font-size: var(--wt-font-size-sm);
+      }
+
       .refusal {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-lg);
@@ -60,6 +125,10 @@ export class WtQrScanner extends LitElement {
   @property() message = "";
   /** Shown in place of everything else once the scanner fires `wt-qr-unavailable`. */
   @property() unavailable = "";
+  /** Films inside a fixed dark camera box with corner brackets and `caption` along its foot. */
+  @property({ type: Boolean, reflect: true }) framed = false;
+  /** The framed look's words over the picture; empty draws `hint` there. */
+  @property() caption = "";
   @state() private phase: "starting" | "filming" | "failed" = "starting";
   @query("video") private video?: HTMLVideoElement;
 
@@ -179,6 +248,7 @@ export class WtQrScanner extends LitElement {
   }
 
   override render() {
+    if (this.framed) return this.#renderFramed();
     return html`${
       this.phase === "filming"
         ? html`<video muted playsinline aria-label=${this.label}></video>`
@@ -191,6 +261,32 @@ export class WtQrScanner extends LitElement {
             ${this.phase === "failed" ? this.unavailable : this.hint}
           </p>`
     }`;
+  }
+
+  #renderFramed() {
+    if (this.phase === "failed") {
+      return html`<p class="message" data-scanner-message role="status">${this.unavailable}</p>`;
+    }
+    const bracket = (corner: string) =>
+      html`<span
+        class="bracket ${corner}"
+        data-scanner-bracket=${corner}
+        aria-hidden="true"
+      ></span>`;
+    return html`<div class="camera" data-scanner-camera>
+        ${
+          this.phase === "filming"
+            ? html`<video muted playsinline aria-label=${this.label}></video>`
+            : nothing
+        }
+        ${bracket("top-start")}${bracket("top-end")}${bracket("bottom-start")}${bracket("bottom-end")}
+        <p class="caption" data-scanner-caption>${this.caption || this.hint}</p>
+      </div>
+      ${
+        this.message
+          ? html`<p class="message refusal" data-scanner-message role="alert">${this.message}</p>`
+          : nothing
+      }`;
   }
 }
 

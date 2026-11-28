@@ -6,6 +6,7 @@ import {
   rulesIn,
   type ContrastGroupId,
 } from "../theme/contrast-rules.js";
+import { contrastRatio } from "../theme/colour.js";
 import { WAITRON_DEFAULTS } from "../theme/waitron.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same way.
@@ -349,6 +350,23 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
     expect(failures("google-button", theme, mount(theme))).toEqual([]);
   });
 });
+
+const CAMERA = { "--wt-color-camera": "#15171b", "--wt-color-on-camera": "#e9ecf1" } as const;
+
+test.each(["light", "dark"] as const)(
+  "the camera colours are the same in %s by data-theme or the OS, and its caption reads",
+  async (theme) => {
+    const tokens = (el: HTMLElement) =>
+      Object.fromEntries(Object.keys(CAMERA).map((name) => [name, token(el, name)]));
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    expect(tokens(mount(theme))).toEqual(CAMERA);
+    await commands.emulateColorScheme(theme);
+    expect(tokens(mount())).toEqual(CAMERA);
+    expect(
+      contrastRatio(CAMERA["--wt-color-on-camera"], CAMERA["--wt-color-camera"]),
+    ).toBeGreaterThanOrEqual(4.5);
+  },
+);
 
 const PALETTE = [
   "red",

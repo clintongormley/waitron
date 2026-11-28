@@ -17,8 +17,19 @@ afterEach(() => {
 const SCANNER =
   '<wt-qr-scanner label="Camera" hint="Hold the code up to the camera" unavailable="The camera did not start"></wt-qr-scanner>';
 
+const FRAMED =
+  '<wt-qr-scanner framed label="Camera" caption="Point at a sticker" unavailable="The camera did not start"></wt-qr-scanner>';
+
 describe.each(["light", "dark"] as const)("QR scanner accessibility (%s)", (theme) => {
-  test.each(["filming", "message", "unavailable"] as const)("%s", async (state) => {
+  test.each([
+    ["filming", SCANNER],
+    ["message", SCANNER],
+    ["unavailable", SCANNER],
+    ["framed filming", FRAMED],
+    ["framed message", FRAMED],
+    ["framed unavailable", FRAMED],
+  ] as const)("%s", async (name, markup) => {
+    const state = name.replace("framed ", "") as "filming" | "message" | "unavailable";
     if (state === "unavailable") {
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
         new DOMException("Permission denied", "NotAllowedError"),
@@ -28,7 +39,7 @@ describe.each(["light", "dark"] as const)("QR scanner accessibility (%s)", (them
       filming = camera;
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
     }
-    const el = (await mountThemed(SCANNER, theme)) as WtQrScanner;
+    const el = (await mountThemed(markup, theme)) as WtQrScanner;
     const message = () =>
       el.shadowRoot!.querySelector("[data-scanner-message]")?.textContent?.trim();
     if (state === "unavailable") {

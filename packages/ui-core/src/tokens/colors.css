@@ -31,6 +31,8 @@
   --wt-color-logo-plate: #ffffff;
   --wt-color-paper: #ffffff;
   --wt-color-ink: #000000;
+  --wt-color-camera: #15171b;
+  --wt-color-on-camera: #e9ecf1;
   --wt-color-field-fill: #f0f1f4;
   --wt-color-field-line: #7d8390;
   --wt-color-field-label-focus: #007392;
@@ -169,6 +171,8 @@
     --wt-color-logo-plate: #ffffff;
     --wt-color-paper: #ffffff;
     --wt-color-ink: #000000;
+    --wt-color-camera: #15171b;
+    --wt-color-on-camera: #e9ecf1;
     --wt-color-field-fill: #262a33;
     --wt-color-field-line: #7a8291;
     --wt-color-field-label-focus: #71cfeb;
@@ -300,6 +304,8 @@
   --wt-color-logo-plate: #ffffff;
   --wt-color-paper: #ffffff;
   --wt-color-ink: #000000;
+  --wt-color-camera: #15171b;
+  --wt-color-on-camera: #e9ecf1;
   --wt-color-field-fill: #f0f1f4;
   --wt-color-field-line: #7d8390;
   --wt-color-field-label-focus: #007392;
@@ -430,6 +436,8 @@
   --wt-color-logo-plate: #ffffff;
   --wt-color-paper: #ffffff;
   --wt-color-ink: #000000;
+  --wt-color-camera: #15171b;
+  --wt-color-on-camera: #e9ecf1;
   --wt-color-field-fill: #262a33;
   --wt-color-field-line: #7a8291;
   --wt-color-field-label-focus: #71cfeb;

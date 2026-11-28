@@ -106,6 +106,13 @@
   --wt-help-badge-target: 24px;
   --wt-help-badge-size: 20px;
 
+  /* wt-qr-scanner's framed camera and the corner brackets drawn over it. */
+  --wt-camera-height: 230px;
+  --wt-camera-bracket-size: 34px;
+  --wt-camera-bracket-line: 4px;
+  --wt-camera-bracket-inset-block: 40px;
+  --wt-camera-bracket-inset-inline: 70px;
+
   /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
      --wt-text-control-font-size, with its 12px padding on each side. A sign drawn by `locale` widens the box
      beyond this. */

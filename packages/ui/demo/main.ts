@@ -171,6 +171,9 @@ const panel = (theme: "light" | "dark") => `
           highlight
         ></wt-combobox>
       </div>
+      <div class="demo-framed-camera" style="margin-top:16px">
+        <wt-button variant="secondary" class="start-framed-camera">Show the framed camera</wt-button>
+      </div>
       <wt-address-lookup
         label="Street address"
         name="streetAddress"
@@ -581,6 +584,15 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     ];
     boxed.value = "bar";
   }
+  // Added on a tap, because a scanner asks for the camera as soon as it is on the page.
+  el.querySelector(".start-framed-camera")!.addEventListener("click", (event) => {
+    const scanner = document.createElement("wt-qr-scanner");
+    scanner.framed = true;
+    scanner.label = "Camera";
+    scanner.caption = "Point at a device's QR sticker · scan as many as you need";
+    scanner.unavailable = "The camera is not available. Choose from the list.";
+    (event.currentTarget as HTMLElement).replaceWith(scanner);
+  });
   const address =
     el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!;
   address.provider = {
