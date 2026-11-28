@@ -90,7 +90,7 @@ async function fixture(
   };
 }
 
-async function pairWithStreamingSpare(nodeId: string) {
+async function pairWithSpare(nodeId: string, link: "pending" | "streaming" = "streaming") {
   const spare = generateNodeKeyPair();
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
   const key = await readNodeIdentityKey(suite.node, ring, nodeId);
@@ -107,13 +107,14 @@ async function pairWithStreamingSpare(nodeId: string) {
       endorsements: [endorseKey(spareNodeId, spare.publicKey, nodeId, key)],
     }),
   );
-  await writePairLink(nodeId, "streaming", spare.publicKey);
+  await writePairLink(nodeId, link, spare.publicKey);
+  return spare.publicKey;
 }
 
 async function writePairLink(
   nodeId: string,
   state: "pending" | "streaming",
-  peerPublicKey = generateNodeKeyPair().publicKey,
+  peerPublicKey: string,
 ) {
   await withNodeTransaction(suite.node, (tx) =>
     writePairLinkTx(tx, ring, nodeId, {
@@ -143,12 +144,14 @@ function following(state: SpareFollowView["state"] = "following"): SpareFollowVi
 }
 
 it("refuses a checked shutdown while the spare's pair link has not started streaming", async () => {
-  const { nodeId, duties, runForShutdown } = await fixture();
-  await writePairLink(nodeId, "pending");
+  const { nodeId, duties, runForShutdown } = await fixture({ readSpare: async () => following() });
+  const spareKey = await pairWithSpare(nodeId, "pending");
   expect(await duties.available()).toBe(false);
   await expect(duties.start(actor)).rejects.toMatchObject({ code: "box.shutdown_unavailable" });
   expect(await duties.view()).toEqual({ available: false, phase: "idle" });
   expect(runForShutdown).not.toHaveBeenCalled();
+  await writePairLink(nodeId, "streaming", spareKey);
+  expect(await duties.view()).toEqual({ available: true, paired: true, phase: "idle" });
 });
 
 it("offers no checked shutdown on a box whose backups Waitron Cloud takes", async () => {
@@ -188,7 +191,7 @@ async function seedWorkingStaff(nodeId: string) {
 it.each([
   [true, [{ displayName: "Working staff", state: "working" }]],
   [false, []],
-])("with the workforce module on: %s, lists the staff still working", async (on, staff) => {
+])("lists the staff still working only when the workforce module is on (%s)", async (on, staff) => {
   const { nodeId, duties } = await fixture({ workforceEnabled: on });
   await seedWorkingStaff(nodeId);
   expect(await duties.readStaff()).toEqual(staff);
@@ -199,7 +202,7 @@ it("pauses without taking the final backup when the paired spare stops following
   const { nodeId, duties, runForShutdown } = await fixture({
     readSpare: async () => following(spareStates.shift() ?? "unknown"),
   });
-  await pairWithStreamingSpare(nodeId);
+  await pairWithSpare(nodeId);
   expect(await duties.view()).toEqual({ available: true, paired: true, phase: "idle" });
   await duties.start(actor);
   await vi.waitFor(() =>
@@ -213,7 +216,7 @@ it("pauses when the paired spare cannot confirm it holds the final upload", asyn
     readSpare: async () => following(),
     checkShutdownUpload: async () => false,
   });
-  await pairWithStreamingSpare(nodeId);
+  await pairWithSpare(nodeId);
   await duties.start(actor);
   await vi.waitFor(() =>
     expect(duties.status()).toEqual({ phase: "paused", errorCode: "box.shutdown_spare_unchecked" }),
@@ -251,9 +254,10 @@ it("records no alert for an upload stall that lands after the shutdown was cance
 });
 
 it("keeps the shutdown paused and logs when its alert cannot be recorded, then alerts on retry", async () => {
-  vi.spyOn(stopAlert, "recordShutdownPause").mockRejectedValueOnce(
-    new AppError("storage.disk_full", {}),
-  );
+  const recordPause = vi
+    .spyOn(stopAlert, "recordShutdownPause")
+    .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+  onTestFinished(() => recordPause.mockRestore());
   const { duties, wake, log, shutdownIncidents } = await fixture({
     runForShutdown: async () => {
       throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
@@ -278,12 +282,15 @@ it("keeps the shutdown paused and logs when its alert cannot be recorded, then a
 });
 
 it("removes a hold mark a failed save left behind when the shutdown is cancelled", async () => {
-  const writeDurable = atomic.writeFileDurable;
-  vi.spyOn(atomic, "writeFileDurable").mockImplementationOnce(async (...args) => {
-    await writeDurable(...args);
-    throw Object.assign(new Error("folder sync failed"), { code: "EIO" });
-  });
   const { stateDir, duties } = await fixture();
+  const writeDurable = atomic.writeFileDurable;
+  const failingSave = vi
+    .spyOn(atomic, "writeFileDurable")
+    .mockImplementationOnce(async (...args) => {
+      await writeDurable(...args);
+      throw Object.assign(new Error("folder sync failed"), { code: "EIO" });
+    });
+  onTestFinished(() => failingSave.mockRestore());
   const mark = join(stateDir, "admin-shutdown.json");
   await duties.start(actor);
   await vi.waitFor(() => expect(duties.status()).toMatchObject({ phase: "paused" }));

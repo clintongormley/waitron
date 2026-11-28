@@ -507,6 +507,15 @@ it.each([
     Uint8Array.from(FILE),
     "masterKey",
   ],
+  [
+    "a bucket copy in place of a backup file",
+    {
+      eventId: "e",
+      source: { kind: "bucket", masterKey: FILE_MASTER_KEY_TEXT, environment: "production" },
+    },
+    Uint8Array.from(FILE),
+    "body",
+  ],
 ])("refuses a stage with %s", async (_name, request, artifact, field) => {
   const { app, stageRecovery } = stageFixture();
   const response = await app.request(
@@ -835,33 +844,20 @@ it.each([
     multipart({ request: "{", artifact: new Blob([Uint8Array.from(FILE)]) }),
     "body",
   ],
-  [
-    "a form with no backup file",
-    multipart({ request: JSON.stringify({ source: archiveSource, preparation }) }),
-    "body",
-  ],
+  ["a form with no backup file", stageForm({ source: archiveSource, preparation }, null), "body"],
   [
     "a form whose backup file is empty",
-    multipart({
-      request: JSON.stringify({ source: archiveSource, preparation }),
-      artifact: new Blob([]),
-    }),
+    stageForm({ source: archiveSource, preparation }, new Uint8Array()),
     "artifact",
   ],
   [
     "a bucket copy sent beside an uploaded file",
-    multipart({
-      request: JSON.stringify({ source: bucket, preparation }),
-      artifact: new Blob([Uint8Array.from(FILE)]),
-    }),
+    stageForm({ source: bucket, preparation }),
     "artifact",
   ],
   [
     "a Cloud point sent beside an uploaded file",
-    multipart({
-      request: JSON.stringify({ source: cloud, preparation }),
-      artifact: new Blob([Uint8Array.from(FILE)]),
-    }),
+    stageForm({ source: cloud, preparation }),
     "artifact",
   ],
 ])("refuses a preparation with %s, before dispatch", async (_name, init, field) => {
@@ -873,6 +869,17 @@ it.each([
 });
 it("refuses a form whose declared length is past the restore limit before reading it", async () => {
   const { app, execute } = fixture();
+  let pulls = 0;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new TextEncoder().encode("--declared--\r\n"));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
   const response = await app.request(
     path,
     {
@@ -881,34 +888,28 @@ it("refuses a form whose declared length is past the restore limit before readin
         "content-type": "multipart/form-data; boundary=declared",
         "content-length": String(64 * 1024 ** 4),
       },
-      body: "--declared--\r\n",
-    },
+      body,
+      duplex: "half",
+    } as RequestInit,
     tls(),
   );
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual(invalidField("artifact"));
+  expect(pulls).toBe(0);
   expect(execute).not.toHaveBeenCalled();
 });
 it.each([
   [
-    "a body that is neither JSON nor a form",
+    "neither JSON nor a form",
     { method: "POST", headers: { "content-type": "text/plain" }, body: "stage" },
     "body",
   ],
   [
-    "a request field that is not JSON",
+    "a form whose request field is not JSON",
     multipart({ request: "{", artifact: new Blob([Uint8Array.from(FILE)]) }),
     "body",
   ],
-  [
-    "a bucket copy in place of a backup file",
-    stageForm({
-      eventId: "e",
-      source: { kind: "bucket", masterKey: FILE_MASTER_KEY_TEXT, environment: "production" },
-    }),
-    "body",
-  ],
-])("refuses a stage with %s, before staging", async (_name, init, field) => {
+])("refuses a stage whose body is %s, before staging", async (_name, init, field) => {
   const { app, stageRecovery } = stageFixture();
   const response = await app.request("/setup-api/recovery/stage", init, tls());
   expect(response.status).toBe(400);
@@ -968,6 +969,7 @@ it("refuses a preparation, and a stage queued behind it, once a restore is stage
   );
   admit();
   expect((await restore).status).toBe(202);
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledOnce());
   const staged = await stage;
   expect([staged.status, await staged.json()]).toEqual([
     409,

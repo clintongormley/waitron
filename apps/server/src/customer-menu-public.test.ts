@@ -31,6 +31,7 @@ import {
   updateMenuDetails,
   writeContentLanguages,
 } from "@waitron/menu";
+import * as menuPackage from "@waitron/menu";
 import { AppError } from "@waitron/shared";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { createCustomerMenuApp, startCustomerMenuListener } from "./customer-menu-public.js";
@@ -184,21 +185,28 @@ it("renders only the exact public photo recipe and withdraws it when photos are 
   expect(await view.readPhoto(path)).toBeNull();
 });
 
+async function guestBuild(index = guestIndex) {
+  const root = await mkdtemp(join(tmpdir(), "wt-customer-build-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "assets/fonts"), { recursive: true });
+  await writeFile(join(root, "assets/menu-123.js"), "export {};");
+  await writeFile(join(root, "favicon.svg"), "<svg></svg>");
+  await writeFile(join(root, "notes.txt"), "Not an icon");
+  await writeFile(join(root, "index.html"), index);
+  return root;
+}
+const guestIndex =
+  '<html lang="en"><title>Menu</title><script type="application/json" id="customer-menu-data"></script></html>';
+
 async function httpsFixture() {
   const f = await fixture(true);
   const stateDir = await mkdtemp(join(tmpdir(), "wt-customer-"));
   onTestFinished(() => rm(stateDir, { recursive: true, force: true }));
   const hostname = "staff.waitron.local";
   const socketPath = join(stateDir, "customer-menu.sock");
-  const root = join(stateDir, "guest");
+  const root = await guestBuild();
   await mkdir(join(stateDir, "cloud"));
-  await mkdir(join(root, "assets"), { recursive: true });
-  await writeFile(join(root, "assets/menu-123.js"), "export {};");
   await writeFile(join(root, "THIRD-PARTY-NOTICES.txt"), "Notices");
-  await writeFile(
-    join(root, "index.html"),
-    '<html lang="en"><title>Menu</title><script type="application/json" id="customer-menu-data"></script></html>',
-  );
   let ca: string;
   async function install() {
     const cert = mintSelfSignedServerCert({
@@ -349,22 +357,13 @@ it("finds photos inside sections and serves large photos in the display shape", 
 
 it("builds one view for reads that arrive together", async () => {
   const { view } = await fixture();
+  const builds = vi.spyOn(menuPackage, "readLiveDocuments");
+  onTestFinished(() => builds.mockRestore());
   const [first, second] = await Promise.all([view.read(), view.read()]);
   expect(second).toBe(first);
+  expect(builds).toHaveBeenCalledOnce();
 });
 
-async function guestBuild(index = guestIndex) {
-  const root = await mkdtemp(join(tmpdir(), "wt-customer-build-"));
-  onTestFinished(() => rm(root, { recursive: true, force: true }));
-  await mkdir(join(root, "assets/fonts"), { recursive: true });
-  await writeFile(join(root, "assets/menu-123.js"), "export {};");
-  await writeFile(join(root, "favicon.svg"), "<svg></svg>");
-  await writeFile(join(root, "notes.txt"), "Not an icon");
-  await writeFile(join(root, "index.html"), index);
-  return root;
-}
-const guestIndex =
-  '<html lang="en"><title>Menu</title><script type="application/json" id="customer-menu-data"></script></html>';
 const ask = (app: { request(path: string): Response | Promise<Response> }, path: string) =>
   app.request(`http://menu.example${path}`);
 
