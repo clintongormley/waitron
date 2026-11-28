@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import type { WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dish-pick-row.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type {
@@ -150,4 +151,16 @@ export function choiceRow(
         : html`<span data-choice-reason=${purpose}>${reasonText(reason)}</span>`
     }
   </div>`;
+}
+
+/** A step replaces the control that was pressed, so the new step's first control takes focus;
+ * a press whose answer was lost, its Send again. */
+export async function focusFirstControl(root: ShadowRoot): Promise<void> {
+  await root.querySelector<WtDialog>("wt-dialog")?.updateComplete;
+  (
+    root.querySelector<HTMLElement>("[data-send-again]:not([disabled])") ??
+    root.querySelector<HTMLElement>(
+      ".body :is(wt-choice-row, wt-dish-pick-row, wt-switch, wt-price-input, wt-button):not([disabled])",
+    )
+  )?.focus();
 }

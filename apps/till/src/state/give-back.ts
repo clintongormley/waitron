@@ -75,6 +75,8 @@ export const PROVES_NOTHING = new Set([
   "advance.taken_off_final_invoice",
   "clock.unconfirmed",
   "sif.allocation_invalid",
+  "invoice_delivery.printer_invalid",
+  "invoice_delivery.email_unavailable",
 ]);
 /** Refusals a resend can meet too; on a first send they prove nothing, as the PIN and rights are
  * checked before anything is written. */

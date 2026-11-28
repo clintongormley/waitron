@@ -94,6 +94,28 @@ it("sends only the request's own fields, never another property found on it", as
   });
 });
 
+it("sends the corrective invoice's chosen way with the request's fields", async () => {
+  const correctiveDelivery = { medium: "print" as const, printerId: "printer-2" };
+  const request = { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" };
+  const body = {
+    request: { ...request, correctiveDelivery },
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund" as const, amount: "5.00", way: "cash" }],
+    submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+  };
+  const fetcher = vi.fn().mockResolvedValue(response({ parts: [] }));
+  await new TillApi("", fetcher).giveBack("sale/1", body);
+  expect(JSON.parse(fetcher.mock.calls[0]![1].body as string)).toEqual({
+    ...request,
+    correctiveDelivery,
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+    submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+  });
+});
+
 it("lists the approvers holding every right a give-back needs", async () => {
   const fetcher = vi.fn().mockResolvedValue(response([]));
   await new TillApi("", fetcher).listApprovers(["sale.refund", "sale.rectify"]);

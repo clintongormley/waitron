@@ -24,6 +24,7 @@ import type { TillApi } from "../api/client.js";
 import type { AdjustmentReason } from "../api/payments-api.js";
 import type { StaffMember } from "../api/device-session-api.js";
 import type {
+  CorrectiveDelivery,
   GiveBackAsk,
   GiveBackLine,
   GiveBackOutcome,
@@ -36,11 +37,12 @@ import type {
   GiveBackWay,
 } from "../api/give-back-types.js";
 import { reasonPicker } from "./reason-picker.js";
-import { choiceRow, dishLines, wayLines } from "./give-back-lines.js";
+import { choiceRow, dishLines, focusFirstControl, wayLines } from "./give-back-lines.js";
 import {
   AMOUNT_REFUSALS,
   PURPOSES,
   blank,
+  comparable,
   positive,
   startOf,
   usable,
@@ -54,6 +56,7 @@ import type { GiveBackSession } from "../state/give-back.js";
 import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import type { TenderRefundSession } from "../state/tender-refund.js";
+import { correctiveLine, correctiveRefusal, withCorrective } from "./corrective-choice.js";
 import "./give-back-under-way.js";
 import type { GiveBackUnderWayApi } from "./give-back-under-way.js";
 import "./supervisor-override-dialog.js";
@@ -137,6 +140,8 @@ export class TillGiveBackDialog extends LitElement {
   @state() private pinError: ApproverRefusal | null = null;
   /** The press waiting for an approver, from the read of who may approve. */
   @state() private approval?: Sending;
+  /** Where staff chose to send the corrective full invoice; null for the way it goes anyway. */
+  @state() private corrective: CorrectiveDelivery | null = null;
   #previewRequest = 0;
   #lastStep = "";
   #lastHeld = false;
@@ -170,7 +175,7 @@ export class TillGiveBackDialog extends LitElement {
       id: this,
       current: () => this.draft,
       snapshot: (value) => ({ ...value, lineIds: [...value.lineIds] }),
-      equal: (a, b) => JSON.stringify(this.#comparable(a)) === JSON.stringify(this.#comparable(b)),
+      equal: (a, b) => JSON.stringify(comparable(a)) === JSON.stringify(comparable(b)),
       restore: (value) => {
         this.draft = { ...value, lineIds: [...value.lineIds] };
       },
@@ -211,18 +216,7 @@ export class TillGiveBackDialog extends LitElement {
       this.step?.kind === "lost" ? "lost" : this.view === null ? "" : (this.purpose ?? "choice");
     if (step === this.#lastStep) return;
     this.#lastStep = step;
-    void this.#focusFirstControl();
-  }
-  /** A step replaces the control that was pressed, so the new step's first control takes focus;
-   * a press whose answer was lost, its Send again. */
-  async #focusFirstControl(): Promise<void> {
-    await this.shadowRoot!.querySelector<WtDialog>("wt-dialog")?.updateComplete;
-    (
-      this.shadowRoot!.querySelector<HTMLElement>("[data-send-again]:not([disabled])") ??
-      this.shadowRoot!.querySelector<HTMLElement>(
-        ".body :is(wt-choice-row, wt-dish-pick-row, wt-switch, wt-price-input, wt-button):not([disabled])",
-      )
-    )?.focus();
+    void focusFirstControl(this.shadowRoot!);
   }
   async #load(): Promise<void> {
     this.loadRefusal = null;
@@ -241,16 +235,6 @@ export class TillGiveBackDialog extends LitElement {
       // The picker offers Retry while the reasons are unread.
     }
     this.reasonsLoading = false;
-  }
-  #comparable(value: Draft) {
-    return {
-      lineIds: [...value.lineIds].sort(),
-      amount: typedMoney(value.amount) ?? value.amount,
-      extraOn: value.extraOn,
-      way: value.way,
-      reasonId: value.reasonId,
-      note: value.note.trim(),
-    };
   }
   #money(value: string): string {
     return formatMoney(value, currentLocale());
@@ -303,6 +287,7 @@ export class TillGiveBackDialog extends LitElement {
   #choose(purpose: GiveBackPurpose, filled: Partial<Draft> = {}): void {
     const way = this.#offered(purpose).find(usable);
     this.purpose = purpose;
+    this.corrective = null;
     this.pendingStatus = "";
     this.amountTyped = false;
     this.attempted = false;
@@ -449,12 +434,12 @@ export class TillGiveBackDialog extends LitElement {
     if (this.#answer() === null) {
       // What is handed on must be what was on screen at the press, so an edit made while the
       // preview is asked again needs a press of its own.
-      const pressed = JSON.stringify(this.#comparable(this.draft));
+      const pressed = JSON.stringify(comparable(this.draft));
       this.confirming = true;
       await this.#preview();
       this.confirming = false;
       if (!this.#open()) return;
-      if (JSON.stringify(this.#comparable(this.draft)) !== pressed) {
+      if (JSON.stringify(comparable(this.draft)) !== pressed) {
         this.changedWhileChecking = true;
         return;
       }
@@ -464,7 +449,7 @@ export class TillGiveBackDialog extends LitElement {
     const request = this.#request()!;
     const reason = this.reasons!.find((row) => row.id === this.draft.reasonId)!;
     const ask: GiveBackAsk = {
-      request,
+      request: withCorrective(request, answer.corrective, this.corrective),
       reasonId: reason.id,
       note: reason.noteRequired ? this.draft.note.trim() : null,
       expected: answer.parts,
@@ -741,6 +726,7 @@ export class TillGiveBackDialog extends LitElement {
     const refusal = this.#refusal();
     const sent = this.sendRefusal;
     const onAmount = (shown: Refusal | null) => shown !== null && AMOUNT_REFUSALS.has(shown.code);
+    const onCorrective = correctiveRefusal(sent);
     if (onAmount(sent)) errors.set("amount", this.#sendRefusalText(sent!));
     else if (onAmount(refusal))
       errors.set("amount", this.#refusalText(refusal!, "give_back.preview_failed"));
@@ -821,12 +807,15 @@ export class TillGiveBackDialog extends LitElement {
         answer === null
           ? nothing
           : summaryOf(answer, way!, moneyPlus(typedMoney(this.draft.amount)!, this.#extra()))
-      }
+      }${correctiveLine(answer?.corrective, this.corrective, onCorrective, (delivery) => {
+        this.corrective = delivery;
+        this.sendRefusal = null;
+      })}
       <wt-form-actions
         .error=${[
-          errors.size > 0 ? t("form.fix_fields") : "",
+          errors.size > 0 || onCorrective !== "" ? t("form.fix_fields") : "",
           sent !== null
-            ? onAmount(sent)
+            ? onAmount(sent) || onCorrective !== ""
               ? ""
               : this.#sendRefusalText(sent)
             : refusal !== null && !onAmount(refusal)

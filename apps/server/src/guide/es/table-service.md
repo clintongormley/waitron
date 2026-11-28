@@ -470,7 +470,9 @@ puedes devolver dinero, un responsable o encargado aprueba la consulta con su PI
 que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
 nunca devuelven el mismo dinero dos veces. Una factura rectificativa sale sola cuando se emite: por
 correo a la dirección a la que fue la factura del cliente, si el servidor puede enviar correo; si no,
-se imprime en esta caja. Entrega al cliente lo que se imprima. Un ticket rectificativo o una factura
+se imprime en esta caja. La ventana dice adónde va: para enviarla a otra impresora o a otra
+dirección de correo, elige **Cambiar** antes de devolver el dinero. Entrega al cliente lo que se
+imprima. Un ticket rectificativo o una factura
 rectificativa que no se imprime solo se puede imprimir desde **Buscar cuenta**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el ticket en **Buscar cuenta**, en

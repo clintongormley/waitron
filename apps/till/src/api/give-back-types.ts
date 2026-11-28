@@ -61,6 +61,25 @@ export interface GiveBackRequest {
   way: string;
   /** The cancels the window was opened filled in with. */
   fromCancel?: string[];
+  /** Where staff chose to send the corrective full invoice; never sent with a preview, which
+   * would refuse a printer or email no longer offered before the press. */
+  correctiveDelivery?: CorrectiveDelivery;
+}
+
+/** A way staff may choose for a corrective full invoice. */
+export type CorrectiveDelivery =
+  { medium: "print"; printerId: string } | { medium: "email"; recipient: string };
+
+/** Where a give-back's corrective full invoice goes, and what staff may choose instead. */
+export interface CorrectiveChoice {
+  /** The way it goes unless staff choose another; null when it is not sent at all. */
+  default:
+    | { medium: "email"; recipient: string | null }
+    | { medium: "a4" | "receipt"; printerId: string; printerName: string }
+    | null;
+  /** The printers this device may choose, the default's first. */
+  printers: { id: string; name: string; kind: "a4" | "receipt" }[];
+  emailAvailable: boolean;
 }
 
 export type GiveBackRight = "sale.refund" | "sale.rectify";
@@ -79,6 +98,8 @@ export interface GiveBackPreview {
   /** The rights the parts need that the person signed in lacks. */
   needs: GiveBackRight[];
   manual: boolean;
+  /** Present only when the give-back files a corrective full invoice. */
+  corrective?: CorrectiveChoice;
 }
 
 /** The ids one press writes under, one per part it may write; a resend reuses them. */

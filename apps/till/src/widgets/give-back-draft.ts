@@ -1,5 +1,6 @@
 import { compareDecimal, decimal } from "@waitron/shared";
 import type { GiveBackLine, GiveBackPurpose, GiveBackWay } from "../api/give-back-types.js";
+import { typedMoney } from "../state/bill-payment.js";
 
 export type Draft = {
   lineIds: string[];
@@ -38,3 +39,15 @@ export const positive = (value: string) => compareDecimal(decimal(value), decima
 /** What ticking `line` starts the amount at: a cancel's money still owed, otherwise what is left. */
 export const startOf = (line: GiveBackLine) =>
   line.cancelled !== null && positive(line.cancelled.owed) ? line.cancelled.owed : line.left;
+
+/** A draft as staff would compare it: dishes in any order, an amount however it was typed. */
+export function comparable(value: Draft) {
+  return {
+    lineIds: [...value.lineIds].sort(),
+    amount: typedMoney(value.amount) ?? value.amount,
+    extraOn: value.extraOn,
+    way: value.way,
+    reasonId: value.reasonId,
+    note: value.note.trim(),
+  };
+}
