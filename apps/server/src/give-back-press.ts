@@ -11,6 +11,7 @@ import type { TrustedReading } from "@waitron/fiscal";
 import type { Authorization } from "@waitron/identity";
 import type { RefundRefusalReason } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, isUuid, type SaleId } from "@waitron/shared";
+import { readSentCorrective, type SentCorrective } from "./corrective-delivery.js";
 import { invalid } from "./bill-allocation.js";
 import { parseGiveBackRequest, type GiveBackPart, type GiveBackRequest } from "./give-back-plan.js";
 import { reasonOf, type GiveBackDeps, type WaitReason } from "./give-back-read.js";
@@ -47,6 +48,8 @@ export interface GiveBackOutcome {
     state: GiveBackPartState;
     refundId?: string;
     correctionId?: string;
+    /** A filed corrective full invoice: what it is and how it is being sent. */
+    corrective?: SentCorrective;
   }[];
   /** A later part refused after an earlier one moved money. */
   refusal: { code: string; params: object } | null;
@@ -240,23 +243,36 @@ export async function outcomeOf(
   refusal: WaitReason | null = null,
   running = false,
 ): Promise<GiveBackOutcome> {
-  const answer: GiveBackOutcome["parts"] = ask.expected.map((part) => {
+  const answer: GiveBackOutcome["parts"] = [];
+  for (const part of ask.expected) {
     const amount = centsToDecimal(part.amount);
     if (part.kind === "correction") {
       const row = stored.correction;
-      if (row === undefined) return { kind: "correction", amount, state: "not_started" };
-      return {
+      if (row === undefined) {
+        answer.push({ kind: "correction", amount, state: "not_started" });
+        continue;
+      }
+      const corrective =
+        row.correctiveSaleId === null
+          ? null
+          : await readSentCorrective(tx, cfg, row.correctiveSaleId);
+      answer.push({
         kind: "correction",
         amount,
         state: row.state === "filed" ? "completed" : row.state === "open" ? "pending" : "failed",
         correctionId: row.id,
-      };
+        ...(corrective === null ? {} : { corrective }),
+      });
+      continue;
     }
     const kind = part.kind as "refund" | "extra";
     const rows = stored[slotOf(ask, kind)];
-    if (rows.length === 0) return { kind, amount, state: "not_started" };
-    return { kind, amount, state: refundsState(rows), refundId: rows[0]!.id };
-  });
+    answer.push(
+      rows.length === 0
+        ? { kind, amount, state: "not_started" }
+        : { kind, amount, state: refundsState(rows), refundId: rows[0]!.id },
+    );
+  }
   const failed = [...stored.refund, ...stored.extra, ...legs].find((row) => row.state === "failed");
   const declined =
     failed === undefined

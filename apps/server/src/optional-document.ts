@@ -4,6 +4,7 @@ import { AppError } from "@waitron/shared";
 type SaleDocument =
   | "enqueueSaleReceipt"
   | "enqueueCorrectiveReceipt"
+  | "sendFiledCorrective"
   | "reserveStagedInvoiceDelivery"
   | "refreshWaitingOriginal";
 

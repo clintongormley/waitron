@@ -53,6 +53,7 @@ import {
   waitsForRecordsCheck,
 } from "./invoice-correction-legs.js";
 import { linkCorrectionToCancels } from "./cancelled-lines.js";
+import { sendFiledCorrective } from "./corrective-delivery.js";
 import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
 import { deviceMayPrintReceipts, enqueueOriginalReceipt } from "./receipt-print.js";
@@ -447,9 +448,10 @@ export async function listOpenInvoiceCorrections(
  * Files the corrective of the open correction `correctionId` (an R1 in the full invoices' series
  * where the regime's admission says so, else an R5) for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * corrective is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues
- * the corrective's original on that device's receipt printer when one resolves; an automatic
- * filing passes none and queues nothing.
+ * corrective is filed. An R1 is sent the way its original went ({@link sendFiledCorrective}), on
+ * paper at `cfg`'s device, whoever files it. For an R5, when a person asked (`asked`) and `cfg`'s
+ * device may print receipts, queues its original on that device's receipt printer when one
+ * resolves; an automatic filing queues none.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -520,7 +522,8 @@ export async function fileCorrectionIn(
     await linkCorrectionToCancels(tx, saleId, legs, {
       filed: { allocations: preview.allocations, openedAt: correction.createdAt },
     });
-  if (asked?.print)
+  if (fullInvoice) await sendFiledCorrective(tx, deps.backend, cfg, correction, correctiveSaleId);
+  else if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;
       await enqueueOriginalReceipt(
