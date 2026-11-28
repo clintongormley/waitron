@@ -60,8 +60,8 @@ for (const [name, ctor] of Object.entries(components)) {
 
   test(`${name} declares no literal px/rem/em sizing`, () => {
     // Up to 1px is allowed as a hairline; rem and em are banned at any size. The menu tiles alone
-    // may keep their 720 px height step, since a media condition cannot read a custom property,
-    // and the shared column formula.
+    // may keep `@media (width >= 720px)` conditions, since a media condition cannot read a custom
+    // property, and the shared column formula.
     let css = cssOf(ctor.styles);
     if (name === "menuTileStyles")
       css = css.replace(/@media \(width >= 720px\)\s*\{/g, "{").replaceAll(HOME_GRID_COLUMNS, "");

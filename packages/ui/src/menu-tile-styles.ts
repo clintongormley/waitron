@@ -91,8 +91,8 @@ export const menuTileStyles: CSSResult = css`
     max-width: 100%;
   }
 
-  /* Two lines at most, so a tile never grows and its corner count never covers the name; the whole
-     name stays in the text that screen readers and the information window read. */
+  /* Two lines at most, so a tile never grows; the whole name stays in the text that screen readers
+     and the information window read. */
   .name {
     display: -webkit-box;
     -webkit-box-orient: vertical;

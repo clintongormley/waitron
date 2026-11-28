@@ -1106,7 +1106,7 @@ Every colour, spacing, radius, and font value in a `packages/ui/src/components/*
 property: no hex, no
 `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/`oklch()`/`color()`/`color-mix()`, no named colours,
 no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp()`).
-`menuTileStyles` alone may keep its `@media (width >= 720px)` tile-height step, since a media
+`menuTileStyles` alone may keep `@media (width >= 720px)` conditions, since a media
 condition cannot read a custom property, and the shared `HOME_GRID_COLUMNS` formula. `transparent`,
 `currentColor`, and `inherit` are legitimate escape hatches, not chrome, and so are the system
 colours inside `@media (forced-colors: active)` (see
