@@ -1391,6 +1391,108 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads and saves a menu's customer settings, preview and style on its encoded routes", async () => {
+    const settings = { enabled: true, address: "lunch", photos: "large" as const };
+    const preview = { state: "unpublished" as const };
+    const style = {
+      name: "Default",
+      appearance: { pageColor: "#ffffff" },
+      affectedMenus: [{ id: "m 2", name: "Dinner" }],
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(settings))
+      .mockResolvedValueOnce(jsonResponse(settings))
+      .mockResolvedValueOnce(jsonResponse(preview))
+      .mockResolvedValueOnce(jsonResponse(preview))
+      .mockResolvedValueOnce(jsonResponse(style))
+      .mockResolvedValueOnce(jsonResponse(style));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getCustomerOnlineSettings("m/1")).resolves.toEqual(settings);
+    await expect(api.saveCustomerOnlineSettings("m/1", settings)).resolves.toEqual(settings);
+    await expect(api.getCustomerPreview("m/1", "es")).resolves.toEqual(preview);
+    await expect(api.getCustomerPreview("m/1", "")).resolves.toEqual(preview);
+    await expect(api.getCustomerStyle("m/1")).resolves.toEqual(style);
+    await expect(api.saveCustomerStyle("m/1", { pageColor: "#ffffff" })).resolves.toEqual(style);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/menus/m%2F1/customer-online-settings", "GET", undefined],
+      ["/management-api/menus/m%2F1/customer-online-settings", "PUT", settings],
+      ["/management-api/menus/m%2F1/customer-preview?language=es", "GET", undefined],
+      ["/management-api/menus/m%2F1/customer-preview", "GET", undefined],
+      ["/management-api/menus/m%2F1/customer-style", "GET", undefined],
+      ["/management-api/menus/m%2F1/customer-style", "PUT", { pageColor: "#ffffff" }],
+    ]);
+  });
+
+  it("lists, schedules, moves and cancels a menu's queued publications", async () => {
+    const queued = { versionId: "v4", number: 4, activatesAt: "2026-12-01T09:00:00.000Z" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ live: null, queued: [queued] }))
+      .mockResolvedValueOnce(jsonResponse(queued))
+      .mockResolvedValueOnce(jsonResponse(queued))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const at = { date: "2026-12-01", time: "10:00" };
+    const twice = { date: "2026-10-25", time: "02:30", occurrence: "later" as const };
+
+    await expect(api.getMenuPublications("c1")).resolves.toEqual({ live: null, queued: [queued] });
+    await expect(
+      api.scheduleMenuPublication("c1", { expectedHash: "h".repeat(64), activatesAt: at }),
+    ).resolves.toEqual(queued);
+    await expect(
+      api.rescheduleMenuPublication("c1", "v4", { activatesAt: twice }),
+    ).resolves.toEqual(queued);
+    await expect(api.cancelMenuPublication("c1", "v4")).resolves.toBeUndefined();
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/menus/c1/publications", "GET", undefined],
+      [
+        "/management-api/menus/c1/publications",
+        "POST",
+        { expectedHash: "h".repeat(64), activatesAt: at },
+      ],
+      ["/management-api/menus/c1/publications/v4", "PATCH", { activatesAt: twice }],
+      ["/management-api/menus/c1/publications/v4/cancel", "POST", undefined],
+    ]);
+  });
+
+  it("reads a menu's delete impact and structure, and deletes, renames and saves it", async () => {
+    const impact = { defaultChoices: null };
+    const structure = { rootSectionId: "root", nodes: [] };
+    const body = { replacements: { zone: "m2" }, defaultMenuId: "m2" };
+    const save = { expectedRevision: "r1", root: { members: [] } };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(impact))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse(structure))
+      .mockResolvedValueOnce(jsonResponse({ revision: "r2" }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getMenuDeleteImpact("m/1")).resolves.toEqual(impact);
+    await expect(api.deleteMenu("m/1", body)).resolves.toBeUndefined();
+    await expect(api.renameMenu("c1", "Lunch")).resolves.toBeUndefined();
+    await expect(api.getMenuStructure("c1")).resolves.toEqual(structure);
+    await expect(
+      api.saveMenuStructure(
+        "m/1",
+        save as unknown as Parameters<DashboardApi["saveMenuStructure"]>[1],
+      ),
+    ).resolves.toEqual({ revision: "r2" });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/menus/m%2F1/delete-impact", "GET", undefined],
+      ["/management-api/menus/m%2F1/delete", "POST", body],
+      ["/management-api/menus/c1", "PATCH", { name: "Lunch" }],
+      ["/management-api/menus/c1/structure", "GET", undefined],
+      ["/management-api/menus/m%2F1/structure", "PUT", save],
+    ]);
+  });
+
   it("reads a menu's live version and patches it against the version it was read from", async () => {
     const live = { versionId: "v3", number: 3, since: "2026-10-27T09:00:00.000Z", document: {} };
     const declared = {
@@ -1778,6 +1880,25 @@ it("lists the tax office's invoices with only the filters given, and the keyset 
       "GET",
       undefined,
     ],
+  ]);
+});
+
+it("leaves out the tax office filters a person cleared or never set", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(jsonResponse({ rows: [], next: null, timeZone: "Europe/Madrid" }));
+  const api = new DashboardApi("", fetchImpl);
+
+  await api.listTaxOfficeInvoices({
+    from: "2026-11-01",
+    to: "2026-11-30",
+    q: "",
+    rate: undefined,
+    kind: "F2",
+  });
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30&kind=F2", "GET", undefined],
   ]);
 });
 
@@ -2311,6 +2432,84 @@ it("downloads an invoice customer's data by tax number with the server's file na
   expect(url).toBe("/management-api/invoice-customers/personal-data/export?taxId=12345678Z");
   expect(init.method).toBe("GET");
   expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+});
+
+it("finds and downloads an invoice customer by an identifier that is not a Spanish tax number", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ taxId: "X1", invoices: [] }))
+    .mockResolvedValueOnce(
+      new Response(new Uint8Array([1]), {
+        headers: { "content-disposition": 'attachment; filename="customer.zip"' },
+      }),
+    );
+  const api = new DashboardApi("", fetchImpl);
+
+  await api.findInvoiceCustomer("X 1", {});
+  await api.downloadInvoiceCustomerData("X 1", { identifierType: "vat-number" });
+
+  expect((fetchImpl.mock.calls as [string, RequestInit][]).map(([url]) => url)).toEqual([
+    "/management-api/invoice-customers/personal-data?taxId=X%201&identifierType=&identifierCountryCode=",
+    "/management-api/invoice-customers/personal-data/export?taxId=X%201&identifierType=vat-number&identifierCountryCode=",
+  ]);
+});
+
+it("reads the orders page's staff and printers lists", async () => {
+  const staff = { staff: [{ id: "p1", name: null }] };
+  const printers = [{ id: "pr1", name: "Bar" }];
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(staff))
+    .mockResolvedValueOnce(jsonResponse(printers));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.listOrderStaff()).toEqual(staff);
+  expect(await api.getOrderPrinters()).toEqual(printers);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/orders/staff", "GET", undefined],
+    ["/management-api/orders/printers", "GET", undefined],
+  ]);
+});
+
+it("resends a print job on its own printer, pages completed jobs and lists the demo printer's jobs", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ jobId: "j2" }))
+    .mockResolvedValueOnce(jsonResponse([]))
+    .mockResolvedValueOnce(jsonResponse([]))
+    .mockResolvedValueOnce(jsonResponse([]))
+    .mockResolvedValueOnce(emptyResponse());
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.resendPrintJob("j1")).toEqual({ jobId: "j2" });
+  await api.listRecentJobs();
+  await api.listRecentJobs(2);
+  await api.listDemoPrinterJobs();
+  await api.assignPrinterProfiles("pr1", ["bar", "terrace"]);
+
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/print-jobs/j1/resend", "POST", undefined],
+    ["/management-api/print-jobs", "GET", undefined],
+    ["/management-api/print-jobs?completedPage=2", "GET", undefined],
+    ["/management-api/demo-printer/jobs", "GET", undefined],
+    ["/management-api/printers/pr1/profiles", "PUT", { profileIds: ["bar", "terrace"] }],
+  ]);
+});
+
+it("reads drawer closes for a period and prints one on the chosen printer", async () => {
+  const closes = { closes: [] };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(closes))
+    .mockResolvedValueOnce(jsonResponse({ jobId: "j9" }));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.getDrawerCloses("2026-11-01", "2026-11-30")).toEqual(closes);
+  expect(await api.printDrawerClose("close/1", "pr1")).toEqual({ jobId: "j9" });
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/reports/drawer-closes?from=2026-11-01&to=2026-11-30", "GET", undefined],
+    ["/management-api/reports/drawer-closes/close%2F1/print", "POST", { printerId: "pr1" }],
+  ]);
 });
 
 describe("DashboardApi.getDiskStop", () => {

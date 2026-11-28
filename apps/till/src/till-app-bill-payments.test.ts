@@ -8097,6 +8097,40 @@ describe("till-app: giving back a bill payment", () => {
     expect(inDialog(el, "[data-payment-refunded]")).not.toBeNull();
   });
 
+  it("refuses a refund acknowledgment that answers for another bill and says it could not be opened", async () => {
+    const refund = refundOf();
+    const getTenderRefundAcknowledgment = vi.fn().mockResolvedValue({
+      parent: "bill",
+      workingOrderId: "wo-other",
+      paymentReference: refund.paymentId,
+      refund,
+      printQueued: false,
+      issuer: { venueName: "Venue", nif: "61000002T" },
+      customerName: null,
+      method: "cash",
+      last4: null,
+    });
+    const el = await askRefund(
+      {
+        refundBillPayment: vi.fn().mockResolvedValue(givenBack(cashPaid, refund)),
+        getTenderRefundAcknowledgment,
+      },
+      cashPaid,
+    );
+    await press(el, '[data-payment-refund-ack="r-1"]');
+    await expect
+      .poll(() =>
+        [
+          ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>(
+            "wt-form-actions",
+          ),
+        ].map((actions) => actions.error),
+      )
+      .toContain(t("refund_ack.load_failed"));
+    expect(getTenderRefundAcknowledgment).toHaveBeenCalledWith(refund.id);
+    expect(el.shadowRoot!.querySelector("till-refund-acknowledgment")).toBeNull();
+  });
+
   it("gives back a cash payment with a manager's PIN when the operator cannot, under the same submission id, opens no drawer from the till, and shows the bill after it", async () => {
     const refunded = givenBack(cashPaid, refundOf());
     let latest = holding(cashPaid);

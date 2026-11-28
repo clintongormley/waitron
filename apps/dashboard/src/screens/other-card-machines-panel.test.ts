@@ -539,3 +539,154 @@ it("names each Remove in Spanish", async () => {
     .element(page.getByRole("button", { name: es["other_card_machines.remove_new"], exact: true }))
     .toBeVisible();
 });
+
+function gate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((ready, fail) => {
+    resolve = ready;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+const notConnected = () =>
+  page.getByText("This browser could not connect to Waitron.", { exact: false });
+const loading = () => page.getByText("Loading other card machines…");
+
+it("says the list could not be read in place of the loading line", async () => {
+  const r = rig();
+  r.api.getOtherCardMachines.mockRejectedValueOnce({ code: "connection.failed" });
+  await mount(r);
+  await expect.element(notConnected()).toBeVisible();
+  await expect.element(loading()).not.toBeInTheDocument();
+  await expect.element(page.getByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
+});
+
+it("keeps the newer list when a live update answers with an older revision", async () => {
+  const { api, liveData } = await mount();
+  api.getOtherCardMachines.mockResolvedValueOnce({
+    otherCardMachines: [{ id: "m1", name: "Old name", paysInto: "other" }],
+    revision: 2,
+  });
+  liveData.invalidate([{ type: "settings.payments" }]);
+  await vi.waitFor(() => expect(api.getOtherCardMachines).toHaveBeenCalledTimes(2));
+  await api.getOtherCardMachines.mock.results[1]!.value;
+  await new Promise(requestAnimationFrame);
+  await expect.element(nameField(row("Bar terminal"))).toHaveValue("Bar terminal");
+  await expect.element(page.getByRole("group", { name: "Old name" })).not.toBeInTheDocument();
+});
+
+it("says so when the list cannot be read again after someone else changed it", async () => {
+  const r = rig();
+  r.api.saveOtherCardMachines.mockRejectedValueOnce({
+    code: "settings.out_of_date",
+    params: { revision: 4 },
+  });
+  const { api } = await mount(r);
+  api.getOtherCardMachines.mockRejectedValueOnce({ code: "connection.failed" });
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  await expect.element(notConnected()).toBeVisible();
+  await expect.element(refreshed()).not.toBeInTheDocument();
+  await expect.element(nameField(row("Terrace 2"))).toHaveValue("Terrace 2");
+});
+
+it("keeps where a moved machine's payments go when someone else renamed it", async () => {
+  const r = rig();
+  refuseAsOutOfDate(r, {
+    otherCardMachines: [
+      { id: "m1", name: "Bar", paysInto: "other" },
+      { id: "m2", name: "Terrace", paysInto: "connected_account" },
+    ],
+    revision: 5,
+  });
+  const { api, el } = await mount(r);
+  el.shadowRoot!.querySelector("wt-combobox[name='paysInto-0']")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "connected_account" } }),
+  );
+  await save().click();
+  await expect.element(refreshed()).toBeVisible();
+  await save().click();
+  await vi.waitFor(() => expect(api.saveOtherCardMachines).toHaveBeenCalledTimes(2));
+  expect(api.saveOtherCardMachines.mock.calls[1]![0].otherCardMachines[0]).toEqual({
+    id: "m1",
+    name: "Bar",
+    paysInto: "connected_account",
+  });
+});
+
+it("sends one save when Save is pressed twice before the panel redraws", async () => {
+  const r = rig();
+  const written = gate<OtherCardMachinesView>();
+  r.api.saveOtherCardMachines.mockReturnValueOnce(written.promise);
+  const { api } = await mount(r);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  const button = save().element() as HTMLElement;
+  button.click();
+  button.click();
+  expect(api.saveOtherCardMachines).toHaveBeenCalledOnce();
+  written.resolve({ ...structuredClone(stored), revision: 4 });
+  await expect.element(save()).toBeDisabled();
+});
+
+it("takes no change into the list while a save is being sent", async () => {
+  const r = rig();
+  const written = gate<OtherCardMachinesView>();
+  r.api.saveOtherCardMachines.mockReturnValueOnce(written.promise);
+  const { el } = await mount(r);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  const name = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    "wt-input[name='name-0']",
+  )!;
+  name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed" } }));
+  await el.updateComplete;
+  expect(name.value).toBe("Bar terminal");
+  written.resolve({
+    otherCardMachines: [
+      stored.otherCardMachines[0]!,
+      { id: "m2", name: "Terrace 2", paysInto: "connected_account" },
+    ],
+    revision: 4,
+  });
+  await expect.element(nameField(row("Terrace 2"))).toHaveValue("Terrace 2");
+  await expect.element(nameField(row("Bar terminal"))).toHaveValue("Bar terminal");
+  await expect.element(save()).toBeDisabled();
+});
+
+async function leaveDuringSave(written: Promise<OtherCardMachinesView>) {
+  const r = rig();
+  r.api.saveOtherCardMachines.mockReturnValueOnce(written);
+  const { el, api } = await mount(r);
+  const host = el.parentElement!;
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  el.remove();
+  const reread = gate<OtherCardMachinesView>();
+  api.getOtherCardMachines.mockReturnValueOnce(reread.promise);
+  host.appendChild(el);
+  await expect.element(loading()).toBeVisible();
+  return reread;
+}
+
+it("does not show a save that finishes after the panel was left and opened again", async () => {
+  const written = gate<OtherCardMachinesView>();
+  const reread = await leaveDuringSave(written.promise);
+  written.resolve({ ...structuredClone(stored), revision: 4 });
+  await new Promise(requestAnimationFrame);
+  await expect.element(loading()).toBeVisible();
+  reread.resolve(structuredClone(stored));
+  await expect.element(nameField(row("Terrace"))).toHaveValue("Terrace");
+  await expect.element(save()).toBeDisabled();
+});
+
+it("does not show a refusal for a save that ends after the panel was left and opened again", async () => {
+  const written = gate<OtherCardMachinesView>();
+  const reread = await leaveDuringSave(written.promise);
+  written.reject({ code: "connection.failed" });
+  await new Promise(requestAnimationFrame);
+  await expect.element(notConnected()).not.toBeInTheDocument();
+  reread.resolve(structuredClone(stored));
+  await expect.element(nameField(row("Terrace"))).toHaveValue("Terrace");
+  await expect.element(notConnected()).not.toBeInTheDocument();
+});

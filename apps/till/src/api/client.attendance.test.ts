@@ -220,3 +220,25 @@ it("names the manager and day routes and sends only the displayed day keys for a
     body: JSON.stringify({ days }),
   });
 });
+
+it("sends a manager's decision to the manager command route with its signal", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ commandId: "c1", entryIds: ["e1"], replayed: false }));
+  const api = new TillApi("", fetcher);
+  const stop = new AbortController();
+  const command = {
+    action: "approve" as const,
+    itemId: "item",
+    commandId: "c1",
+    expectedRevision: "rev",
+  };
+
+  await expect(api.sendAttendanceManagerCommand(command, { signal: stop.signal })).resolves.toEqual(
+    { commandId: "c1", entryIds: ["e1"], replayed: false },
+  );
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+    "/api/attendance/manager/commands",
+    expect.objectContaining({ method: "POST", body: JSON.stringify(command), signal: stop.signal }),
+  );
+});

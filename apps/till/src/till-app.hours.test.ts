@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { cleanupWidgets, pageAt, resetPage } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { clockApp, clockState, deferred, signIn, shellAction, working } from "../test/clock-app.js";
 import { hoursView } from "../test/hours-fixtures.js";
@@ -318,4 +318,69 @@ it("Hours shows a failed clock read's message", async () => {
   await working(f.el);
   await open(f.el);
   expect(screen(f.el)!.error).not.toBe("");
+});
+it("Cancel closes the calendar-day editor opened from hours", async () => {
+  const f = await clockApp({ state: clockState("working", "in") });
+  await signIn(f.el);
+  await working(f.el);
+  await open(f.el);
+  await vi.waitFor(() => expect(screen(f.el)!.view).not.toBeNull());
+  await userEvent.click(
+    screen(f.el)!.shadowRoot!.querySelector<HTMLElement>('[data-fix="2026-01-05"]')!,
+  );
+  const day = () => f.el.shadowRoot!.querySelector("till-attendance-day-dialog");
+  await vi.waitFor(() => expect(day()?.shadowRoot?.querySelector("[data-close]")).toBeTruthy());
+  await userEvent.click(day()!.shadowRoot!.querySelector<HTMLElement>("[data-close]")!);
+  await vi.waitFor(() => expect(day()).toBeNull());
+  expect(screen(f.el)).not.toBeNull();
+});
+it("a failed calendar-day read offers Retry, which reads the day again", async () => {
+  const f = await clockApp({ state: clockState("working", "in") });
+  await signIn(f.el);
+  await working(f.el);
+  await open(f.el);
+  await vi.waitFor(() => expect(screen(f.el)!.view).not.toBeNull());
+  const read = f.api.getAttendanceDay.getMockImplementation()!;
+  f.api.getAttendanceDay.mockRejectedValue({ code: "attendance.read_failed" });
+  await userEvent.click(
+    screen(f.el)!.shadowRoot!.querySelector<HTMLElement>('[data-fix="2026-01-05"]')!,
+  );
+  const day = () => f.el.shadowRoot!.querySelector("till-attendance-day-dialog");
+  await vi.waitFor(() => expect(day()?.shadowRoot?.querySelector("[data-retry]")).toBeTruthy());
+  expect(day()!.shadowRoot!.querySelector("[data-effective]")).toBeNull();
+  const calls = f.api.getAttendanceDay.mock.calls.length;
+  f.api.getAttendanceDay.mockImplementation(read);
+  await userEvent.click(day()!.shadowRoot!.querySelector<HTMLElement>("[data-retry]")!);
+  await vi.waitFor(() => expect(f.api.getAttendanceDay.mock.calls.length).toBeGreaterThan(calls));
+  expect(f.api.getAttendanceDay).toHaveBeenLastCalledWith("2026-01-05", {
+    signal: expect.any(AbortSignal),
+  });
+  await vi.waitFor(() => expect(day()!.shadowRoot!.querySelector("[data-retry]")).toBeNull());
+});
+it.each([
+  ["[data-my-hours]", "till-hours-screen"],
+  ["[data-fix-hours]", "till-attendance-day-dialog"],
+] as const)("a phone's floor More row %s opens %s", async (row, opened) => {
+  await pageAt(390, 844);
+  try {
+    const f = await clockApp({ state: clockState("working", "in") });
+    await signIn(f.el);
+    await working(f.el);
+    Object.assign(f.el, { formFactor: "phone-portrait" });
+    await f.el.updateComplete;
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!;
+    const menu = await vi.waitFor(() => {
+      const menu = shell.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("[data-floor-bar] [data-test=more-menu]");
+      expect(menu?.querySelector(row)).toBeTruthy();
+      return menu!;
+    });
+    await menu.updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu.querySelector<HTMLElement>(row)!);
+    await vi.waitFor(() => expect(f.el.shadowRoot!.querySelector(opened)).not.toBeNull());
+  } finally {
+    await resetPage();
+  }
 });

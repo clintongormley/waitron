@@ -41,7 +41,11 @@ const status = {
   publishedAt: "2026-11-26T17:00:00.000Z",
 };
 
-async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSettings) => value)) {
+async function open(
+  save = vi.fn(async (_id: string, value: CustomerMenuOnlineSettings) => value),
+  getSettings: () => Promise<CustomerMenuOnlineSettings> = async () => initial,
+  tag = "online-settings-leave-app",
+) {
   let appearance: CustomerMenuAppearance = { pageColor: "#fbf7ef" };
   const style = () => ({
     name: "Default",
@@ -66,7 +70,7 @@ async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSe
     getMenuRead(id: string, parts: readonly MenuReadPart[]) {
       return menuReadFixture(this as unknown as DashboardApi, id, parts);
     },
-    getCustomerOnlineSettings: async () => initial,
+    getCustomerOnlineSettings: getSettings,
     saveCustomerOnlineSettings: save,
     getCustomerStyle: async () => style(),
     saveCustomerStyle: async (_id: string, value: CustomerMenuAppearance) => {
@@ -80,9 +84,7 @@ async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSe
     }),
   } as unknown as DashboardApi;
   history.replaceState(null, "", "/menus/menu/menu/view/customer-menu");
-  const { el: app, host } = await mountWidget<OnlineSettingsLeaveApp>("online-settings-leave-app", {
-    api,
-  });
+  const { el: app, host } = await mountWidget<OnlineSettingsLeaveApp>(tag, { api });
   return { app, host, save };
 }
 
@@ -265,4 +267,182 @@ it("keeps Spanish photo choices on one line beside the preview", async () => {
       );
     });
   }
+});
+
+function gate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((ready, fail) => {
+    resolve = ready;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Reads after the listed ones never settle: the screen reads again as the test page is torn down. */
+const readsFrom = (reads: Promise<CustomerMenuOnlineSettings>[]) => () =>
+  reads.shift() ?? new Promise<CustomerMenuOnlineSettings>(() => {});
+const loadingSettings = () => page.getByText("Loading Online settings…");
+const tab = (name: string) => page.getByRole("tab", { name, exact: true });
+
+async function leaveAndReturn() {
+  await tab("Preview").click();
+  await vi.waitFor(() => expect(location.pathname).toBe("/menus/menu/menu/view/preview"));
+  await tab("Customer menu").click();
+  await vi.waitFor(() => expect(location.pathname).toBe("/menus/menu/menu/view/customer-menu"));
+}
+
+it("ignores Online settings that arrive after the manager left and came back", async () => {
+  const first = gate<CustomerMenuOnlineSettings>();
+  const second = gate<CustomerMenuOnlineSettings>();
+  const reads = [first.promise, second.promise];
+  await open(undefined, readsFrom(reads), "dashboard-menus-screen");
+  await expect.element(loadingSettings()).toBeVisible();
+  await leaveAndReturn();
+  first.resolve({ ...initial, address: "stale" });
+  await new Promise(requestAnimationFrame);
+  await expect.element(loadingSettings()).toBeVisible();
+  second.resolve(initial);
+  await expect.element(address()).toHaveValue("lunch");
+});
+
+it("ignores a failed settings read that ends after the manager left and came back", async () => {
+  const first = gate<CustomerMenuOnlineSettings>();
+  const second = gate<CustomerMenuOnlineSettings>();
+  const reads = [first.promise, second.promise];
+  await open(undefined, readsFrom(reads), "dashboard-menus-screen");
+  await leaveAndReturn();
+  first.reject({ code: "connection.failed" });
+  await new Promise(requestAnimationFrame);
+  await expect
+    .element(page.getByText("Could not load the Online settings."))
+    .not.toBeInTheDocument();
+  await expect.element(loadingSettings()).toBeVisible();
+  second.resolve(initial);
+  await expect.element(address()).toHaveValue("lunch");
+});
+
+it("does not apply a save that finishes after the manager left and came back", async () => {
+  const written = gate<CustomerMenuOnlineSettings>();
+  const reread = gate<CustomerMenuOnlineSettings>();
+  const reads = [Promise.resolve(initial), reread.promise];
+  const save = vi.fn(() => written.promise);
+  await open(save, readsFrom(reads), "dashboard-menus-screen");
+  await address().fill("dinner");
+  await saveButton().click();
+  expect(save).toHaveBeenCalledOnce();
+  await leaveAndReturn();
+  written.resolve({ ...initial, address: "dinner" });
+  await new Promise(requestAnimationFrame);
+  await expect.element(loadingSettings()).toBeVisible();
+  reread.resolve(initial);
+  await expect.element(address()).toHaveValue("lunch");
+  await expect.element(saveButton()).toBeDisabled();
+});
+
+it("does not show a refusal for a save that ends after the manager left and came back", async () => {
+  const written = gate<CustomerMenuOnlineSettings>();
+  const reread = gate<CustomerMenuOnlineSettings>();
+  const reads = [Promise.resolve(initial), reread.promise];
+  await open(
+    vi.fn(() => written.promise),
+    readsFrom(reads),
+    "dashboard-menus-screen",
+  );
+  await address().fill("dinner");
+  await saveButton().click();
+  await leaveAndReturn();
+  written.reject({ code: "connection.failed" });
+  await new Promise(requestAnimationFrame);
+  await expect.element(loadingSettings()).toBeVisible();
+  await expect
+    .element(page.getByText("This browser could not connect to Waitron.", { exact: false }))
+    .not.toBeInTheDocument();
+});
+
+it("shows a refusal that names no field at the bottom and keeps the draft", async () => {
+  await open(
+    vi.fn(async () => {
+      throw { code: "connection.failed" };
+    }),
+  );
+  await address().fill("dinner");
+  await saveButton().click();
+  await expect
+    .element(page.getByText("This browser could not connect to Waitron.", { exact: false }))
+    .toBeVisible();
+  await expect.element(address()).toHaveValue("dinner");
+  await expect.element(address()).not.toHaveAttribute("aria-invalid", "true");
+  await expect.element(saveButton()).toBeEnabled();
+});
+
+it("brings a phone back to Settings with a link to Preview when the menu is not published", async () => {
+  await page.viewport(390, 800);
+  try {
+    const written = gate<CustomerMenuOnlineSettings>();
+    await open(vi.fn(() => written.promise));
+    const link = page.getByRole("link", { name: "Go to Preview" });
+    await page.getByRole("radio", { name: "Settings", exact: true }).click();
+    await expect.element(link).not.toBeInTheDocument();
+    await online().click();
+    await saveButton().click();
+    await page.getByRole("radio", { name: "Preview", exact: true }).click();
+    await vi.waitFor(() => expect(address().query()).toBeNull());
+    written.reject({ code: "customer_menu.not_published" });
+    await expect
+      .element(page.getByText("Publish the menu from Preview before switching it on."))
+      .toBeVisible();
+    await expect.element(link).toBeVisible();
+  } finally {
+    await page.viewport(1280, 800);
+  }
+});
+
+it("asks for an address when the menu is switched on with the address cleared", async () => {
+  const { save } = await open();
+  await online().click();
+  await address().fill("");
+  await saveButton().click();
+  await expect.element(page.getByText("Enter an address to switch the menu on.")).toBeVisible();
+  await expect.element(address()).toHaveAttribute("aria-invalid", "true");
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("puts the saved settings back on Cancel when no page asks about unsaved changes", async () => {
+  const { save } = await open(undefined, undefined, "dashboard-menus-screen");
+  await address().fill("dinner");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect.element(address()).toHaveValue("lunch");
+  await expect.element(saveButton()).toBeDisabled();
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("sends one save when Save is pressed twice before the screen redraws", async () => {
+  const written = gate<CustomerMenuOnlineSettings>();
+  const save = vi.fn(() => written.promise);
+  await open(save);
+  await address().fill("dinner");
+  const button = saveButton().element() as HTMLElement;
+  button.click();
+  button.click();
+  expect(save).toHaveBeenCalledOnce();
+  written.resolve({ ...initial, address: "dinner" });
+  await expect.element(saveButton()).toBeDisabled();
+});
+
+it("takes no change into the draft while a save is being sent", async () => {
+  const written = gate<CustomerMenuOnlineSettings>();
+  const { app } = await open(vi.fn(() => written.promise));
+  await address().fill("dinner");
+  await saveButton().click();
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+  const toggle = screen.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+    "wt-switch[name=customer-menu-enabled]",
+  )!;
+  toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await screen.updateComplete;
+  expect(toggle.checked).toBe(false);
+  written.resolve({ ...initial, address: "dinner" });
+  await expect.element(saveButton()).toBeDisabled();
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

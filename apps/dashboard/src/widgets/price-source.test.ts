@@ -24,6 +24,13 @@ const clash: Setting<Decimal> = {
     },
   ],
 };
+const undecided: Setting<Decimal> = {
+  state: "clash",
+  candidates: [
+    { place: { kind: "own_sections" }, value: "3.00" as Decimal, source: product },
+    { place: { kind: "menu", menuId: "drinks", menuName: "Drinks" }, undecided: true },
+  ],
+};
 it.each([
   [decided("3.00", product), "The product's own price.", "El precio propio del producto."],
   [decided("3.00", { kind: "parent" }), "Follows Lager's price.", "Sigue el precio de Lager."],
@@ -60,9 +67,28 @@ it.each([
     "The places disagree: €3.00 in this menu's sections, €3.50 in Drinks.",
     "Los lugares discrepan: 3,00 € en las secciones de esta carta, 3,50 € en Drinks.",
   ],
+  [decided("4.00", own), "This menu sets €4.00.", "Esta carta fija 4,00 €."],
+  [
+    decided("4.00", own, decided("3.00", own)),
+    "This menu sets €4.00. Without it: €3.00, this menu sets its own price.",
+    "Esta carta fija 4,00 €. Sin él: 3,00 €, esta carta fija su propio precio.",
+  ],
+  [
+    undecided,
+    "The places disagree: €3.00 in this menu's sections, Clash in Drinks.",
+    "Los lugares discrepan: 3,00 € en las secciones de esta carta, Conflicto en Drinks.",
+  ],
 ] as const)("describes the full price source chain (%#)", (setting, en, es) => {
   setLocale("en-GB");
   expect(describeSetting(setting, { product: "Lager" }, t)).toBe(en);
   setLocale("es-ES");
   expect(describeSetting(setting, { product: "Lager" }, t)).toBe(es);
+});
+
+it("leaves a mistyped translation placeholder as written", () => {
+  const words = (key: string) =>
+    key === "menu_prices.source_parent" ? "Follows {name}'s {size}" : key;
+  expect(
+    describeSetting(decided("3.00", { kind: "parent" }), { product: "Lager" }, words as typeof t),
+  ).toBe("Follows Lager's {size}.");
 });
