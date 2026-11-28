@@ -10,7 +10,7 @@ import type {
 } from "../api/kitchen-api.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { es } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 import "./sent-orders.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
@@ -579,6 +579,58 @@ it("draws Serve all as a teal word on the heading's line, with a full tap area i
   expect(button.top).toBeLessThan(title.bottom);
   expect(button.right).toBeCloseTo(edge(heading), 0);
   expect(pill.right).toBeLessThanOrEqual(button.left);
+});
+
+it.each(["en", "es"] as const)(
+  "names each %s group's Serve all after its group, as Fire is named",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(
+      current(
+        [row("loose")],
+        [
+          group("g7", [row("beer")], { state: "fired", firedAt: at(48) }),
+          group("g8", [row("wine", { lineNo: 2 })], {
+            position: 2,
+            displayNumber: 8,
+            state: "fired",
+            firedAt: at(48),
+          }),
+        ],
+      ),
+    );
+    const strings = { en, es }[locale];
+    const named = (n: number) =>
+      `${strings["table.serve_group"]} · ${strings["table.group_n"].replace("{n}", String(n))}`;
+    expect(
+      every(el, "[data-serve-all]").map((button) => button.getAttribute("aria-label")),
+    ).toEqual([named(7), named(8), null]);
+  },
+);
+
+it("draws a disabled Serve all quiet, not teal", async () => {
+  const el = await mount(
+    current(
+      [],
+      [
+        group("served", [row("beer", { servedQuantity: "1.000", servedAt: at(50) })], {
+          state: "fired",
+          firedAt: at(48),
+        }),
+        group("fired", [row("wine")], { position: 2, state: "fired", firedAt: at(48) }),
+      ],
+    ),
+  );
+  el.style.setProperty("--wt-color-primary-text", "rgb(1, 2, 3)");
+  const colour = (id: string) =>
+    getComputedStyle(
+      find(el, `[data-sent-section=${id}] [data-serve-all]`).shadowRoot!.querySelector("button")!,
+    ).color;
+  expect(colour("fired")).toBe("rgb(1, 2, 3)");
+  expect(colour("served")).not.toBe("rgb(1, 2, 3)");
+  el.busy = true;
+  await el.updateComplete;
+  expect(colour("fired")).not.toBe("rgb(1, 2, 3)");
 });
 
 it("draws a held heading's Fire as an outlined button at the right of its line", async () => {

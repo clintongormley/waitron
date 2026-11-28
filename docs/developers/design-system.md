@@ -6613,11 +6613,12 @@ Above a table's New order, the bill's sent dishes are drawn always, with no box 
 `sentSections`, `apps/till/src/state/sent-sections.ts`). Each fire group is a section under a
 `wt-course-heading`, in firing order, then the dishes sent outside any group under one of their
 own. A heading's title is its courses' names, then its state: "Fired 12 min ago", "At the pass"
-when every dish still to serve waits at the pass, or "Held". A fired or at-the-pass heading carries
+when every dish still to serve waits at the pass, or "Held" while any of the group's dishes, on any
+bill, still waits for Fire. A fired or at-the-pass heading carries
 the ✓ Sent mark and **Serve all**, which serves the section's released dishes still to serve; a held
 heading carries no mark and **Fire**, with **Serve all** beside it when some of this bill's dishes under it are released and still to serve, and its other bills' held dishes stand under it as ordinary
 rows with no price, their second line the bill's name ("Bill 2"). **Serve all** is a word, not a
-block: a `ghost` `wt-button` in `--wt-color-primary-text`, `md` and bold, whose 44 px tap area
+block: a `ghost` `wt-button`, `md` and bold, in `--wt-color-primary-text` when it can be pressed, whose 44 px tap area
 spills into the heading's padding so the heading stays about 44 px tall. **Fire** is outlined
 (`secondary`). The time in a title ("Fired 12 min ago") never breaks across lines. The sent rows
 and their headings sit on the page colour, with `--wt-space-3` below the last row; beside the menu,
