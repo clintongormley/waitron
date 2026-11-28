@@ -31,6 +31,7 @@ import {
   AnswerTooLarge,
   boxExchange,
   CheckedAddressUnreached,
+  hasCertificateRefusalCode,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
@@ -375,20 +376,6 @@ export function isCertificateRefusal(error: unknown): boolean {
   return error instanceof PeerCertificateRefused;
 }
 
-const CERTIFICATE_REFUSALS = new Set([
-  "CERT_HAS_EXPIRED",
-  "CERT_NOT_YET_VALID",
-  "CERT_SIGNATURE_FAILURE",
-  "CERT_UNTRUSTED",
-  "DEPTH_ZERO_SELF_SIGNED_CERT",
-  "ERR_TLS_CERT_ALTNAME_INVALID",
-  "INVALID_PURPOSE",
-  "SELF_SIGNED_CERT_IN_CHAIN",
-  "UNABLE_TO_GET_ISSUER_CERT",
-  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
-  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
-]);
-
 /** This box's venue authority, the box CA certificate; `undefined` when it cannot be read. */
 export async function readVenueAuthority(stateDir: string): Promise<string | undefined> {
   try {
@@ -439,10 +426,7 @@ export async function postToBox(
     );
   } catch (error) {
     if (error instanceof PeerCertificateRefused || error instanceof AnswerTooLarge) throw error;
-    if (
-      deps.fetch === undefined &&
-      firstCodeInCauseChain(error, (code) => CERTIFICATE_REFUSALS.has(code)) !== null
-    )
+    if (deps.fetch === undefined && hasCertificateRefusalCode(error))
       throw new PeerCertificateRefused("certificate refused", { cause: error });
     // A connected peer may still sell. A fetch replacement exposes no connection phase.
     if (connected || (signal.aborted && deps.fetch !== undefined))

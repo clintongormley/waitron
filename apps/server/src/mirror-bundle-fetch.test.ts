@@ -28,6 +28,7 @@ import {
   boxExchange,
   fetchPrimaryCertificate,
   CheckedAddresses,
+  hasCertificateRefusalCode,
   CheckedAddressUnreached,
   isMirrorBundle,
   PlainHttpBoxAddress,
@@ -653,6 +654,35 @@ describe("a box named on the venue's network is found by asking it", () => {
   const portOf = (server: BoxServer) => new URL(server.url).port;
   const pinned = (authority: BoxAuthority) => ({ ca: authority.caPem, rejectUnauthorized: true });
 
+  /** Joins `socket` to whatever listens on 127.0.0.1 at `port`, both ways. */
+  function joinTo(socket: Socket, port: number): Socket {
+    const onward = createConnection(port, "127.0.0.1");
+    socket.on("error", () => onward.destroy());
+    onward.on("error", () => socket.destroy());
+    socket.pipe(onward).pipe(socket);
+    return onward;
+  }
+
+  /**
+   * Listens at `host`:`port` (0 for any free port) and joins each connection to 127.0.0.1 at
+   * `onwardPort()`, read as each connection arrives; returns the port it listens on.
+   */
+  async function forwarder(host: string, port: number, onwardPort: () => number): Promise<number> {
+    const open = new Set<Socket>();
+    const server = createTcpServer((socket) => {
+      open.add(socket).add(joinTo(socket, onwardPort()));
+    });
+    await new Promise<void>((resolve) => server.listen(port, host, resolve));
+    closers.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const socket of open) socket.destroy();
+          server.close(() => resolve());
+        }),
+    );
+    return (server.address() as AddressInfo).port;
+  }
+
   it("connects to the address the lookup gave and checks the certificate against the name", async () => {
     const box = await serve(named);
     const lookup = vi.fn(() => Promise.resolve({ addresses: ["127.0.0.1"], remembered: false }));
@@ -706,14 +736,7 @@ describe("a box named on the venue's network is found by asking it", () => {
     const otherPort = Number(portOf(right));
     // The two boxes listen on different ports; the call names one, so the first answer is made to
     // reach the wrong box by giving it the right box's port through a forwarding listener.
-    const forward = createTcpServer((socket) => {
-      const onward = createConnection(Number(portOf(wrong)), "127.0.0.1");
-      socket.pipe(onward).pipe(socket);
-      socket.on("error", () => onward.destroy());
-      onward.on("error", () => socket.destroy());
-    });
-    await new Promise<void>((resolve) => forward.listen(otherPort, "::1", resolve));
-    closers.push(() => new Promise<void>((resolve) => forward.close(() => resolve())));
+    await forwarder("::1", otherPort, () => Number(portOf(wrong)));
 
     const answer = await boxExchange(new URL(`https://${NAME}:${otherPort}/x`), {
       method: "GET",
@@ -727,7 +750,7 @@ describe("a box named on the venue's network is found by asking it", () => {
     expect(right.requests).toHaveLength(1);
   });
 
-  it("refuses with the last address's failure when no answer completes the handshake", async () => {
+  it("keeps the certificate refusal over a refused connection when no answer completes the handshake", async () => {
     const box = await serve(unnamed);
     // Nothing listens on the IPv6 loopback at this port, so that address is refused outright, while
     // 127.0.0.1 fails its certificate: the two failures differ.
@@ -742,7 +765,9 @@ describe("a box named on the venue's network is found by asking it", () => {
     await expect(call(["::1", "127.0.0.1"])).rejects.toMatchObject({
       code: "ERR_TLS_CERT_ALTNAME_INVALID",
     });
-    await expect(call(["127.0.0.1", "::1"])).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    await expect(call(["127.0.0.1", "::1"])).rejects.toMatchObject({
+      code: "ERR_TLS_CERT_ALTNAME_INVALID",
+    });
     expect(box.requests).toHaveLength(0);
   });
 
@@ -890,6 +915,86 @@ describe("a box named on the venue's network is found by asking it", () => {
     expect(lookup).toHaveBeenCalledTimes(1);
   });
 
+  describe("a certificate refused before the call ends with no handshake finished", () => {
+    /** One GET to `port` under the unnamed box's authority, which its certificate fails by name. */
+    const callUnder = (port: string, lookup: BoxLookup, timeoutMs = 5_000) =>
+      boxExchange(new URL(`https://${NAME}:${port}/x`), {
+        method: "GET",
+        trust: pinned(unnamed),
+        signal: AbortSignal.timeout(timeoutMs),
+        lookup,
+      });
+
+    it("is the call's failure when nobody answers for the name asked afresh", async () => {
+      const wrong = await serve(unnamed);
+      const net = rememberedThen(["127.0.0.1"], new AppError("mirror.peer_unresolved", {}));
+
+      await expect(callUnder(portOf(wrong), net.lookup)).rejects.toMatchObject({
+        code: "ERR_TLS_CERT_ALTNAME_INVALID",
+      });
+      expect(net.asks).toEqual([false, true]);
+      expect(wrong.requests).toHaveLength(0);
+    });
+
+    it("is the call's failure when the limit ends while the name is asked afresh", async () => {
+      const wrong = await serve(unnamed);
+      const net = rememberedThen(["127.0.0.1"], "never");
+
+      await expect(callUnder(portOf(wrong), net.lookup, 500)).rejects.toMatchObject({
+        code: "ERR_TLS_CERT_ALTNAME_INVALID",
+      });
+      expect(net.asks).toEqual([false, true]);
+    });
+
+    it("is the call's failure when the limit ends at a later address that never starts its handshake", async () => {
+      const wrong = await serve(unnamed);
+      let accepted = 0;
+      await onIpv6Loopback(
+        createTcpServer(() => accepted++),
+        Number(portOf(wrong)),
+      );
+
+      await expect(
+        callUnder(
+          portOf(wrong),
+          () => Promise.resolve({ addresses: ["127.0.0.1", "::1"], remembered: false }),
+          500,
+        ),
+      ).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+      expect(accepted).toBe(1);
+    });
+
+    it("gives way to a later address's handshake, whose cut-short answer is the call's failure", async () => {
+      const wrong = await serve(unnamed);
+      let reached = 0;
+      const cutShort = createTlsServer({ key: named.keyPem, cert: named.certPem }, (socket) => {
+        socket.once("data", () => {
+          reached++;
+          socket.end("HTTP/1.1 200 OK\r\ncontent-type: appl");
+        });
+      });
+      await onIpv6Loopback(cutShort, Number(portOf(wrong)));
+
+      const call = boxExchange(new URL(`https://${NAME}:${portOf(wrong)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses: ["127.0.0.1", "::1"], remembered: false }),
+      });
+
+      await expect(call).rejects.toMatchObject({ code: "ECONNRESET" });
+      expect(reached).toBe(1);
+      // Control: the first address alone fails its certificate.
+      const alone = boxExchange(new URL(`https://${NAME}:${portOf(wrong)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses: ["127.0.0.1"], remembered: false }),
+      });
+      await expect(alone).rejects.toSatisfy(hasCertificateRefusalCode);
+    });
+  });
+
   describe("an address that does not finish its handshake", () => {
     /** Accepts connections on the IPv6 loopback at `port` and never sends a byte. */
     async function silentAt(port: number): Promise<{ connected: Promise<void> }> {
@@ -955,10 +1060,7 @@ describe("a box named on the venue's network is found by asking it", () => {
         socket.pause();
         markHeld();
         void released.then(() => {
-          const onward = createConnection(Number(portOf(box)), "127.0.0.1");
-          socket.on("error", () => onward.destroy());
-          onward.on("error", () => socket.destroy());
-          socket.pipe(onward).pipe(socket);
+          joinTo(socket, Number(portOf(box)));
           socket.resume();
         });
       });
@@ -1044,7 +1146,7 @@ describe("a box named on the venue's network is found by asking it", () => {
       box: BoxServer | string,
       checked: CheckedAddresses,
       lookup: BoxLookup,
-      trust: { ca?: string; rejectUnauthorized: boolean } = pinned(named),
+      trust: { ca?: string | string[]; rejectUnauthorized: boolean } = pinned(named),
       timeoutMs = 5_000,
     ) =>
       boxExchange(new URL(`https://${NAME}:${typeof box === "string" ? box : portOf(box)}/x`), {
@@ -1180,6 +1282,24 @@ describe("a box named on the venue's network is found by asking it", () => {
 
       const failure = await failureOf(call(port, checked, refused, { rejectUnauthorized: false }));
       expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("whose certificate is now refused keeps that refusal over the network's refused connections", async () => {
+      const right = await serve(named);
+      const wrong = await serve(unnamed);
+      let onwardPort = Number(portOf(right));
+      const port = String(await forwarder("127.0.0.1", 0, () => onwardPort));
+      const bothAuthorities = { ca: [named.caPem, unnamed.caPem], rejectUnauthorized: true };
+      const checked = new CheckedAddresses();
+      await call(port, checked, () => Promise.resolve(fresh("127.0.0.1")), bothAuthorities);
+      onwardPort = Number(portOf(wrong));
+      const net = rememberedThen(["::1"], ["::1"]);
+
+      await expect(call(port, checked, net.lookup, bothAuthorities)).rejects.toMatchObject({
+        code: "ERR_TLS_CERT_ALTNAME_INVALID",
+      });
+      expect(net.asks).toEqual([false, true]);
+      expect(wrong.requests).toHaveLength(0);
     });
 
     it("is passed over for a duplicate the network answers with", async () => {

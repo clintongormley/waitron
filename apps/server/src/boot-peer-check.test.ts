@@ -1815,6 +1815,38 @@ describe("askPeerStatus", () => {
 
       expect(await askAt(box.port, 300)).toEqual({ answer: null, reasons: ["unreachable"] });
     });
+
+    it("a box under another authority, then nobody answering for its name afresh, is a certificate refusal", async () => {
+      const wrong = await statusServer(authorityY, (q) => sign(body(q.nonce)));
+      heard = (_, { fresh: afresh }) =>
+        afresh ? nobody() : Promise.resolve({ addresses: ["127.0.0.1"], remembered: true });
+
+      expect(await askAt(new URL(wrong.url).port)).toEqual({
+        answer: null,
+        reasons: ["certificate"],
+      });
+      expect(wrong.requests).toHaveLength(0);
+    });
+
+    it("a box under another authority, then the limit ending at an address that never starts its handshake, is a certificate refusal", async () => {
+      const wrong = await statusServer(authorityY, (q) => sign(body(q.nonce)));
+      const port = new URL(wrong.url).port;
+      const held = new Set<Socket>();
+      const claimant = createTcpServer((socket) => {
+        held.add(socket);
+        socket.on("error", () => {});
+      });
+      await new Promise<void>((done) => claimant.listen(Number(port), "::1", done));
+      heard = fresh("127.0.0.1", "::1");
+      try {
+        expect(await askAt(port, 1000)).toEqual({ answer: null, reasons: ["certificate"] });
+        expect(held.size).toBe(1);
+        expect(wrong.requests).toHaveLength(0);
+      } finally {
+        for (const socket of held) socket.destroy();
+        await new Promise<void>((done) => claimant.close(() => done()));
+      }
+    });
   });
 
   it("a refused connection at an address the chart writes out is not established when this box never reached it", async () => {
