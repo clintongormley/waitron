@@ -28,17 +28,38 @@ import {
 } from "@waitron/shared";
 import { listValue, readRows, stageOf, type Row } from "./adjustment-rows.js";
 import { reprice, type Change } from "./adjustment-reprice.js";
-import { gatherHeldBills, workOutHeldBill, type HeldBill } from "./bill-discounts-read.js";
+import {
+  gatherHeldBills,
+  givenTogether,
+  workOutHeldBill,
+  type HeldBill,
+} from "./bill-discounts-read.js";
 import type { TradingContext } from "./trading-context.js";
 import { bumpRevision } from "./working-order-edit-state.js";
 import "./errors.js";
 
 type NotHolding = ErrorParams["adjustment.no_longer_applies"]["discounts"][number];
 
-/** What each of `worked` that does not hold was given on, as the refusal names it. */
-function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): NotHolding[] {
-  return worked.flatMap(({ id, holds }): NotHolding[] => {
-    if (holds === "yes") return [];
+/** A discount given as one till row that does not hold, as the refusal names it, the held row
+ * of its first row and what its rows take together. */
+interface Standing {
+  entry: NotHolding;
+  held: PendingDiscount;
+  takes: number;
+}
+
+/**
+ * Each discount of `worked` that does not hold: one for each till row, its rows sharing
+ * `given_together`, under the id of its first row, by which Remove takes them all (plan D22), with
+ * their amounts together.
+ */
+function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): Standing[] {
+  return givenTogether(bill, worked).flatMap((group): Standing[] => {
+    const why = group
+      .map(({ holds }) => holds)
+      .find((holds): holds is NotHolding["why"] => holds !== "yes");
+    if (why === undefined) return [];
+    const { id } = group[0]!;
     const row = bill.held.get(id)!;
     const line = bill.input.lines.find(({ id: lineId }) => lineId === row.lineId);
     const on: NotHolding["on"] =
@@ -50,14 +71,19 @@ function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): NotH
         : row.setMenuName !== null
           ? { kind: "set_menu", targetName: row.setMenuName }
           : { kind: "bill", targetName: null };
+    const given = group.reduce((sum, one) => sum + (bill.held.get(one.id)!.amount ?? 0), 0);
     return [
       {
-        discountId: id,
-        why: holds,
-        on,
-        action: row.action,
-        percentBp: row.percentBp,
-        amount: row.amount === null ? null : centsToDecimal(row.amount),
+        entry: {
+          discountId: id,
+          why,
+          on,
+          action: row.action,
+          percentBp: row.percentBp,
+          amount: row.amount === null ? null : centsToDecimal(given),
+        },
+        held: row,
+        takes: group.reduce((sum, { takes }) => sum + takes, 0),
       },
     ];
   });
@@ -70,7 +96,7 @@ function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): NotH
 export async function refuseDiscountsNotHolding(tx: Transaction, billId: string): Promise<void> {
   const bill = (await gatherHeldBills(tx, [billId])).get(billId);
   if (bill === undefined) return;
-  const discounts = notHolding(bill, workOutHeldBill(bill).discounts);
+  const discounts = notHolding(bill, workOutHeldBill(bill).discounts).map(({ entry }) => entry);
   if (discounts.length > 0) {
     throw new AppError("adjustment.no_longer_applies", { workingOrderId: billId, discounts });
   }
@@ -329,7 +355,7 @@ export async function crystalliseBillDiscounts(
   if (options.asked && standing.length > 0) {
     throw new AppError("adjustment.no_longer_applies", {
       workingOrderId: billId,
-      discounts: standing,
+      discounts: standing.map(({ entry }) => entry),
     });
   }
   const ids = input.discounts.map(({ id }) => id);
@@ -361,28 +387,22 @@ export async function crystalliseBillDiscounts(
         open = { held, line, dish, quantity: line?.quantity ?? 0, written: [written] };
       }
     }
-    const stood = standing.find(({ discountId }) => discountId === one.id);
-    if (stood !== undefined) {
-      await recordActivity(tx, {
-        kind: "discount.written_as_it_stood",
-        subjectId: billId,
-        personId: held.requestedBy,
-        data: {
-          discountId: one.id,
-          why: stood.why,
-          takes: centsToDecimal(one.takes),
-          on: stood.on,
-          action: stood.action,
-          percentBp: stood.percentBp,
-          amount: stood.amount,
-          reasonId: held.reasonId,
-          reasonName: held.reasonName,
-          requestedBy: held.requestedBy,
-          approvedBy: held.approvedBy,
-        },
-      });
-    }
   }
   if (open !== null) await recordGiven(tx, billId, open);
+  for (const { entry, held, takes } of standing) {
+    await recordActivity(tx, {
+      kind: "discount.written_as_it_stood",
+      subjectId: billId,
+      personId: held.requestedBy,
+      data: {
+        ...entry,
+        takes: centsToDecimal(takes),
+        reasonId: held.reasonId,
+        reasonName: held.reasonName,
+        requestedBy: held.requestedBy,
+        approvedBy: held.approvedBy,
+      },
+    });
+  }
   await bumpRevision(tx, [billId]);
 }

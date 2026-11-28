@@ -758,17 +758,30 @@ describe("a split line's pending discounts", () => {
     const shares = await inTx(venue, (tx) => pendingOn(tx, billId));
     expect(shares.map(({ amount }) => amount).sort()).toEqual([1, 3]);
     expect((await inTx(venue, (tx) => workedNow(tx, billId))).takes).toBe(3);
-    await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
+    // One entry for the one discount given, under an id Remove takes the whole group by (D22).
+    const refused = await inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId)).then(
+      () => null,
+      (error: unknown) => error as AppError<"adjustment.no_longer_applies">,
+    );
+    expect(refused).toMatchObject({
       code: "adjustment.no_longer_applies",
       params: {
         workingOrderId: billId,
-        discounts: expect.arrayContaining(
-          shares.map(({ id: discountId }) =>
-            expect.objectContaining({ discountId, why: "cut_down" }),
-          ),
-        ) as unknown,
+        discounts: [
+          {
+            discountId: expect.any(String) as string,
+            why: "cut_down",
+            on: { kind: "dish", targetName: "Fish" },
+            action: "discount_amount",
+            percentBp: null,
+            amount: "0.04",
+          },
+        ],
       },
     });
+    expect(shares.map(({ id: discountId }) => discountId)).toContain(
+      refused!.params.discounts[0]!.discountId,
+    );
     expect(shares.map(({ id: discountId }) => discountId)).toContain(id);
     await expect(
       inTx(venue, (tx) => crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true })),
@@ -847,6 +860,41 @@ describe("a split line's pending discounts", () => {
     await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
       code: "adjustment.no_longer_applies",
     });
+  });
+
+  it("are written as they stood when not asked, with one activity entry for the discount given", async () => {
+    const billId = await groupedBill([{ name: "Fish", quantity: "4" }], 100);
+    const fish = await lineIdOf(venue, billId, 1);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: fish, ...amountOf(4) }));
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1.5" }]),
+    );
+    const shares = await inTx(venue, (tx) => pendingOn(tx, billId));
+    expect(await crystallisesAsShown(billId, false)).toBe(3);
+    const entries = await inTx(venue, (tx) =>
+      tx
+        .select({ data: activityLog.data })
+        .from(activityLog)
+        .where(
+          and(
+            eq(activityLog.kind, "discount.written_as_it_stood"),
+            eq(activityLog.subjectId, billId),
+          ),
+        ),
+    );
+    expect(entries).toEqual([
+      {
+        data: expect.objectContaining({
+          why: "cut_down",
+          takes: "0.03",
+          amount: "0.04",
+          on: { kind: "dish", targetName: "Fish" },
+        }) as unknown,
+      },
+    ]);
+    expect(shares.map(({ id }) => id)).toContain(
+      (entries[0]!.data as { discountId: string }).discountId,
+    );
   });
 
   it("are written as one discount, counted once, with what it takes off each line", async () => {

@@ -141,14 +141,10 @@ export async function gatherBillDiscountInputs(
  * unable to take it. An amount on a weighed line that takes less unsplit is `cut_down` too. What
  * each takes is `workOutBillDiscounts`' figure, unchanged.
  */
-export function workOutHeldBill({ input, held }: HeldBill): WorkedBill {
+export function workOutHeldBill(bill: HeldBill): WorkedBill {
+  const { input, held } = bill;
   const worked = workOutBillDiscounts(input.lines, input.discounts);
-  const groups = new Map<string, WorkedBillDiscount[]>();
-  for (const one of worked.discounts) {
-    const key = held.get(one.id)!.givenTogether;
-    groups.set(key, [...(groups.get(key) ?? []), one]);
-  }
-  for (const group of groups.values()) {
+  for (const group of givenTogether(bill, worked.discounts)) {
     const rows = group.map(({ id }) => held.get(id)!);
     const short =
       rows.every(({ action }) => action === "discount_amount") &&
@@ -158,6 +154,22 @@ export function workOutHeldBill({ input, held }: HeldBill): WorkedBill {
     if (short) for (const one of group) one.holds = "cut_down";
   }
   return worked;
+}
+
+/** `worked`, the rows of each discount given as one till row together (`given_together`), in the
+ * order each one's first row is worked out. */
+export function givenTogether(
+  bill: HeldBill,
+  worked: readonly WorkedBillDiscount[],
+): WorkedBillDiscount[][] {
+  const groups = new Map<string, WorkedBillDiscount[]>();
+  for (const one of worked) {
+    const key = bill.held.get(one.id)!.givenTogether;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [one]);
+    else group.push(one);
+  }
+  return [...groups.values()];
 }
 
 /**
