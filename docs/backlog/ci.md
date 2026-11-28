@@ -178,6 +178,16 @@ state, each load of the decoder file the page recorded and each request the refu
 caught, with how its refusal ended. On the next sighting keep the job log and read that message
 before retrying.
 
+**The till's Pass-profile handheld case fails about one run in six, alone, on plain `main`
+(2026-11-28).** `apps/till/src/till-app.test.ts` "gives a handheld with a Pass profile only Pass
+and Schedule, despite both screen capabilities" fails with `expected null not to be null`: the
+`headerButton` lookups for `expo`, `schedule` and `find-bill` read before the shell has drawn the
+button. Lane O saw it four times in local till runs (27 November 18:37 and 22:51, and twice on 28
+November). On `main` at `f0cf014d06`, `pnpm exec vitest run src/till-app.test.ts -t "gives a handheld
+with a Pass profile only Pass and Schedule"` failed 1 of 6 runs, alone on an idle machine; a run of
+the whole file passed (1,298). No CI sighting was searched for. The root-cause fix is due. Start
+by finding which update the case does not wait for after `signIn("handheld", …)`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
