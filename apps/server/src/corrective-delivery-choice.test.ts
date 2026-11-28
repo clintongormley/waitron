@@ -17,6 +17,7 @@ import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/pri
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { departments } from "@waitron/venue-service";
 import type { Hono } from "hono";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
@@ -305,6 +306,74 @@ describe("a give-back sends the corrective full invoice the way staff chose", ()
     const resent = (again.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!;
     expect(resent.corrective?.printedOnReceiptNotA4).toBe(false);
     expect(await jobsOf(r1)).toHaveLength(1);
+  });
+
+  it("lets Find a bill retry a failed chosen receipt print of the corrective only on the till's own invoice printer, as for any print request", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await delivered(saleId, { medium: "a4", pagePrinterId: officeId });
+    await useOwnA4();
+    const receipt = receiptPrinterId();
+    const answer = await give(
+      saleId,
+      await pressBody(saleId, { correctiveDelivery: { medium: "print", printerId: receipt } }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const r1 = await filedR1(answer);
+    const [job] = await venue.db
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(eq(printJobs.saleId, r1));
+    await venue.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, job!.id));
+    await venue.db
+      .update(invoiceDeliveries)
+      .set({
+        status: "failed",
+        failureCode: "transport_failed",
+        reportedAt: new Date().toISOString(),
+      })
+      .where(eq(invoiceDeliveries.printJobId, job!.id));
+    const findABill = (method: string, path: string, body?: unknown) =>
+      send(mailApp, adminCookie, method, `/api/transactions/${r1}${path}`, body);
+
+    // This till's invoice printer is the A4 one, so Find a bill prints no full invoice on the
+    // receipt printer, the corrective's retry included, and offers the A4 printer instead.
+    expect(
+      await findABill("POST", "/deliveries", {
+        medium: "print",
+        requestKey: randomUUID(),
+        printerId: receipt,
+      }),
+    ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+    expect((await findABill("GET", "/receipt-print")).json).toMatchObject({
+      status: "failed",
+      jobId: job!.id,
+      canRetry: true,
+      printerWithdrawn: true,
+    });
+    expect((await findABill("GET", "/deliveries")).json).toMatchObject({
+      actions: { retryOriginal: null, print: { printers: [{ id: officeId }] } },
+    });
+    expect(await findABill("POST", "/receipt-print/retry", {})).toMatchObject({
+      status: 409,
+      json: { code: "invoice_delivery.printer_invalid" },
+    });
+    expect(await jobsOf(r1)).toHaveLength(1);
+
+    // Once the receipt printer is the till's invoice printer again, the same retry is sent.
+    await venue.db
+      .update(devices)
+      .set({ invoicePrinterId: receipt })
+      .where(eq(devices.id, venue.deviceId));
+    expect((await findABill("GET", "/receipt-print")).json).not.toHaveProperty("printerWithdrawn");
+    const retried = await findABill("POST", "/receipt-print/retry", {});
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    expect(await jobsOf(r1)).toEqual([
+      { printerId: receipt, kind: "document" },
+      { printerId: receipt, kind: "document" },
+    ]);
   });
 
   it("still says it did not fall back from A4 when the same press is sent again without the choice", async () => {

@@ -125,7 +125,7 @@ export interface CorrectiveChoice {
     | { medium: "email"; recipient: string | null }
     | Exclude<CorrectiveWay, { medium: "email" }>
     | null;
-  /** The printers Find a bill offers this device for a full invoice, the default's first. */
+  /** The active printers this device's profile lists for full invoices, the default's first. */
   printers: DocumentOffers["printers"];
   /** Whether staff may choose email now. */
   emailAvailable: boolean;

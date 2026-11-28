@@ -356,9 +356,10 @@ type OriginalJob = {
 };
 
 /**
- * A print request marks the delivery row of each job it queues (`printerChosen`), and a resend's own
- * row is unmarked, so the chain's first row decides, wherever in the chain a resend that took it
- * over moved it; the device's receipt role marks none, and its original is resent wherever it went.
+ * A print request, and a give-back's chosen printer for its corrective, mark the delivery row of
+ * each job they queue (`printerChosen`), and a resend's own row is unmarked, so the chain's first
+ * row decides, wherever in the chain a resend that took it over moved it; the device's receipt role
+ * marks none, and its original is resent wherever it went.
  */
 function receiptPrinterWithdrawn(
   rows: InvoiceDelivery[],
