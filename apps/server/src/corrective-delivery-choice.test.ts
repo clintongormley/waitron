@@ -208,6 +208,7 @@ describe("the give-back preview shows where the corrective full invoice will go"
       default: { medium: "email", recipient: "accounts@harbour.example" },
       printers: offers(),
       emailAvailable: true,
+      emailNeedsReceiptContact: false,
     });
   });
 
@@ -223,6 +224,7 @@ describe("the give-back preview shows where the corrective full invoice will go"
         ...offers().filter((printer) => printer.id !== officeId),
       ],
       emailAvailable: false,
+      emailNeedsReceiptContact: false,
     });
   });
 
@@ -237,6 +239,7 @@ describe("the give-back preview shows where the corrective full invoice will go"
         ...offers().filter((printer) => printer.id !== receipt),
       ],
       emailAvailable: true,
+      emailNeedsReceiptContact: false,
     });
   });
 
@@ -578,6 +581,63 @@ describe("a box that cannot read whether it can send email offers no email", () 
     expect(await deliveriesOf(await filedR1(answer))).toEqual([
       { medium: "a4", recipient: null, printerId: officeId },
     ]);
+  });
+});
+
+describe("a box that can send email but has no receipt contact address offers no email, and says why", () => {
+  /** Takes every department's receipt contact address away for the rest of the test. */
+  async function withoutReceiptContact() {
+    const all = await venue.db.select({ id: departments.id }).from(departments);
+    await inTx(venue, async (tx) => {
+      for (const department of all)
+        await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
+    });
+    onTestFinished(async () => {
+      await inTx(venue, async (tx) => {
+        for (const department of all)
+          await seedDepartmentReceipt(tx, department.id, {
+            operationDescription: "Restaurante",
+            email: "dining@example.test",
+          });
+      });
+    });
+  }
+
+  it("previews email as needing a receipt contact address", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await withoutReceiptContact();
+    const shown = await preview(saleId, ask("goodwill", "10.00"));
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect(shown.json.corrective).toMatchObject({
+      emailAvailable: false,
+      emailNeedsReceiptContact: true,
+    });
+  });
+
+  it("refuses an address staff typed as email that cannot be sent, writing nothing", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await withoutReceiptContact();
+    const body = await pressBody(saleId);
+    const answer = await give(saleId, {
+      ...body,
+      correctiveDelivery: { medium: "email", recipient: "ana@example.com" },
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toEqual({
+      code: "invoice_delivery.email_unavailable",
+      params: { field: "correctiveDelivery.recipient" },
+    });
+    expect(await writtenOn(saleId)).toEqual(NOTHING);
+  });
+
+  it("does not say a receipt contact address is needed when the box cannot send email at all", async () => {
+    const { saleId } = await fixture.fullInvoice(venue, { cash: "37.00" });
+    await withoutReceiptContact();
+    const shown = await preview(saleId, ask("goodwill", "10.00"), venue.app);
+    expect(shown.json.corrective).toMatchObject({
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    });
   });
 });
 

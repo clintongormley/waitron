@@ -129,10 +129,13 @@ export interface CorrectiveChoice {
   printers: DocumentOffers["printers"];
   /** Whether staff may choose email now. */
   emailAvailable: boolean;
+  /** This box can send invoice email, but the invoice has no receipt contact address, which an
+   * invoice email needs. */
+  emailNeedsReceiptContact: boolean;
 }
 
-/** Whether this box can send invoice email now; a failed read counts as no, so that it fails only
- * a give-back that chooses email. */
+/** Whether this box can send invoice email now; a failed read counts as no, so email is then
+ * neither offered nor sent. */
 async function emailTransportNow(
   tx: Transaction,
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
@@ -150,22 +153,26 @@ async function readCorrectiveOffers(
   deps: Pick<InvoiceCorrectionDeps, "invoiceEmailAvailable">,
   device: Pick<DeviceBinding, "deviceId" | "deviceProfileId">,
   contactSaleId: string,
-): Promise<{ mayPrint: boolean; printers: DocumentOffers["printers"]; emailAvailable: boolean }> {
+): Promise<{ mayPrint: boolean } & Omit<CorrectiveChoice, "default">> {
   const mayPrint = await deviceMayPrintReceipts(tx, device.deviceId);
-  if (!mayPrint) return { mayPrint, printers: [], emailAvailable: false };
+  if (!mayPrint)
+    return { mayPrint, printers: [], emailAvailable: false, emailNeedsReceiptContact: false };
   const offered = await readOfferedPrinters(
     tx,
     { deviceId: device.deviceId, profileId: device.deviceProfileId },
     "invoice",
   );
+  const transport = await emailTransportNow(tx, deps);
+  const emailAvailable = await canEmailInvoice(
+    tx,
+    { kind: "sale", saleId: contactSaleId },
+    transport,
+  );
   return {
     mayPrint,
     printers: offered.printers,
-    emailAvailable: await canEmailInvoice(
-      tx,
-      { kind: "sale", saleId: contactSaleId },
-      await emailTransportNow(tx, deps),
-    ),
+    emailAvailable,
+    emailNeedsReceiptContact: transport && !emailAvailable,
   };
 }
 
@@ -194,6 +201,7 @@ export async function readCorrectiveChoice(
       ...offers.printers.filter((printer) => printer.id !== first),
     ],
     emailAvailable: offers.emailAvailable,
+    emailNeedsReceiptContact: offers.emailNeedsReceiptContact,
   };
 }
 
@@ -309,7 +317,7 @@ export async function sendFiledCorrective(
         cfg,
         corrective!.corrects!,
         { kind: "sale", saleId: correctiveSaleId },
-        async () => (await deps.invoiceEmailAvailable?.(tx)) === true,
+        () => emailTransportNow(tx, deps),
       );
       if (way?.medium === "receipt") way = { medium: "receipt", printerId: null };
     }

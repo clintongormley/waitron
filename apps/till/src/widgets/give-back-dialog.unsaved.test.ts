@@ -287,6 +287,7 @@ describe("the corrective invoice's way, in a window filled in after a cancel", (
         { id: "bar", name: "Bar", kind: "receipt" },
       ],
       emailAvailable: false,
+      emailNeedsReceiptContact: false,
     };
   });
 

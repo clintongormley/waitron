@@ -243,6 +243,11 @@ export class TillCorrectiveSheet extends LitElement {
         width: var(--wt-form-max-width);
         max-width: 100%;
       }
+      .note {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
   @property({ attribute: false }) choice!: CorrectiveChoice;
@@ -383,6 +388,11 @@ export class TillCorrectiveSheet extends LitElement {
             this.#set({ way: event.detail.value });
           }}
         ></wt-combobox>
+        ${
+          this.choice.emailNeedsReceiptContact
+            ? html`<p class="note" data-email-note>${t("invoice.email_needs_receipt_contact")}</p>`
+            : nothing
+        }
         ${
           this.draft.way === "email"
             ? html`<wt-input

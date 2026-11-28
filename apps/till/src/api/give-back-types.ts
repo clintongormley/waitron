@@ -80,6 +80,9 @@ export interface CorrectiveChoice {
   /** The printers this device may choose, the default's first. */
   printers: { id: string; name: string; kind: "a4" | "receipt" }[];
   emailAvailable: boolean;
+  /** This box can send invoice email, but the invoice has no receipt contact address, which an
+   * invoice email needs. */
+  emailNeedsReceiptContact: boolean;
 }
 
 export type GiveBackRight = "sale.refund" | "sale.rectify";
@@ -138,8 +141,8 @@ export interface SentCorrective {
   /** Null when the box sent nothing. The address is there only for a device that may print
    * receipts. */
   delivery: InvoiceDeliveryAttempt | null;
-  /** The invoice it corrects went on A4, and the box's own send when it was filed put this one on
-   * the receipt printer instead. */
+  /** The invoice it corrects went on A4, and the send recorded when it was filed put it on the
+   * till's receipt printer without staff choosing that printer. */
   printedOnReceiptNotA4: boolean;
 }
 

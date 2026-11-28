@@ -200,6 +200,7 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
           { id: "bar", name: "Barra", kind: "receipt" },
         ],
         emailAvailable: true,
+        emailNeedsReceiptContact: false,
       },
     }));
     const mounted = await mount(api);

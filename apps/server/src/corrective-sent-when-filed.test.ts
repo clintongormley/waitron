@@ -586,6 +586,28 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     });
   });
 
+  it("prints the R1 on paper, as the preview says, when the original was emailed and this box cannot read whether it can send email", async () => {
+    const app = venue.appWith({
+      invoiceEmailAvailable: () => Promise.reject(new Error("email settings unreadable")),
+    });
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const shown = await send(
+      app,
+      adminCookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      ask("goodwill", "10.00"),
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    expect((shown.json.corrective as { default: unknown }).default).toMatchObject({
+      medium: "receipt",
+      printerId: receiptPrinterId(),
+    });
+    const { r1 } = await givenBackInCash(saleId, app);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+  });
+
   it("does not show the email address to a till that may not print receipts", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });

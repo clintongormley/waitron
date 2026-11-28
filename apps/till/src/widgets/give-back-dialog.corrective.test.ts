@@ -38,11 +38,13 @@ const A4: CorrectiveChoice = {
   default: { medium: "a4", printerId: "office", printerName: "Office" },
   printers: PRINTERS,
   emailAvailable: true,
+  emailNeedsReceiptContact: false,
 };
 const EMAILED: CorrectiveChoice = {
   default: { medium: "email", recipient: "ana@example.com" },
   printers: PRINTERS,
   emailAvailable: true,
+  emailNeedsReceiptContact: false,
 };
 
 function answering(corrective: CorrectiveChoice | undefined) {
@@ -167,6 +169,7 @@ describe("the corrective invoice's way on the form", () => {
         default: { medium: "email", recipient: null },
         printers: [],
         emailAvailable: false,
+        emailNeedsReceiptContact: false,
       }),
     );
     expect(line(el)).toBe("Corrective invoice: emailed to the customer");
@@ -253,6 +256,7 @@ describe("Change", () => {
           { id: "terrace", name: "Terrace", kind: "receipt" },
         ],
         emailAvailable: false,
+        emailNeedsReceiptContact: false,
       }),
     );
     expect(line(el)).toBe("Corrective invoice: printed on the receipt printer · Bar");
@@ -358,7 +362,14 @@ describe("Change", () => {
   });
 
   it("opens on email, with no address, when no printer is offered", async () => {
-    const { el } = await mount(answering({ default: null, printers: [], emailAvailable: true }));
+    const { el } = await mount(
+      answering({
+        default: null,
+        printers: [],
+        emailAvailable: true,
+        emailNeedsReceiptContact: false,
+      }),
+    );
     await openSheet(el);
     expect(inSheet<HTMLElement & { value: string }>(el, "wt-combobox[name=delivery]")!.value).toBe(
       "email",
@@ -375,6 +386,38 @@ describe("Change", () => {
       "wt-combobox[name=delivery]",
     )!.options;
     expect(options.map((option) => option.value)).toEqual(["print:office", "print:bar"]);
+  });
+
+  it("says where Email would be that email needs the receipt's contact address", async () => {
+    const { el } = await mount(
+      answering({ ...A4, emailAvailable: false, emailNeedsReceiptContact: true }),
+    );
+    await openSheet(el);
+    const options = inSheet<HTMLElement & { options: { value: string }[] }>(
+      el,
+      "wt-combobox[name=delivery]",
+    )!.options;
+    expect(options.map((option) => option.value)).toEqual(["print:office", "print:bar"]);
+    expect(text(inSheet(el, "[data-email-note]"))).toBe(en["invoice.email_needs_receipt_contact"]);
+  });
+
+  it("in Spanish, says email needs the receipt's contact address", async () => {
+    setLocale("es-ES");
+    const { el } = await mount(
+      answering({ ...A4, emailAvailable: false, emailNeedsReceiptContact: true }),
+    );
+    await openSheet(el);
+    expect(text(inSheet(el, "[data-email-note]"))).toBe(es["invoice.email_needs_receipt_contact"]);
+  });
+
+  it("says nothing about a contact address when email is offered, or the box cannot send it", async () => {
+    const { el } = await mount();
+    await openSheet(el);
+    expect(inSheet(el, "[data-email-note]")).toBeNull();
+    cleanupWidgets();
+    const { el: offline } = await mount(answering({ ...A4, emailAvailable: false }));
+    await openSheet(offline);
+    expect(inSheet(offline, "[data-email-note]")).toBeNull();
   });
 
   it("Cancel keeps the way it had", async () => {
