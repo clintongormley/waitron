@@ -368,7 +368,7 @@ describe("while a card payment is pending, every edit that changes what the bill
   it("moving the bill to an empty table is not refused: it changes nothing the bill charges", async () => {
     const p = await paying();
     const { id: tableId } = await withTransaction(venue.db, (tx) =>
-      createTable(tx, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+      createTable(tx, { label: `Table ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
     );
     const path = `/api/bills/${p.tabId}/move`;
     const moved = await send(
@@ -412,7 +412,7 @@ describe("while a card payment is pending, every edit that changes what the bill
   it("splitting the table: POST /api/parties/:id/split-table", async () => {
     const p = await paying(async (party) => {
       const { id: leaving } = await withTransaction(venue.db, (tx) =>
-        createTable(tx, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+        createTable(tx, { label: `Table ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
       );
       const path = `/api/parties/${party.partyId}/join`;
       const joined = await send(
