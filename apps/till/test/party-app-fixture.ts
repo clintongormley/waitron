@@ -108,6 +108,7 @@ export const table9 = table({ id: "t9", label: "9" });
 export const tabBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",
@@ -125,6 +126,7 @@ export const tabBill: PartyBill = {
 export const checkBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-check",
   revision: 0,
   invoiceType: "F2",

@@ -56,10 +56,12 @@ export interface DiscountNotice {
   reapplyOn: { lineId: string } | null;
 }
 
-/** A comp or discount given on an open bill and not yet written into its prices. `amount` is the
- * fixed amount given, null for a comp or a percentage; `takes` is what it takes off the bill's
- * total now. `holds` is `cut_down` when it takes less than it was given, `set_menu_gone` when its
- * set-menu row is gone, so it takes nothing. */
+/** A comp or discount given on an open bill and not yet written into its prices, once however
+ * many rows (`given_together`) hold it, `id` being the first row's. `amount` is the fixed amount
+ * given, null for a comp or a percentage; `takes` is what it takes off the bill's total now; both
+ * sum its rows. `holds`, as `workOutHeldBill` decides: `cut_down` when a fixed amount cannot all
+ * come off what it was given on, `set_menu_gone` when its set-menu row is gone, so it takes
+ * nothing; `yes` only when every row holds, otherwise the first row's that does not. */
 export interface PendingDiscountView {
   id: string;
   target:

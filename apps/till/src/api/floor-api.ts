@@ -9,6 +9,7 @@ import type {
 import type {
   BillSetMenuState,
   DiscountNotice,
+  PendingDiscountView,
   ServedSetMenuCopy,
   Dining,
   JoinSide,
@@ -130,6 +131,8 @@ export interface PartyBill {
   setMenuCopies?: ServedSetMenuCopy[];
   /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
+  /** Its pending discounts; none on a settled or abandoned bill. */
+  discounts: PendingDiscountView[];
   workingOrderId: string;
   revision: number;
   /** The bill's own way, whatever its department now says. */

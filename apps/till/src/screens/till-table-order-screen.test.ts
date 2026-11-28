@@ -391,6 +391,7 @@ const anaParty: TableParty = {
 const bill = (over: Partial<PartyBill>): PartyBill => ({
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",

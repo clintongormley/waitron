@@ -254,6 +254,7 @@ it.each([
         {
           dining: "eat_in",
           diningChoice: "none",
+          discounts: [],
           workingOrderId: "wo-4",
           revision: 1,
           invoiceType: "F2",

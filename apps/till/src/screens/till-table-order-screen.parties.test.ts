@@ -33,6 +33,7 @@ const party: TableParty = {
 const paidTab: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-tab",
   revision: 0,
   invoiceType: "F2",
@@ -50,6 +51,7 @@ const paidTab: PartyBill = {
 const check: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-check",
   revision: 0,
   invoiceType: "F2",
@@ -67,6 +69,7 @@ const check: PartyBill = {
 const abandoned: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-gone",
   revision: 0,
   invoiceType: "F2",

@@ -11,6 +11,7 @@ import {
   subtractDecimal,
   thousandthsToDecimal,
   type Decimal,
+  type PendingDiscountView,
 } from "@waitron/shared";
 import { groupFiledRows } from "./filed-rows.js";
 import {
@@ -269,17 +270,16 @@ export interface BillDiscountLine extends SpreadRow {
 }
 
 /** A dish or an extra (`line`), a set-menu row, null once the grouping deleted it, or the bill. */
-export type BillDiscountTarget =
-  { kind: "bill" } | { kind: "line"; lineId: string } | { kind: "set_menu"; lineId: string | null };
+export type BillDiscountTarget = PendingDiscountView["target"];
 
 /** A discount given on an open bill, not yet written into its lines: `amount` in cents. */
 export interface PendingBillDiscount {
   id: string;
   target: BillDiscountTarget;
-  action: "comp" | "discount_percent" | "discount_amount";
+  action: PendingDiscountView["action"];
   percentBp: number | null;
   amount: number | null;
-  origin: "given" | "bill_share";
+  origin: PendingDiscountView["origin"];
   position: number;
 }
 
@@ -308,7 +308,7 @@ export interface BillDiscountRow {
  */
 export interface WorkedBillDiscount {
   id: string;
-  holds: "yes" | "set_menu_gone" | "cut_down";
+  holds: PendingDiscountView["holds"];
   takes: number;
   spreadTakes?: number;
   lines: { lineId: string; rows: BillDiscountRow[] }[];

@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { billPayments, sales } from "@waitron/db";
+import { billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { REASONS } from "./testing/adjustment-venue.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { holdTenPercent, salesOf } from "./testing/bill-discounts.js";
 import { inTx, seatedWith } from "./testing/bill-venue.js";
 import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { parseBillsQuery } from "./find-bill-query.js";
@@ -35,19 +34,6 @@ useVenueDb({
     );
   },
 });
-
-function holdTenPercent(billId: string): Promise<string> {
-  return inTx(t.venue, (tx) =>
-    holdDiscount(
-      tx,
-      {
-        reasonId: { complaint } as Record<keyof typeof REASONS, string>,
-        staffId: t.venue.operatorId,
-      },
-      { workingOrderId: billId },
-    ),
-  );
-}
 
 function received(billId: string, applied: number) {
   return inTx(t.venue, (tx) =>
@@ -80,10 +66,10 @@ const findQuery = (values: Record<string, string> = {}) =>
 describe("an open bill's SQL totals take off its pending discounts", () => {
   it("party bills: the total, what is outstanding and what is overpaid", async () => {
     const part = await seatedWith(t.venue, "House salad");
-    await holdTenPercent(part.tabId);
+    await holdTenPercent(t.venue, complaint, part.tabId);
     await received(part.tabId, 500);
     const over = await seatedWith(t.venue, "House salad");
-    await holdTenPercent(over.tabId);
+    await holdTenPercent(t.venue, complaint, over.tabId);
     await received(over.tabId, 1100);
 
     expect(await partyBill(part.partyId, part.tabId)).toMatchObject({
@@ -105,7 +91,7 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("held orders", async () => {
     const party = await seatedWith(t.venue, "House salad");
-    await holdTenPercent(party.tabId);
+    await holdTenPercent(t.venue, complaint, party.tabId);
 
     const held = await listHeldOrders({ db: t.venue.db });
 
@@ -114,7 +100,7 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("the floor's tab total", async () => {
     const party = await seatedWith(t.venue, "House salad", "Small beer");
-    await holdTenPercent(party.tabId);
+    await holdTenPercent(t.venue, complaint, party.tabId);
 
     const tables = await inTx(t.venue, (tx) => listTablesWithState(tx));
 
@@ -125,7 +111,7 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("the counter's waiting list, a placed Counter order included", async () => {
     const placed = await t.counterOrder("placed");
-    await holdTenPercent(placed);
+    await holdTenPercent(t.venue, complaint, placed);
 
     const waiting = await listCounterWaiting({ db: t.venue.db });
 
@@ -134,7 +120,7 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("the orders list, and what it owes", async () => {
     const party = await seatedWith(t.venue, "House salad");
-    await holdTenPercent(party.tabId);
+    await holdTenPercent(t.venue, complaint, party.tabId);
     await received(party.tabId, 500);
 
     const page = await inTx(t.venue, (tx) =>
@@ -149,7 +135,7 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("Find bill, what it owes, and its place when sorted by total", async () => {
     const discounted = await seatedWith(t.venue, "Steak");
-    await holdTenPercent(discounted.tabId);
+    await holdTenPercent(t.venue, complaint, discounted.tabId);
     await received(discounted.tabId, 500);
     const between = await seatedWith(t.venue, "Octopus", "Small beer");
 
@@ -169,15 +155,11 @@ describe("an open bill's SQL totals take off its pending discounts", () => {
 
   it("the deferred close accepts the party bill's discounted total as its expected total", async () => {
     const party = await seatedWith(t.venue, "House salad");
-    await holdTenPercent(party.tabId);
+    await holdTenPercent(t.venue, complaint, party.tabId);
     const { total } = await partyBill(party.partyId, party.tabId);
 
     await t.close(await t.requestFor(party.tabId, total, party.partyId));
 
-    expect(
-      await inTx(t.venue, (tx) =>
-        tx.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, party.tabId)),
-      ),
-    ).toEqual([{ total: 1080 }]);
+    expect(await salesOf(t.venue, party.tabId)).toEqual([{ total: 1080 }]);
   });
 });

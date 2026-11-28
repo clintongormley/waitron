@@ -29,6 +29,7 @@ export function partyBill(
   return {
     dining: "eat_in",
     diningChoice: "none",
+    discounts: [],
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

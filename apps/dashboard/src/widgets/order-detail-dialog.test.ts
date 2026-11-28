@@ -495,15 +495,27 @@ async function shownDiscounts(shown: OrderDetailDto) {
   );
 }
 
-it("lists an open bill's pending discount with its name and what it takes off", async () => {
+const heldComp: OrderDetailDto["discounts"][number] = {
+  ...heldDiscount,
+  id: "discount-2",
+  target: { kind: "line", lineId: "line-1" },
+  action: "comp",
+  percentBp: null,
+  takes: "4.50",
+};
+
+it("lists an open bill's pending discounts and comps with their names and what they take off", async () => {
+  const discounts = [heldDiscount, heldComp];
   setLocale("en-GB");
-  expect(await shownDiscounts({ ...detail, discounts: [heldDiscount] })).toEqual([
+  expect(await shownDiscounts({ ...detail, discounts })).toEqual([
     "Discount: Guest complaint −€1.20",
+    "Comp: Guest complaint −€4.50",
   ]);
   cleanupWidgets();
   setLocale("es-ES");
-  expect(await shownDiscounts({ ...detail, discounts: [heldDiscount] })).toEqual([
+  expect(await shownDiscounts({ ...detail, discounts })).toEqual([
     "Descuento: Guest complaint −1,20 €",
+    "Invitación: Guest complaint −4,50 €",
   ]);
 });
 

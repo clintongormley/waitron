@@ -4,7 +4,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { REASONS } from "./testing/adjustment-venue.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { holdTenPercent } from "./testing/bill-discounts.js";
 import { inTx, seatedWith } from "./testing/bill-venue.js";
 import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { readFindBill } from "./find-bill-bills.js";
@@ -49,24 +49,11 @@ beforeEach(() => {
   gathered.length = 0;
 });
 
-function holdTenPercent(billId: string): Promise<string> {
-  return inTx(t.venue, (tx) =>
-    holdDiscount(
-      tx,
-      {
-        reasonId: { complaint } as Record<keyof typeof REASONS, string>,
-        staffId: t.venue.operatorId,
-      },
-      { workingOrderId: billId },
-    ),
-  );
-}
-
 async function twoDiscountedParties() {
   const unrelated = await seatedWith(t.venue, "House salad");
-  await holdTenPercent(unrelated.tabId);
+  await holdTenPercent(t.venue, complaint, unrelated.tabId);
   const asked = await seatedWith(t.venue, "House salad");
-  await holdTenPercent(asked.tabId);
+  await holdTenPercent(t.venue, complaint, asked.tabId);
   gathered.length = 0;
   return { unrelated, asked };
 }

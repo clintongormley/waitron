@@ -34,6 +34,7 @@ const party: TableParty = {
 const openBill: PartyBill = {
   dining: "eat_in",
   diningChoice: "none",
+  discounts: [],
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",
