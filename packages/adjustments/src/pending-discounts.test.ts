@@ -13,6 +13,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { stringToThousandths } from "@waitron/shared";
 import { policySnapshotOf } from "./policy.js";
 import {
+  copyPendingDiscountsToParts,
   deletePendingDiscounts,
   insertPendingDiscount,
   moveShare,
@@ -48,6 +49,24 @@ async function burger(workingOrderId: string): Promise<string> {
       quantity: stringToThousandths("1"),
       unitPriceGross: 1000,
       lineTotal: 1000,
+    })
+    .returning({ id: workingOrderLines.id });
+  return row!.id;
+}
+
+/** A line of `quantity` thousandths at 1.00 each. */
+async function lineOf(workingOrderId: string, quantity: number): Promise<string> {
+  lineCount += 1;
+  const [row] = await db
+    .insert(workingOrderLines)
+    .values({
+      workingOrderId,
+      lineNo: lineCount,
+      name: "Beer",
+      descriptions: { es: "Beer" },
+      quantity,
+      unitPriceGross: 100,
+      lineTotal: quantity / 10,
     })
     .returning({ id: workingOrderLines.id });
   return row!.id;
@@ -269,5 +288,57 @@ describe("pending-discounts: the store's writer of bill_discounts", () => {
       { id: ofFirst, billId: first, amount: null, sharedFrom: null },
       { id: ofSecond, billId: second, amount: null, sharedFrom: null },
     ]);
+  });
+
+  it("copies a split line's discounts to its parts, an amount shared by quantity from the line", async () => {
+    const billId = await bill();
+    const line = await lineOf(billId, 2000);
+    const parts = [await lineOf(billId, 1000), await lineOf(billId, 1000)];
+    const other = await lineOf(billId, 1000);
+    const percent = await give({ lineId: line, position: 1 });
+    const free = await give({ lineId: line, action: "comp", percentBp: null, position: 2 });
+    const amount = await give({ lineId: line, ...amountOff(101), position: 3 });
+    const cent = await give({ lineId: line, ...amountOff(1), position: 4 });
+    const untouched = await give({ lineId: other, ...amountOff(50), position: 5 });
+    await inTx((tx) =>
+      copyPendingDiscountsToParts(
+        tx,
+        parts.map((to) => ({ from: line, to })),
+      ),
+    );
+    const held = await inTx((tx) => readPendingDiscounts(tx, [billId]));
+    const at = (lineId: string) =>
+      held
+        .filter((row) => row.lineId === lineId)
+        .map(({ action, percentBp, amount, position }) => [action, percentBp, amount, position]);
+    // 1.01 over 2, 1 and 1: 0.50, 0.25 and 0.25, the cent left over on the line; 0.01 stays whole.
+    expect(at(line)).toEqual([
+      ["discount_percent", 1000, null, 1],
+      ["comp", null, null, 2],
+      ["discount_amount", null, 51, 3],
+      ["discount_amount", null, 1, 4],
+    ]);
+    for (const part of parts) {
+      expect(at(part)).toEqual([
+        ["discount_percent", 1000, null, 1],
+        ["comp", null, null, 2],
+        ["discount_amount", null, 25, 3],
+      ]);
+    }
+    expect(at(other)).toEqual([["discount_amount", null, 50, 5]]);
+    expect(
+      held.filter(({ id }) => [percent, free, amount, cent, untouched].includes(id)),
+    ).toHaveLength(5);
+  });
+
+  it("copies nothing for no splits, or a split line holding no discount", async () => {
+    const billId = await bill();
+    const line = await lineOf(billId, 2000);
+    const part = await lineOf(billId, 1000);
+    await inTx(async (tx) => {
+      await copyPendingDiscountsToParts(tx, []);
+      await copyPendingDiscountsToParts(tx, [{ from: line, to: part }]);
+    });
+    expect(await inTx((tx) => readPendingDiscounts(tx, [billId]))).toEqual([]);
   });
 });

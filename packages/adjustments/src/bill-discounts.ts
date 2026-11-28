@@ -346,7 +346,7 @@ const targetKey = (target: BillDiscountTarget) =>
 
 /** `amount` shared over `quantities` by quantity, the cents left over one each from the first
  * (plan D10's copy on a split, unlike `shareByWeight`). */
-function byQuantity(amount: number, quantities: readonly number[]): number[] {
+export function byQuantity(amount: number, quantities: readonly number[]): number[] {
   const whole = quantities.reduce((sum, quantity) => sum + quantity, 0);
   const shares = quantities.map((quantity) => Math.floor((amount * quantity) / whole));
   let left = amount - shares.reduce((sum, share) => sum + share, 0);

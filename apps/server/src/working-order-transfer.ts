@@ -8,6 +8,7 @@ import {
   ticketItemMoves,
   newId,
 } from "@waitron/db";
+import { copyPendingDiscountsToParts } from "@waitron/adjustments";
 import { assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/menu";
 import {
   AppError,
@@ -633,6 +634,7 @@ async function carveLines(
       }
     }
     await carryLineReductions(tx, carried);
+    await copyPendingDiscountsToParts(tx, carried);
   }
   if (fromTabId !== toTabId) await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
   return { splitLines };

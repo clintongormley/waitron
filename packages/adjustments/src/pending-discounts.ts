@@ -1,6 +1,7 @@
 import { eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/sqlite-core";
 import { billDiscounts, workingOrderLines, type Transaction } from "@waitron/db";
+import { byQuantity } from "./bill-discounts.js";
 
 /** A discount to hold on an open bill until its invoice (plan A1621 D3). */
 export type NewPendingDiscount = typeof billDiscounts.$inferInsert;
@@ -111,4 +112,57 @@ export async function moveShare(
       .set({ amount: held - cents })
       .where(eq(billDiscounts.id, from));
   return into;
+}
+
+/**
+ * Copies each discount held on a split line to the parts `splits` cut off it (plan A1621 D10): a
+ * percentage or Free as it is, an amount shared by quantity over the line and its parts in line
+ * order, the cents left over one each from the earliest, as `workOutBillDiscounts` shares it. A
+ * part whose share is nothing holds no copy.
+ */
+export async function copyPendingDiscountsToParts(
+  tx: Transaction,
+  splits: readonly { from: string; to: string }[],
+): Promise<void> {
+  const partsOf = new Map<string, string[]>();
+  for (const { from, to } of splits) partsOf.set(from, [...(partsOf.get(from) ?? []), to]);
+  if (partsOf.size === 0) return;
+  const held = await tx
+    .select()
+    .from(billDiscounts)
+    .where(inArray(billDiscounts.lineId, [...partsOf.keys()]));
+  if (held.length === 0) return;
+  const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
+  const lines = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, ids));
+  const lineOf = new Map(lines.map((line) => [line.id, line]));
+  for (const { id, ...row } of held) {
+    const parts = [row.lineId!, ...partsOf.get(row.lineId!)!]
+      .map((lineId) => lineOf.get(lineId)!)
+      .sort((a, b) => a.lineNo - b.lineNo);
+    const shares =
+      row.action === "discount_amount"
+        ? byQuantity(
+            row.amount!,
+            parts.map(({ quantity }) => quantity),
+          )
+        : parts.map(() => row.amount);
+    for (const [at, part] of parts.entries()) {
+      const amount = shares[at]!;
+      if (part.id === row.lineId) {
+        // The line comes first, so it always keeps a share of an amount.
+        if (amount !== row.amount) {
+          await tx.update(billDiscounts).set({ amount }).where(eq(billDiscounts.id, id));
+        }
+      } else if (amount !== 0) {
+        await insertPendingDiscount(tx, { ...row, lineId: part.id, amount });
+      }
+    }
+  }
 }
