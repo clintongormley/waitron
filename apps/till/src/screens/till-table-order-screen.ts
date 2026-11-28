@@ -1319,6 +1319,12 @@ export class TillTableOrderScreen extends LitElement {
           var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
         );
       }
+      /* Less than the box's, so on a sideways phone the box's line sits lower under the top bar. */
+      till-sent-orders::part(opened-serve) {
+        scroll-margin-block-end: calc(
+          var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-1)
+        );
+      }
     `,
     segmentedOptionStyles,
   ];

@@ -78,17 +78,17 @@ async function open(el: TillTableOrderScreen, host: HTMLElement, n: number) {
   await scrollSettled(host);
 }
 
-const gapOf = (el: TillTableOrderScreen) => {
-  const gap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+const gapOf = (el: TillTableOrderScreen, token: "--wt-space-1" | "--wt-space-2") => {
+  const gap = Number.parseFloat(getComputedStyle(el).getPropertyValue(token));
   expect(gap).toBeGreaterThan(0);
   return gap;
 };
 
-/** The last Serve button's foot stops --wt-space-2 above the bar's top, the dish's own line
+/** The last Serve button's foot stops --wt-space-1 above the bar's top, the dish's own line
  * showing whole below the top of the scroll area; Dish details may sit under the bar. */
 function expectAboveBar(el: TillTableOrderScreen, host: HTMLElement, box: HTMLElement) {
   const top = barTop(el);
-  const gap = gapOf(el);
+  const gap = gapOf(el, "--wt-space-1");
   const serves = [...box.querySelectorAll("[data-sent-serve]")];
   expect(serves.length).toBeGreaterThan(0);
   const foot = serves.at(-1)!.getBoundingClientRect().bottom;
@@ -138,8 +138,8 @@ it("a sent row with nothing to serve, opened low, brings its box's foot above th
   expect(box.hasAttribute("data-open")).toBe(true);
   expect(box.querySelector("[data-sent-serve]")).toBeNull();
   const gap = (top: number) => top - box.getBoundingClientRect().bottom;
-  expect(gap(barTop(el))).toBeGreaterThanOrEqual(gapOf(el) - 0.5);
-  expect(gap(barTop(el))).toBeLessThanOrEqual(gapOf(el) + 1.5);
+  expect(gap(barTop(el))).toBeGreaterThanOrEqual(gapOf(el, "--wt-space-2") - 0.5);
+  expect(gap(barTop(el))).toBeLessThanOrEqual(gapOf(el, "--wt-space-2") + 1.5);
 });
 
 describe("on a handheld turned sideways, with the strip the app leaves above the bar", () => {
@@ -168,7 +168,9 @@ describe("on a handheld turned sideways, with the strip the app leaves above the
     expect(more.top).toBeGreaterThanOrEqual(name.bottom - 0.5);
     const serve = [...box.querySelectorAll("[data-sent-serve]")].at(-1)!.getBoundingClientRect();
     // Line and buttons cannot both show between the scroll area's top and the bar.
-    expect(serve.bottom - line.top + gapOf(el)).toBeGreaterThan(barTop(el) - visibleTop(host));
+    expect(serve.bottom - line.top + gapOf(el, "--wt-space-1")).toBeGreaterThan(
+      barTop(el) - visibleTop(host),
+    );
     expect(host.scrollTop).toBeGreaterThan(before);
     expect(line.top).toBeGreaterThanOrEqual(visibleTop(host) - 0.5);
     expect(line.top).toBeLessThanOrEqual(visibleTop(host) + 1.5);

@@ -165,6 +165,7 @@ export function sentOpenControls(view: SentOpenView): TemplateResult {
                 html`<button
                   type="button"
                   class="sent-open-act"
+                  part="opened-serve"
                   data-sent-serve=${each.kind}
                   ?disabled=${view.busy}
                   @click=${(event: Event) => view.serve(each, event)}

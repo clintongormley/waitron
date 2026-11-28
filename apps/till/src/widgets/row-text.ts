@@ -86,7 +86,7 @@ export function scrollAreaOf(element: Element): Element {
 }
 
 /** Brings the foot of `aim`, an opened row's box or a part of it, above the bar at the foot of
- * `scroller`, the area the order scrolls in, by the clearance the box's `scroll-margin-block-end`
+ * `scroller`, the area the order scrolls in, by the clearance the aim's `scroll-margin-block-end`
  * holds. Where the box is taller than the area, the aim's foot wins, except that when a part is
  * aimed at and `line` is given, the scroll stops with `line`'s top at the area's top. */
 export function revealOpenBox(
@@ -98,7 +98,7 @@ export function revealOpenBox(
   const page = scroller === document.scrollingElement;
   const top = page ? 0 : scroller.getBoundingClientRect().top + scroller.clientTop;
   const foot = page ? innerHeight : top + scroller.clientHeight;
-  const margin = Number.parseFloat(getComputedStyle(box).scrollMarginBlockEnd);
+  const margin = Number.parseFloat(getComputedStyle(aim).scrollMarginBlockEnd);
   const over = aim.getBoundingClientRect().bottom - (foot - margin);
   if (over <= 0) return;
   const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
