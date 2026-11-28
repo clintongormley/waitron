@@ -24,8 +24,14 @@ export const tableOrderLoadingStyles = [
       padding-inline: var(--wt-space-4);
     }
 
+    .loading-screen:has(> .loading-foot):not([data-embedded]) {
+      padding-block-end: 0;
+    }
+
     .loading-foot {
       margin-block-start: auto;
+      position: sticky;
+      inset-block-end: 0;
       padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-space-4)
         max(calc(var(--wt-space-5) + var(--wt-space-1) / 2), env(safe-area-inset-bottom));
       border-block-start: 1px solid var(--wt-color-border);

@@ -23,7 +23,13 @@ export const firstReadNoticeStyles = css`
     min-block-size: 100%;
   }
 
-  .first-floor-read:has(> wt-placeholder, > .map) {
+  .first-floor-read.map {
+    flex: none;
+    min-block-size: 0;
+    margin-inline: 0;
+  }
+
+  .first-floor-read:has(> wt-placeholder) {
     background: var(--wt-color-surface);
     border: 1px solid var(--wt-color-border);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
@@ -282,7 +288,10 @@ export function firstFloorRead(
   map?: TemplateResult,
   starting = false,
 ) {
-  return html`<div class="first-floor-read" ?data-starting=${starting}>
+  return html`<div
+    class=${map === undefined ? "first-floor-read" : "first-floor-read map"}
+    ?data-starting=${starting}
+  >
     ${stage === "quiet" ? nothing : (map ?? html`<wt-placeholder></wt-placeholder>`)}
     ${firstReadNotice(stage, handheld, retry)}
   </div>`;

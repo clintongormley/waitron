@@ -2333,6 +2333,7 @@ export class TillFloorScreen extends LitElement {
     const knownZone =
       this.knownZones?.find(({ id }) => id === this.activeZone) ?? this.knownZones?.[0];
     const shapes = knownZone === undefined ? undefined : this.rememberedPlan?.get(knownZone.id);
+    const remembered = firstRead !== undefined && !!shapes?.length;
     const empty =
       listed.length === 0 && onMap.length === 0
         ? floorEmptyState(
@@ -2367,16 +2368,16 @@ export class TillFloorScreen extends LitElement {
             ${
               this.useFloorFooter ||
               this.#phone.matches ||
-              firstRead !== undefined ||
-              empty !== nothing
+              (firstRead === undefined ? empty !== nothing : !remembered)
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
                     data-view-toggle
                     variant="secondary"
+                    ?disabled=${firstRead !== undefined}
                     @click=${() => this.#toggleView(view)}
                   >
-                    ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+                    ${remembered || view === "map" ? t("floor.view_list") : t("floor.view_map")}
                   </wt-button>`
             }
             ${this.#zoneMenu(planned, activeKey, view)}
@@ -2426,15 +2427,13 @@ export class TillFloorScreen extends LitElement {
                 this.handheld,
                 () => this.#requestFloorRefresh({ zones: true }),
                 shapes?.length
-                  ? html`<div class="map">
-                      <wt-floor-map
-                        inert
-                        aria-hidden="true"
-                        .placeholders=${shapes}
-                        .fitKey=${knownZone!.id}
-                        .compact=${this.useFloorFooter}
-                      ></wt-floor-map>
-                    </div>`
+                  ? html`<wt-floor-map
+                      inert
+                      aria-hidden="true"
+                      .placeholders=${shapes}
+                      .fitKey=${knownZone!.id}
+                      .compact=${this.useFloorFooter}
+                    ></wt-floor-map>`
                   : undefined,
               )
             : empty !== nothing

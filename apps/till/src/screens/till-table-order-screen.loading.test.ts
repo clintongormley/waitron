@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtButton } from "@waitron/ui";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { cleanupWidgets, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PrintProblem } from "../api/kitchen-api.js";
@@ -17,6 +17,26 @@ const shown = (el: TillTableOrderScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
 
 describe("till-table-order-screen while loading", () => {
+  it.each([
+    [390, 844],
+    [700, 390],
+  ] as const)("keeps Menu visible at the foot of a %i × %i phone", async (width, height) => {
+    await pageAt(width, height);
+    try {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { el, host } = await mount({ loading: true });
+      host.id = "app";
+      await vi.advanceTimersByTimeAsync(300);
+      const foot = shown(el, "footer")!.getBoundingClientRect();
+      const menu = shown(el, "footer wt-button")!.getBoundingClientRect();
+      expect(menu.bottom).toBeLessThanOrEqual(height);
+      expect(foot.bottom).toBeCloseTo(height, 0);
+    } finally {
+      vi.useRealTimers();
+      await resetPage();
+    }
+  });
+
   it("while loading it keeps Back and draws quiet rows after a short wait", async () => {
     const problems: PrintProblem[] = [
       {
