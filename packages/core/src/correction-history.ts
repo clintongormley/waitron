@@ -26,7 +26,11 @@ import {
   requireSupportedCorrection,
   requireTaxpayerDomicile,
 } from "./correction-eligibility.js";
-import { correctionTargetFor, earlierCorrectionsOf } from "./correction-target.js";
+import {
+  correctionTargetFor,
+  earlierCorrectionsOf,
+  type EarlierCorrections,
+} from "./correction-target.js";
 import { deductionsTaken, type TakenCents } from "./deductions-taken.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
@@ -235,7 +239,7 @@ async function readStored(
 ): Promise<{
   sale: StoredFigures & Pick<typeof sales.$inferSelect, "counterpartyTaxId">;
   corrections: StoredFigures[];
-  earlierLines: Awaited<ReturnType<typeof earlierCorrectionsOf>>["lines"];
+  earlierLines: EarlierCorrections["lines"];
 }> {
   const figures = { id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown };
   const [sale] = await tx

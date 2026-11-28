@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
+import {
+  addDecimal,
+  decimal,
+  saleId as brandSaleId,
+  subtractDecimal,
+  toScale,
+} from "@waitron/shared";
 import type { Decimal, SaleId } from "@waitron/shared";
 import {
   at,
@@ -691,6 +697,82 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
     });
   });
 
+  describe("a ticket refunded in part, then replaced with an earlier quarter's day", () => {
+    const FIVE = [{ rate: "10.00", base: "5.00", tax: "0.50" }];
+
+    function partRefund(issuedDay: string, ticket: SaleId): Promise<SaleId> {
+      return sale(issuedDay, {
+        correctsSaleId: ticket,
+        total: "-5.50",
+        lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+      });
+    }
+
+    function replace(issuedDay: string, ticket: SaleId): Promise<SaleId> {
+      return sale(issuedDay, {
+        correctsSaleId: ticket,
+        replacesOriginal: true,
+        supplyDay: "2026-03-31",
+      });
+    }
+
+    async function q3Corrections() {
+      const corrections = await withTransaction(suite.db, (tx) =>
+        computeVatCorrections(tx, { year: 2026, period: { kind: "quarter", quarter: 3 } }),
+      );
+      return corrections.rows.map((row) => [row.kind, row.belongsTo, row.base, row.tax]).sort();
+    }
+
+    it("leaves the refund's ended quarter as it was when the replacement is made in a later one", async () => {
+      const ticket = await sale("2026-04-01");
+      await partRefund("2026-04-05", ticket);
+      expect(await quarters()).toEqual([[], FIVE]);
+      await replace("2026-08-12", ticket);
+      expect(await quarters()).toEqual([[], FIVE]);
+    });
+
+    it("leaves the quarter the refund was made in as it was when the refund came first", async () => {
+      // Stamped 1 April, really 31 March; refunded on 31 March and replaced on 2 April.
+      const ticket = await sale("2026-04-01");
+      await partRefund("2026-03-31", ticket);
+      expect((await quarters())[0]).toEqual([]);
+      await replace("2026-04-02", ticket);
+      expect((await quarters())[0]).toEqual([]);
+    });
+
+    it("takes a refund voided after the replacement off the replacement's day, changing no return", async () => {
+      const ticket = await sale("2026-04-01");
+      const refund = await partRefund("2026-04-05", ticket);
+      await replace("2026-08-12", ticket);
+      await seedVoid(suite.db, { saleId: refund }, at("2026-09-01"));
+      expect(await quarters()).toEqual([[], FIVE]);
+      expect(await q3Corrections()).toEqual(
+        [
+          ["date_moved_out", "2026-2T", "-10.00", "-1.00"],
+          ["date_moved_in", "2026-1T", "10.00", "1.00"],
+          ["date_moved_out", "2026-2T", "5.00", "0.50"],
+          ["date_moved_in", "2026-1T", "-5.00", "-0.50"],
+          ["void", "2026-1T", "5.00", "0.50"],
+        ].sort(),
+      );
+    });
+
+    it("moves nothing for a refund voided before the replacement", async () => {
+      const ticket = await sale("2026-04-01");
+      const refund = await partRefund("2026-04-05", ticket);
+      await seedVoid(suite.db, { saleId: refund }, at("2026-04-06"));
+      expect(await quarters()).toEqual([[], TEN]);
+      await replace("2026-08-12", ticket);
+      expect(await quarters()).toEqual([[], TEN]);
+      expect(await q3Corrections()).toEqual(
+        [
+          ["date_moved_out", "2026-2T", "-10.00", "-1.00"],
+          ["date_moved_in", "2026-1T", "10.00", "1.00"],
+        ].sort(),
+      );
+    });
+  });
+
   it("E: gives no line for a sale and its full corrective in the same quarter", async () => {
     const ticket = await sale("2026-02-10");
     await sale("2026-03-10", {
@@ -784,6 +866,21 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
       total: "-5.50",
       lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
     });
+    // A ticket refunded in part, then replaced in a later quarter with an earlier quarter's day.
+    // Fixed ids: the refund's and the replacement's moves share a stamp and sort by sale id.
+    const refundedReplaced = await sale("2026-04-15");
+    await sale("2026-05-20", {
+      id: brandSaleId("00000000-0000-7000-8000-000000000001"),
+      correctsSaleId: refundedReplaced,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    await sale("2026-08-20", {
+      id: brandSaleId("00000000-0000-7000-8000-000000000002"),
+      correctsSaleId: refundedReplaced,
+      replacesOriginal: true,
+      supplyDay: "2026-03-30",
+    });
 
     const net = new Map<string, { base: Decimal; tax: Decimal }>();
     const add = (line: { rate: string; base: string; tax: string }, sign: 1 | -1 = 1) => {
@@ -831,6 +928,19 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
         ["2026-07-20", "A/6", "date_moved_out", "2026-2T", "10.00", "reduction", "-10.00", "-1.00"],
         ["2026-07-20", "A/6", "date_moved_in", "2026-2T", "10.00", "addition", "10.00", "1.00"],
         ["2026-08-02", "A/3", "correction", "2026-1T", "21.00", "addition", "10.00", "2.10"],
+        ["2026-08-20", "A/20", "date_moved_out", "2026-2T", "10.00", "addition", "5.00", "0.50"],
+        ["2026-08-20", "A/20", "date_moved_in", "2026-1T", "10.00", "reduction", "-5.00", "-0.50"],
+        [
+          "2026-08-20",
+          "A/21",
+          "date_moved_out",
+          "2026-2T",
+          "10.00",
+          "reduction",
+          "-10.00",
+          "-1.00",
+        ],
+        ["2026-08-20", "A/21", "date_moved_in", "2026-1T", "10.00", "addition", "10.00", "1.00"],
       ],
       "2026-4T": [
         ["2026-10-02", "A/12", "void", "2026-3T", "10.00", "reduction", "-10.00", "-1.00"],

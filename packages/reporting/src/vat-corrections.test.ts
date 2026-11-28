@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { addDecimal, decimal } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { at, seedVenueWithSeries, seedVoid, ticketSeller } from "../test/fixtures.js";
 import type { TicketSeller } from "../test/fixtures.js";
@@ -68,6 +69,46 @@ describe("computeVatCorrections", () => {
         },
       ],
     });
+  });
+
+  it("moves a refund given before the ticket's date was moved with it, netting what is left of the ticket", async () => {
+    const ticket = await sale("2026-04-01");
+    const refund = await sale("2026-05-05", {
+      correctsSaleId: ticket,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    const replacement = await sale("2026-08-12", {
+      correctsSaleId: ticket,
+      replacesOriginal: true,
+      supplyDay: "2026-03-31",
+    });
+    const { rows, summary } = await corrections(Q3);
+    const named = { 1: ticket, 2: refund, 3: replacement } as Record<number, string>;
+    expect(
+      rows
+        .map((row) => [
+          named[row.invoice.number],
+          row.madeDay,
+          row.kind,
+          row.belongsTo,
+          row.base,
+          row.tax,
+        ])
+        .sort(),
+    ).toEqual(
+      [
+        [replacement, "2026-08-12", "date_moved_out", "2026-2T", "-11.00", "-1.10"],
+        [replacement, "2026-08-12", "date_moved_in", "2026-1T", "11.00", "1.10"],
+        [refund, "2026-08-12", "date_moved_out", "2026-2T", "5.00", "0.50"],
+        [refund, "2026-08-12", "date_moved_in", "2026-1T", "-5.00", "-0.50"],
+      ].sort(),
+    );
+    const net = (belongsTo: string) =>
+      summary
+        .filter((line) => line.belongsTo === belongsTo)
+        .reduce((sum, line) => addDecimal(sum, line.base), decimal("0.00"));
+    expect([net("2026-1T"), net("2026-2T")]).toEqual(["6.00", "-6.00"]);
   });
 
   it("lists a ticket issued in April for a March sale as an addition for the first quarter (#3398)", async () => {

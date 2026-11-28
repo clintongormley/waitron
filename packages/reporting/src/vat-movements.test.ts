@@ -47,6 +47,17 @@ async function refund(issuedDay: string, target: SaleId): Promise<SaleId> {
   });
 }
 
+const PART = { rate: "10.00", base: "-5.00", tax: "-0.50" };
+const PART_BACK = { rate: "10.00", base: "5.00", tax: "0.50" };
+
+function partRefund(issuedDay: string, target: SaleId): Promise<SaleId> {
+  return sale(issuedDay, {
+    correctsSaleId: target,
+    total: "-5.50",
+    lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+  });
+}
+
 async function replacement(issuedDay: string, original: SaleId, supplyDay?: string) {
   return sale(issuedDay, {
     correctsSaleId: original,
@@ -251,32 +262,99 @@ describe("vatMovements", () => {
       ]);
     });
 
-    it("of an original refunded before it was replaced puts the refund on the replacement's supply day, the sale's quarter", async () => {
+    it("of an original refunded before it was replaced moves the refund with it to the supply day, the sale's quarter", async () => {
       const original = await sale("2026-04-01");
-      const correction = await refund("2026-03-31", original);
+      const correction = await partRefund("2026-03-31", original);
       const repl = await replacement("2026-03-31", original, "2026-03-31");
       const sold = await movements(Q1);
-      expect(sold.filter((m) => m.kind === "date_moved_in")).toEqual([
+      const made = { madeDay: "2026-03-31", correctedSaleId: original };
+      expect(sold.filter((m) => m.saleId === correction)).toEqual([
+        { ...PART, ...made, kind: "correction", belongsDay: "2026-04-01", saleId: correction },
         {
-          ...PLUS,
-          kind: "date_moved_in",
-          madeDay: "2026-03-31",
-          belongsDay: "2026-03-31",
-          saleId: repl,
+          ...PART_BACK,
+          ...made,
+          kind: "date_moved_out",
+          belongsDay: "2026-04-01",
+          saleId: correction,
+        },
+        { ...PART, ...made, kind: "date_moved_in", belongsDay: "2026-03-31", saleId: correction },
+      ]);
+      const inQ1 = sold.filter((m) => m.belongsDay === "2026-03-31");
+      expect(inQ1.map((m) => [m.saleId, m.base]).sort()).toEqual(
+        [
+          [repl, "11.00"],
+          [correction, "-5.00"],
+        ].sort(),
+      );
+    });
+
+    it("of an original refunded before it was replaced moves the refund on the replacement's issue date, leaving the refund's own day", async () => {
+      const original = await sale("2026-04-01");
+      const correction = await partRefund("2026-04-05", original);
+      await replacement("2026-08-12", original, "2026-03-31");
+      const made = { madeDay: "2026-08-12", saleId: correction, correctedSaleId: original };
+      expect((await movements(Q2)).filter((m) => m.saleId === correction)).toEqual([
+        {
+          ...PART,
+          madeDay: "2026-04-05",
+          kind: "correction",
+          belongsDay: "2026-04-01",
+          saleId: correction,
           correctedSaleId: original,
         },
+        { ...PART_BACK, ...made, kind: "date_moved_out", belongsDay: "2026-04-01" },
       ]);
-      expect(sold.filter((m) => m.kind === "correction")).toEqual([
+      expect(
+        (await movements({ kind: "quarter", quarter: 3 })).filter((m) => m.saleId === correction),
+      ).toEqual([
+        { ...PART_BACK, ...made, kind: "date_moved_out", belongsDay: "2026-04-01" },
+        { ...PART, ...made, kind: "date_moved_in", belongsDay: "2026-03-31" },
+      ]);
+    });
+
+    it("of an original refunded before it was replaced puts a correction of the refund made after it on the supply day", async () => {
+      const original = await sale("2026-04-01");
+      const correction = await partRefund("2026-04-05", original);
+      await replacement("2026-08-12", original, "2026-03-31");
+      const back = await sale("2026-09-01", {
+        correctsSaleId: correction,
+        total: "2.20",
+        lines: [{ vatRate: "10.00", lineTotal: "2.00" }],
+      });
+      expect(
+        (await movements({ kind: "quarter", quarter: 3 })).filter((m) => m.saleId === back),
+      ).toEqual([
         {
-          ...MINUS,
+          rate: "10.00",
+          base: "2.00",
+          tax: "0.20",
           kind: "correction",
-          madeDay: "2026-03-31",
+          madeDay: "2026-09-01",
           belongsDay: "2026-03-31",
+          saleId: back,
+          correctedSaleId: correction,
+        },
+      ]);
+    });
+
+    it("of an original refunded and the refund voided before it was replaced moves no refund", async () => {
+      const original = await sale("2026-04-01");
+      const correction = await partRefund("2026-04-05", original);
+      await seedVoid(suite.db, { saleId: correction }, at("2026-04-06"));
+      await replacement("2026-08-12", original, "2026-03-31");
+      expect(
+        (await movements({ kind: "quarter", quarter: 3 })).filter((m) => m.saleId === correction),
+      ).toEqual([]);
+      expect((await movements(Q2)).filter((m) => m.kind === "void")).toEqual([
+        {
+          ...PART_BACK,
+          kind: "void",
+          madeDay: "2026-04-06",
+          belongsDay: "2026-04-01",
           saleId: correction,
           correctedSaleId: original,
         },
       ]);
-      expect((await movements(Q2)).filter((m) => m.saleId === correction)).toEqual([]);
     });
 
     it("of an original refunded before it was replaced takes the refund off with it when the refund is voided", async () => {

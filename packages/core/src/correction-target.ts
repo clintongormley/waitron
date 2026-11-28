@@ -17,6 +17,15 @@ export async function correctionTargetFor(tx: Transaction, saleId: SaleId): Prom
   return replacement === undefined ? saleId : brandSaleId(replacement.id);
 }
 
+/** What `earlierCorrectionsOf` reads: the corrections' stored figures and their lines. */
+export interface EarlierCorrections {
+  corrections: Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakdown">[];
+  lines: Pick<
+    typeof saleLines.$inferSelect,
+    "saleId" | "correctsLineId" | "vatRate" | "lineTotal" | "lineGross" | "setMenuPart"
+  >[];
+}
+
 /**
  * The corrections already recorded that change what the correction target `targetId`
  * (`correctionTargetFor`) owes, read through `correctivesOf`: for a replacement, the replaced
@@ -24,7 +33,10 @@ export async function correctionTargetFor(tx: Transaction, saleId: SaleId): Prom
  * invoice's correction names that invoice's line, so it is read as naming the replacement's line
  * with the same line number.
  */
-export async function earlierCorrectionsOf(tx: Transaction, targetId: SaleId) {
+export async function earlierCorrectionsOf(
+  tx: Transaction,
+  targetId: SaleId,
+): Promise<EarlierCorrections> {
   const [target] = await tx
     .select({ correctsSaleId: sales.correctsSaleId, replacesOriginal: sales.replacesOriginal })
     .from(sales)
@@ -65,7 +77,7 @@ export async function earlierCorrectionsOf(tx: Transaction, targetId: SaleId) {
     corrections,
     lines: lines.map((line) =>
       line.correctsLineId !== null && onReplaced.has(line.correctsLineId)
-        ? { ...line, correctsLineId: onReplaced.get(line.correctsLineId)! }
+        ? { ...line, correctsLineId: onReplaced.get(line.correctsLineId) ?? null }
         : line,
     ),
   };
