@@ -96,32 +96,23 @@ const disabled = (button: HTMLElement | null) => button?.hasAttribute("disabled"
 afterEach(cleanupWidgets);
 
 describe("till-portion-picker", () => {
-  it("keeps the quantity buttons usable at both limits and shows picks corrected by a fresh read", async () => {
-    const { el, last } = await picker(BEERS.slice(0, 2));
+  it("shows a fresh read's corrected quantity and describes its limit on the stepper", async () => {
+    const lines = BEERS.slice(0, 2);
+    const { el } = await picker(lines, null, new Set(["c1"]));
     el.setAttribute("mode", "quantity");
     await el.updateComplete;
-    const stepper = el.shadowRoot!.querySelector("wt-stepper");
-    expect(stepper?.value).toBe(0);
-    const minus = stepper!.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="-1"]')!;
-    const plus = stepper!.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!;
-    expect(minus.disabled).toBe(true);
+    const stepper = el.shadowRoot!.querySelector("wt-stepper")!;
+    const plus = stepper.shadowRoot!.querySelector<HTMLButtonElement>('[data-step="1"]')!;
     plus.focus();
-    await userEvent.keyboard("{Enter}{Enter}");
-    expect(last()).toEqual(["c1", "c2"]);
-    expect(plus.disabled).toBe(true);
-    expect(stepper!.shadowRoot!.activeElement).toBe(minus);
-    await userEvent.keyboard("{Enter}{Enter}");
-    expect(last()).toEqual([]);
-    expect(minus.disabled).toBe(true);
-    expect(stepper!.shadowRoot!.activeElement).toBe(plus);
-    await userEvent.keyboard("{Enter}{Enter}");
+    await userEvent.keyboard("{Enter}");
+    expect(stepper.value).toBe(2);
     el.picks = new Set(["c1"]);
-    el.rows = rowsOf(BEERS.slice(0, 2), balance("10.00", "5.00"), el.picks);
+    el.rows = rowsOf(lines, balance("10.00", "5.00"), el.picks);
     await el.updateComplete;
-    await stepper!.updateComplete;
-    expect(stepper!.value).toBe(1);
+    await stepper.updateComplete;
+    expect(stepper.value).toBe(1);
     expect(plus.disabled).toBe(true);
-    expect(el.shadowRoot!.textContent).toContain("Payments keep");
+    expect(plus.getAttribute("aria-description")).toContain("Payments keep");
   });
   it("registers as a custom element", () => {
     expect(customElements.get("till-portion-picker")).toBe(TillPortionPicker);

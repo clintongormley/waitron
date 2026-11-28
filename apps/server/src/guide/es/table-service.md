@@ -874,10 +874,9 @@ Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuent
 **⋮** y elige **Mover platos**. Está disponible en una cuenta de mesa que sigue abierta, aunque
 parte de ella ya esté pagada.
 
-Usa **+** y **−** para elegir cuántos platos de cada tipo quieres mover. Los platos iguales
-comparten una fila con la cantidad que hay en la cuenta debajo del nombre. Un plato al peso pasa
-entero y sus extras van con él. Si la cuenta tiene pagos, solo puedes mover los platos que esos
-pagos no necesitan cubrir.
+Elige cuántos platos quieres mover con **+** y **−**. Cada fila muestra cuántos hay en la cuenta.
+Los extras van con su plato y los platos al peso pasan enteros. Deja en la cuenta lo necesario
+para cubrir los pagos.
 
 En **Mover a**, elige otra cuenta abierta de la mesa o **Cuenta nueva**. El botón de abajo te
 dice cuántos platos vas a mover y a qué cuenta van. Púlsalo para moverlos.

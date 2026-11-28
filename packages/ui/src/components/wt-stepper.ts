@@ -167,6 +167,7 @@ export class WtStepper extends LitElement {
     `Decrease ${label}`;
   @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
     `Increase ${label}`;
+  @property({ attribute: false }) increaseDescription = "";
   /** Names the bin, given `label`; with none, − is disabled at `min` and there is no bin. */
   @property({ attribute: false }) removeLabel: ((label: string) => string) | null = null;
 
@@ -209,19 +210,17 @@ export class WtStepper extends LitElement {
     this.#focused = (this.renderRoot as ShadowRoot).activeElement;
   }
 
-  // A limit can disable the focused button or replace − with a bin. Never hand focus to the bin:
-  // a held Enter would remove. The group receives focus if neither step is available.
+  // The group holds focus when a limit disables the active step, so held Enter cannot reverse it.
+  // When − becomes a bin, + can take focus since the bin must never receive a held Enter.
   protected override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
     const focused = this.#focused;
     this.#focused = null;
     if (!(focused instanceof HTMLButtonElement) || (focused.isConnected && !focused.disabled))
       return;
-    if (focused.isConnected && this.disabled) return;
-    const step = focused.dataset.step === "1" ? "-1" : "1";
-    const other = this.renderRoot.querySelector<HTMLButtonElement>(`button[data-step="${step}"]`);
-    if (other !== null && !other.disabled) {
-      other.focus();
+    const plus = this.renderRoot.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
+    if (!focused.isConnected && !plus.disabled) {
+      plus.focus();
       return;
     }
     const group = this.renderRoot.querySelector<HTMLElement>('[role="group"]')!;
@@ -271,6 +270,7 @@ export class WtStepper extends LitElement {
           type="button"
           data-step="1"
           aria-label=${this.increaseLabel(this.label)}
+          aria-description=${this.increaseDescription || nothing}
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >

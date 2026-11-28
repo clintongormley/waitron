@@ -823,9 +823,8 @@ When one guest decides to pay for their own drinks, move those dishes onto a bil
 the **⋮** menu and choose **Move dishes**. It is there for a table's bill that is still open, even
 when part of it is paid.
 
-Use **+** and **−** to choose how many of each dish to move. Identical dishes share a row, with
-its quantity on the bill under the name. A weighed dish moves whole, and extras go with their dish.
-If the bill has payments, you can only move dishes the payments do not need to cover.
+Choose how many to move with **+** and **−**. Each row shows how many are on the bill. Extras go with
+their dish, and weighed dishes move whole. Leave enough on the bill to cover any payments.
 
 Under **Move them to**, choose one of the table's other open bills or **New bill**. The button at
 the bottom tells you how many you are moving and where they will go. Press it to move the dishes.

@@ -96,6 +96,20 @@ test("− is disabled at min and + at max, and neither steps past them", async (
   expect(seen).toEqual([]);
 });
 
+test("holding Enter reaches a limit and leaves focus where another Enter cannot reverse it", async () => {
+  const el = (await mount('<wt-stepper label="Burger" max="2"></wt-stepper>')) as Stepper;
+  const { minus, plus, group } = parts(el);
+  const seen = changes(el);
+  plus.focus();
+  await userEvent.keyboard("{Enter>4}");
+  expect(seen).toEqual([1, 2]);
+  expect(el.shadowRoot!.activeElement).toBe(group);
+  minus.focus();
+  await userEvent.keyboard("{Enter>4}");
+  expect(seen).toEqual([1, 2, 1, 0]);
+  expect(el.shadowRoot!.activeElement).toBe(group);
+});
+
 test("min defaults to 0 and max to none", async () => {
   const el = (await mount('<wt-stepper label="Burger"></wt-stepper>')) as Stepper;
   expect(el.value).toBe(0);

@@ -354,7 +354,7 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   const { app, screen } = await mount();
   await pickDish(screen);
   const picker = screen.shadowRoot!.querySelector("till-portion-picker")!;
-  const oldStep = quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!);
+  const oldStep = quantityButton(picker.shadowRoot!.querySelector('[data-pick="line-1"]')!, -1);
   const oldTarget = screen.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="other"]')!;
   const oldConfirm = screen.shadowRoot!.querySelector<HTMLElement>("[data-move-dishes-confirm]")!;
   const oldBack = panelBackButton(

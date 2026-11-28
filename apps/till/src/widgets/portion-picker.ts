@@ -331,6 +331,7 @@ export class TillPortionPicker extends LitElement {
         .max=${row.limit}
         .decreaseLabel=${(dish: string) => `${t("basket.decrease")} ${dish}`}
         .increaseLabel=${(dish: string) => `${t("basket.increase")} ${dish}`}
+        .increaseDescription=${reason}
         @wt-change=${(event: CustomEvent<{ value: number }>) => {
           event.stopPropagation();
           this.#emit(setCount(row, event.detail.value, this.picks));
