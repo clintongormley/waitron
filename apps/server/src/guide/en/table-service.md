@@ -942,6 +942,10 @@ when you serve seated guests, and the pickup zone from **Counter** when you hand
 
 ## Show a zone as a map or a list {#floor-view}
 
+Read the map for your next job. Collect ready dishes first. Look below a table's name for the job
+and its time, where there is room. The map uses the table's short name when it fits better. Open
+the table's details to see its other jobs.
+
 Tap **List** or **Map** to change the view. On a narrow floor, find the button at the bottom. The device keeps your choice for each zone, so the zone opens the same way
 next time, and switching one zone leaves the others as they were. A zone you have not switched
 opens as a map when it has tables placed on its plan, and as a list when it has none. If the tables are

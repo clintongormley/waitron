@@ -775,6 +775,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
           label: `F${i}`,
           shortName: `F${i}`,
           zoneId: `f${i}`,
+          readyToServe: 0,
           ...over,
         })),
       ];

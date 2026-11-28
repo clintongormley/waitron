@@ -3,6 +3,7 @@ import type {
   FloorCueIcon,
   FloorMapCue,
   FloorMapFill,
+  FloorMapJob,
   FloorMapOutline,
   FloorMapPulse,
 } from "@waitron/ui";
@@ -13,6 +14,7 @@ import { heldChip } from "../widgets/signal-chips.js";
 import { needsMovingToday } from "./floor-today.js";
 import { minutesToFire, reminderDueAt } from "./release-reminder.js";
 import { currentStep, stepWaitMinutes } from "./service-steps.js";
+import { signalOf } from "./table-signals.js";
 import { PRECEDENCE, tableStates, type TableStateKind } from "./table-precedence.js";
 
 /** `delivery` and `moving` are drawn on the map only; the list card does not rank them. */
@@ -51,6 +53,7 @@ export interface MapLook {
   outline: FloorMapOutline | null;
   pulse: FloorMapPulse | null;
   cue: FloorMapCue | null;
+  job: FloorMapJob | null;
   top: MapKind | undefined;
   kinds: MapKind[];
   description: string;
@@ -205,8 +208,14 @@ export function kindCue(
         text: waiting === null ? step.name : t("floor.cue_minutes").replace("{m}", String(waiting)),
       };
     }
-    case "delivery":
-      return { icon: "floor-step", text: kindWords(kind, members, now) };
+    case "delivery": {
+      const count = String(totalDeliveries(members));
+      return {
+        icon: "floor-step",
+        text: `${count} ${t("floor.pending_delivery")}`,
+        compact: count,
+      };
+    }
     case "held": {
       const { dueAt } = soonestHeld(members, now);
       const text =
@@ -224,7 +233,178 @@ export function kindCue(
   }
 }
 
+function oldestStation(members: readonly TableState[]) {
+  return members
+    .flatMap((member) => signalOf(member.signals, "ready")?.byStation ?? [])
+    .sort((a, b) => stamp(a.oldestReadyAt) - stamp(b.oldestReadyAt))[0];
+}
+
+function stamp(value: string | null | undefined): number {
+  const time = Date.parse(value ?? "");
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+const elapsedMinutes = (since: number, now: number) =>
+  Math.max(0, Math.floor((now - since) / 60_000));
+const minuteWords = (m: number) => t("floor.job_minutes").replace("{m}", String(m));
+const compactMinutes = (m: number) => t("floor.cue_minutes").replace("{m}", String(m));
+
+function timedJob(text: string, compact: string, since: number, now: number): FloorMapJob {
+  if (!Number.isFinite(since)) return { text, compact };
+  const minutes = elapsedMinutes(since, now);
+  return { text, time: minuteWords(minutes), compact, compactTime: compactMinutes(minutes) };
+}
+
+function oldestSignal(members: readonly TableState[], kind: "bill_requested" | "needs_clearing") {
+  return Math.min(
+    ...members.map(({ signals }) => {
+      const signal = signalOf(signals, kind);
+      return stamp(signal?.kind === "bill_requested" ? signal.requestedAt : signal?.since);
+    }),
+  );
+}
+
+function oldestLateDish(tables: readonly TableState[], kind: "forgotten" | "overdue" | "waiting") {
+  const band = kind === "waiting" ? "warm" : kind;
+  return tables
+    .filter((table) => table.timingBand === band && table.waitingSince !== undefined)
+    .sort((a, b) => stamp(a.waitingSince) - stamp(b.waitingSince))[0];
+}
+
+function mapJob(
+  kind: MapKind | undefined,
+  members: readonly TableState[],
+  now: number,
+): FloorMapJob | null {
+  switch (kind) {
+    case "ready": {
+      const station = oldestStation(members);
+      const text =
+        station === undefined
+          ? t("floor.job_collect")
+          : t("floor.job_collect_from").replace("{station}", () => station.stationName);
+      return timedJob(
+        text,
+        station?.stationName ?? t("floor.job_collect_short"),
+        stamp(station?.oldestReadyAt),
+        now,
+      );
+    }
+    case "forgotten":
+    case "overdue":
+    case "waiting": {
+      const dish = oldestLateDish(members, kind);
+      const station = dish?.waitingStationName;
+      const text =
+        kind === "forgotten"
+          ? station === undefined
+            ? t("floor.job_chase")
+            : t("floor.job_chase_station").replace("{station}", () => station)
+          : t(kind === "overdue" ? "floor.job_overdue" : "floor.job_waiting");
+      return timedJob(
+        text,
+        t(
+          kind === "forgotten"
+            ? "floor.job_chase_short"
+            : kind === "overdue"
+              ? "floor.job_overdue_short"
+              : "floor.job_waiting_short",
+        ),
+        stamp(dish?.waitingSince),
+        now,
+      );
+    }
+    case "bill":
+      return timedJob(
+        t("floor.job_bill"),
+        t("floor.job_bill_short"),
+        oldestSignal(members, "bill_requested"),
+        now,
+      );
+    case "clearing":
+      return timedJob(
+        t("floor.job_clear"),
+        t("floor.cue_clear"),
+        oldestSignal(members, "needs_clearing"),
+        now,
+      );
+    case "step": {
+      const step = latestStep(members, now);
+      const minutes = elapsedMinutes(stamp(step.dueAt), now);
+      return {
+        text: step.name,
+        time: minuteWords(minutes),
+        compact: t("floor.job_step_short"),
+        compactTime: compactMinutes(minutes),
+      };
+    }
+    case "fire":
+      return {
+        text: t("floor.job_fire"),
+        time: t("floor.job_now"),
+        compact: t("floor.job_fire_short"),
+      };
+    case "held": {
+      const { dueAt } = soonestHeld(members, now);
+      const text = t("floor.job_held");
+      return dueAt === Number.POSITIVE_INFINITY
+        ? { text, compact: text }
+        : {
+            text,
+            time: t("floor.job_fire_in").replace("{m}", String(minutesToFire(dueAt, now))),
+            compact: text,
+            compactTime: compactMinutes(minutesToFire(dueAt, now)),
+          };
+    }
+    case "reserved": {
+      const time = soonestBooking(members);
+      return { text: t("floor.reserved"), time, compact: time };
+    }
+    case "moving":
+      return { text: t("floor.job_move"), compact: t("floor.cue_move") };
+    case "unavailable":
+      return { text: t("floor.job_unavailable"), compact: t("floor.job_unavailable_short") };
+    case "not-sent":
+      return { text: t("floor.job_not_sent"), compact: t("floor.job_not_sent") };
+    default:
+      return null;
+  }
+}
+
+function jobMinuteStart(table: TableState, now: number): number {
+  const kind = mapKinds(table, now)[0];
+  switch (kind) {
+    case "ready":
+      return stamp(oldestStation([table])?.oldestReadyAt);
+    case "forgotten":
+    case "overdue":
+    case "waiting":
+      return stamp(oldestLateDish([table], kind)?.waitingSince);
+    case "bill":
+      return oldestSignal([table], "bill_requested");
+    case "clearing":
+      return oldestSignal([table], "needs_clearing");
+    case "step":
+      return stamp(currentStep(table.signals, now)?.dueAt);
+    default:
+      return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function nextMapJobMinute(table: TableState, now: number): number {
+  const start = jobMinuteStart(table, now);
+  return start + (elapsedMinutes(start, now) + 1) * 60_000;
+}
+
 function fillOf(kinds: readonly MapKind[], members: readonly TableState[]): FloorMapFill {
+  if (kinds[0] === "ready") {
+    // Collection leads the words, while the higher alerts still paint the table.
+    const alert = kinds.find(
+      (kind) =>
+        kind === "forgotten" || kind === "unavailable" || kind === "fire" || kind === "bill",
+    );
+    return FILL_OF[alert ?? "ready"]!;
+  }
   for (const kind of kinds) {
     const fill = FILL_OF[kind];
     if (fill !== undefined) return fill;
@@ -272,6 +452,7 @@ export function mapLook(members: readonly TableState[], now: number): MapLook {
     outline: outlineOf(kinds, members, now),
     pulse: PULSES.find((pulse) => kinds.includes(pulse)) ?? null,
     cue: top === undefined ? null : kindCue(top, members, now),
+    job: mapJob(top, members, now),
     top,
     kinds,
     description: describe(kinds, members, now),
@@ -289,14 +470,16 @@ export interface PinLook {
  * minute timer of its own, so a held course is said without its countdown.
  */
 export function pinLook(rows: readonly TableState[], now: number): PinLook {
-  const { fill, cue, top } = mapLook(rows, now);
+  const { fill, cue, job, top } = mapLook(rows, now);
   if (top === undefined) return { fill, icon: null, text: "" };
   const text =
     top === "held"
       ? heldChip(soonestHeld(rows, now).member.signals, Number.POSITIVE_INFINITY, now)!.text
       : top === "step"
         ? latestStep(rows, now).name
-        : kindWords(top, rows, now);
+        : top === "ready" && oldestStation(rows) !== undefined
+          ? job!.text
+          : kindWords(top, rows, now);
   return { fill, icon: cue?.icon ?? null, text };
 }
 
@@ -324,6 +507,8 @@ export function reminderClock(tables: readonly TableState[], now: number): strin
       const step = currentStep(table.signals, now);
       if (step !== null)
         parts.push(`${table.id}:step:${step.stepId}:${stepWaitMinutes(step, now) ?? ""}`);
+      const start = jobMinuteStart(table, now);
+      if (Number.isFinite(start)) parts.push(`${table.id}:${elapsedMinutes(start, now)}`);
       return parts;
     })
     .join(",");

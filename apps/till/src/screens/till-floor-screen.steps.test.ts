@@ -217,7 +217,7 @@ describe("till-floor-screen: a table's due service step", () => {
         mark.getAttribute("data-chip") ??
         mark.getAttributeNames().find((name) => name.startsWith("data-")),
     );
-    expect(marks).toEqual(["bill-requested", "ready", "service-step", "data-reserved"]);
+    expect(marks).toEqual(["ready", "bill-requested", "service-step", "data-reserved"]);
   });
 
   it("keeps a long step name and a whole Done inside a narrow card", async () => {
@@ -399,9 +399,10 @@ describe("till-floor-screen: a table's due service step", () => {
       { map: true },
     );
     const map = el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!;
-    await expect.poll(() => map.shadowRoot!.querySelector(".cue-text")).not.toBeNull();
-    const cue = map.shadowRoot!.querySelector<HTMLElement>(".cue-text")!;
-    expect(cue.scrollWidth).toBeLessThanOrEqual(cue.clientWidth);
+    await expect.poll(() => map.shadowRoot!.querySelector('[part="time"]')).not.toBeNull();
+    const time = map.shadowRoot!.querySelector<HTMLElement>('[part="time"]')!;
+    expect(time.textContent).toBe("5 min");
+    expect(time.scrollWidth).toBeLessThanOrEqual(time.clientWidth);
     expect(map.tables[0]!.description).toBe("Seated, Take order · Waiting 5 min");
   });
 
@@ -427,7 +428,16 @@ describe("till-floor-screen: a table's due service step", () => {
           { clock: "real", map },
         );
         const reads = record(el, "floor-refresh");
-        await vi.advanceTimersByTimeAsync(299_999);
+        if (map) {
+          const jobTime = () =>
+            el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!.tables[0]!.job?.time;
+          await vi.advanceTimersByTimeAsync(59_999);
+          expect(jobTime()).toBe("0 min");
+          await vi.advanceTimersByTimeAsync(1);
+          await el.updateComplete;
+          expect(jobTime()).toBe("1 min");
+        }
+        await vi.advanceTimersByTimeAsync(map ? 239_999 : 299_999);
         await el.updateComplete;
         if (!map) expect(cardOf(el).querySelector('[data-ring="waiting"]')).toBeNull();
         await vi.advanceTimersByTimeAsync(1);
@@ -438,6 +448,7 @@ describe("till-floor-screen: a table's due service step", () => {
             .tables.find((row) => row.id === "t9")!;
           expect(row.outline).toBe("waiting");
           expect(row.cue?.text).toBe("5′");
+          expect(row.job?.time).toBe("5 min");
         } else {
           expect(cardOf(el).querySelector('[data-ring="waiting"]')).not.toBeNull();
           expect(stepChipOf(el)!.textContent).toContain("Waiting 5 min");

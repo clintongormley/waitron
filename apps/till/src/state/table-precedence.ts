@@ -4,16 +4,15 @@ import { reminderDueAt } from "./release-reminder.js";
 import { currentStep } from "./service-steps.js";
 
 /**
- * A757 §4's order, most urgent first, for the states that exist today; Waiter called (row 5, A508)
- * goes between `fire` and `bill` when it is built.
+ * Food waiting to be delivered comes first. The rest follow A757's order.
  */
 export const PRECEDENCE = [
+  "ready",
   "forgotten",
   "overdue",
   "unavailable",
   "fire",
   "bill",
-  "ready",
   "step",
   "not-sent",
   "waiting",

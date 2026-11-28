@@ -16,9 +16,17 @@ export const FLOOR_MAP_FILLS = [
 export type FloorMapFill = (typeof FLOOR_MAP_FILLS)[number];
 export type FloorMapOutline = "overdue" | "waiting" | "clearing";
 export type FloorMapPulse = FloorPulse;
+export interface FloorMapJob {
+  text: string;
+  time?: string;
+  compact: string;
+  compactTime?: string;
+}
+
 export interface FloorMapCue {
   icon: FloorCueIcon | null;
   text: string;
+  compact?: string;
 }
 
 export const floorMapFillStyles: CSSResult = css`

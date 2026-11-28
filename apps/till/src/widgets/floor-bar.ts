@@ -45,7 +45,8 @@ export const floorScreenLayoutStyles = css`
     outline: 1px solid var(--wt-color-border);
     outline-offset: -1px;
   }
-  wt-floor-map::part(name) {
+  wt-floor-map::part(name),
+  wt-floor-map::part(name-probe) {
     --wt-floor-table-weight: 700;
     font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
     font-weight: var(--wt-floor-table-weight);
@@ -79,6 +80,9 @@ export const floorScreenLayoutStyles = css`
     aspect-ratio: auto;
     min-block-size: calc(var(--wt-tap-min) * 3);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+  }
+  wt-floor-map {
+    --wt-floor-map-name-wrap: wrap;
   }
 `;
 

@@ -255,11 +255,21 @@ it("shows a merge's name by its whole box", async () => {
   expect(within(el, "name", "m1")!.textContent).toBe("M1+M2");
 });
 
-it("paints a table from its fill's tokens", async () => {
-  const el = await map([t("t1", "T1", {}, { fill: "bill" })]);
+it("paints from the fill tokens and can hide the filled table's field line", async () => {
+  const el = await map([
+    t("t1", "T1", {}, { fill: "bill" }),
+    t("free", "Free", { x: 10 }),
+    t("clear", "Clear", { x: 20 }, { fill: "bill", outline: "clearing" }),
+  ]);
   host.style.setProperty("--wt-color-table-bill", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-on-table-bill", "rgb(4, 5, 6)");
-  expect(getComputedStyle(within(el, "shape", "t1")!).backgroundColor).toBe("rgb(1, 2, 3)");
+  host.style.setProperty("--wt-floor-map-filled-line", "transparent");
+  host.style.setProperty("--wt-color-field-line", "rgb(7, 8, 9)");
+  const shape = (id: string) => getComputedStyle(within(el, "shape", id)!);
+  expect(shape("t1").backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(shape("t1").borderTopColor).toBe("rgba(0, 0, 0, 0)");
+  expect(shape("free").borderTopColor).toBe("rgb(7, 8, 9)");
+  expect(shape("clear").borderTopStyle).toBe("dashed");
   expect(getComputedStyle(within(el, "name", "t1")!).color).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(button(el, "t1")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });

@@ -197,9 +197,13 @@ export class TillTableDetailsSheet extends LitElement {
         partyPaid(table)
           ? html`<li data-paid>${paidWords(table)}</li>`
           : html`<li data-owed>
-              ${t("floor.details_owed").replace("{amount}", () =>
-                formatMoney(party.outstanding, currentLocale()),
-              )}
+              ${
+                isZeroDecimal(decimal(party.outstanding))
+                  ? t("floor.nothing_owed")
+                  : t("floor.details_owed").replace("{amount}", () =>
+                      formatMoney(party.outstanding, currentLocale()),
+                    )
+              }
             </li>`,
       );
       if (party.billCount > 1)

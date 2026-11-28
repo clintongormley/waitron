@@ -109,6 +109,7 @@ import { paidWords, partyPaid, unsentText } from "../widgets/table-details-sheet
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import {
   drawnGroupKey,
+  floorPartySummary,
   listedTables,
   mapTables,
   seatsFor,
@@ -126,7 +127,13 @@ import type {
 import type { BillEditExpected } from "../api/order-types.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
-import { MAP_PRECEDENCE, mapLook, readyText, reminderClock } from "../state/floor-look.js";
+import {
+  MAP_PRECEDENCE,
+  mapLook,
+  nextMapJobMinute,
+  readyText,
+  reminderClock,
+} from "../state/floor-look.js";
 import {
   nextReadyBarChange,
   readyBar,
@@ -1100,14 +1107,18 @@ export class TillFloorScreen extends LitElement {
     return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
   }
 
-  /** The server's floor does not change when a reminder falls due, a held countdown's minutes
-   * change, or the Ready bar's minutes or warning change, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
     if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
+    const zone = this.#zone;
+    const mapIds = zone?.view === "map" ? new Set(zone.onMap.map((table) => table.id)) : undefined;
     for (const table of this.tables) {
-      next = Math.min(next, nextStepChangeAt(table.signals, this.#drawnAt));
+      next = Math.min(
+        next,
+        nextStepChangeAt(table.signals, this.#drawnAt),
+        mapIds?.has(table.id) ? nextMapJobMinute(table, this.#drawnAt) : Number.POSITIVE_INFINITY,
+      );
       const dueAt = reminderDueAt(table.party?.reminder);
       if (dueAt <= this.#drawnAt || dueAt === Number.POSITIVE_INFINITY) continue;
       const at = table.signals.some((signal) => signal.kind === "held")
@@ -3135,15 +3146,6 @@ export class TillFloorScreen extends LitElement {
       : html`<span class="party-name" data-party-name>${name}</span>`;
   }
 
-  #party(party: TableParty | null): TemplateResult | typeof nothing {
-    if (party === null) return nothing;
-    const parts = [
-      ...(party.guestCount === null ? [] : [`${t("floor.guests")}: ${party.guestCount}`]),
-      ...(party.billCount > 1 ? [`${t("floor.bills")}: ${party.billCount}`] : []),
-    ];
-    return parts.length === 0 ? nothing : html`<span class="party">${parts.join(" · ")}</span>`;
-  }
-
   #hint(table: TableState): CardMark | null {
     if (table.readyToServe > 0) {
       if (signalOf(table.signals, "ready") !== undefined) return null;
@@ -3167,14 +3169,16 @@ export class TillFloorScreen extends LitElement {
    * here rather than a silently blank card. */
   #occupancy(table: TableState): TemplateResult {
     switch (table.state) {
-      case "open-tab":
+      case "open-tab": {
+        const total = table.party?.outstanding ?? table.tabTotal;
+        const party = floorPartySummary(table.party);
         return html`<span class="occupancy tab-open">
           ${
             partyPaid(table)
               ? html`<span class="paid" data-paid>${paidWords(table)}</span>`
-              : html`<span class="total"
-                  >${formatMoney(table.party?.outstanding ?? table.tabTotal!, currentLocale())}</span
-                >`
+              : total === undefined || isZeroDecimal(decimal(total))
+                ? nothing
+                : html`<span class="total">${formatMoney(total, currentLocale())}</span>`
           }
           ${
             table.hasOpenTab
@@ -3183,8 +3187,9 @@ export class TillFloorScreen extends LitElement {
                 >`
               : nothing
           }
-          ${this.#party(table.party)}
+          ${party === "" ? nothing : html`<span class="party">${party}</span>`}
         </span>`;
+      }
       case "delivery-pending":
         return html`<span class="occupancy delivery"
           >${table.pendingDeliveries} ${t("floor.pending_delivery")}</span

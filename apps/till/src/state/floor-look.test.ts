@@ -12,6 +12,7 @@ import {
   kindWords,
   mapKinds,
   mapLook,
+  nextMapJobMinute,
   pinLook,
   readyText,
   reminderClock,
@@ -120,6 +121,139 @@ describe("MAP_PRECEDENCE", () => {
 });
 
 describe("mapLook", () => {
+  it("names the longest-waiting collection station on the map and pin while keeping the danger paint", () => {
+    const members = [
+      table({
+        timingBand: "forgotten",
+        signals: [
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "grill",
+                stationName: "Grill",
+                count: 2,
+                oldestReadyAt: inMinutes(-2),
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
+        ],
+      }),
+      table({
+        id: "t3",
+        signals: [
+          {
+            kind: "ready",
+            byStation: [
+              {
+                stationId: "bar",
+                stationName: "Bar",
+                count: 1,
+                oldestReadyAt: inMinutes(-9),
+                readyWarningAfterMinutes: 3,
+              },
+            ],
+          },
+        ],
+      }),
+    ];
+    expect(mapLook(members, now)).toMatchObject({
+      top: "ready",
+      fill: "danger",
+      pulse: "forgotten",
+      job: { text: "Collect from Bar", time: "9 min", compact: "Bar", compactTime: "9′" },
+    });
+    expect(pinLook(members, now)).toEqual({
+      fill: "danger",
+      icon: "floor-ready",
+      text: "Collect from Bar",
+    });
+  });
+
+  it("uses only timestamps and stations from the displayed late band", () => {
+    const forgotten = table({
+      timingBand: "forgotten",
+      waitingSince: inMinutes(-17),
+      waitingStationName: "Bar",
+    });
+    const warm = table({
+      timingBand: "warm",
+      waitingSince: inMinutes(-23),
+      waitingStationName: "Grill",
+    });
+    expect(mapLook([warm, forgotten], now).job).toMatchObject({
+      text: "Chase the Bar",
+      compact: "Chase",
+      time: "17 min",
+    });
+    const noMatchingTime = table({ ...warm, signals: [wait("forgotten")] });
+    expect(mapLook([noMatchingTime], now).job).toEqual({
+      text: "Chase the kitchen",
+      compact: "Chase",
+    });
+  });
+
+  it.each([
+    ["overdue", "Late"],
+    ["warm", "On its way"],
+  ] as const)("shortens the %s job without reusing the state name", (timingBand, compact) => {
+    const row = table({ timingBand, waitingSince: inMinutes(-11) });
+    expect(mapLook([row], now).job).toMatchObject({ compact, compactTime: "11′" });
+  });
+
+  it("changes the map cache key at the displayed minute boundary", () => {
+    const since = new Date(now - 30_000).toISOString();
+    const billTable = table({ signals: [{ kind: "bill_requested", requestedAt: since }] });
+    expect(mapLook([billTable], now).job).toMatchObject({ text: "Wants to pay", time: "0 min" });
+    expect(mapLook([billTable], now + 30_000).job?.time).toBe("1 min");
+    expect(reminderClock([billTable], now + 29_999)).not.toBe(
+      reminderClock([billTable], now + 30_000),
+    );
+  });
+
+  it("gives a newly due step a word as well as minutes on a small table", () => {
+    const tbl = table({ signals: [dueStepSignal("Take order", inMinutes(0))] });
+    expect(mapLook([tbl], now).job).toMatchObject({
+      text: "Take order",
+      time: "0 min",
+      compact: "Step",
+      compactTime: "0′",
+    });
+  });
+
+  it("does not schedule a redraw for a table with no running job clock", () => {
+    expect(nextMapJobMinute(table(free), now)).toBe(Number.POSITIVE_INFINITY);
+    expect(nextMapJobMinute(table({ timingBand: "forgotten" }), now)).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("does not redraw for the bill's minute when collection is the top job", () => {
+    const billTime = new Date(now - 59_000).toISOString();
+    const readyTime = new Date(now - 30_000).toISOString();
+    const tbl = table({
+      signals: [
+        { kind: "bill_requested", requestedAt: billTime },
+        {
+          kind: "ready",
+          byStation: [
+            {
+              stationId: "bar",
+              stationName: "Bar",
+              count: 1,
+              oldestReadyAt: readyTime,
+              readyWarningAfterMinutes: 3,
+            },
+          ],
+        },
+      ],
+    });
+    expect(nextMapJobMinute(tbl, now)).toBe(now + 30_000);
+    expect(reminderClock([tbl], now)).toBe(reminderClock([tbl], now + 1_000));
+    expect(reminderClock([tbl], now)).not.toBe(reminderClock([tbl], now + 30_000));
+  });
+
   it("adds Waiting's outline five minutes after a step, retaining its blue fill and bell", () => {
     const tbl = table({ signals: [dueStepSignal("Take order", inMinutes(0))] });
     expect(mapLook([tbl], now + 299_999).outline).toBeNull();
@@ -238,7 +372,7 @@ describe("mapLook", () => {
         fill: "seated",
         outline: null,
         pulse: null,
-        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}` },
+        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}`, compact: "2" },
       },
     ],
     [
@@ -730,11 +864,11 @@ describe("pinLook", () => {
   const pin = (members: TableState[]) => pinLook(members, now);
   const moving = today({ needsMoving: true });
 
-  it("the pin says the top state, with its icon and the map's fill", () => {
+  it("the pin says the top job with its own icon and the map's fill", () => {
     expect(pin([table({ signals: [bill], readyToServe: 2 })])).toEqual({
       fill: "bill",
-      icon: "floor-bill",
-      text: en["signal.bill_requested"],
+      icon: "floor-ready",
+      text: readyText(2),
     });
     expect(pin([table({ pendingToServe: 3 })])).toEqual({
       fill: "calm",
@@ -803,7 +937,7 @@ describe("pinLook", () => {
     });
   });
 
-  it("a forgotten wait beats ready, and an overdue one is said too", () => {
+  it("collection takes the pin over a forgotten wait, while an overdue wait can still lead", () => {
     expect(pin([table({ readyToServe: 2 })])).toEqual({
       fill: "ready",
       icon: "floor-ready",
@@ -811,12 +945,10 @@ describe("pinLook", () => {
     });
     expect(pin([table({ readyToServe: 2, timingBand: "forgotten" })])).toEqual({
       fill: "danger",
-      icon: "floor-timer",
-      text: en["floor.forgotten"],
+      icon: "floor-ready",
+      text: readyText(2),
     });
-    expect(pin([table({ signals: [wait("forgotten")], readyToServe: 2 })]).text).toBe(
-      en["floor.forgotten"],
-    );
+    expect(pin([table({ signals: [wait("forgotten")], readyToServe: 2 })]).text).toBe(readyText(2));
     expect(pin([table({ timingBand: "overdue" })])).toEqual({
       fill: "calm",
       icon: "floor-timer",
@@ -918,13 +1050,14 @@ describe("reminderClock and service steps", () => {
   it("changes when a current step becomes late and on each elapsed minute", () => {
     const tables = [table({ signals: [dueStepSignal("Take order", inMinutes(0))] })];
     const at = (ms: number) => reminderClock(tables, now + ms);
-    expect(at(0)).toBe(at(299_999));
+    expect(at(0)).toBe(at(59_999));
+    expect(at(59_999)).not.toBe(at(60_000));
     expect(at(299_999)).not.toBe(at(300_000));
     expect(at(300_000)).toBe(at(359_999));
     expect(at(359_999)).not.toBe(at(360_000));
   });
 
-  it("changes when a step falls due and not before", () => {
+  it("changes to the next step at its due time", () => {
     const dueAt = now + 4 * 60_000;
     const tables = [
       table({
@@ -941,9 +1074,9 @@ describe("reminderClock and service steps", () => {
       }),
     ];
     const at = (ms: number) => reminderClock(tables, ms);
-    expect(at(now)).toBe(at(dueAt - 1));
+    expect(at(dueAt - 60_000)).toBe(at(dueAt - 1));
     expect(at(dueAt - 1)).not.toBe(at(dueAt));
-    expect(at(dueAt)).toBe(at(dueAt + 4 * 60_000));
+    expect(at(dueAt)).toBe(at(dueAt + 59_999));
     expect(
       reminderClock([table({ id: "b", signals: [dueStepSignal("Set up", inMinutes(1))] })], now),
     ).toBe("");
@@ -972,12 +1105,12 @@ describe("topTabKind", () => {
 
   // Each kind, then every kind after it, so the first wins over all the rest in either order.
   const ranked = [
+    ready,
     forgotten,
     overdue,
     out,
     fire,
     billed,
-    ready,
     step,
     delivery,
     notSent,
@@ -988,12 +1121,12 @@ describe("topTabKind", () => {
 
   it("lists the kinds above Held, which a tab shows", () => {
     expect([...TAB_KINDS]).toEqual([
+      "ready",
       "forgotten",
       "overdue",
       "unavailable",
       "fire",
       "bill",
-      "ready",
       "step",
       "delivery",
       "not-sent",

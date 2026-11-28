@@ -313,6 +313,12 @@ describe("till-table-details-sheet", () => {
     });
   });
 
+  it("says Nothing owed while a zero-balance bill is still open", async () => {
+    const el = await mount({ table: table({ ...seated, hasOpenTab: true, party: party() }) });
+    expect(text(el, "[data-owed]")).toBe("Nothing owed");
+    expect(find(el, "[data-paid]")).toBeNull();
+  });
+
   it("says Paid when the party owes nothing", async () => {
     const el = await mount({
       table: table({ ...seated, hasOpenTab: false, party: party({ outstanding: "0.00" }) }),
@@ -524,8 +530,8 @@ describe("till-table-details-sheet", () => {
     });
     const chips = [...el.shadowRoot!.querySelectorAll("[data-chip]")];
     expect(chips.map((chip) => chip.getAttribute("data-chip"))).toEqual([
-      "bill-requested",
       "ready",
+      "bill-requested",
     ]);
   });
 

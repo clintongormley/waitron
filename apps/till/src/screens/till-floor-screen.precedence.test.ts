@@ -417,11 +417,11 @@ describe("till-floor-screen: the card's marks in the order of precedence", () =>
       }),
     ]);
     expect(marks(el)).toEqual([
+      '[data-chip="ready"]',
       "[data-forgotten]",
       '[data-chip="held-unavailable"]',
       "[data-fire-due]",
       '[data-chip="bill-requested"]',
-      '[data-chip="ready"]',
       '[data-chip="service-step"]',
       "[data-unsent]",
       "[data-reserved]",

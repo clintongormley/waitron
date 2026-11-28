@@ -83,14 +83,14 @@ const unsent = {
 };
 
 describe("PRECEDENCE", () => {
-  it("is A757 §4's order for the states built today", () => {
+  it("is collection first, then A757 §4 for the remaining states", () => {
     expect(PRECEDENCE).toEqual([
+      "ready",
       "forgotten",
       "overdue",
       "unavailable",
       "fire",
       "bill",
-      "ready",
       "step",
       "not-sent",
       "waiting",
@@ -173,7 +173,7 @@ describe("tableStates", () => {
     ]);
   });
 
-  it("lists every state at once in §4's order", () => {
+  it("lists every active job with collection first", () => {
     const busy = table({
       timingBand: "forgotten",
       nextReservation: { time: "21:00" },
@@ -190,19 +190,19 @@ describe("tableStates", () => {
       ],
     });
     expect(tableStates(busy, now)).toEqual([
+      "ready",
       "forgotten",
       "unavailable",
       "fire",
       "bill",
-      "ready",
       "step",
       "not-sent",
       "reserved",
     ]);
-    expect(tableStates(busy, now)[0]).toBe("forgotten");
+    expect(tableStates(busy, now)[0]).toBe("ready");
   });
 
-  it("orders T4 as the owner's Q34 example does", () => {
+  it("puts collection before a bill request and a service step", () => {
     const t4 = table({
       signals: [
         ready,
@@ -210,8 +210,8 @@ describe("tableStates", () => {
         dueStepSignal("Take order"),
       ],
     });
-    expect(tableStates(t4, now)).toEqual(["bill", "ready", "step"]);
-    expect(tableStates(t4, now)[0]).toBe("bill");
+    expect(tableStates(t4, now)).toEqual(["ready", "bill", "step"]);
+    expect(tableStates(t4, now)[0]).toBe("ready");
   });
 
   it("is empty for a table in no state", () => {
@@ -245,9 +245,9 @@ describe("byPrecedence", () => {
       ["kitchen ready", "ready"],
     ];
     expect(byPrecedence(items, ([, kind]) => kind).map(([name]) => name)).toEqual([
-      "forgotten",
       "bar ready",
       "kitchen ready",
+      "forgotten",
       "reserved",
       "n to serve",
       "other",

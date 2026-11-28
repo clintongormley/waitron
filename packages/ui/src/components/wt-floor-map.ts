@@ -8,10 +8,17 @@ import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import {
   type FloorMapCue,
   type FloorMapFill,
+  type FloorMapJob,
   type FloorMapOutline,
   type FloorMapPulse,
   floorMapFillStyles,
 } from "../floor-map-fills.js";
+import {
+  captionStyles,
+  captionMetrics,
+  renderCaption,
+  type CaptionMetrics,
+} from "../floor-map-caption.js";
 import * as compactFloor from "../floor-map-compact.js";
 import { floorRingStyles, renderFloorPulse, renderFloorRing } from "../floor-ring.js";
 import "../floor-chips.js";
@@ -39,6 +46,8 @@ export interface FloorMapTable {
   pulse: FloorMapPulse | null;
   /** Drawn under the name on a table big enough for both (`showsCue`). */
   cue: FloorMapCue | null;
+  job?: FloorMapJob | null;
+  shortName?: string;
   joinId: string | null;
   /** Today's name when it differs from `label`. */
   name?: string;
@@ -128,6 +137,7 @@ interface Group {
   box: PlanRect;
   /** Its tables' name, or its linked party's. */
   label: string;
+  shortLabel?: string;
   /** False on a linked group after the first. */
   drawsName: boolean;
   fixed: boolean;
@@ -179,10 +189,19 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
       members,
       box: bounds(members.map((m) => m.placement))!,
       label: members[0]!.groupName ?? mergeLabel(members.map((m) => m.name ?? m.label)),
+      shortLabel: shortLabelOf(members),
       drawsName: true,
       fixed: members.some((m) => m.fixed === true),
     };
   });
+}
+
+function shortLabelOf(members: readonly FloorMapTable[]): string | undefined {
+  const shortNames = members.map((member) =>
+    member.shortName === member.label ? undefined : member.shortName,
+  );
+  if (shortNames.every((name) => name === undefined)) return undefined;
+  return mapLabel(members.map((member, index) => shortNames[index] ?? member.name ?? member.label));
 }
 
 /** Names each linked party's groups once, on the first; its groups in their first labels' order. */
@@ -206,6 +225,7 @@ function linksOf(groups: readonly Group[]): Group[][] {
       : mergeLabel(linked.flatMap((g) => g.members.map((m) => m.label)));
     for (const group of linked) {
       group.label = label;
+      group.shortLabel = shortLabelOf(linked.flatMap((g) => g.members));
       group.drawsName = group === linked[0];
     }
   }
@@ -245,6 +265,7 @@ export class WtFloorMap extends LitElement {
     baseStyles,
     floorMapFillStyles,
     floorRingStyles,
+    captionStyles,
     compactFloor.viewportStyles,
     css`
       :host {
@@ -281,6 +302,10 @@ export class WtFloorMap extends LitElement {
         border: 1px solid var(--wt-color-field-line);
         border-radius: var(--wt-radius-sm);
         pointer-events: auto;
+      }
+
+      [part="shape"]:where(:not([data-fill="free"], [data-fill="plain"])) {
+        border-color: var(--wt-floor-map-filled-line, var(--wt-color-field-line));
       }
 
       [part="shape"][data-outline="clearing"] {
@@ -404,58 +429,6 @@ export class WtFloorMap extends LitElement {
 
       [part="shape"][data-shape="round"] {
         border-radius: 50%;
-      }
-
-      [part="name"] {
-        position: relative;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        text-wrap: nowrap;
-      }
-
-      /* Positioned, or it paints under the table's own shape. */
-      [part="caption"] {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        max-width: 100%;
-        overflow: hidden;
-        line-height: 1.2;
-      }
-
-      /* Clear, left and right, of the thickest outline drawn inside the shape: Overdue's. */
-      [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
-      [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"] {
-        max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
-      }
-
-      [part="cue"] {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        justify-content: center;
-        font-size: var(--wt-font-size-sm);
-        text-wrap: nowrap;
-        overflow: hidden;
-      }
-
-      /* A flex container cuts no text itself: its text's own box carries the ellipsis. */
-      [part="cue"] .cue-text {
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      [part="cue"] wt-icon {
-        flex: none;
-        color: inherit;
-      }
-
-      /* Painted in the fill, over the seam between a merge's tables. */
-      [part="table"][data-merge] > [part="name"],
-      [part="table"][data-merge] [part="caption"] {
-        padding-inline: var(--wt-space-1);
-        border-radius: var(--wt-radius-sm);
       }
 
       [part="allergy"] {
@@ -1032,12 +1005,14 @@ export class WtFloorMap extends LitElement {
         crop.height * view.scale + 2 * this.#fit!.inset > size.height);
     if (this.placeholders.length > 0) return renderFloorPlaceholders(this.placeholders, view);
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return html`<div class="map-content">
-      <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
-        ${view === null ? nothing : this.#renderGroups(view, still)}
-      </div>
-      ${overflows && this.copy.pan ? html`<span class="pan-hint" aria-hidden="true">${this.copy.pan}</span>` : nothing}
-    </div>`;
+    return html`<span class="name-probe" part="name-probe" aria-hidden="true"></span>
+      <span class="job-probe" aria-hidden="true"></span>
+      <div class="map-content">
+        <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
+          ${view === null ? nothing : this.#renderGroups(view, still)}
+        </div>
+        ${overflows && this.copy.pan ? html`<span class="pan-hint" aria-hidden="true">${this.copy.pan}</span>` : nothing}
+      </div>`;
   }
 
   // Enlarging a tightly spaced row could route a tap to the neighbouring stool.
@@ -1088,10 +1063,11 @@ export class WtFloorMap extends LitElement {
     const tabStop =
       (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
       this.#readingOrder[0];
+    const metrics = captionMetrics(this.renderRoot);
     return html`${this.#links.map((linked) => this.#renderLink(linked, view, targets))}${repeat(
       this.#groups,
       (g) => g.key,
-      (g) => this.#renderGroup(g, view, still, g === tabStop, targets?.get(g)),
+      (g) => this.#renderGroup(g, view, still, g === tabStop, targets?.get(g), metrics),
     )}${this.#renderFixedDrag(view, targets)}`;
   }
 
@@ -1101,6 +1077,7 @@ export class WtFloorMap extends LitElement {
     still: boolean,
     tabStop: boolean,
     target: PlanRect | undefined,
+    metrics: CaptionMetrics | undefined,
   ): TemplateResult {
     const { members, label } = group;
     const box = target ?? group.box;
@@ -1109,8 +1086,25 @@ export class WtFloorMap extends LitElement {
     const drawn = merged ? box : first.placement;
     const named = group.drawsName && showsName(target ?? drawn, view.scale);
     const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
+    const job = first.job ?? null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
+    const caption = named
+      ? renderCaption({
+          label,
+          shortLabel: group.shortLabel,
+          cue,
+          job,
+          metrics,
+          width: box.width * view.scale,
+          height: box.height * view.scale,
+          allergy,
+          outlined: members.some((member) => member.outline !== null),
+          fill: merged ? first.fill : undefined,
+        })
+      : null;
+    const spokenName =
+      caption !== null && caption.name !== label ? `${label} (${caption.name})` : label;
     return html`<button
       type="button"
       part="table"
@@ -1121,8 +1115,12 @@ export class WtFloorMap extends LitElement {
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${[
-        label,
-        ...(cue === null || cue.text === "" ? [] : [cue.text]),
+        spokenName,
+        ...(job !== null
+          ? [job.text, ...(job.time === undefined ? [] : [job.time])]
+          : cue === null || cue.text === ""
+            ? []
+            : [cue.text]),
         first.description,
         ...(allergy ? [this.copy.allergy ?? DEFAULT_COPY.allergy] : []),
       ].join(", ")}
@@ -1135,21 +1133,7 @@ export class WtFloorMap extends LitElement {
     >
       ${members.map((m) => this.#renderShape(m, box, view.scale, still, target))}
       ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
-      ${
-        cue !== null
-          ? html`<span part="caption" data-fill=${merged ? first.fill : nothing}
-              ><span part="name">${label}</span>
-              <!-- The space: axe reads the name and the cue as one word without it. -->
-              <span part="cue"
-                >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${
-                  cue.text === "" ? nothing : html`<span class="cue-text">${cue.text}</span>`
-                }</span
-              ></span
-            >`
-          : named
-            ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`
-            : nothing
-      }
+      ${caption?.content ?? nothing}
     </button>`;
   }
 

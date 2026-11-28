@@ -63,6 +63,211 @@ it("keeps both ends of a wide floor within reach at the minimum touch size", asy
   expect(near.getBoundingClientRect().left).toBeCloseTo(plan(map).getBoundingClientRect().left);
 });
 
+it("uses the short name only when the full name cannot fit, and keeps the name spoken", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(340, 320, [
+    { ...table("small", 3, 4), label: "Riverside 12", shortName: "R12" },
+    { ...table("large", 5, 8, 8), label: "Riverside 14", shortName: "R14" },
+  ]);
+  const small = button(map, "small");
+  expect(small.querySelector('[part="name"]')?.textContent).toBe("R12");
+  expect(small.getAttribute("aria-label")).toBe("Riverside 12 (R12), Free");
+  expect(button(map, "large").querySelector('[part="name"]')?.textContent).toBe("Riverside 14");
+});
+
+it("keeps today's name if the saved fallback is wider", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("near", 5, 7),
+      name: "Window 12",
+      label: "Riverside table",
+      shortName: "Riverside table 12",
+    },
+    table("far", 25, 7),
+  ]);
+  const name = button(map, "near").querySelector<HTMLElement>('[part="name"]')!;
+  expect(name.textContent).toBe("Window 12");
+  expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+});
+
+it("does not replace a daily name with the saved full name", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("near", 5, 7),
+      name: "Birthday at the window",
+      label: "Table 12",
+      shortName: "Table 12",
+    },
+    table("far", 25, 7),
+  ]);
+  const near = button(map, "near");
+  expect(near.querySelector('[part="name"]')?.textContent).toBe("Birthday at the window");
+  expect(near.getAttribute("aria-label")).toBe("Birthday at the window, Free");
+});
+
+it("uses the compact job when the whole action would take more than two lines", async () => {
+  await page.viewport(390, 700);
+  const job = {
+    text: "Collect from the upstairs cocktail station beside the very far end of the terrace",
+    time: "9 min",
+    compact: "Bar 9′",
+  };
+  const { map } = await compactMap(250, 210, [
+    {
+      ...table("T12", 2, 2, 8),
+      cue: { icon: "floor-ready", text: "2" },
+      job,
+    },
+  ]);
+  const target = button(map, "T12");
+  expect(target.getBoundingClientRect().width).toBeGreaterThan(90);
+  expect(target.querySelector('[part="cue"]')?.textContent?.trim()).toBe("Bar 9′");
+  expect(target.getAttribute("aria-label")).toBe(`T12, ${job.text}, 9 min, Free`);
+});
+
+it("shows a whole short job with its wait or leaves the narrow table in its job colour", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(260, 340, [
+    {
+      ...table("T1", 5, 7),
+      fill: "danger",
+      cue: { icon: "floor-timer", text: "Forgotten" },
+      job: {
+        text: "Chase the downstairs kitchen",
+        time: "11 min",
+        compact: "Chase",
+        compactTime: "11′",
+      },
+    },
+    {
+      ...table("T2", 11, 7, 2.7, 2),
+      cue: { icon: "floor-ready", text: "2" },
+      job: { text: "Collect from Bar", time: "9 min", compact: "Bar", compactTime: "9′" },
+    },
+    {
+      ...table("T4", 17, 7, 3.5, 4),
+      cue: { icon: null, text: "Reserved" },
+      job: { text: "Reserved", time: "21:30", compact: "21:30" },
+    },
+    table("T3", 25, 7),
+  ]);
+  map.style.fontSize = "20px";
+  map.style.fontFamily = "monospace";
+  map.requestUpdate();
+  await map.updateComplete;
+  const narrow = button(map, "T1");
+  expect(narrow.querySelector('[part="cue"]')).toBeNull();
+  expect(narrow.getAttribute("aria-label")).toContain("Chase the downstairs kitchen, 11 min");
+  expect(narrow.querySelector('[part="shape"]')?.getAttribute("data-fill")).toBe("danger");
+
+  const cue = button(map, "T2").querySelector<HTMLElement>('[part="cue"]');
+  expect(cue?.textContent?.trim()).toBe("Bar 9′");
+  expect(cue!.scrollWidth).toBeLessThanOrEqual(cue!.clientWidth);
+  expect(getComputedStyle(cue!).fontWeight).toBe("600");
+  const reservation = button(map, "T4");
+  expect(reservation.querySelector('[part="job"]')?.textContent).toBe("Reserved");
+  expect(reservation.querySelector('[part="time"]')?.textContent).toBe("21:30");
+});
+
+it("shows the delivery count beside the icon when the full label does not fit", async () => {
+  await page.viewport(390, 700);
+  const delivery = { icon: "floor-step", text: "2 to deliver", compact: "2" } as const;
+  const { map } = await compactMap(260, 340, [
+    { ...table("T1", 5, 7, 3.8, 2), cue: delivery },
+    { ...table("T2", 11, 7, 6, 2), cue: delivery },
+    table("T3", 25, 7),
+  ]);
+  const narrow = button(map, "T1");
+  const wide = button(map, "T2");
+  expect(narrow.querySelector("wt-icon")?.getAttribute("name")).toBe("floor-step");
+  expect(narrow.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2");
+  expect(narrow.getAttribute("aria-label")).toContain("2 to deliver");
+  expect(wide.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2 to deliver");
+});
+
+it("keeps the full collection job when three lines fit inside the table", async () => {
+  await page.viewport(390, 700);
+  const cue = { icon: "floor-ready", text: "2" } as const;
+  const job = {
+    text: "Collect from Kitchen",
+    time: "2 min",
+    compact: "Kitchen",
+    compactTime: "2′",
+  };
+  const { map } = await compactMap(260, 340, [
+    { ...table("T1", 5, 7, 4), cue, job },
+    { ...table("T2", 14, 7, 4, 3), cue, job },
+    table("T3", 25, 7),
+  ]);
+  map.style.fontFamily = "monospace";
+  map.style.fontSize = "12px";
+  map.requestUpdate();
+  await map.updateComplete;
+  const target = button(map, "T1");
+  expect(target.querySelector('[part="job"]')?.textContent).toBe("Collect from Kitchen");
+  expect(target.querySelector('[part="time"]')?.textContent).toBe("2 min");
+  expect(button(map, "T2").querySelector('[part="cue"]')?.textContent?.trim()).toBe("Kitchen 2′");
+});
+
+it("leaves an inset beside a full job and wraps whole words", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(250, 210, [
+    {
+      ...table("T1", 2, 2, 9, 8),
+      label: "Riverside 1234",
+      shortName: "R12",
+      cue: { icon: "floor-ready", text: "2" },
+      job: {
+        text: "Collect from Bar",
+        time: "9 min",
+        compact: "Bar",
+        compactTime: "9′",
+      },
+    },
+  ]);
+  map.style.fontFamily = "monospace";
+  map.requestUpdate();
+  await map.updateComplete;
+  const target = button(map, "T1");
+  expect(target.querySelector('[part="name"]')?.textContent).toBe("R12");
+  const job = target.querySelector('[part="job"]')!;
+  expect(job.textContent).toBe("Collect from Bar");
+  const tile = target.getBoundingClientRect();
+  const label = document.createRange();
+  label.selectNodeContents(job);
+  const lines = [...label.getClientRects()];
+  expect(lines).toHaveLength(2);
+  for (const line of lines) {
+    expect(line.left - tile.left).toBeGreaterThanOrEqual(10);
+    expect(tile.right - line.right).toBeGreaterThanOrEqual(10);
+  }
+});
+
+it("uses the compact wait if the allergy mark leaves too little height for a full job", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(340, 280, [
+    {
+      ...table("T1", 5, 7, 3),
+      allergy: true,
+      cue: { icon: "floor-timer", text: "Forgotten" },
+      job: { text: "Chase the Bar", time: "17 min", compact: "Bar", compactTime: "17′" },
+    },
+    table("T2", 14, 7, 3),
+  ]);
+  map.style.fontSize = "17px";
+  map.requestUpdate();
+  await map.updateComplete;
+  const target = button(map, "T1");
+  const box = target.getBoundingClientRect();
+  expect(box.height).toBeGreaterThanOrEqual(68);
+  expect(box.height).toBeLessThan(80);
+  const cue = target.querySelector<HTMLElement>('[part="cue"]');
+  expect(cue?.textContent?.trim()).toContain("17′");
+  expect(cue!.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+});
+
 it("fits a landscape floor by its height and leaves room at its edges", async () => {
   await page.viewport(700, 390);
   const { map } = await compactMap(400, 200, [table("Near", 5, 7, 4), table("Far", 13, 13, 4)]);

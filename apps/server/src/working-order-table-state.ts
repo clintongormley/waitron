@@ -15,7 +15,7 @@ import type { Logger } from "@waitron/server-kit";
 import {
   type TimingBand,
   type TableSignal,
-  worstBand,
+  BAND_RANK,
   classifyBand,
   rawCentsToDecimal,
   partyDisplayName,
@@ -127,6 +127,8 @@ export interface TableState {
    * counter delivery does not feed it.
    */
   timingBand: TimingBand;
+  waitingSince?: string;
+  waitingStationName?: string;
   today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
@@ -206,6 +208,7 @@ export async function listTablesWithState(
                  'queuedAt',
                  case when ti.pass_controlled then coalesce(ti.requested_at, ti.queued_at)
                       else ti.queued_at end,
+                 'stationName', ks.name,
                  'warmAfterMinutes', ks.warm_after_minutes,
                  'overdueAfterMinutes', ks.overdue_after_minutes,
                  'forgottenAfterMinutes', ks.forgotten_after_minutes
@@ -266,15 +269,18 @@ export async function listTablesWithState(
     const pendingDeliveries = Number(r.pending_deliveries);
     const state: TableState["state"] =
       party !== undefined ? "open-tab" : pendingDeliveries > 0 ? "delivery-pending" : "free";
-    const timingBand = worstBand(
-      parseUnservedLines(r.tab_unserved_lines).map((line) =>
-        classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, {
-          warmAfterMinutes: line.warmAfterMinutes,
-          overdueAfterMinutes: line.overdueAfterMinutes,
-          forgottenAfterMinutes: line.forgottenAfterMinutes,
-        }),
-      ),
-    );
+    let timingBand: TimingBand = "fresh";
+    let waitingLine: ReturnType<typeof parseUnservedLines>[number] | undefined;
+    for (const line of parseUnservedLines(r.tab_unserved_lines)) {
+      const band = classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, line);
+      if (
+        BAND_RANK[band] > BAND_RANK[timingBand] ||
+        (band === timingBand && waitingLine !== undefined && line.queuedAt < waitingLine.queuedAt)
+      ) {
+        timingBand = band;
+        waitingLine = line;
+      }
+    }
     return {
       id: r.id,
       label: r.label,
@@ -289,6 +295,8 @@ export async function listTablesWithState(
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
       timingBand,
+      ...(waitingLine === undefined ? {} : { waitingSince: waitingLine.queuedAt }),
+      ...(waitingLine?.stationName == null ? {} : { waitingStationName: waitingLine.stationName }),
       pendingDeliveries,
       today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,

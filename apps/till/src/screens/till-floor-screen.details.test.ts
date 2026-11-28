@@ -153,6 +153,27 @@ describe("till-floor-screen's details sheet", () => {
     expect(sheetText(sheet, "[data-fire-due]")).toBe("Time to fire");
   });
 
+  it("shows a nonzero open balance on its card and omits a zero open balance", async () => {
+    const el = await mount([
+      table("t4", {
+        ...seated,
+        tabLineCount: 1,
+        today: null,
+        party: party({ outstanding: "0.00" }),
+      }),
+      table("t5", {
+        ...seated,
+        tabLineCount: 1,
+        today: null,
+        party: party({ id: "p2", outstanding: "10.00" }),
+      }),
+    ]);
+    expect(el.shadowRoot!.querySelector('[data-table="t4"] .total')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-table="t5"] .total')?.textContent).toContain(
+      "10.00",
+    );
+  });
+
   it("a re-read updates the open sheet", async () => {
     const el = await mount([table("t4", { ...seated, party: party() })]);
     const sheet = await askDetails(el, "t4");
