@@ -31,11 +31,11 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except the cases
+// The workflow side is extracted from ci.yml, except the cases
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
 // two apt cases, a `--with-deps` case, the push-concurrency, pnpm-setup, checkout and artifact-transfer cases reading every
-// .yml file in .github/workflows/. A transcription tests this file's copy of a workflow rather than
-// the workflow. Each extraction carries a guard that it found something, because a silently-empty
+// .yml file in .github/workflows/. The admission table is maintained against the Cloud runner release.
+// Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
 //
@@ -57,7 +57,6 @@ const DISPOSABLE_FAMILIES = [
   "till",
   "dashboard",
   "setup",
-  "customer-menu",
   "venue-service",
   "adjustments",
   "staffing",
@@ -424,6 +423,103 @@ describe("remaining disposable jobs", () => {
 });
 
 describe("disposable server routing", () => {
+  it("gives every server job the name and label its runner accepts", () => {
+    // Keep these pairs in step with Waitron Cloud's ci-canary.mjs, ci-identity.mjs and session.py.
+    const singleJobs = (
+      "changes server-probe lint root-guards bundle-smoke typecheck " +
+      "test-server-stream test-ui test-setup test-adjustments test-staffing test-bookings " +
+      "test-media test-payments-stripe test-payments-sumup test-identity test-workforce " +
+      "test-light-a test-light-b mutation-shared-aggregate test-server-merge test-heavy-merge " +
+      "test-fiscal-verifactu-merge test-till-merge test-dashboard-merge test-venue-service-merge " +
+      "test-provisioning-merge"
+    ).split(" ");
+    const admitted = new Map(singleJobs.map((name) => [name, `${name}-1`]));
+    admitted.set("image / smoke", "image-smoke-1");
+    for (const [family, count] of Object.entries({
+      "test-server": 24,
+      "test-heavy": 3,
+      "test-fiscal-verifactu": 4,
+      "test-till": 7,
+      "test-dashboard": 6,
+      "test-venue-service": 4,
+      "test-provisioning": 6,
+      "mutation-shared": 7,
+    })) {
+      for (let shard = 1; shard <= count; shard++) {
+        admitted.set(`${family} (${shard})`, `${family}-${shard}`);
+      }
+    }
+
+    const workflowJobs = parse(lines.join("\n")).jobs;
+    const image = workflowJobs.image;
+    const imageJobs = parse(readFileSync(join(repoRoot, image.uses), "utf8")).jobs;
+    const routes = [
+      ...Object.entries(workflowJobs),
+      ...Object.entries(imageJobs).map(([id, entry]) => [
+        `${image.name ?? "image"} / ${entry.name ?? id}`,
+        entry,
+      ]),
+    ];
+    const context = routingContext();
+    const prefix = context.vars.DISPOSABLE_TESTS_LABEL_PREFIX;
+    context.vars.DISPOSABLE_TESTS_CAPACITY = '{"slots":12,"serverRunning":0,"serverWaiting":0}';
+    context.needs.changes.outputs.server_jobs = JSON.stringify(
+      Object.fromEntries(routes.map(([id]) => [id, 256])),
+    );
+    const checked = new Set();
+    const violations = new Set();
+    for (const [event, full] of [
+      ["pull_request", "false"],
+      ["push", "false"],
+      ["push", "true"],
+      ["schedule", "true"],
+      ["workflow_dispatch", "true"],
+    ]) {
+      context.github.event_name = event;
+      context.needs.changes.outputs.full = full;
+      for (const attempt of [1, 2]) {
+        context.github.run_attempt = attempt;
+        context.needs.changes.outputs.server_route_attempt = String(attempt);
+        context.inputs.server_route = expressionValue(image.with.server_route, context);
+        for (const [id, entry] of routes) {
+          const route = entry["runs-on"];
+          if (route === undefined) continue;
+          const matrix = entry.strategy?.matrix;
+          for (const shard of matrix?.shard ?? [1]) {
+            context.matrix.shard = shard;
+            const selection =
+              typeof route === "string" && route.startsWith("${{ ")
+                ? expressionValue(route, context)
+                : route;
+            const labels = Array.isArray(selection) ? selection : [selection];
+            const selfHosted = labels.includes("self-hosted");
+            if (!selfHosted && !labels.some((label) => String(label).startsWith(`${prefix}-`)))
+              continue;
+            if (matrix) expect(Object.keys(matrix), id).toEqual(["shard"]);
+            const template = workflowJobs[id]?.name ?? (matrix ? `${id} (${shard})` : id);
+            const name = template.replace(/\$\{\{ .*? \}\}/g, (value) =>
+              expressionValue(value, context),
+            );
+            checked.add(name);
+            const expected = `${prefix}-42-1234-${attempt}-${admitted.get(name)}`;
+            if (
+              !selfHosted ||
+              !admitted.has(name) ||
+              labels.length !== 2 ||
+              !labels.includes(expected)
+            ) {
+              violations.add(`${name}: ${JSON.stringify(labels)}`);
+            }
+          }
+        }
+      }
+    }
+    expect([...violations]).toEqual([]);
+    expect(
+      [...admitted.keys()].filter((name) => name !== "image / smoke" && !checked.has(name)),
+    ).toEqual([]);
+  });
+
   it.each([
     ["", true],
     ["a".repeat(40), true],
@@ -466,6 +562,7 @@ describe("disposable server routing", () => {
           "server-probe",
           "test-webkit-startup",
           "root-process-guards",
+          "test-customer-menu",
         ].includes(entry.id)
       )
         continue;
