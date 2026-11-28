@@ -82,7 +82,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
     from scope_orders so join working_orders wo on wo.id = so.order_id
     left join parties p on p.id = wo.party_id left join dining_tables dt on dt.id = wo.delivery_table_id
   ), invoices as (
-    select s.id, s.working_order_id, s.issued_at, sr.code as series_code, s.invoice_number as number,
+    select s.id, s.working_order_id, s.issued_at,
       sr.code || '/' || s.invoice_number as invoice_number,
       case when s.replaces_original = 1 then 'replacement'
         when s.corrects_sale_id is not null and s.counterparty_tax_id is not null
@@ -100,8 +100,6 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
         from order_labels o where o.sale_id = s.id) as order_search,
       (select json_group_array(json_object('method',m.method,'last4',m.last4)) from
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as methods,
-      (select group_concat(m.method || coalesce(m.last4,''), ' ') from
-        (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as method_key,
       (select group_concat(m.last4,' ') from tender_methods m where m.sale_id = s.id) as card_search,
       (s.corrects_sale_id is not null or s.counterparty_tax_id is not null
         or exists(select 1 from sale_settlements ss where ss.sale_id = s.id)) as listed
@@ -124,11 +122,11 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
   ), transactions as (
     select i.*, i.id as sale_id, null as refund_id from invoices i where i.listed
     union all
-    select r.id, i.working_order_id, r.completed_at, i.series_code, i.number, i.invoice_number,
+    select r.id, i.working_order_id, r.completed_at, i.invoice_number,
       'refund', i.customer_name, r.requested_by, person.display_name,
       -(r.applied_amount + r.tip_amount), i.order_number, i.zone_name, i.scope_order_ids, i.table_name, i.order_search,
       json_array(json_object('method',r.method,'last4',r.last4)),
-      r.method || coalesce(r.last4,''), r.last4, i.listed, i.id, r.id
+      r.last4, i.listed, i.id, r.id
     from refund_rows r join invoices i on i.id = r.invoice_id
     left join persons person on person.id = r.requested_by
     where i.listed or r.bill_payment_id is not null
@@ -139,10 +137,6 @@ function filtered(query: TransactionsQuery, dates: DateWindow): SQL {
   const clauses = [sql`r.search_rank is not null`];
   if (dates !== null)
     clauses.push(sql`r.issued_at >= ${dates.startAt} and r.issued_at < ${dates.endAt}`);
-  if (query.method !== undefined)
-    clauses.push(
-      sql`exists(select 1 from json_each(r.methods) m where json_extract(m.value,'$.method') = ${query.method})`,
-    );
   if (query.type === "corrective")
     clauses.push(sql`r.type in ('correction', 'full-correction', 'replacement')`);
   else if (query.type !== undefined) clauses.push(sql`r.type = ${query.type}`);
@@ -150,15 +144,6 @@ function filtered(query: TransactionsQuery, dates: DateWindow): SQL {
   return sql.join(clauses, sql` and `);
 }
 
-const sorts: Readonly<Record<string, SQL>> = {
-  when: sql`r.issued_at`,
-  invoice: sql`r.series_code`,
-  type: sql`r.type`,
-  tableName: sql`r.table_name`,
-  method: sql`r.method_key`,
-  staff: sql`r.staff_name`,
-  amount: sql`r.amount_cents`,
-};
 type RawTransaction = {
   id: string;
   sale_id: string;
@@ -191,8 +176,7 @@ export async function readFindTransactions(
       ? sql`null`
       : sql`case when abs(r.amount_cents) = ${amount.cents} then 'amount'
           when r.refund_id is null and exists(select 1 from tenders t
-            where t.sale_id = r.sale_id and t.amount = ${amount.cents}
-              ${query.method === undefined ? sql`` : sql`and t.method = ${query.method}`}) then 'payment' end`;
+            where t.sale_id = r.sale_id and t.amount = ${amount.cents}) then 'payment' end`;
   const words =
     query.q === ""
       ? sql`0`
@@ -211,14 +195,11 @@ export async function readFindTransactions(
   const { rows: counts } = await tx.execute<{ total: number }>(
     sql`${ranked} select count(*) as total from ranked r where ${where}`,
   );
-  const key = sorts[query.sort.key] ?? sorts.when!;
-  const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;
   const { rows } = await tx.execute<RawTransaction>(sql`${ranked}
     select r.id,r.sale_id,r.refund_id,r.working_order_id,r.issued_at,r.invoice_number,r.type,r.table_name,r.customer_name,
       r.operator_id,r.staff_name,cast(r.amount_cents as text) as amount_cents,r.order_number,r.zone_name,
       r.amount_match,r.scope_order_ids,r.methods
-    from ranked r where ${where} order by r.search_rank, ${key} is null, ${key} ${direction},
-      ${query.sort.key === "invoice" ? sql`r.number ${direction},` : sql``} r.id desc
+    from ranked r where ${where} order by r.search_rank, r.issued_at desc, r.id desc
     limit ${50} offset ${query.page * 50}`);
   return {
     rows: rows.map((row) => ({

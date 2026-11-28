@@ -1012,6 +1012,7 @@ visible enabled items, Home and End reach the ends, and Tab closes the menu and 
 trigger. Plain action disclosures keep their ordinary Tab order.
 
 Use `bottom-sheet sheet-variant="menu"` on `wt-row-actions` for the till's menu sheet.
+The sheet leaves `--wt-space-5` under its last row, plus the phone's bottom safe area.
 Set `sheet-heading` to show a title and name the dialog. A sheet without a heading takes
 its name from `sheet-label`, or from the trigger's `label` when you omit it. Use `data-sheet-heading` on a direct child to label a
 section. If the sheet needs to stop above a bottom bar, set `--wt-menu-sheet-bottom-offset`
@@ -1824,8 +1825,7 @@ cannot see it, so assert a computed width or colour when you add a styled cell.
 **What the guard does not see.** `scripts/data-table-cell-classes.test.ts` reports a class that one
 file both puts on cell markup and styles in its own `css`, and is weaker than its name. It reads
 each file alone, and only a file whose text contains `<wt-data-table`. Cell markup is the value of a
-`cell` property, each argument of a call to a function named `cell` (the till's find-bill screen
-builds its columns that way) and a `.rowControls=${…}` binding, plus the bodies of the functions
+`cell` property, each argument of a call to a function named `cell` and a `.rowControls=${…}` binding, plus the bodies of the functions
 those call: `this.foo()` is the method of the class the call sits in, and `foo()` the function the
 nearest enclosing scope declares. It misses a method inherited from a superclass, a function passed
 as a value (`.map(this.#row)`) rather than called, a getter read as `this.name`, a static method
@@ -6388,8 +6388,8 @@ only under Testing on Demo or Preparation installs with the existing station per
 keep Stations off their navigation; prep station displays retain their own fixed primary screen. Find a
 bill opens the finished sales, with unpaid bills and counter orders above them. Its Back returns to the device's home screen without replacing
 the basket, and reads "Back to counter" only where that home is Counter; elsewhere it reads "Back".
-The Pass, the station screen and My schedule label their Back the same way. A transaction receipt
-keeps the page's query and server page for its own Back action. On a device with no Counter (a
+The Pass, the station screen and My schedule label their Back the same way. Back from a transaction receipt
+reads again every page of sales shown, with the same search and days. On a device with no Counter (a
 handheld, or a till with no counter zones) a presented counter bill opens Find a bill's collecting
 dialog on what it owes, and a parked one opens the pay window, on the whole bill on a handheld
 while none of it is paid and otherwise on an amount, emptying the basket when that window closes or

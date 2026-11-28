@@ -323,7 +323,7 @@ describe("Find Transactions SQL paging", () => {
     ]);
   });
 
-  it("filters dates, any tender, type and issuing staff before counts and paging", async () => {
+  it("filters dates, type and issuing staff before counts and paging", async () => {
     const id = await invoice(
       { counterpartyTaxId: "B12345674", operatorId: venue.supervisorId },
       false,
@@ -349,7 +349,6 @@ describe("Find Transactions SQL paging", () => {
       preset: "custom",
       from: "2026-10-15",
       to: "2026-10-15",
-      method: "card",
       type: "full-invoice",
       staffId: venue.supervisorId,
     };
@@ -364,7 +363,6 @@ describe("Find Transactions SQL paging", () => {
       },
     });
     expect(result.rows.map((r) => r.saleId)).toEqual([id]);
-    expect((await list({ ...values, method: "cash" })).rows.map((r) => r.saleId)).toEqual([id]);
   });
 
   it("searches formatted invoices, customers and retained order/party/table names with shared word ranking", async () => {
@@ -399,27 +397,26 @@ describe("Find Transactions SQL paging", () => {
     ]);
     expect((await list({ q: "gar " })).total).toBe(0);
     expect((await list({ q: "' OR 1=1 --" })).total).toBe(0);
-    const exact = await invoice({ counterpartyLegalName: "Álvaro", total: 100 });
-    expect(
-      (await list({ q: "alvaro", sort: "amount", direction: "descending" })).rows.map(
-        (r) => r.saleId,
-      ),
-    ).toEqual([exact, id]);
+    const exact = await invoice({
+      counterpartyLegalName: "Álvaro",
+      issuedAt: "2026-10-14T12:00:00.000Z",
+    });
+    expect((await list()).rows.map((r) => r.saleId).indexOf(exact)).toBeGreaterThan(0);
+    expect((await list({ q: "alvaro" })).rows.map((r) => r.saleId)).toEqual([exact, id]);
   });
 
-  it("applies each date, method, type and staff predicate on its own to both rows and totals", async () => {
+  it("applies each date, type and staff predicate on its own to both rows and totals", async () => {
     const own = await invoice(
       { counterpartyTaxId: "B12345674", operatorId: venue.supervisorId },
       false,
     );
     await tender(own, "card");
     const cash = await invoice({ issuedAt: "2026-10-14T12:00:00.000Z" });
-    const before = await invoice({ issuedAt: "2026-10-14T21:59:59.999Z" });
+    await invoice({ issuedAt: "2026-10-14T21:59:59.999Z" });
     const start = await invoice({ issuedAt: "2026-10-14T22:00:00.000Z" });
-    const end = await invoice({ issuedAt: "2026-10-15T22:00:00.000Z" });
+    await invoice({ issuedAt: "2026-10-15T22:00:00.000Z" });
     const correction = await invoice({ correctsSaleId: cash, total: -100 });
     for (const [filter, wanted] of [
-      [{ method: "card" }, [own]],
       [{ type: "full-invoice" }, [own]],
       [{ type: "correction" }, [correction]],
       [{ staffId: venue.supervisorId }, [own]],
@@ -433,9 +430,6 @@ describe("Find Transactions SQL paging", () => {
         total: wanted.length,
       });
     }
-    expect(new Set((await list({ method: "cash" })).rows.map((r) => r.saleId))).toEqual(
-      new Set([cash, before, start, end]),
-    );
   });
 
   it("keeps the closed party's retained table names after today's table label changes", async () => {
@@ -454,84 +448,13 @@ describe("Find Transactions SQL paging", () => {
     });
   });
 
-  it("sorts invoice series and numbers numerically, signed amounts, and nullable columns last in either direction", async () => {
-    const [series] = await inTx(venue, (tx) =>
-      tx
-        .insert(invoiceSeries)
-        .values({ nodeId: venue.cfg.nodeId, code: "T1" })
-        .returning({ id: invoiceSeries.id }),
-    );
-    const orderZ = await parked(venue, "Small beer");
-    const orderA = await parked(venue, "Tarta");
-    await inTx(venue, async (tx) => {
-      await tx.update(workingOrders).set({ label: "Zed" }).where(eq(workingOrders.id, orderZ));
-      await tx.update(workingOrders).set({ label: "Alpha" }).where(eq(workingOrders.id, orderA));
-    });
-    const ten = await invoice(
-      {
-        workingOrderId: orderZ,
-        seriesId: series!.id,
-        invoiceNumber: 10,
-        total: 2000,
-        counterpartyLegalName: "Zeta",
-        operatorId: venue.supervisorId,
-      },
-      false,
-    );
-    const two = await invoice(
-      {
-        workingOrderId: orderA,
-        seriesId: series!.id,
-        invoiceNumber: 2,
-        total: 100,
-        issuedAt: "2026-10-14T12:00:00.000Z",
-      },
-      false,
-    );
-    const zero = await invoice({ total: 0, operatorId: null });
-    await tender(ten, "card", { amount: 2000 });
-    await settle(ten);
-    await tender(two, "cash", { amount: 100 });
-    await settle(two);
-    const correction = await invoice({ correctsSaleId: ten, total: -121 });
-    const ids = async (values: Record<string, string>) =>
-      (await list(values)).rows.map((r) => r.saleId);
-    expect(await ids({ sort: "invoice", direction: "ascending" })).toEqual([
-      zero,
-      correction,
-      two,
-      ten,
+  it("lists newest first, breaking a tie by id", async () => {
+    const older = await invoice({ issuedAt: "2026-10-14T12:00:00.000Z" });
+    const tied = [await invoice(), await invoice(), await invoice()];
+    expect((await list()).rows.map((r) => r.saleId)).toEqual([
+      ...[...tied].sort().reverse(),
+      older,
     ]);
-    expect(await ids({ sort: "invoice", direction: "descending" })).toEqual([
-      ten,
-      two,
-      correction,
-      zero,
-    ]);
-    expect(await ids({ sort: "amount", direction: "ascending" })).toEqual([
-      correction,
-      zero,
-      two,
-      ten,
-    ]);
-    expect(await ids({ sort: "when", direction: "ascending" })).toEqual([
-      two,
-      ...[ten, zero, correction].sort().reverse(),
-    ]);
-    expect((await list({ sort: "type", direction: "ascending" })).rows[0]!.saleId).toBe(correction);
-    for (const direction of ["ascending", "descending"]) {
-      const methods = (await list({ sort: "method", direction })).rows;
-      expect(methods.slice(0, 2).map((r) => r.saleId)).toEqual(
-        direction === "ascending" ? [ten, two] : [two, ten],
-      );
-      expect(methods.slice(2).every((r) => r.methods.length === 0)).toBe(true);
-      expect((await list({ sort: "staff", direction })).rows.at(-1)!.saleId).toBe(zero);
-      const labels = (await list({ sort: "tableName", direction })).rows;
-      expect(labels.slice(0, 3).map((r) => r.tableName)).toEqual(
-        direction === "ascending" ? ["Alpha", "Zed", "Zed"] : ["Zed", "Zed", "Alpha"],
-      );
-      expect(labels.at(-1)!.saleId).toBe(zero);
-    }
   });
 
   it("uses every original order's zone for corrections and multi-sale substitutions, and names no order for several", async () => {
@@ -676,7 +599,7 @@ describe("completed post-invoice refund Transactions", () => {
       type: "sale",
     });
   });
-  it("excludes pending/failed attempts and filters completion dates, refund method, type and requester before counting", async () => {
+  it("excludes pending/failed attempts and filters completion dates, type and requester before counting", async () => {
     const saleId = await invoice();
     const cash = await returned(saleId);
     const card = await returned(saleId, {
@@ -691,8 +614,6 @@ describe("completed post-invoice refund Transactions", () => {
     expect((await list()).total).toBe(3);
     for (const [filter, wanted] of [
       [{ type: "refund" }, [card.id, cash.id]],
-      [{ type: "refund", method: "cash" }, [cash.id]],
-      [{ type: "refund", method: "card" }, [card.id]],
       [{ staffId: venue.supervisorId }, [cash.id]],
       [{ preset: "custom", from: "2026-10-16", to: "2026-10-16" }, [card.id, cash.id]],
     ] as [Record<string, string>, string[]][]) {
@@ -736,7 +657,6 @@ describe("completed post-invoice refund Transactions", () => {
     expect((await list({ type: "refund" })).rows[0]!.methods).toEqual([
       { method: "card", last4: "3210" },
     ]);
-    expect((await list({ type: "refund", method: "cash" })).total).toBe(0);
   });
   it("keeps refund original-sale zone scope in addition to their distinct refund identity", async () => {
     const allowed = await parked(venue, "Small beer");
@@ -801,19 +721,19 @@ describe("completed post-invoice refund Transactions", () => {
       corrective,
     ]);
   });
-  it("pages across invoices and refunds without collapsing shared sale ids and sorts signed amounts", async () => {
+  it("pages across invoices and refunds without collapsing shared sale ids", async () => {
     const saleId = await invoice();
     const ids: string[] = [];
     for (let i = 0; i < 51; i++)
       ids.push((await returned(saleId, { appliedAmount: i + 1, tipAmount: 0 })).id);
-    const first = await list({ sort: "amount", direction: "ascending" });
+    const newest = [...ids].sort().reverse();
+    const first = await list();
     expect(first).toMatchObject({ total: 52, pageSize: 50, page: 0 });
-    expect(first.rows.map((r) => r.refundId)).toEqual([...ids].reverse().slice(0, 50));
-    expect(
-      (await list({ sort: "amount", direction: "ascending", page: "1" })).rows.map(
-        (r) => r.transactionId,
-      ),
-    ).toEqual([`refund:${ids[0]}`, `sale:${saleId}`]);
+    expect(first.rows.map((r) => r.refundId)).toEqual(newest.slice(0, 50));
+    expect((await list({ page: "1" })).rows.map((r) => r.transactionId)).toEqual([
+      `refund:${newest[50]}`,
+      `sale:${saleId}`,
+    ]);
   });
 });
 
@@ -909,7 +829,7 @@ describe("Find Transactions amount search", () => {
     );
   });
 
-  it("still applies dates, staff, method and kind to amount matches", async () => {
+  it("still applies dates, staff and kind to amount matches", async () => {
     const own = await invoice({ total: 700, operatorId: venue.supervisorId });
     const other = await invoice({ total: 700, issuedAt: "2026-10-14T12:00:00.000Z" });
     const ids = async (values: Record<string, string>) =>
@@ -917,22 +837,6 @@ describe("Find Transactions amount search", () => {
     expect(await ids({ staffId: venue.supervisorId })).toEqual([own]);
     expect(await ids({ preset: "custom", from: "2026-10-14", to: "2026-10-14" })).toEqual([other]);
     expect(await ids({ type: "full-invoice" })).toEqual([]);
-    expect(await ids({ method: "card" })).toEqual([]);
-  });
-
-  it("matches a payment of the chosen method only, under the method filter", async () => {
-    const order = await parked(venue, "Tarta");
-    const split = await invoice({ workingOrderId: order, total: 4000 }, false);
-    await tender(split, "card", { amount: 2200 });
-    await tender(split, "cash", { amount: 1800 });
-    await settle(split);
-    expect((await list({ q: "18,00" })).rows).toMatchObject([
-      { saleId: split, amountMatch: "payment" },
-    ]);
-    expect((await list({ q: "18,00", method: "card" })).rows).toEqual([]);
-    expect((await list({ q: "22,00", method: "card" })).rows).toMatchObject([
-      { saleId: split, amountMatch: "payment" },
-    ]);
   });
 
   it("asks for every corrective kind with corrective, beside the six other kinds", async () => {

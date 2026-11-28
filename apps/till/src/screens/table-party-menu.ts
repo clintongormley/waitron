@@ -183,7 +183,7 @@ export const tablePartyMenuStyles = css`
     background: var(--wt-color-field-fill);
   }
   .party-menu [data-finish-table] {
-    margin: var(--wt-space-2) var(--wt-space-4) var(--wt-space-5);
+    margin: var(--wt-space-2) var(--wt-space-4) 0;
     width: auto;
   }
   .party-menu [data-finish-table]::part(button) {

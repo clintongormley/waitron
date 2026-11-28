@@ -15,9 +15,7 @@ const billsQuery: BillsQuery = {
 const transactionsQuery: TransactionsQuery = {
   q: "T1/12 ",
   page: 2,
-  sort: { key: "invoice", direction: "descending" },
   dates: { preset: "custom", from: "2026-10-01", to: "2026-10-15" },
-  method: "card",
   type: "corrective",
   staffId: "staff-2",
 };
@@ -71,12 +69,9 @@ describe("Find a bill client", () => {
     expect(Object.fromEntries(parsed.searchParams)).toEqual({
       q: "T1/12 ",
       page: "2",
-      sort: "invoice",
-      direction: "descending",
       preset: "custom",
       from: "2026-10-01",
       to: "2026-10-15",
-      method: "card",
       type: "corrective",
       staffId: "staff-2",
     });
@@ -90,17 +85,12 @@ describe("Find a bill client", () => {
       );
     const api = new TillApi("", fetchStub);
     expect(api.listTransactions).toBeTypeOf("function");
-    await api.listTransactions({
-      q: "",
-      page: 0,
-      sort: { key: "when", direction: "descending" },
-      dates: { preset: "any" },
-    });
+    await api.listTransactions({ q: "", page: 0, dates: { preset: "any" } });
     expect(
       Object.fromEntries(
         new URL(String(fetchStub.mock.calls[0]![0]), location.origin).searchParams,
       ),
-    ).toEqual({ q: "", page: "0", sort: "when", direction: "descending", preset: "any" });
+    ).toEqual({ q: "", page: "0", preset: "any" });
     await api.listBills({ q: "", page: 0, sort: { key: "openedAt", direction: "descending" } });
     expect(
       Object.fromEntries(

@@ -194,7 +194,8 @@ nobody in your team made, check the account straight away.
 ## Find a bill {#find-a-bill}
 
 **Find a bill** lists finished sales, newest first. Search by number, table, name, a card's last
-digits or an amount, such as 80.52. Above the sales, **Unpaid bills** lists bills guests left
+digits or an amount, such as 80.52. It opens on today's sales: for an older one, choose the days
+from the button under the search, such as **Any date** or **From / To**. Above the sales, **Unpaid bills** lists bills guests left
 without paying, and **Counter orders** the counter orders not yet finished: choose one to open it.
 
 ## Choose a document and printer {#invoice-printer}

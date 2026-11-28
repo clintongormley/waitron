@@ -160,7 +160,8 @@ export class WtRowActions extends LitElement {
         --wt-row-actions-bottom: var(--wt-menu-sheet-bottom-offset);
       }
       :host([bottom-sheet][sheet-variant="menu"]) .actions {
-        padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        padding: 0 env(safe-area-inset-right) calc(var(--wt-space-5) + env(safe-area-inset-bottom))
+          env(safe-area-inset-left);
         border: 0;
         box-shadow: var(--wt-menu-sheet-shadow);
       }

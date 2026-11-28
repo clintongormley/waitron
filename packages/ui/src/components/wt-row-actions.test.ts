@@ -97,6 +97,20 @@ test("the menu sheet and its scrim stop above the bottom bar and read their pain
   }
 });
 
+test("the menu sheet leaves --wt-space-5 under its last row", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el, popup } = await menuSheet("<button>Edit</button><button>Any date</button>");
+    host.style.setProperty("--wt-space-5", "27px");
+    const sheet = popup.querySelector<HTMLElement>(".actions")!;
+    const last = el.querySelector<HTMLElement>("button:last-of-type")!;
+    await expect.poll(() => sheet.getBoundingClientRect().bottom).toBeCloseTo(844, 0);
+    expect(sheet.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom).toBe(27);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
 test("the visible bar stays active and its sheet trigger closes on the second tap", async () => {
   const { trigger, popup } = await menuSheet(
     "<button>Find a bill</button>",

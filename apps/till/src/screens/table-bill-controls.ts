@@ -361,7 +361,6 @@ export const billControlStyles = css`
     flex-direction: column;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-block-end: var(--wt-space-5);
   }
   .bill-menu [data-row-choice]:disabled {
     color: var(--wt-color-text-muted);

@@ -7132,7 +7132,8 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     expect(app.drill?.kind).toBe("find-bill");
     const back = el
       .shadowRoot!.querySelector("till-find-bill-screen")!
-      .shadowRoot!.querySelector<HTMLElement>("header wt-button")!;
+      .shadowRoot!.querySelector("wt-top-bar")!
+      .shadowRoot!.querySelector<HTMLElement>("wt-button")!;
     const toCounter = name === "a till with counter zones";
     expect(text(back)).toBe(toCounter ? "Back to counter" : "Back");
     back.click();

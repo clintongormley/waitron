@@ -10,7 +10,6 @@ import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
-import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import {
   billOptions,
   billRow,
@@ -34,6 +33,7 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
+  pageAt,
   resetPage,
   servedMenus,
   startCounterBasket,
@@ -26403,7 +26403,7 @@ describe("A737 Find a bill page", () => {
     await flush(el);
     expect(pageOf(el), "Find a bill is a full page").not.toBeNull();
     await vi.waitFor(() =>
-      expect(pageOf(el)!.shadowRoot!.querySelector("wt-data-table")?.rows).toHaveLength(1),
+      expect(pageOf(el)!.shadowRoot!.querySelectorAll("button[data-transaction]")).toHaveLength(1),
     );
     return { el, counter, view: pageOf(el)! };
   }
@@ -26612,7 +26612,7 @@ describe("A737 Find a bill page", () => {
     expect(pageOf(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
   });
-  it("reads an orderless historical receipt by sale ID and returns to the same Transactions table without altering the basket", async () => {
+  it("reads an orderless historical receipt by sale ID and returns to the same search and rows without altering the basket", async () => {
     const getTransactionReceipt = vi.fn().mockResolvedValue({
       ...saleResult,
       invoiceType: "F1",
@@ -26621,7 +26621,11 @@ describe("A737 Find a bill page", () => {
     });
     const originalRead = vi.fn();
     const listTransactions = vi.fn(async (query: { page: number }) => ({
-      ...listPage([transactionRow()], 101, query.page),
+      ...listPage(
+        [query.page === 0 ? transactionRow({ transactionId: "sale-0" }) : transactionRow()],
+        101,
+        query.page,
+      ),
       dates: resolvedDates,
     }));
     const { el, counter, view } = await open({
@@ -26642,24 +26646,30 @@ describe("A737 Find a bill page", () => {
     });
     counter.store.addProduct(coffee, "2");
     await view.updateComplete;
-    const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
-    await vi.waitFor(() => expect(grid.rows).toHaveLength(1));
-    const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const field = view.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+    const search = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
     await userEvent.fill(page.elementLocator(search), "0091 ");
     await vi.waitFor(() =>
       expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " }),
     );
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    await userEvent.click(
-      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
+    const more = await vi.waitFor(() => {
+      const found = view.shadowRoot!.querySelector<HTMLElement>("[data-list-more]");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    await userEvent.click(page.elementLocator(more));
+    await vi.waitFor(() =>
+      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, q: "0091 " }),
     );
-    await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    await userEvent.click(
-      page.elementLocator(
-        grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
-      ),
-    );
+    const later = await vi.waitFor(() => {
+      const found = view.shadowRoot!.querySelector<HTMLElement>(
+        'button[data-transaction="sale-1"]',
+      );
+      expect(found, "the row Show more added").not.toBeNull();
+      return found!;
+    });
+    const calledBefore = listTransactions.mock.calls.length;
+    await userEvent.click(page.elementLocator(later));
     await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
     expect(getTransactionReceipt.mock.calls[0]![0]).toBe("sale-1");
     const receipt = ticket(el)!;
@@ -26682,13 +26692,91 @@ describe("A737 Find a bill page", () => {
     emit(receipt, "back-to-find-bill");
     await flush(el);
     expect(pageOf(el)).toBe(view);
-    expect(view.shadowRoot!.querySelector("wt-data-table")).toBe(grid);
+    expect(view.shadowRoot!.querySelector('wt-input[name="search"]')).toBe(field);
     expect(counter.store.lines[0]!.quantity).toBe("2");
     await vi.waitFor(() =>
-      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, q: "0091 " }),
+      expect(
+        [...view.shadowRoot!.querySelectorAll<HTMLElement>("button[data-transaction]")].map(
+          (row) => row.dataset.transaction,
+        ),
+      ).toEqual(["sale-0", "sale-1"]),
     );
-    expect(grid.serverPaging?.page).toBe(1);
+    expect(listTransactions.mock.calls.slice(calledBefore).map(([query]) => query)).toMatchObject([
+      { page: 0, q: "0091 " },
+      { page: 1, q: "0091 " },
+    ]);
     expect(search.value).toBe("0091 ");
+  });
+  it("on a phone keeps the top bar and search in place while only the list scrolls, and brings a sale opened after Show more back into that list", async () => {
+    await pageAt(390, 844);
+    try {
+      const sales = Array.from({ length: 51 }, (_, index) =>
+        transactionRow({ transactionId: `sale-${index + 1}` }),
+      );
+      const { el } = await mountApp({
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
+        listBills: vi.fn().mockResolvedValue(listPage([])),
+        listTransactions: vi.fn(async (query: { page: number }) => ({
+          ...listPage(query.page === 0 ? sales.slice(0, 50) : sales.slice(50), 51, query.page),
+          dates: resolvedDates,
+        })),
+        getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      });
+      el.parentElement!.style.blockSize = "100%";
+      await toCounter(el);
+      emit(shell(el)!, "find-bill");
+      await flush(el);
+      const view = pageOf(el)!;
+      const more = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>("[data-list-more]");
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      const list = view
+        .shadowRoot!.querySelector("wt-full-screen-panel")!
+        .shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const drill = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".drill")!;
+      const bar = view.shadowRoot!.querySelector("wt-top-bar")!;
+      const field = view.shadowRoot!.querySelector('wt-input[name="search"]')!;
+      const barTop = bar.getBoundingClientRect().top;
+      const fieldTop = field.getBoundingClientRect().top;
+      const seen = () =>
+        `screen ${view.getBoundingClientRect().height} tall, list scrollTop ${list.scrollTop}, page scrollTop ${drill.scrollTop}, bar ${bar.getBoundingClientRect().top}`;
+      expect(view.getBoundingClientRect().height, seen()).toBeLessThanOrEqual(drill.clientHeight);
+      more.scrollIntoView({ block: "center" });
+      expect(list.scrollTop, seen()).toBeGreaterThan(1000);
+      expect(drill.scrollTop, seen()).toBe(0);
+      expect(bar.getBoundingClientRect().top, seen()).toBe(barTop);
+      expect(field.getBoundingClientRect().top, seen()).toBe(fieldTop);
+      await userEvent.click(page.elementLocator(more));
+      const last = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>(
+          'button[data-transaction="sale-51"]',
+        );
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      last.scrollIntoView({ block: "center" });
+      await userEvent.click(page.elementLocator(last));
+      await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+      expect(view.checkVisibility(), "Find a bill is hidden under the receipt").toBe(false);
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      expect(view.checkVisibility()).toBe(true);
+      await vi.waitFor(() => {
+        const row = view.shadowRoot!.querySelector('button[data-transaction="sale-51"]');
+        expect(row).not.toBeNull();
+        const box = row!.getBoundingClientRect();
+        const shown = list.getBoundingClientRect();
+        expect(box.top, seen()).toBeGreaterThanOrEqual(shown.top);
+        expect(box.bottom, seen()).toBeLessThanOrEqual(shown.bottom);
+      });
+      expect(drill.scrollTop, seen()).toBe(0);
+      expect(bar.getBoundingClientRect().top, seen()).toBe(barTop);
+    } finally {
+      await resetPage();
+    }
   });
   it("ignores a historical receipt answered after Back", async () => {
     let resolve!: (value: TillSaleResult) => void;
@@ -27253,7 +27341,10 @@ describe("A737 Find a bill page", () => {
     const { el, view } = await open();
     await userEvent.click(
       page.elementLocator(
-        view.shadowRoot!.querySelector("header wt-button")!.shadowRoot!.querySelector("button")!,
+        view
+          .shadowRoot!.querySelector("wt-top-bar")!
+          .shadowRoot!.querySelector("wt-button")!
+          .shadowRoot!.querySelector("button")!,
       ),
     );
     await flush(el);
@@ -28644,56 +28735,50 @@ describe("A737 post-invoice refund integration", () => {
       },
     );
 
-    it("money given back keeps the Transactions query, filters, sorting and page while leaving the basket intact", async () => {
+    it("money given back keeps the search, days and rows shown while leaving the basket intact", async () => {
       let searchRequested!: () => void;
       const searchRequest = new Promise<void>((resolve) => (searchRequested = resolve));
       const listTransactions = vi.fn(async (query: { page: number; q: string }) => {
         if (query.q === "0091 ") searchRequested();
-        return { ...listPage([transactionRow()], 101, query.page), dates: resolvedDates };
+        return {
+          ...listPage(
+            [query.page === 0 ? transactionRow({ transactionId: "sale-0" }) : transactionRow()],
+            101,
+            query.page,
+          ),
+          dates: resolvedDates,
+        };
       });
       const { el, view, basket } = await open({ ...giving(), listTransactions });
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
-      await vi.waitFor(() => expect(grid.loading).toBe(false));
-      await userEvent.click(
-        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>('[data-sort="amount"]')!),
-      );
-      await vi.waitFor(() => expect(grid.loading).toBe(false));
-      await userEvent.click(
-        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!),
-      );
-      await chooseOption(grid.shadowRoot!.querySelector('[data-filter="method"]')!, "card");
-      await chooseOption(grid.shadowRoot!.querySelector('[data-filter="type"]')!, "full-invoice");
-      await userEvent.click(
-        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-close")!),
-      );
-      await vi.waitFor(() => expect(grid.loading).toBe(false));
-      const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+      const field = view.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+      const search = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
       await userEvent.fill(page.elementLocator(search), "0091 ");
       await searchRequest;
       expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " });
-      await vi.waitFor(() => expect(grid.loading).toBe(false));
-      await userEvent.click(
-        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
+      const more = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>("[data-list-more]");
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      await userEvent.click(page.elementLocator(more));
+      await vi.waitFor(() =>
+        expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1 }),
       );
-      await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
-      await vi.waitFor(() => expect(grid.loading).toBe(false));
       basket.store.addProduct(coffee, "2");
       await flush(el);
       const before = listTransactions.mock.calls.at(-1)![0];
-      expect(before).toMatchObject({
-        q: "0091 ",
-        page: 1,
-        method: "card",
-        type: "full-invoice",
-        sort: { key: "amount", direction: "ascending" },
+      expect(before).toEqual({ q: "0091 ", page: 1, dates: { preset: "today" } });
+      const later = await vi.waitFor(() => {
+        const found = view.shadowRoot!.querySelector<HTMLElement>(
+          'button[data-transaction="sale-1"]',
+        );
+        expect(found, "the row Show more added").not.toBeNull();
+        return found!;
       });
-      await userEvent.click(
-        page.elementLocator(
-          grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
-        ),
-      );
+      const calledBefore = listTransactions.mock.calls.length;
+      await userEvent.click(page.elementLocator(later));
       await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
       await pressGoodwill(el);
       await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
@@ -28702,9 +28787,16 @@ describe("A737 post-invoice refund integration", () => {
       expect(giveBack(el)).toBeNull();
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      expect(view.shadowRoot!.querySelector("wt-data-table")).toBe(grid);
-      await vi.waitFor(() => expect(listTransactions.mock.calls.at(-1)![0]).toEqual(before));
-      expect(grid.serverPaging?.page).toBe(1);
+      expect(view.shadowRoot!.querySelector('wt-input[name="search"]')).toBe(field);
+      const rows = () =>
+        [...view.shadowRoot!.querySelectorAll<HTMLElement>("button[data-transaction]")].map(
+          (row) => row.dataset.transaction,
+        );
+      await vi.waitFor(() => expect(rows()).toEqual(["sale-0", "sale-1"]));
+      expect(listTransactions.mock.calls.slice(calledBefore).map(([query]) => query)).toEqual([
+        { ...before, page: 0 },
+        before,
+      ]);
       expect(search.value).toBe("0091 ");
       expect(basket.store.lines[0]!.quantity).toBe("2");
     });

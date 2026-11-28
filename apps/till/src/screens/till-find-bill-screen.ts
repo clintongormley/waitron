@@ -2,50 +2,28 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import type { DataTableColumn, WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
+import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import type { TillApi } from "../api/client.js";
 import type { OpenInvoiceCorrection } from "../api/invoice-correction-types.js";
 import type {
   BillRow,
-  DateWindow,
   FindBillDates,
   FindBillOptions,
   TransactionRow,
-  TransactionsQuery,
+  TransactionsPage,
 } from "../api/find-bill-types.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import "@waitron/ui/src/components/wt-data-table.js";
+import { findBillRow, findBillRowStyles } from "./find-bill-row.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-full-screen-panel.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-top-bar.js";
 
-type Row = TransactionRow;
-type QueryDetail = {
-  search: string;
-  sortKey: string;
-  sortDirection: "ascending" | "descending";
-  filters: Record<string, string | string[]>;
-};
-type View = {
-  query?: QueryDetail;
-  page: number;
-  rows: Row[];
-  total: number;
-  loading: boolean;
-  error: string;
-};
-const emptyView = (): View => ({ page: 0, rows: [], total: 0, loading: false, error: "" });
-const methods = ["cash", "card", "voucher", "deferred", "other"] as const;
-const types = [
-  "sale",
-  "full-invoice",
-  "correction",
-  "full-correction",
-  "replacement",
-  "refund",
-] as const;
 const presets = [
   "today",
   "yesterday",
@@ -61,6 +39,8 @@ function validDate(value: string): boolean {
   const date = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+const dayText = (value: string) =>
+  new Date(`${value}T00:00:00Z`).toLocaleDateString(currentLocale(), { timeZone: "UTC" });
 
 @customElement("till-find-bill-screen")
 export class TillFindBillScreen extends LitElement {
@@ -70,26 +50,47 @@ export class TillFindBillScreen extends LitElement {
   }
   static override styles = [
     baseStyles,
+    actionChoiceStyles,
+    findBillRowStyles,
     css`
       :host {
         display: block;
+        block-size: 100%;
         min-width: 0;
         color: var(--wt-color-text);
-        padding: var(--wt-space-4);
       }
-      header,
+      .band {
+        display: grid;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        background: var(--wt-color-surface);
+        border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
+      }
       .chips {
         display: flex;
-        align-items: center;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
-      header {
-        margin-bottom: var(--wt-space-3);
+      .days::part(trigger) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        min-height: var(--wt-tap-min);
+        padding-inline: var(--wt-space-3);
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface);
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
       }
-      h1 {
-        font-size: var(--wt-font-size-xl);
-        margin: 0;
+      .days [slot="trigger"] {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+      .days [slot="trigger"] wt-icon {
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
       }
       .dates {
         display: grid;
@@ -99,8 +100,8 @@ export class TillFindBillScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .chips {
-        padding-block: var(--wt-space-2);
+      .sections {
+        padding: var(--wt-space-3) var(--wt-space-4) 0;
       }
       .strip {
         display: flex;
@@ -119,6 +120,28 @@ export class TillFindBillScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
         margin: 0;
       }
+      .order {
+        margin: 0;
+        padding: var(--wt-space-3) var(--wt-space-4) calc(var(--wt-space-1) + var(--wt-space-1) / 2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .state {
+        display: grid;
+        justify-items: start;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3) var(--wt-space-4);
+      }
+      .state p {
+        margin: 0;
+      }
+      .more {
+        padding-block-end: var(--wt-space-4);
+      }
+      wt-full-screen-panel > :last-child {
+        margin-block-end: env(safe-area-inset-bottom);
+      }
     `,
   ];
   @property({ attribute: false }) api!: TillApi;
@@ -131,7 +154,15 @@ export class TillFindBillScreen extends LitElement {
   @state() private dateFrom = "";
   @state() private dateTo = "";
   @state() private dateInvalid = false;
-  @state() private resolved: DateWindow = null;
+  @state() private search = "";
+  @state() private rows: TransactionRow[] = [];
+  /** The count the answer to the current search and days gave; null until it arrives. */
+  @state() private found: number | null = null;
+  @state() private more = false;
+  @state() private listLoading: "list" | "more" | null = null;
+  @state() private listError: "list" | "more" | null = null;
+  #page = 0;
+  #opened?: string;
   @state() private corrections: OpenInvoiceCorrection[] = [];
   @state() private correctionsError = false;
   #correctionsController?: AbortController;
@@ -141,7 +172,6 @@ export class TillFindBillScreen extends LitElement {
   @state() private owedError: "list" | "more" | null = null;
   #owedPage = 0;
   #owedController?: AbortController;
-  #view: View = emptyView();
   #controller?: AbortController;
   #optionsController?: AbortController;
   #generation = 0;
@@ -155,14 +185,18 @@ export class TillFindBillScreen extends LitElement {
       this.#optionsGeneration++;
       if (changed.has("api") && changed.get("api") !== undefined) {
         this.options = undefined;
-        this.#view = emptyView();
+        this.rows = [];
+        this.#page = 0;
+        this.found = null;
+        this.more = false;
+        this.listError = null;
         this.optionsError = "";
         this.owed = [];
         this.owedMore = false;
         this.corrections = [];
       }
       if (this.active && this.api) {
-        if (this.options) this.#read();
+        if (this.options) void this.#reread();
         else void this.#loadOptions();
       }
       void this.#loadCorrections();
@@ -182,7 +216,7 @@ export class TillFindBillScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated && this.active) {
-      if (this.options) this.#read();
+      if (this.options) void this.#reread();
       else void this.#loadOptions();
       void this.#loadCorrections();
       void this.#loadOwed();
@@ -375,7 +409,7 @@ export class TillFindBillScreen extends LitElement {
     this.#controller?.abort();
     clearTimeout(this.#timer);
     this.#timer = undefined;
-    this.#view.loading = false;
+    this.listLoading = null;
   }
   async #loadOptions(): Promise<void> {
     const generation = ++this.#optionsGeneration;
@@ -386,32 +420,21 @@ export class TillFindBillScreen extends LitElement {
       const options = await this.api.findBillOptions({ signal: controller.signal });
       if (generation !== this.#optionsGeneration || !this.active || !this.isConnected) return;
       this.options = options;
+      void this.#read();
     } catch {
       if (generation === this.#optionsGeneration && this.active && this.isConnected)
         this.optionsError = label("load_failed");
     }
   }
-  #query(event: CustomEvent<QueryDetail>): void {
-    event.stopPropagation();
-    const view = this.#view,
-      previous = view.query;
-    view.query = event.detail;
-    if (JSON.stringify(previous) === JSON.stringify(view.query)) return;
-    view.page = 0;
-    if (!this.active) return;
-    this.#schedule(previous !== undefined && previous.search !== view.query.search);
-  }
   #schedule(debounce = false): void {
     this.#cancel();
-    const view = this.#view;
-    view.error = "";
-    view.rows = [];
-    if (!this.active || !view.query || this.dateInvalid) {
-      this.requestUpdate();
-      return;
-    }
-    view.loading = true;
-    this.requestUpdate();
+    this.listError = null;
+    this.rows = [];
+    this.found = null;
+    this.#page = 0;
+    this.#opened = undefined;
+    if (!this.active || !this.options || this.dateInvalid) return;
+    this.listLoading = "list";
     if (debounce)
       this.#timer = setTimeout(() => {
         this.#timer = undefined;
@@ -419,310 +442,279 @@ export class TillFindBillScreen extends LitElement {
       }, 200);
     else void this.#read();
   }
-  async #read(): Promise<void> {
-    const view = this.#view,
-      query = view.query;
-    if (!query || !this.active || !this.isConnected || this.dateInvalid) return;
+  async #read(more = false): Promise<void> {
+    if (!this.options || !this.active || !this.isConnected || this.dateInvalid) return;
     this.#cancel();
     const generation = this.#generation;
     const controller = (this.#controller = new AbortController());
-    view.loading = true;
-    view.error = "";
-    view.rows = [];
-    this.requestUpdate();
-    const filter = (key: string) =>
-      typeof query.filters[key] === "string" ? (query.filters[key] as string) : undefined;
+    const page = more ? this.#page + 1 : 0;
+    this.listError = null;
+    this.listLoading = more ? "more" : "list";
+    if (!more) {
+      this.rows = [];
+      this.found = null;
+      this.#page = 0;
+      this.#opened = undefined;
+    }
     try {
-      const result = await this.api.listTransactions(
-        {
-          q: query.search,
-          page: view.page,
-          sort: {
-            key: query.sortKey || "when",
-            direction: query.sortKey ? query.sortDirection : ("descending" as const),
-          },
-          ...(filter("staff") ? { staffId: filter("staff") } : {}),
-          dates: this.dates,
-          ...(filter("method") ? { method: filter("method") as TransactionsQuery["method"] } : {}),
-          ...(filter("type") ? { type: filter("type") as TransactionsQuery["type"] } : {}),
-        },
-        { signal: controller.signal },
-      );
+      const result = await this.#readPage(page, controller.signal);
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
-      const last = Math.max(0, Math.ceil(result.total / 50) - 1);
-      if (view.page > last) {
-        view.total = result.total;
-        view.page = last;
-        void this.#read();
-        return;
-      }
-      view.rows = result.rows;
-      view.total = result.total;
-      this.resolved = result.dates;
+      this.#take(result, page, more ? this.rows : []);
     } catch {
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
-      view.error = label("load_failed");
+      this.listError = more ? "more" : "list";
     } finally {
-      if (generation === this.#generation) {
-        view.loading = false;
-        this.requestUpdate();
-      }
+      if (generation === this.#generation) this.listLoading = null;
     }
   }
+  /** Reads every page shown before again, in turn, so a return to the screen keeps staff's place. */
+  async #reread(): Promise<void> {
+    if (!this.options || !this.active || !this.isConnected || this.dateInvalid) return;
+    this.#cancel();
+    const generation = this.#generation;
+    const controller = (this.#controller = new AbortController());
+    const through = this.#page;
+    this.listError = null;
+    this.listLoading = "list";
+    this.rows = [];
+    this.found = null;
+    const read: { result: TransactionsPage; page: number }[] = [];
+    let failed = false;
+    try {
+      for (let page = 0; page <= through; page++) {
+        const result = await this.#readPage(page, controller.signal);
+        if (generation !== this.#generation || !this.active || !this.isConnected) return;
+        read.push({ result, page });
+        if ((page + 1) * result.pageSize >= result.total) break;
+      }
+    } catch {
+      if (generation !== this.#generation || !this.active || !this.isConnected) return;
+      failed = true;
+    } finally {
+      if (generation === this.#generation) this.listLoading = null;
+    }
+    // A visit ended part-way leaves #page alone, so the next visit reads the same pages again.
+    for (const { result, page } of read) this.#take(result, page, this.rows);
+    if (failed) this.listError = read.length === 0 ? "list" : "more";
+    void this.#showOpened();
+  }
+  /** The reread draws the list from empty, losing its scroll position and the sale staff opened. */
+  async #showOpened(): Promise<void> {
+    const opened = this.#opened;
+    this.#opened = undefined;
+    if (opened === undefined) return;
+    await this.updateComplete;
+    const button = this.renderRoot.querySelector<HTMLElement>(
+      `button[data-transaction="${CSS.escape(opened)}"]`,
+    );
+    if (button === null) return;
+    button.scrollIntoView({ block: "center" });
+    if (document.activeElement === document.body) button.focus({ preventScroll: true });
+  }
+  #readPage(page: number, signal: AbortSignal) {
+    return this.api.listTransactions({ q: this.search, page, dates: this.dates }, { signal });
+  }
+  #take(result: TransactionsPage, page: number, shown: TransactionRow[]): void {
+    // Paging is by offset, so a sale recorded between reads would come back a second time.
+    const held = new Set(shown.map((row) => row.transactionId));
+    this.rows = [...shown, ...result.rows.filter((row) => !held.has(row.transactionId))];
+    this.found = result.total;
+    this.#page = page;
+    this.more = (page + 1) * result.pageSize < result.total;
+  }
+  #onSearch(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (event.detail.value === this.search) return;
+    this.search = event.detail.value;
+    this.#schedule(true);
+  }
   #setDates(preset: FindBillDates["preset"]): void {
+    if (preset === this.dates.preset) return;
     this.dates =
       preset === "custom" ? { preset, from: this.dateFrom, to: this.dateTo } : { preset };
     this.#dateChanged();
   }
   #dateChanged(): void {
-    this.resolved = null;
     this.dateInvalid =
       this.dates.preset === "custom" &&
       (!validDate(this.dateFrom) || !validDate(this.dateTo) || this.dateFrom > this.dateTo);
     if (this.dates.preset === "custom")
       this.dates = { preset: "custom", from: this.dateFrom, to: this.dateTo };
-    this.#view.page = 0;
     this.#schedule();
-  }
-  #clearFilters(event: Event): void {
-    event.stopPropagation();
-    this.dates = { preset: "any" };
-    this.dateInvalid = false;
-    this.resolved = null;
-    this.#view.page = 0;
-    const generation = this.#generation;
-    void Promise.resolve()
-      .then(() => this.#grid()?.updateComplete)
-      .then(() => {
-        if (generation === this.#generation && this.active) this.#schedule();
-      });
   }
   #emit(name: string, detail: unknown = {}): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  #grid(): WtDataTable<Row> | null {
-    return this.shadowRoot?.querySelector<WtDataTable<Row>>("wt-data-table") ?? null;
+  get #searching(): boolean {
+    return this.search.trim() !== "";
   }
-  #columns(): DataTableColumn<Row>[] {
-    const choices = (key: string, values: { value: string; label: string }[]) => ({
-      label: label(key),
-      allLabel: label(`any_${key}`),
-      value: () => "",
-      options: values,
-    });
-    const money = (value: string) => formatMoney(value, currentLocale());
-    const column = (
-      key: string,
-      cell: (row: Row) => unknown,
-      extra: Partial<DataTableColumn<Row>> = {},
-    ): DataTableColumn<Row> => ({
-      key,
-      label: label(key),
-      cell,
-      sortValue: () => "",
-      ...(key === "when" ? {} : { choosable: "shown" }),
-      ...extra,
-    });
-    const options = this.options!;
-    const cell = (read: (row: TransactionRow) => unknown) => read;
-    return [
-      column(
-        "when",
-        cell((row) =>
-          new Date(row.issuedAt).toLocaleString(currentLocale(), { timeZone: options.timeZone }),
-        ),
-      ),
-      column(
-        "invoice",
-        cell((row) => row.invoiceNumber),
-      ),
-      column(
-        "type",
-        cell((row) => label(row.type)),
-        {
-          filter: choices(
-            "type",
-            types.map((value) => ({ value, label: label(value) })),
-          ),
-        },
-      ),
-      column(
-        "tableName",
-        cell((row) => [row.tableName, row.customerName].filter(Boolean).join(" · ") || "—"),
-      ),
-      column(
-        "method",
-        cell(
-          (row) =>
-            row.methods
-              .map((m) => `${label(m.method)}${m.last4 ? ` · ${m.last4}` : ""}`)
-              .join(", ") || label("unpaid"),
-        ),
-        {
-          filter: choices(
-            "method",
-            methods.map((value) => ({ value, label: label(value) })),
-          ),
-        },
-      ),
-      column(
-        "staff",
-        cell((row) => row.staff?.name ?? "—"),
-        {
-          filter: choices(
-            "staff",
-            options.transactionStaff.map((o) => ({ value: o.id, label: o.name })),
-          ),
-        },
-      ),
-      column(
-        "amount",
-        cell((row) => money(row.amount)),
-        { align: "end" },
-      ),
-    ];
+  #subtitle(): string {
+    if (this.#searching && this.found !== null)
+      return countText(this.found, "find_page.found", "find_page.found_one");
+    if (this.dates.preset !== "custom") return label(`paid_${this.dates.preset}`);
+    if (this.dateInvalid) return label("custom");
+    return fill(label("paid_custom"), { from: dayText(this.dateFrom), to: dayText(this.dateTo) });
   }
-  #dateControls() {
-    return html`<div slot="filters-start" class="dates">
-      <wt-combobox
-        ?preserve-order=${true /* Preserve date-preset progression. */}
-        name="dates"
-        label=${label("dates")}
-        .value=${this.dates.preset}
-        .options=${presets.map((value) => ({ value, label: label(value) }))}
-        @wt-change=${(event: CustomEvent<{ value: FindBillDates["preset"] }>) => {
+  #daysChip() {
+    const chosen = this.dates.preset;
+    return html`<wt-row-actions
+      class="days"
+      data-days
+      bottom-sheet
+      sheet-variant="menu"
+      label=${fill(label("days_chip"), { dates: label(chosen) })}
+      sheet-heading=${label("dates")}
+    >
+      <span slot="trigger"
+        >${label(chosen)}<wt-icon name="chevron-down" aria-hidden="true"></wt-icon
+      ></span>
+      <div role="menu" aria-label=${label("dates")}>
+        ${presets.map(
+          (preset, index) =>
+            html`<button
+              type="button"
+              role="menuitemradio"
+              data-row-choice
+              data-preset=${preset}
+              aria-checked=${preset === chosen ? "true" : "false"}
+              @click=${() => this.#setDates(preset)}
+            >
+              <wt-menu-row
+                label=${label(preset)}
+                .check=${preset === chosen}
+                ?divider=${index < presets.length - 1}
+              ></wt-menu-row>
+            </button>`,
+        )}
+      </div>
+    </wt-row-actions>`;
+  }
+  #dateFields() {
+    if (this.dates.preset !== "custom") return nothing;
+    const field = (name: "from" | "to", value: string) =>
+      html`<wt-input
+        name=${name}
+        type="date"
+        label=${label(name)}
+        required
+        .value=${value}
+        .error=${this.dateInvalid ? label("invalid_dates") : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          this.#setDates(event.detail.value);
+          if (name === "from") this.dateFrom = event.detail.value;
+          else this.dateTo = event.detail.value;
+          this.#dateChanged();
         }}
-      ></wt-combobox>
-      ${
-        this.dates.preset === "custom"
-          ? html`
-              <wt-input
-                name="from"
-                type="date"
-                label=${label("from")}
-                required
-                .value=${this.dateFrom}
-                .error=${this.dateInvalid ? label("invalid_dates") : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  this.dateFrom = event.detail.value;
-                  this.#dateChanged();
-                }}
-              ></wt-input>
-              <wt-input
-                name="to"
-                type="date"
-                label=${label("to")}
-                required
-                .value=${this.dateTo}
-                .error=${this.dateInvalid ? label("invalid_dates") : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  this.dateTo = event.detail.value;
-                  this.#dateChanged();
-                }}
-              ></wt-input>
-              ${this.dateInvalid ? html`<p class="error" role="alert">${label("invalid_dates")}</p>` : nothing}
-            `
-          : nothing
-      }
+      ></wt-input>`;
+    return html`<div class="dates">
+      ${field("from", this.dateFrom)} ${field("to", this.dateTo)}
+      ${this.dateInvalid ? html`<p class="error" role="alert">${label("invalid_dates")}</p>` : nothing}
     </div>`;
   }
-  /** The name starts with the chip's drawn text so it holds what is seen (WCAG 2.5.3). */
-  #chip(key: string, text: string, remove: string, onClick: () => void) {
-    return html`<wt-button
-      variant="secondary"
-      data-chip=${key}
-      aria-label=${`${text}, ${remove}`}
-      @click=${onClick}
-      >${text} ×</wt-button
-    >`;
-  }
-  #table() {
-    const view = this.#view,
-      columns = this.#columns();
-    const chips = Object.entries(view.query?.filters ?? {});
-    return html`<wt-data-table
-      aria-label=${label("transactions")}
-      viewKey="waitron.find-bill.transactions"
-      searchable
-      searchLabel=${label("search")}
-      searchPlaceholder=${label("transaction_search")}
-      filtersLabel=${label("filters")}
-      filteredColumnLabel=${label("filtered")}
-      filtersClearAllLabel=${label("clear_all")}
-      filtersCloseLabel=${label("close_filters")}
-      filterSearchPlaceholder=${label("search")}
-      filterNoResultsLabel=${label("none")}
-      noMatchesMessage=${label("none")}
-      customiseColumnsLabel=${label("customise_columns")}
-      customiseLabel=${label("customise")}
-      restoreColumnsLabel=${label("restore")}
-      doneLabel=${label("done")}
-      moveColumnLabel=${label("move")}
-      showColumnLabel=${label("show")}
-      hideColumnLabel=${label("hide")}
-      alwaysShownColumnLabel=${label("always_shown")}
-      lastShownColumnLabel=${label("last_shown")}
-      columnPositionLabel=${label("position")}
-      previousPageLabel=${label("previous")}
-      nextPageLabel=${label("next")}
-      .pageRangeLabel=${(from: number, to: number, total: number) => label("range").replace("{from}", from.toLocaleString(currentLocale())).replace("{to}", to.toLocaleString(currentLocale())).replace("{total}", total.toLocaleString(currentLocale()))}
-      .serverPaging=${{ page: view.page, pageSize: 50, total: view.total }}
-      .externalFilterCount=${this.dates.preset !== "any" ? 1 : 0}
-      .rows=${view.rows}
-      .columns=${columns}
-      .rowKey=${(row: Row) => row.transactionId}
-      .sortKey=${"when"}
-      sortDirection="descending"
-      .rowClickLabel=${() => label("open_receipt")}
-      .rowActivation=${() => (!view.loading && this.active && !this.busy ? "click" : "none")}
-      .rowClick=${(row: Row) => this.#emit("find-transaction-open", { row })}
-      .loading=${view.loading}
-      loadingMessage=${label("loading")}
-      emptyMessage=${label("none")}
-      errorMessage=${view.error}
-      @wt-query-change=${(event: CustomEvent<QueryDetail>) => this.#query(event)}
-      @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
-        event.stopPropagation();
-        if (!view.loading) {
-          view.page = event.detail.page;
-          this.#schedule();
-        }
-      }}
-      @wt-filters-clear=${(event: Event) => this.#clearFilters(event)}
-    >
-      ${this.#dateControls()}
-      <div slot="toolbar-bottom" class="chips">
-        ${this.dates.preset !== "any" ? this.#chip("dates", `${label(this.dates.preset)}${!this.dateInvalid && this.resolved ? ` · ${this.resolved.from} – ${this.resolved.to}` : ""}`, label("remove_dates"), () => this.#setDates("any")) : nothing}
-        ${chips.map(([key, value]) => this.#chip(key, `${label(key)}: ${columns.find((c) => c.key === key)?.filter?.options.find((o) => o.value === value)?.label ?? value}`, label("remove_filter").replace("{filter}", label(key)), () => this.#grid()?.chooseFilter(key, [])))}
-        ${view.error ? html`<wt-button variant="secondary" @click=${() => this.#schedule()}>${label("retry")}</wt-button>` : nothing}
+  #header() {
+    return html`<div slot="header">
+      <wt-top-bar
+        .heading=${t("find_bill.title")}
+        .subtitle=${this.#subtitle()}
+        .backLabel=${t(this.backKey)}
+        @wt-back=${() => {
+          this.#cancel();
+          this.#emit("find-bill-back");
+        }}
+      ></wt-top-bar>
+      <div class="band">
+        <wt-input
+          name="search"
+          type="search"
+          variant="outlined"
+          label=${label("transaction_search")}
+          placeholder=${label("transaction_search")}
+          autocapitalize="none"
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
+          ><wt-icon slot="start" name="search" aria-hidden="true"></wt-icon
+        ></wt-input>
+        <div class="chips">${this.#daysChip()}</div>
+        ${this.#dateFields()}
       </div>
-    </wt-data-table>`;
+    </div>`;
+  }
+  #orderLabel(): string {
+    if (this.rows[0]?.amountMatch === "amount") return label("amount_match");
+    return this.#searching ? label("best_match") : label("newest_first");
+  }
+  #list(timeZone: string) {
+    const failure = (more: boolean) =>
+      html`<div class="state" data-list-error>
+        <p role="alert" class="error">${label("load_failed")}</p>
+        <wt-button variant="secondary" data-list-retry @click=${() => void this.#read(more)}
+          >${label("retry")}</wt-button
+        >
+      </div>`;
+    if (this.listError === "list") return failure(false);
+    if (this.listLoading === "list")
+      return html`<p class="state" role="status" data-list-loading>${label("loading")}</p>`;
+    if (this.rows.length === 0)
+      return this.dateInvalid
+        ? nothing
+        : html`<p class="state" data-list-empty>${label("none")}</p>`;
+    const disabled = this.busy || !this.active;
+    return html`<p class="order" data-order-label>${this.#orderLabel()}</p>
+      <div data-transactions>
+        ${this.rows.map((row) =>
+          findBillRow(row, {
+            timeZone,
+            disabled,
+            open: () => {
+              if (!this.busy && this.active) {
+                this.#opened = row.transactionId;
+                this.#emit("find-transaction-open", { row });
+              }
+            },
+          }),
+        )}
+      </div>
+      ${
+        this.listError === "more"
+          ? failure(true)
+          : this.more
+            ? html`<div class="state more">
+                <wt-button
+                  variant="secondary"
+                  data-list-more
+                  ?loading=${this.listLoading === "more"}
+                  @click=${() => {
+                    if (this.listLoading === null) void this.#read(true);
+                  }}
+                  >${label("show_more")}</wt-button
+                >
+              </div>`
+            : nothing
+      }`;
+  }
+  #body() {
+    const options = this.options;
+    if (!options)
+      return this.optionsError
+        ? html`<div class="state">
+            <p role="alert" class="error">${this.optionsError}</p>
+            <wt-button data-options-retry @click=${() => this.#loadOptions()}
+              >${label("retry")}</wt-button
+            >
+          </div>`
+        : html`<p class="state" role="status">${label("loading")}</p>`;
+    return html`${
+      this.#searching
+        ? nothing
+        : html`<div class="sections">
+            ${this.#correctionsList(options.timeZone)}${this.#billSections(options.timeZone)}
+          </div>`
+    }
+    ${this.#list(options.timeZone)}`;
   }
   override render() {
-    return html`<header>
-        <wt-button
-          variant="secondary"
-          @click=${() => {
-            this.#cancel();
-            this.#emit("find-bill-back");
-          }}
-          >${t(this.backKey)}</wt-button
-        >
-        <h1>${t("find_bill.title")}</h1>
-      </header>
-      ${this.options ? this.#correctionsList(this.options.timeZone) : nothing}
-      ${this.options ? this.#billSections(this.options.timeZone) : nothing}
-      ${
-        this.options
-          ? this.#table()
-          : this.optionsError
-            ? html`<p role="alert" class="error">${this.optionsError}</p>
-                <wt-button @click=${() => this.#loadOptions()}>${label("retry")}</wt-button>`
-            : html`<p role="status">${label("loading")}</p>`
-      }`;
+    return html`<wt-full-screen-panel .bodyLabel=${t("find_bill.title")}>
+      ${this.#header()} ${this.#body()}
+    </wt-full-screen-panel>`;
   }
 }
