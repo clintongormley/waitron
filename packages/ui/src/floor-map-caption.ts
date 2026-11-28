@@ -10,6 +10,15 @@ export const captionStyles = css`
     text-wrap: nowrap;
   }
 
+  [part="name"][data-wrap] {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    text-wrap: var(--wt-floor-map-name-wrap, nowrap);
+  }
+
   /* Positioned, or it paints under the table's own shape. */
   [part="caption"] {
     position: relative;
@@ -167,7 +176,13 @@ export function renderCaption({
       ? shortLabel
       : label;
   if (cue === null) {
-    return { name, content: html`<span part="name" data-fill=${fill ?? nothing}>${name}</span>` };
+    const wrap = !allergy && metrics !== undefined && height >= metrics.nameSize * 2.4;
+    return {
+      name,
+      content: html`<span part="name" data-fill=${fill ?? nothing} ?data-wrap=${wrap}
+        >${name}</span
+      >`,
+    };
   }
   const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
   const full =

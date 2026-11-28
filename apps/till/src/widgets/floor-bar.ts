@@ -80,6 +80,9 @@ export const floorScreenLayoutStyles = css`
     min-block-size: calc(var(--wt-tap-min) * 3);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
   }
+  wt-floor-map {
+    --wt-floor-map-name-wrap: wrap;
+  }
   wt-floor-map::part(name),
   wt-floor-map::part(name-probe) {
     --wt-floor-table-weight: 700;
