@@ -60,6 +60,16 @@ describe("attendance questions before work", () => {
     expect(el.shadowRoot!.textContent).not.toContain("The deli");
   });
 
+  it("stacks full-width answers and offers Answer later in the foot bar", async () => {
+    const { el } = await mount();
+    el.style.inlineSize = "390px";
+    const confirm = button(el, "[data-confirm]").getBoundingClientRect();
+    const edit = button(el, "[data-edit]").getBoundingClientRect();
+    expect(edit.top).toBeGreaterThanOrEqual(confirm.bottom);
+    expect(edit.width).toBe(confirm.width);
+    expect(words(button(el, "wt-foot-button-bar [data-cancel]"))).toBe("Answer later");
+  });
+
   it("sends the exact confirmation or edit intent once through real controls", async () => {
     const { el } = await mount();
     const confirms = watch(el, "attendance-confirm");
@@ -441,7 +451,7 @@ describe("attendance questions before work", () => {
     expect(el.shadowRoot!.querySelector("[data-confirm]")).toBeNull();
   });
 
-  it("a held or failed read keeps Cancel and Retry read usable without writing an answer", async () => {
+  it("a held or failed read keeps Answer later and Retry read usable without writing an answer", async () => {
     const { el } = await mount({ inbox: null, reading: true });
     const canceled = watch(el, "cancel-attendance");
     const retried = watch(el, "retry-attendance");
@@ -500,7 +510,7 @@ describe("attendance questions before work", () => {
       await el.updateComplete;
       expect(button(el, "[data-confirm]").textContent!.trim()).toBe("Es correcto");
       expect(button(el, "[data-edit]").textContent!.trim()).toBe("No, salí a las…");
-      expect(button(el, "[data-cancel]").textContent!.trim()).toBe("Cancelar");
+      expect(button(el, "[data-cancel]").textContent!.trim()).toBe("Responder más tarde");
       expect(el.shadowRoot!.textContent).not.toMatch(/My hours|Mis horas|Clock in/);
     } finally {
       setLocale(locale);

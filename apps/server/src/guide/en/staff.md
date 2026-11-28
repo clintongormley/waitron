@@ -218,6 +218,10 @@ If **Check your times** appears, look at the recorded times for each day. If a d
 times, choose **Add missing times** to enter them.
 If a manager proposes missing times, check them and choose **Accept** or **Disagree**.
 
+Choose **Answer later** to leave the questions for another sign-in. On **Clock in**, check your
+shift if one is shown and choose **Clock in**. If you sign in during a break, choose **End break**
+to resume. Choose **Not now** to open the till without recording either action.
+
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
 
 When a recorded time is wrong or missing, choose **Fix my hours** from your name's menu. On a

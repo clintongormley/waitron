@@ -339,7 +339,22 @@ describe("till attendance sign-in flow", () => {
     expect(clockPage(f.el)).toBeNull();
   });
 
-  it("a refused read offers Retry and Cancel, and retry does not write", async () => {
+  it("Answer later offers End break even after the questions read failed", async () => {
+    const f = await clockApp({ state: clockState("on_break", "break") });
+    f.api.getAttendanceInbox.mockRejectedValueOnce(new TypeError("offline"));
+    await signIn(f.el);
+    await vi.waitFor(() =>
+      expect(questions(f.el)?.shadowRoot!.querySelector("[data-retry]")).not.toBeNull(),
+    );
+    await questionButton(f.el, "[data-cancel]");
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-end-break]")).toBeTruthy(),
+    );
+    expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
+    expect(f.api.endBreak).not.toHaveBeenCalled();
+  });
+
+  it("a refused read offers Retry, then Answer later goes on to Clock in without a write", async () => {
     const f = await clockApp();
     f.api.getAttendanceInbox
       .mockRejectedValueOnce(new TypeError("offline"))
@@ -352,9 +367,12 @@ describe("till attendance sign-in flow", () => {
     await vi.waitFor(() =>
       expect(questions(f.el)?.shadowRoot!.querySelector("[data-confirm]")).not.toBeNull(),
     );
-    expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
     await questionButton(f.el, "[data-cancel]");
-    await working(f.el);
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-clock-in]")).toBeTruthy(),
+    );
+    expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
+    expect(f.api.clockIn).not.toHaveBeenCalled();
   });
 
   it("uncertain writes use Retry read to recover the receipt without a second POST", async () => {

@@ -278,6 +278,7 @@ describe("signed-in own till clock routes", () => {
       lastEntryId: null,
       firstClockIn: true,
       shiftStart: null,
+      breakStart: null,
     });
     const shiftStart = { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 };
     for (const [path, want] of [
@@ -296,6 +297,8 @@ describe("signed-in own till clock routes", () => {
         lastEntryId: expect.any(String),
         firstClockIn: false,
         shiftStart: want === "out" ? null : shiftStart,
+        breakStart:
+          want === "on_break" ? { eventAt: "2026-01-05T09:01:00.000Z", offsetMinutes: 60 } : null,
       });
       expect(await state()).toEqual(written);
       instant = new Date(instant.getTime() + 60_000);

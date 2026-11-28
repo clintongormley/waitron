@@ -236,6 +236,11 @@ Si aparece **Comprueba tus horas**, revisa los fichajes de cada día. Si falta a
 **Añadir fichajes que faltan** para introducirlo.
 Si un responsable propone fichajes que faltan, revísalos y pulsa **Aceptar** o **No estoy de acuerdo**.
 
+Pulsa **Responder más tarde** para dejar las preguntas para otro inicio de sesión. Cuando aparezca
+**Fichar entrada**, comprueba tu turno si aparece y pulsa **Fichar entrada**. Si inicias sesión
+durante un descanso, pulsa **Terminar descanso** para reanudar el trabajo. Pulsa **Ahora no** para
+abrir el TPV sin registrar ninguna de estas acciones.
+
 Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.
 
 Si falta un fichaje o su hora es incorrecta, elige **Corregir mis horas** en el menú de tu nombre.

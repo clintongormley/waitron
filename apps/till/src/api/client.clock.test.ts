@@ -15,6 +15,7 @@ const state = {
   lastEntryId: "entry",
   firstClockIn: false,
   shiftStart: { eventAt: "2026-10-14T08:00:00.000Z", offsetMinutes: 120 },
+  breakStart: null,
 };
 afterEach(() => clearDevDeviceId());
 

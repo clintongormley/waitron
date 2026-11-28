@@ -10,17 +10,23 @@ describe.each(["light", "dark"] as const)("clock page accessibility in %s", (the
     setLocale(language);
     try {
       for (const props of [
-        {},
-        { reading: true, canClockIn: false },
-        { error: "Clock unavailable", canClockIn: false },
+        { displayName: "Javier Torres" },
+        {
+          action: "break-end" as const,
+          displayName: "Javier Torres",
+          breakStart: { eventAt: new Date().toISOString(), offsetMinutes: 60 },
+        },
+        { reading: true, canAct: false },
+        { error: "Clock unavailable", canAct: false },
       ]) {
         const { el, host } = await mountWidget<TillClockInScreen>(
           "till-clock-in-screen",
           props,
           theme,
         );
-        expect(el.shadowRoot!.querySelector("[data-clock-in]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-clock-in], [data-end-break]")).not.toBeNull();
         await expectNoA11yViolations(host);
+        cleanupWidgets();
       }
     } finally {
       setLocale(locale);

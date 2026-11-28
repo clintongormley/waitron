@@ -6,7 +6,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { en } from "./i18n/strings.js";
 import { ServerRouter } from "./api/server-router.js";
-import type { TillClockState } from "./api/attendance-api.js";
+import type { MyShift, TillClockState } from "./api/attendance-api.js";
 import {
   clockApp,
   clockPage,
@@ -199,7 +199,7 @@ describe("till clocking integration", () => {
     expect(f.state().state).toBe("working");
   });
 
-  it("Cancel works and next sign-in asks again", async () => {
+  it("Not now skips clocking in and the next sign-in asks again", async () => {
     const f = await clockApp();
     await signIn(f.el);
     await pageButton(f.el, "[data-cancel]");
@@ -231,6 +231,52 @@ describe("till clocking integration", () => {
     await vi.waitFor(() => expect(f.api.getTablesState).toHaveBeenCalled());
   });
 
+  it("Clock in works while the roster is pending", async () => {
+    const f = await clockApp();
+    const pending = deferred<MyShift[]>();
+    f.api.listMyShifts.mockReturnValueOnce(pending.promise);
+    await signIn(f.el);
+    await vi.waitFor(() => expect(f.api.listMyShifts).toHaveBeenCalledTimes(1));
+    await pageButton(f.el, "[data-clock-in]");
+    await working(f.el);
+    pending.resolve([]);
+    expect(f.state().state).toBe("working");
+  });
+
+  it("ignores a late shift from the previous sign-in", async () => {
+    const f = await clockApp();
+    const pending = deferred<MyShift[]>();
+    f.api.listMyShifts.mockReturnValueOnce(pending.promise);
+    await signIn(f.el);
+    await vi.waitFor(() => expect(f.api.listMyShifts).toHaveBeenCalledTimes(1));
+    await pageButton(f.el, "[data-cancel]");
+    await working(f.el);
+    await shellAction(f.el, ".logout");
+    await vi.waitFor(() => expect(f.el.shadowRoot!.querySelector("till-lock-screen")).toBeTruthy());
+    await signIn(f.el, "p2");
+    await vi.waitFor(() => expect(f.api.listMyShifts).toHaveBeenCalledTimes(2));
+    const next = clockPage(f.el)!;
+    const now = Date.now();
+    pending.resolve([
+      {
+        id: "earlier-operator",
+        startsAt: new Date(now - 60_000).toISOString(),
+        startsOffsetMinutes: 60,
+        endsAt: new Date(now + 60_000).toISOString(),
+        endsOffsetMinutes: 60,
+        description: "Previous shift",
+        rosterVersionId: "published",
+      },
+    ]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(clockPage(f.el)).toBe(next);
+    expect(next.shadowRoot!.textContent).not.toContain("Previous shift");
+    expect(next.shadowRoot!.querySelector("[data-rota]")).toBeNull();
+    await pageButton(f.el, "[data-clock-in]");
+    await working(f.el);
+    expect(f.state().personId).toBe("p2");
+  });
+
   it.each([clockState("working", "in"), clockState("out", "out", "p1", false)])(
     "already working or a completed shift today skips the page (%j)",
     async (state) => {
@@ -259,11 +305,57 @@ describe("till clocking integration", () => {
     );
   });
 
+  it.each([false, true])(
+    "resumes work after End break is confirmed (lost reply=%s)",
+    async (lostReply) => {
+      const f = await clockApp({ state: clockState("on_break", "break") });
+      if (lostReply) {
+        f.api.endBreak.mockImplementationOnce(async () => {
+          f.setState(clockState("working", "saved"));
+          throw new TypeError("lost response");
+        });
+      }
+      await signIn(f.el);
+      await vi.waitFor(() =>
+        expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-end-break]")).toBeTruthy(),
+      );
+      expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
+      await pageButton(f.el, "[data-end-break]");
+      await working(f.el);
+      expect(f.api.endBreak).toHaveBeenCalledExactlyOnceWith("break", {
+        signal: expect.any(AbortSignal),
+      });
+      expect(f.state().state).toBe("working");
+    },
+  );
+
+  it("resumes work when Retry reads that the break already ended", async () => {
+    const f = await clockApp({ state: clockState("on_break", "break") });
+    f.api.endBreak.mockRejectedValueOnce({ code: "attendance.state_changed" });
+    await signIn(f.el);
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-end-break]")).toBeTruthy(),
+    );
+    await pageButton(f.el, "[data-end-break]");
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-retry]")).toBeTruthy(),
+    );
+    f.setState(clockState("working", "ended-elsewhere"));
+    await pageButton(f.el, "[data-retry]");
+    await working(f.el);
+    expect(f.api.endBreak).toHaveBeenCalledTimes(1);
+  });
+
   it("Clock out on a break records the finish and locks even when server logout fails", async () => {
     const f = await clockApp({ state: clockState("on_break", "break") });
     f.api.logout.mockRejectedValue(new TypeError("offline"));
     await signIn(f.el);
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-end-break]")).toBeTruthy(),
+    );
+    await pageButton(f.el, "[data-cancel]");
     await working(f.el);
+    expect(f.api.endBreak).not.toHaveBeenCalled();
     await shellAction(f.el, '[data-clock-action="out"]');
     await vi.waitFor(() =>
       expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull(),
@@ -486,6 +578,10 @@ describe("till clocking integration", () => {
     );
     f.setState(clockState("on_break", "luis-break", "p2"));
     await signIn(f.el, "p2");
+    await vi.waitFor(() =>
+      expect(clockPage(f.el)?.shadowRoot?.querySelector("[data-end-break]")).toBeTruthy(),
+    );
+    await pageButton(f.el, "[data-cancel]");
     await working(f.el);
     old.resolve(clockState("working", "ana-in"));
     await Promise.resolve();
@@ -540,9 +636,9 @@ describe("till clocking integration", () => {
       await signIn(f.el);
       await pageButton(f.el, "[data-clock-in]");
       await vi.waitFor(() =>
-        expect(clockPage(f.el)!.shadowRoot!.querySelector(".message")?.textContent?.trim()).toBe(
-          shown,
-        ),
+        expect(
+          clockPage(f.el)!.shadowRoot!.querySelector("[role=status]")?.textContent?.trim(),
+        ).toBe(shown),
       );
     },
   );
@@ -562,7 +658,7 @@ it("the signed-in clock follows live time entries on the device connection", asy
   f.setState(clockState("working", "other-till"));
   stream.event("change", '[{"type":"time_entries"}]');
   await vi.waitFor(() =>
-    expect((clockPage(f.el) as HTMLElement & { canClockIn: boolean }).canClockIn).toBe(false),
+    expect((clockPage(f.el) as HTMLElement & { canAct: boolean }).canAct).toBe(false),
   );
   expect(stream.reads.at(-1)!.types).toContain("time_entries");
 });

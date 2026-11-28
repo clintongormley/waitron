@@ -181,6 +181,11 @@ import {
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
+import {
+  clockActionAfterDeferringQuestions,
+  signInClockAction,
+  type SignInClockAction,
+} from "./state/clock-sign-in.js";
 import type { AttendanceChange, HoursSelection } from "./api/client.js";
 import type { TillClockState } from "./api/attendance-api.js";
 import "./widgets/attendance-correction-dialog.js";
@@ -3127,7 +3132,7 @@ export class TillApp extends LitElement {
   @state() private attendanceSnapshot: AttendanceSnapshot | null = null;
   #clockNeedsInitialRead = false;
   #clockAccessLost = false;
-  @state() private clockPage = false;
+  @state() private clockPage: SignInClockAction | false = false;
   @state() private clockedOut = false;
   @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
   #clockIntent?: {
@@ -5274,7 +5279,7 @@ export class TillApp extends LitElement {
   #startClocking(personId: string, signIn: number, session: number, prompt: boolean): void {
     const api = this.api;
     this.#clockNeedsInitialRead = prompt;
-    this.clockPage = prompt;
+    this.clockPage = prompt ? "in" : false;
     const current = () =>
       this.isConnected &&
       api === this.api &&
@@ -5311,7 +5316,15 @@ export class TillApp extends LitElement {
         }
         if (this.#clockNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
           this.#clockNeedsInitialRead = false;
-          this.clockPage = snapshot.state.state === "out" && snapshot.state.firstClockIn;
+          this.clockPage = signInClockAction(snapshot.state);
+        } else if (
+          this.clockPage === "break-end" &&
+          !snapshot.reading &&
+          !snapshot.busy &&
+          snapshot.state !== null &&
+          snapshot.state.state !== "on_break"
+        ) {
+          void this.#resumeAfterClockPrompt();
         }
         if (this.drill?.kind === "hours" && !snapshot.reading && snapshot.state !== null)
           this.#startHours();
@@ -5729,9 +5742,9 @@ export class TillApp extends LitElement {
       this.attendancePage = false;
       this.#attendanceRefreshClock = false;
       this.#clockNeedsInitialRead = false;
-      this.clockPage = gate === "signin" && state.state === "out" && state.firstClockIn;
+      this.clockPage = gate === "signin" && signInClockAction(state);
       if (gate === "in" && state.state === "out") await this.#performClockAction("in");
-      else if (!this.clockPage) await this.#continueAfterClockIn();
+      else if (!this.clockPage) await this.#resumeAfterClockPrompt();
     } finally {
       if (version === this.#attendanceGateVersion) this.#attendanceSettling = false;
     }
@@ -5739,12 +5752,18 @@ export class TillApp extends LitElement {
 
   async #cancelAttendance(): Promise<void> {
     if (this.attendanceSnapshot?.busy) return;
+    const action =
+      this.#attendanceGate === "signin" &&
+      clockActionAfterDeferringQuestions(this.clockSnapshot, this.attendanceSnapshot);
     this.#attendanceGate = null;
     ++this.#attendanceGateVersion;
     ++this.#attendancePanelVersion;
     this.#attendanceSettling = false;
     this.attendancePage = false;
-    await this.#continueAfterClockIn();
+    if (action) {
+      this.#clockNeedsInitialRead = false;
+      this.clockPage = action;
+    } else await this.#resumeAfterClockPrompt();
   }
 
   #clockMessage(): string {
@@ -5798,7 +5817,7 @@ export class TillApp extends LitElement {
       signIn: this.#signIns,
       session: this.#operatorSession,
       api: this.api,
-      continueFromPage: this.clockPage,
+      continueFromPage: this.clockPage !== false,
     };
     await controller.act(action);
   }
@@ -5815,14 +5834,14 @@ export class TillApp extends LitElement {
       return;
     this.#clockIntent = undefined;
     if (state === null) return;
-    if (action === "in" && intent.continueFromPage) void this.#continueAfterClockIn();
+    if (action === "in" && intent.continueFromPage) void this.#resumeAfterClockPrompt();
     if (action === "out") {
       this.clockedOut = true;
       void this.#onLogout();
     }
   }
 
-  async #continueAfterClockIn(): Promise<void> {
+  async #resumeAfterClockPrompt(): Promise<void> {
     this.#clockNeedsInitialRead = false;
     this.clockPage = false;
     const tab = this.#activeTab();
@@ -5843,7 +5862,7 @@ export class TillApp extends LitElement {
   async #cancelClockIn(): Promise<void> {
     if (this.clockSnapshot.busy) return;
     this.#clockIntent = undefined;
-    await this.#continueAfterClockIn();
+    await this.#resumeAfterClockPrompt();
   }
 
   @state() private kitchenOperator = "";
@@ -25089,12 +25108,19 @@ export class TillApp extends LitElement {
                     }}
                   ></till-attendance-questions>`
                 : this.clockPage
-                  ? html`<till-clock-in-screen
-                      .busy=${this.clockSnapshot.busy}
-                      .reading=${this.clockSnapshot.reading}
-                      .canClockIn=${this.clockSnapshot.state?.state === "out"}
-                      .error=${this.#clockMessage()}
-                    ></till-clock-in-screen>`
+                  ? keyed(
+                      this.#signIns,
+                      html`<till-clock-in-screen
+                        .api=${this.api}
+                        .displayName=${this.operatorName}
+                        .busy=${this.clockSnapshot.busy}
+                        .reading=${this.clockSnapshot.reading}
+                        .action=${this.clockPage}
+                        .breakStart=${this.clockSnapshot.state?.breakStart ?? null}
+                        .canAct=${this.clockSnapshot.state?.state === (this.clockPage === "in" ? "out" : "on_break")}
+                        .error=${this.#clockMessage()}
+                      ></till-clock-in-screen>`,
+                    )
                   : shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),

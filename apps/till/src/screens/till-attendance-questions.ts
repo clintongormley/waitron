@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
 import type { AttendanceInbox, AttendancePrompt } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import {
@@ -21,13 +23,25 @@ export class TillAttendanceQuestions extends LitElement {
     baseStyles,
     css`
       :host {
-        display: block;
-        padding: var(--wt-space-4);
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-block-size: 0;
+      }
+      main {
+        flex: 1;
+        overflow: auto;
+        padding: var(--wt-space-5) var(--wt-space-4);
       }
       .content {
-        max-width: var(--wt-form-max-width);
+        max-inline-size: var(--wt-form-max-width);
+        margin-inline: auto;
         display: grid;
-        gap: var(--wt-space-4);
+        gap: var(--wt-space-3);
+      }
+      header {
+        display: grid;
+        gap: var(--wt-space-1);
       }
       h1,
       h2,
@@ -36,17 +50,20 @@ export class TillAttendanceQuestions extends LitElement {
         overflow-wrap: anywhere;
       }
       h1 {
-        font-size: var(--wt-font-size-xl);
+        font-size: calc(var(--wt-font-size-xl) + var(--wt-space-1) / 2);
       }
       h2 {
-        font-size: var(--wt-font-size-lg);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        letter-spacing: var(--wt-letter-spacing-caps);
+        text-transform: uppercase;
       }
       article {
         display: grid;
         gap: var(--wt-space-3);
         padding: var(--wt-space-4);
         border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
+        border-radius: calc(var(--wt-radius-md) + var(--wt-space-1));
         background: var(--wt-color-surface);
       }
       ul {
@@ -69,9 +86,17 @@ export class TillAttendanceQuestions extends LitElement {
         font-variant-numeric: tabular-nums;
       }
       .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
+        display: grid;
+        gap: var(--wt-space-2);
+        --wt-tap-min: calc(var(--wt-field-height) - var(--wt-space-1));
+        --wt-action-font-size: var(--wt-menu-row-label-size);
+      }
+      wt-foot-button-bar {
+        inline-size: min(100%, var(--wt-form-max-width));
+        margin-inline: auto;
+      }
+      [slot="link"] {
+        --wt-action-font-size: calc(var(--wt-font-size-md) + var(--wt-space-1) / 4);
       }
     `,
   ];
@@ -155,22 +180,30 @@ export class TillAttendanceQuestions extends LitElement {
         item.status === "waiting-worker" ? item.requestEntryIds : [],
       ),
     );
-    return html`<div class="content">
-      <h1>${t("attendance.questions")}</h1>
-      ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("attendance.reading")}</p>` : nothing}
-      ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt, pendingProposalEntries))}
-      <div class="actions">
-        <wt-button
-          data-cancel
-          variant="secondary"
-          .disabled=${this.busy}
-          @click=${(event: Event) => this.#emit(event, "cancel-attendance")}
-          >${t("clock.cancel")}</wt-button
-        >
+    return html`
+      <main>
+        <div class="content">
+          <header>
+            <h1>${t("attendance.questions")}</h1>
+            ${this.inbox?.prompts.length ? html`<p class="muted">${t("attendance.questions_intro")}</p>` : nothing}
+          </header>
+          ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("attendance.reading")}</p>` : nothing}
+          ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt, pendingProposalEntries))}
+        </div>
+      </main>
+      <wt-foot-button-bar>
         ${this.canRetry ? html`<wt-button data-retry-command variant="primary" .disabled=${this.busy || this.reading} @click=${(event: Event) => this.#emit(event, "retry-attendance-command")}>${t("attendance.retry_response")}</wt-button>` : nothing}
         ${this.error ? html`<wt-button data-retry variant="secondary" .disabled=${this.busy || this.reading} @click=${(event: Event) => this.#emit(event, "retry-attendance")}>${t("attendance.retry_read")}</wt-button>` : nothing}
-      </div>
-    </div>`;
+        <wt-button
+          data-cancel
+          slot="link"
+          variant="ghost"
+          .disabled=${this.busy}
+          @click=${(event: Event) => this.#emit(event, "cancel-attendance")}
+          >${t("attendance.answer_later")}</wt-button
+        >
+      </wt-foot-button-bar>
+    `;
   }
 }
 

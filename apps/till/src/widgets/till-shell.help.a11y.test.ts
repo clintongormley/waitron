@@ -157,6 +157,7 @@ const clockState = {
   lastEntryId: "entry",
   firstClockIn: false,
   shiftStart: null,
+  breakStart: null,
 };
 
 describe.each(looks)("till-shell's menu badges a11y (%s theme, %s)", (theme, locale) => {
