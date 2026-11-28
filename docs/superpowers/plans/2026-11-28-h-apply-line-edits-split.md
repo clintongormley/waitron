@@ -8,6 +8,10 @@ limit. This is a TypeScript refactor of the existing Server transaction. Order a
 routes, database schema, VAT and fiscal records are outside its scope. The watcher wrote in
 Lane H’s questions at 02:00 on 28 November 2026, “yes, unblocked; plan the split on current main.”
 
+The write loop and inserts (about 480 lines, originally lines 736–1213) stay inside
+`applyLineEdits`, which ends up at about 540 lines. They share about 15 working lists and
+lookups declared together in the original function (lines 737–765).
+
 ## One PR
 
 - [ ] In `scripts/product-file-size-limits.json`, remove the exception for
@@ -32,8 +36,9 @@ Lane H’s questions at 02:00 on 28 November 2026, “yes, unblocked; plan the s
   kitchen dispatch, discount ending, regrouping, excess-payment check and final bill limit.
   Add the new file to the existing order-path list in `scripts/menu-engine-neutral.test.ts`.
 - [ ] Stage the new product file and run the file-size and engine-neutral guards. Compare the
-  moved bodies to the base by comparing their text after normalising indentation. List every
-  adjusted statement and check the original call order. Check for an import cycle between the
+  moved bodies with `git diff --color-moved=zebra --color-moved-ws=allow-indentation-change <base>..HEAD`.
+  Check that the only new lines are the new signatures, return values, calls, types and imports.
+  Put the output in the PR and check the original call order. Check for an import cycle between the
   pieces and run `pnpm --filter @waitron/server typecheck`. Keep the receipts in the PR. Record
   where A1621 PR 5 can find `addedApart` and the rest of the pricing block. On overlap, replay
   changes to those statements in the new file and other edits at their original call sites.
@@ -52,7 +57,8 @@ Lane H’s questions at 02:00 on 28 November 2026, “yes, unblocked; plan the s
 - [ ] Run the unchanged Server and Till menu gates (`till-api.sell-published`,
   `till-app-menu-refresh`) and the VeriFactu `write-path.e2e` and `inmutabilidad` suites. Keep
   every existing assertion. Sign off and run Codex's `finish-branch` for Lane H with two Claude
-  run-it reviews, the normal push hook and the selected Server checks on the exact PR head.
+  run-it reviews side by side because this code handles money. Run the normal push hook and
+  check the selected Server jobs on the exact PR head.
 
 Budget about 450 product lines moved to the new file, 65 moved within the original file and
 40–65 lines of imports and wiring. The existing guard gains one path. Behavioural tests change
