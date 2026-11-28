@@ -53,5 +53,6 @@ sharing card. PR 1 keeps Style and Photos together, shows the QR code beside Cop
 and Print, and opens Embed code inside the card. The link, QR code and embed snippet use the
 saved address while a draft is open. The visual review and live gateway qualification still apply.
 
-At 15:02 the watcher moved live gateway qualification to D643's Test Cloud rehearsal. The owner
-approved the dashboard pictures at 15:01. Landing awaits green CI on the current head.
+At 15:01 the watcher recorded the owner's picture decision, “OK — lane lands it (Recommended)”.
+At 15:02 the watcher moved live gateway qualification to D643's Test Cloud rehearsal. Landing
+awaits green CI on the current head.

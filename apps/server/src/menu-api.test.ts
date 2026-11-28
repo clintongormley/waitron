@@ -4881,7 +4881,7 @@ describe("publishing a menu", () => {
       expect(
         (
           await send(app, "PUT", `/management-api/menus/${id}/customer-online-settings`, {
-            body: { address, enabled, photos: "none" },
+            body: { address, enabled, photos: "none", styleId: null },
           })
         ).status,
       ).toBe(200);
