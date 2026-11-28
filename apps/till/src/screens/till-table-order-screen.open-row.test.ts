@@ -692,3 +692,29 @@ describe("opening a row near the window's foot", () => {
     expect(host.scrollTop).toBe(0);
   });
 });
+
+it("an opened new row's quantity and name stay where a closed row's are, moved by the border alone, its selection box still a full tap wide", async () => {
+  const { el } = await open([
+    { product: beer, quantity: "2", place: { kind: "fire" } },
+    { product: flan, quantity: "1", place: { kind: "fire" } },
+  ]);
+  await tapRow(el, 0);
+  const entry = row(el, 0).closest(".entry")!;
+  expect(entry.hasAttribute("data-open")).toBe(true);
+  const border = Number.parseFloat(getComputedStyle(entry).borderLeftWidth);
+  expect(border).toBeGreaterThan(0);
+  for (const cell of [".row-qty", ".row-name"]) {
+    const moved =
+      row(el, 0).querySelector(cell)!.getBoundingClientRect().left -
+      row(el, 1).querySelector(cell)!.getBoundingClientRect().left;
+    expect(moved, cell).toBeGreaterThanOrEqual(border - 0.5);
+    expect(moved, cell).toBeLessThanOrEqual(border + 0.5);
+  }
+  const select = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
+  const tap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+  expect(tap).toBeGreaterThan(0);
+  expect(select.getBoundingClientRect().width).toBeGreaterThanOrEqual(tap);
+  expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
+    row(el, 0).getBoundingClientRect().left + 0.5,
+  );
+});

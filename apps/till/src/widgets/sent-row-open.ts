@@ -5,7 +5,7 @@ import { portionLineFacts } from "../state/portion-groups.js";
 import type { SentSlice } from "../state/sent-panel.js";
 import { type SentRow, sentPortionId } from "../state/sent-sections.js";
 import { quantityText, trimQuantity } from "./dish-format.js";
-import { openRowAction, openRowBox } from "./row-text.js";
+import { OPEN_LEAD, openRowAction, openRowBox } from "./row-text.js";
 
 export interface ServeItem {
   lineId: string;
@@ -184,7 +184,7 @@ export function sentOpenControls(view: SentOpenView): TemplateResult {
 export const sentOpenStyles = css`
   .sent-row[data-open] {
     ${openRowBox}
-    grid-template-columns: var(--wt-tap-min) minmax(0, 1fr) var(--wt-space-2);
+    grid-template-columns: ${OPEN_LEAD} minmax(0, 1fr) var(--wt-space-2);
     color: var(--wt-color-text);
   }
   .sent-row[data-open] .row-qty {

@@ -811,3 +811,24 @@ it.each([390, 844, 1280])(
     expect(Math.abs(count.left - name.left)).toBeLessThanOrEqual(0.5);
   },
 );
+
+const rectOf = (li: Element, selector: string) =>
+  li.querySelector(selector)!.getBoundingClientRect();
+
+it.each([390, 844, 1280])(
+  "at %i wide an opened row's quantity and name stay where a closed row's are, moved by the border alone",
+  async (width) => {
+    await page.viewport(width, 800);
+    const el = await mount(sentCurrent([sentDish("bravas"), sentDish("water", { lineNo: 2 })]));
+    await tap(el, toggle("water"));
+    const closed = find(el, "[data-fired-line=bravas]")!;
+    const open = find(el, "li[data-open]")!;
+    const border = Number.parseFloat(getComputedStyle(open).borderLeftWidth);
+    expect(border).toBeGreaterThan(0);
+    for (const cell of [".row-qty", ".row-name"]) {
+      const moved = rectOf(open, cell).left - rectOf(closed, cell).left;
+      expect(moved, cell).toBeGreaterThanOrEqual(border - 0.5);
+      expect(moved, cell).toBeLessThanOrEqual(border + 0.5);
+    }
+  },
+);

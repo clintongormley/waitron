@@ -42,10 +42,15 @@ export const rowTextStyles = css`
 `;
 
 export const OPEN_BORDER = css`2px`;
+/** How far an opened row's box sits in from the row's edges. */
+export const OPEN_MARGIN = css`var(--wt-space-2)`;
+/** An opened row's lead column, narrowed by the box's margin so its quantity and name keep a
+ * closed row's place, moved by the border alone. */
+export const OPEN_LEAD = css`calc(var(--wt-tap-min) - ${OPEN_MARGIN})`;
 
 /** An opened order row's box, new or sent: the declarations for the rule that opens it. */
 export const openRowBox = css`
-  margin: var(--wt-space-1) var(--wt-space-2);
+  margin: var(--wt-space-1) ${OPEN_MARGIN};
   border: ${OPEN_BORDER} solid var(--wt-color-primary);
   border-radius: var(--wt-radius-md);
   background: var(--wt-color-surface);

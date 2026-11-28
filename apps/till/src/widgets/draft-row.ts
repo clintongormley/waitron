@@ -16,7 +16,14 @@ import { extraNutrition } from "./diet-badges.js";
 import { quantityText } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
-import { OPEN_BORDER, openRowBox, rowMore, rowTextStyles } from "./row-text.js";
+import {
+  OPEN_BORDER,
+  OPEN_LEAD,
+  OPEN_MARGIN,
+  openRowBox,
+  rowMore,
+  rowTextStyles,
+} from "./row-text.js";
 import { setMenuTag } from "./set-menu-presentation.js";
 
 registerIcons(DROPDOWN_ICONS);
@@ -192,7 +199,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
 
 const LEAD_WIDTH = css`var(--wt-tap-min)`;
 /** How far an opened row's box sits in from a closed row's end: its side margin and border. */
-const OPEN_INSET = css`calc(var(--wt-space-2) + ${OPEN_BORDER})`;
+const OPEN_INSET = css`calc(${OPEN_MARGIN} + ${OPEN_BORDER})`;
 
 /** Last in the basket's styles; each rule matches the specificity of the line-details grid it overrides. */
 export const draftRowStyles = css`
@@ -219,7 +226,7 @@ export const draftRowStyles = css`
      it; with one, the end column reaches out over the box's margin and border, so the price and
      arrow keep the closed rows' column. */
   :host .order-lines > .entry.draft-row[data-open] {
-    grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
+    grid-template-columns: ${OPEN_LEAD} minmax(0, 1fr) auto;
     grid-template-rows: minmax(calc(var(--wt-tap-min) + var(--wt-space-2)), auto) auto;
     ${openRowBox}
   }
@@ -268,6 +275,10 @@ export const draftRowStyles = css`
     cursor: default;
   }
   ${rowTextStyles}
+  /* The selection box reaches out over the box's margin, so it keeps a full tap's width. */
+  :host .draft-row[data-open] > .draft-row-lead {
+    margin-inline-start: calc(-1 * ${OPEN_MARGIN});
+  }
   :host .draft-row > .draft-row-end {
     display: grid;
     grid-column: 3;
