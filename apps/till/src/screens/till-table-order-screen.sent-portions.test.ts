@@ -16,6 +16,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -135,7 +136,7 @@ async function openGrouped(kind: Kind, over: Partial<TillTableOrderScreen> = {},
   expect(shown.querySelector(".row-qty")!.textContent!.trim()).toBe(String(count));
   expect(shown.querySelector(".row-name")!.textContent!.trim()).toBe("Steak");
   expect(shown.querySelector(".row-more")!.textContent!.trim()).toMatch(/^Lime ×2/);
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-1"]')!);
+  await openSentDetails(panel, "s-1");
   await el.updateComplete;
   return el;
 }
@@ -271,7 +272,7 @@ it("A803 portion grouping: two identical unbound one-unit lines show as two rows
       (node) => node.dataset.firedLine,
     ),
   ).toEqual(["s-1", "s-2"]);
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-1"]')!);
+  await openSentDetails(panel, "s-1");
   await el.updateComplete;
   const events = capture(el, "cancel-item");
   await openMore(el);
@@ -411,10 +412,8 @@ async function openPartServed(over: Partial<TillTableOrderScreen> = {}, served =
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  expect(panel.shadowRoot!.querySelectorAll("[data-sent-info]")).toHaveLength(1);
-  await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="s-${served + 1}"]`)!,
-  );
+  expect(panel.shadowRoot!.querySelectorAll("[data-sent-row]")).toHaveLength(1);
+  await openSentDetails(panel, `s-${served + 1}`);
   await el.updateComplete;
   return el;
 }

@@ -15,6 +15,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails, sentServeButton, serveSentRow } from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -45,6 +46,11 @@ async function sent(over: Partial<TillTableOrderScreen> & {} = {}) {
 }
 async function click(el: TillTableOrderScreen, selector: string) {
   await userEvent.click(inside(el, selector));
+  await el.updateComplete;
+  await panel(el).updateComplete;
+}
+async function details(el: TillTableOrderScreen, lineId: string) {
+  await openSentDetails(panel(el), lineId);
   await el.updateComplete;
   await panel(el).updateComplete;
 }
@@ -179,7 +185,8 @@ it("serves a fired row's entire active remainder through the table's real event 
     }),
   });
   const events = collect(el, "serve-lines");
-  await click(el, '[data-serve-line="fish"]');
+  await serveSentRow(panel(el), "fish", "rest");
+  await el.updateComplete;
   expect(events.map((e) => [e.detail, e.bubbles, e.composed])).toEqual([
     [{ items: [{ lineId: "fish", quantity: "2" }] }, true, true],
   ]);
@@ -393,7 +400,8 @@ it("forwards due Snooze and Clear snooze once, with nothing in Sent to open firs
   const clear = collect(el, "unsnooze-group");
   await click(el, "[data-reminder-unsnooze]");
   expect(clear.map((e) => e.detail)).toEqual([{ groupId: "g3" }]);
-  expect(panel(el).shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(panel(el).shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
 });
 
 it('shows a passive ready update on its row, and a new bill\'s ready row, with no box or "!"', async () => {
@@ -407,7 +415,10 @@ it('shows a passive ready update on its row, and a new bill\'s ready row, with n
   await el.updateComplete;
   await panel(el).updateComplete;
   expect(inside(el, '[data-fired-line="one"] .row-ready').textContent!.trim()).toBe("Ready 1 min");
-  expect(panel(el).shadowRoot!.querySelector("[data-sent-attention],[aria-expanded]")).toBeNull();
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(
+    panel(el).shadowRoot!.querySelector('[data-sent-attention], [aria-expanded="true"], [data-open]'),
+  ).toBeNull();
   el.orderId = "other";
   el.currentOrders = {
     ...data,
@@ -440,13 +451,15 @@ it("puts a failed current-orders read beside Sent without offering old service r
   await el.updateComplete;
   await panel(el).updateComplete;
   expect(find(el, "[data-sent-unread]").textContent).toContain("could not");
-  expect(panel(el).shadowRoot!.querySelector("[data-serve-line]")).toBeNull();
+  expect(panel(el).shadowRoot!.querySelector("[data-sent-row]")).toBeNull();
 });
 
 it("refuses a serve tap while the dish list is unread, as the dish window does", async () => {
   const { el } = await sent();
   const events = collect(el, "serve-lines");
-  const line = inside(el, "[data-serve-line]") as HTMLButtonElement;
+  const lineId = inside(el, "[data-fired-line]").dataset.firedLine!;
+  const line = await sentServeButton(panel(el), lineId, "one", "fired");
+  expect(line.disabled).toBe(false);
   el.currentOrdersUnread = true;
   await el.updateComplete;
   await panel(el).updateComplete;
@@ -498,7 +511,8 @@ it("keeps every sent section drawn when the same bill starts a new visit", async
   await el.updateComplete;
   await panel(el).updateComplete;
   expect(sections()).toEqual(["g1", "g2", "g3", "g4", ""]);
-  expect(panel(el).shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(panel(el).shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
 });
 
 it("opens sent information as read-only recorded dish, extra and note prices at a Not allowed station", async () => {
@@ -526,7 +540,7 @@ it("opens sent information as read-only recorded dish, extra and note prices at 
   };
   const { el } = await sent({ lines: [flanLine], bills: [partyBill("wo-4", 1, "10.00")] });
   const events = collect(el, "serve-lines");
-  await click(el, '[data-sent-info="l-flan"]');
+  await details(el, "l-flan");
   const dialog = find(el, "[data-sent-line-dialog]");
   expect(dialog.hasAttribute("open")).toBe(true);
   expect(dialog.textContent).toContain("Flan ×2");
@@ -560,7 +574,7 @@ it("a fired line's information opens the existing partial-serving choice with it
     }),
   });
   const events = collect(el, "serve-lines");
-  await click(el, '[data-sent-info="dish"]');
+  await details(el, "dish");
   expect(find(el, "[data-sent-line-dialog]").textContent).toContain("no salt");
   await userEvent.click(find(el, "[data-sent-line-serve]"));
   await el.updateComplete;
@@ -577,12 +591,12 @@ it("a fired line's information opens the existing partial-serving choice with it
 it("offers Not served for the served slice and reuses its partial quantity choice", async () => {
   const { el } = await sent();
   const events = collect(el, "unserve-lines");
-  await click(el, '[data-sent-info="l-salad"]');
+  await details(el, "l-salad");
   expect(find(el, "[data-sent-line-serve]")).toBeNull();
   expect(find(el, "[data-sent-line-unserve]")).not.toBeNull();
   await userEvent.click(find(el, "[data-sent-line-close]"));
   await el.updateComplete;
-  await click(el, '[data-sent-info="l-croq"]');
+  await details(el, "l-croq");
   find(el, "[data-sent-line-unserve]").click();
   await el.updateComplete;
   expect(find(el, "[data-serve-count]").textContent!.trim()).toBe("2");
@@ -601,7 +615,7 @@ it("keeps a charged cancellation read-only with no service action", async () => 
       ungrouped: [row("cancelled", "Soup", "1.000", { cancelledQuantity: "1.000" })],
     }),
   });
-  await click(el, '[data-sent-info="cancelled"]');
+  await details(el, "cancelled");
   expect(find(el, "[data-sent-line-dialog]").textContent).toContain("Cancelled, charged");
   expect(root(el).querySelector("[data-sent-line-serve],[data-sent-line-unserve]")).toBeNull();
 });
@@ -611,7 +625,7 @@ it.each(["busy", "groupCommandBusy", "serviceVisit", "api", "row-gone", "bill"] 
   async (change) => {
     const { el } = await sent();
     const events = collect(el, "serve-lines");
-    await click(el, '[data-sent-info="l-beer"]');
+    await details(el, "l-beer");
     const serve = find(el, "[data-sent-line-serve]");
     if (change === "busy") el.busy = true;
     if (change === "groupCommandBusy") el.groupCommandBusy = true;
@@ -631,7 +645,7 @@ it.each(["busy", "command", "api", "visit", "party", "unread", "served-elsewhere
   async (change) => {
     const { el } = await sent();
     const events = collect(el, "serve-lines");
-    await click(el, '[data-sent-info="l-croq"]');
+    await details(el, "l-croq");
     await userEvent.click(find(el, "[data-sent-line-serve]"));
     await el.updateComplete;
     const confirm = find(el, "[data-serve-confirm]");
@@ -663,7 +677,7 @@ it.each(["busy", "command", "api", "visit", "party", "unread", "served-elsewhere
 
 it("does not reopen a departed information window when the old bill returns", async () => {
   const { el } = await sent();
-  await click(el, '[data-sent-info="l-beer"]');
+  await details(el, "l-beer");
   el.orderId = "other";
   await el.updateComplete;
   el.orderId = "wo-4";

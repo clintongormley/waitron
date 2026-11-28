@@ -27,6 +27,7 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import "./till-table-order-screen.js";
 import type { ChangeLineDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -106,11 +107,9 @@ async function openRow(
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(
-      `${fold === "served" ? `[data-served-line="${lineId}"] ` : ""}[data-sent-info="${lineId}"]`,
-    )!,
-  );
+  if (fold === "served")
+    expect(panel.shadowRoot!.querySelector(`[data-served-line="${lineId}"]`)).not.toBeNull();
+  await openSentDetails(panel, lineId, fold === "served" ? "served" : undefined);
   await el.updateComplete;
   expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
   return el;
@@ -371,7 +370,7 @@ it("opens a fresh, unchanged window for another row", async () => {
   await userEvent.click(q(el, "[data-sent-line-close]")!);
   await expect.poll(() => q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(false);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  await openSentDetails(panel, "l-flan");
   await el.updateComplete;
   const button = q(el, "[data-sent-change]")!;
   expect(button.hasAttribute("disabled")).toBe(true);
@@ -408,9 +407,7 @@ async function openInApp(lines?: TabLine[], lineId = "l-flan") {
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
-  );
+  await openSentDetails(panel, lineId);
   await el.updateComplete;
   const coordinator = app.leave.coordinator;
   const request = coordinator.request.bind(coordinator);
@@ -464,9 +461,7 @@ it.each([
     expect(asked.count).toBe(0);
     events.length = 0;
     const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-    await userEvent.click(
-      panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!,
-    );
+    await openSentDetails(panel, "l-flan");
     await el.updateComplete;
     await editNote(el, "warm, no cream");
     await press();
@@ -939,7 +934,7 @@ it("drops the refusal and the attempted change once the reopened window closes",
   await answer("discard");
   await expect.poll(() => dialog.open).toBe(false);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  await openSentDetails(panel, "l-flan");
   await el.updateComplete;
   await expect.poll(() => dialog.open).toBe(true);
   expect(await noteShown(el)).toBe("warm");

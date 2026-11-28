@@ -21,6 +21,7 @@ import {
   openPartyMenu,
   tableMenuAndSwitcherText,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { sentDetailsButton, sentServeButton } from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -53,15 +54,15 @@ it.each(["held", "fired"] as const)(
     await closePartyMenu(el);
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${state}-line="dish"]`)!;
     expect(shown.textContent).toContain("Recorded dish");
-    expect(shown.querySelector("[data-sent-info]")).not.toBeNull();
+    expect(shown.contains(await sentDetailsButton(panel, "dish", state))).toBe(true);
     const commands: CustomEvent[] = [];
     el.addEventListener(state === "held" ? "fire-group" : "serve-lines", (event) =>
       commands.push(event as CustomEvent),
     );
     await userEvent.click(
-      panel.shadowRoot!.querySelector<HTMLElement>(
-        state === "held" ? '[data-group-fire="group"]' : '[data-serve-line="dish"]',
-      )!,
+      state === "held"
+        ? panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="group"]')!
+        : await sentServeButton(panel, "dish", "one", "fired"),
     );
     await el.updateComplete;
     if (state === "held") {
