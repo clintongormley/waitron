@@ -22,7 +22,8 @@ export function menuTilePaint(color: string | null | undefined): string | undefi
 
 /**
  * The menu's tiles as the till draws them, shared with the dashboard's Device home preview. A tile is a `.tile` (a `wt-button`, or a `div` where it is not a
- * control) holding a `.label`; `[data-painted]` fills it from `--tile-fill` and `--tile-ink`.
+ * control) holding a `.label`; `[data-painted]` fills it from `--tile-fill` and `--tile-ink`. The
+ * till's counted dish tiles add their own styles for the count and the room their name keeps for it.
  */
 export const menuTileStyles: CSSResult = css`
   /* Room at the top and end for a count drawn outside a tile's corner, so a scroller never clips it.
@@ -114,43 +115,6 @@ export const menuTileStyles: CSSResult = css`
     font-weight: var(--wt-font-weight-bold);
   }
 
-  /* With the end padding, the count's reach into the tile, from the width the count publishes,
-     beside the first line only; the tile's own padding covers the ring. */
-  .tile[data-in-order] .name {
-    --name-count-room: max(
-      0px,
-      var(--count-badge-width, var(--wt-space-5)) - var(--count-outside) - var(--name-ellipsis-room)
-    );
-  }
-
-  .tile[data-in-order]:is(:not([data-name-room]), [data-name-room="end"]) .name::before {
-    content: "";
-    float: inline-end;
-    width: var(--name-count-room);
-    height: 1lh;
-  }
-
-  /* The same room at the first line's start, so the line stays centred on the tile. Being something
-     for the first line to hold, a first word too wide to sit beside the count starts the second line
-     instead of pushing every line below the count. */
-  .name-start {
-    display: inline-block;
-    vertical-align: top;
-    width: var(--name-count-room);
-  }
-
-  /* Where that first line is left empty, the till sets data-name-room to the first of these that
-     keeps the name on its first line and clear of the count: "none", no room; "end", the room at
-     the first line's end only; "both", the room on both sides of every line. The start then leaves
-     the flow but keeps its width, so the size the till watches holds still. */
-  .tile[data-name-room] .name-start {
-    position: absolute;
-  }
-
-  .tile[data-name-room="both"] .name {
-    padding-inline: calc(var(--name-ellipsis-room) + var(--name-count-room));
-  }
-
   /* A set leading, not the font's own, which is taller in some fonts (Noto Sans's is 1.36 of the
      size): a section the diet filter emptied stacks its icon, name and a two-line notice in the
      fixed tile height. */
@@ -182,20 +146,6 @@ export const menuTileStyles: CSSResult = css`
     width: var(--wt-font-size-md);
     height: var(--wt-font-size-md);
     margin-block-end: 0;
-  }
-
-  .in-order {
-    position: absolute;
-    inset-block-start: calc(-1 * var(--count-outside));
-    inset-inline-end: calc(-1 * var(--count-outside));
-  }
-
-  .in-order::part(badge) {
-    box-shadow: 0 0 0 var(--count-ring) var(--wt-color-bg);
-  }
-
-  .in-order-words {
-    ${visuallyHiddenStyles}
   }
 
   div.tile[data-painted],

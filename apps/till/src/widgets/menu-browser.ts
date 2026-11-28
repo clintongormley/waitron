@@ -43,7 +43,9 @@ import { productName, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../state/set-menus.js";
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
-import { dishTile, sectionTile, setMenuTile, type DishTileHandlers } from "./menu-tiles.js";
+import { dishTile, sectionTile, setMenuTile } from "./menu-tiles.js";
+import type { CountWords, DishTileHandlers } from "./menu-tiles.js";
+import { countedNameStyles } from "./counted-name.js";
 import { menuPath, menuPathStyles } from "./menu-path.js";
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
@@ -133,6 +135,7 @@ export class TillMenuBrowser extends LitElement {
     baseStyles,
     firstReadNoticeStyles,
     menuTileStyles,
+    countedNameStyles,
     menuPathStyles,
     css`
       :host {
@@ -287,14 +290,13 @@ export class TillMenuBrowser extends LitElement {
 
   /** Every served menu's offers as till products, through the same diet lens as `products`. */
   @property({ attribute: false }) servedProducts: TillProduct[] = [];
-
   @property({ attribute: false }) unfilteredServedProducts?: TillProduct[];
-
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** Product id → items of that dish in the order being taken (a table's New order or the
    * Counter's basket); a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
+  @property() countWords: CountWords = "unsent";
 
   /** Uses the shared amount keypad when this screen takes payment elsewhere. */
   @property({ type: Boolean }) weighs = false;
@@ -666,6 +668,7 @@ export class TillMenuBrowser extends LitElement {
         if (this.weighs && !soldByTheUnit(product)) this.#keepTileAboveAmount(tile);
       },
       this.#dishHandlers,
+      this.countWords,
     );
   }
 

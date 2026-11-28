@@ -338,6 +338,7 @@ export class TillCounterScreen extends LitElement {
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
       .inOrder=${this.#inOrder()}
+      countWords="items"
     >
       ${
         hasMenuPicker

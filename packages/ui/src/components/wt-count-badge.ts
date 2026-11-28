@@ -1,13 +1,11 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
 export type WtCountBadgeTone = "neutral" | "warning" | "error" | "notice";
 
 /** A count pill. Renders nothing at zero and caps its text at "99+". It has no accessible name of
- * its own: the control it decorates must say the count. With `publish-width` it keeps
- * `--count-badge-width` on its parent element at its drawn width, so a parent it is drawn over can
- * keep its content clear of it whatever the count, font and text size. */
+ * its own: the control it decorates must say the count. */
 @customElement("wt-count-badge")
 export class WtCountBadge extends LitElement {
   static override styles = [
@@ -50,41 +48,6 @@ export class WtCountBadge extends LitElement {
 
   @property({ type: Number }) count = 0;
   @property({ reflect: true }) tone: WtCountBadgeTone = "neutral";
-  @property({ type: Boolean, attribute: "publish-width" }) publishWidth = false;
-
-  #widthObserver?: ResizeObserver;
-  #publishedOn?: HTMLElement;
-
-  override connectedCallback() {
-    super.connectedCallback();
-    this.#syncPublishing();
-  }
-
-  override disconnectedCallback() {
-    super.disconnectedCallback();
-    this.#stopPublishing();
-  }
-
-  protected override updated(changed: PropertyValues<this>) {
-    if (changed.has("publishWidth")) this.#syncPublishing();
-  }
-
-  #syncPublishing() {
-    this.#stopPublishing();
-    const parent = this.parentElement;
-    if (!this.publishWidth || !parent) return;
-    this.#publishedOn = parent;
-    this.#widthObserver = new ResizeObserver(([entry]) => {
-      parent.style.setProperty("--count-badge-width", `${entry!.borderBoxSize[0]!.inlineSize}px`);
-    });
-    this.#widthObserver.observe(this);
-  }
-
-  #stopPublishing() {
-    this.#widthObserver?.disconnect();
-    this.#publishedOn?.style.removeProperty("--count-badge-width");
-    this.#widthObserver = this.#publishedOn = undefined;
-  }
 
   override render() {
     if (!(this.count > 0)) return nothing;

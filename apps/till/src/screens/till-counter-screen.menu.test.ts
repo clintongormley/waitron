@@ -136,6 +136,28 @@ describe("fixed Counter menu browser", () => {
     expect(count("Steak")).toBe(2);
   });
 
+  it("words a tile's count as items in the basket, not as unsent, on a placed order too", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(salad, "2");
+    store.addProduct(steak, "1");
+    const { browser } = await mountBrowser({
+      store,
+      orderFlow: "ticket_then_pay",
+      stage: "collect",
+    });
+    const words = (name: string) =>
+      [
+        ...browser().shadowRoot!.querySelectorAll<HTMLElement>(
+          '[data-region="shortcuts"] wt-button.tile',
+        ),
+      ]
+        .find((each) => each.querySelector(".name")?.textContent?.trim() === name)!
+        .querySelector(".in-order-words")!
+        .textContent!.trim();
+    expect(words("Salad")).toBe(`, ${t("order_counts.items").replace("{n}", "2")}`);
+    expect(words("Steak")).toBe(`, ${t("order_counts.items_one")}`);
+  });
+
   it("switching menus shows the other menu with its own Device Home Page", async () => {
     const { el, browser } = await mountBrowser();
     el.selectedMenuId = "drinks";

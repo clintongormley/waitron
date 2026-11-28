@@ -37,7 +37,9 @@ Left open:
   path above the tiles, a word "Home" and plain steps, which no longer matches the till's
   (`menu-path.ts`); its search is not the till's outlined one either. The tiles' CSS and colouring
   are shared: both read `menuTileStyles` and `menuTilePaint` (`packages/ui/src/menu-tile-styles.ts`;
-  till redesign PR 10a, watcher 2026-11-28 00:13, question 5). Grid sizing, arrangement, trails and indexing already use shared
+  till redesign PR 10a, watcher 2026-11-28 00:13, question 5), except the count on a dish tile
+  and the room its name keeps for it, which only the till draws (`countedNameStyles` in
+  `apps/till/src/widgets/counted-name.ts`). Grid sizing, arrangement, trails and indexing already use shared
   rules. A shared presentation boundary would need adapters for the till's ordering state and the
   dashboard's shortcut controls.
 

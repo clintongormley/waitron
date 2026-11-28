@@ -3,6 +3,7 @@ import { currentContentLanguages, menuTilePaint } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import type { TillProduct } from "../api/menu-api.js";
 import { countedName } from "./counted-name.js";
+import type { StringKey } from "../i18n/strings.js";
 import { countText, t } from "../i18n/t.js";
 import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
@@ -16,6 +17,15 @@ export interface DishTileHandlers {
   held: () => boolean;
 }
 
+/** What a counted tile's hidden words call its count: `items` where the order may hold dishes
+ * already sent, as a placed Counter order's basket does. */
+export type CountWords = "unsent" | "items";
+
+const COUNT_WORDS: Record<CountWords, readonly [StringKey, StringKey]> = {
+  unsent: ["order_counts.unsent", "order_counts.unsent_one"],
+  items: ["order_counts.items", "order_counts.items_one"],
+};
+
 /** A dish's tile. A tap on a sellable dish runs `onTap` with the tile; on a sold-out one it opens
  * the dish's information, as holding it or Shift+F10 does. `count` is the dish's items in the order being
  * taken (a table's New order or the Counter's basket); undefined, or 0, draws none. */
@@ -24,6 +34,7 @@ export function dishTile(
   count: number | undefined,
   onTap: (tile: HTMLElement) => void,
   handlers: DishTileHandlers,
+  words: CountWords,
 ): TemplateResult {
   const sellable = hasSomethingToSell(product);
   const paint = menuTilePaint(product.color);
@@ -57,7 +68,6 @@ export function dishTile(
               data-in-order-count
               tone="notice"
               aria-hidden="true"
-              publish-width
               .count=${counted}
             ></wt-count-badge>`
           : nothing
@@ -71,9 +81,7 @@ export function dishTile(
       ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
       ${
         counted > 0
-          ? html`<span class="in-order-words"
-              >, ${countText(counted, "order_counts.unsent", "order_counts.unsent_one")}</span
-            >`
+          ? html`<span class="in-order-words">, ${countText(counted, ...COUNT_WORDS[words])}</span>`
           : nothing
       }
     </span>

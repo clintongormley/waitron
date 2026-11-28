@@ -159,15 +159,32 @@ function resolved(near: HTMLElement, property: "backgroundColor" | "color", valu
 
 /** After the next paint, so anything worked out from a drawn size is in place. */
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+/** A counted name is placed again at the frame after the one whose ResizeObserver saw a change. */
+const placedAfterResize = async () => {
+  await nextPaint();
+  await nextPaint();
+};
 
-afterEach(() => cleanupWidgets());
+/** Chromium reports a ResizeObserver whose callback changed the layout it was delivering as an
+ * error on the window, which fails no test by itself. */
+const resizeLoops: string[] = [];
+function onResizeLoop(event: ErrorEvent) {
+  if (event.message.includes("ResizeObserver loop")) resizeLoops.push(event.message);
+}
+
+afterEach(() => {
+  cleanupWidgets();
+  expect(resizeLoops.splice(0), "ResizeObserver loop errors").toEqual([]);
+});
 
 let phoneFont: FontFace;
 beforeAll(async () => {
   phoneFont = await loadPhoneFont();
+  window.addEventListener("error", onResizeLoop);
 });
 afterAll(() => {
   document.fonts.delete(phoneFont);
+  window.removeEventListener("error", onResizeLoop);
 });
 
 const ALL = ["Starters", "Bravas", "Croquettes", "Squid", "Prawns", "Cheeses", "Daily menu"];
@@ -417,7 +434,7 @@ describe("menu tiles", () => {
           }),
         );
         if (pane !== undefined) host.style.width = `${pane}px`;
-        await nextPaint();
+        await placedAfterResize();
         for (const dish of dishes) {
           const shown = tile(el, dish.name);
           const name = shown.querySelector<HTMLElement>(".name")!;
@@ -496,8 +513,7 @@ describe("menu tiles", () => {
           }),
         );
         if (pane !== undefined) host.style.width = `${pane}px`;
-        await nextPaint();
-        await nextPaint();
+        await placedAfterResize();
         const shown = (dish: HTMLElement) => shownLines(dish.querySelector<HTMLElement>(".name")!);
         const neighbour = tile(el, "Mussels");
         const nameTop = shown(neighbour)[0]!.text.top;
@@ -538,16 +554,16 @@ describe("menu tiles", () => {
         }),
       );
       host.style.width = "340px";
-      await nextPaint();
+      await placedAfterResize();
       const dish = tile(el, "Croquettes");
       expect(dish.getAttribute("data-name-room")).toBe("none");
       host.remove();
       document.body.append(host);
       host.style.width = "";
-      await nextPaint();
+      await placedAfterResize();
       expect(dish.hasAttribute("data-name-room")).toBe(false);
       host.style.width = "340px";
-      await nextPaint();
+      await placedAfterResize();
       expect(dish.getAttribute("data-name-room")).toBe("none");
       el.inOrder = new Map();
       await el.updateComplete;
@@ -555,6 +571,83 @@ describe("menu tiles", () => {
     } finally {
       cleanupWidgets();
       await resetPage();
+    }
+  });
+
+  it("keeps a counted name's room through a redraw that changes nothing, without rewriting the tile", async () => {
+    try {
+      await pageAt(844, 390);
+      const { el, host } = await inPhoneFont(
+        mountWidget<TillMenuBrowser>("till-menu-browser", {
+          menu: { ...menu, structure: { members: [member("croq")] } },
+          products: [croquettes],
+          store: new WorkingOrderStore(),
+          inOrder: new Map([["p-croq", 12]]),
+        }),
+      );
+      host.style.width = "340px";
+      await placedAfterResize();
+      const dish = tile(el, "Croquettes");
+      expect(dish.getAttribute("data-name-room")).toBe("none");
+      const writes: MutationRecord[] = [];
+      const watch = new MutationObserver((records) => writes.push(...records));
+      watch.observe(dish, { attributeFilter: ["data-name-room"] });
+      watch.observe(dish.querySelector(".name")!, { attributeFilter: ["style"] });
+      el.inOrder = new Map([["p-croq", 12]]);
+      await el.updateComplete;
+      await placedAfterResize();
+      writes.push(...watch.takeRecords());
+      watch.disconnect();
+      expect(writes.map((write) => write.attributeName)).toEqual([]);
+      expect(dish.getAttribute("data-name-room")).toBe("none");
+    } finally {
+      cleanupWidgets();
+      await resetPage();
+    }
+  });
+
+  it("keeps room for a newly drawn 99+ at its own width before the frame that draws it is painted", async () => {
+    const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
+    const { el } = await mount(390, {
+      menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
+      products: [product("long", full), bravas],
+    });
+    await nextPaint();
+    el.inOrder = new Map([["p-long", 100]]);
+    await el.updateComplete;
+    const dish = tile(el, full);
+    const seen = await new Promise<{ room: number; reach: number; clear: boolean[] }>((resolve) =>
+      requestAnimationFrame(() => {
+        const name = dish.querySelector<HTMLElement>(".name")!;
+        const ring = parseFloat(getComputedStyle(dish).getPropertyValue("--count-ring"));
+        const count = badge(dish)!.getBoundingClientRect();
+        resolve({
+          room: name.querySelector(".name-start")!.getBoundingClientRect().width,
+          // The count's reach into the tile, less the room the name keeps for "…" anyway.
+          reach: count.width - 6 - parseFloat(getComputedStyle(name).fontSize) / 2,
+          clear: shownLines(name).map((line) => clearOf(line, count, ring)),
+        });
+      }),
+    );
+    expect(badge(dish)!.shadowRoot!.textContent!.trim()).toBe("99+");
+    expect(seen.room).toBeCloseTo(seen.reach, 1);
+    expect(seen.clear).toEqual([true, true]);
+  });
+
+  it("places a one-line name mixing writing directions as it places one in a single direction", async () => {
+    const { el } = await mount(390, {
+      menu: { ...menu, structure: { members: [member("mixed"), member("plain")] } },
+      products: [product("mixed", "Pan ب pan"), product("plain", "Pan b pan")],
+      inOrder: new Map([
+        ["p-mixed", 2],
+        ["p-plain", 2],
+      ]),
+    });
+    await nextPaint();
+    for (const name of ["Pan b pan", "Pan ب pan"]) {
+      const dish = tile(el, name);
+      expect(shownLines(dish.querySelector<HTMLElement>(".name")!), name).toHaveLength(1);
+      expect(dish.hasAttribute("data-name-room"), name).toBe(false);
     }
   });
 
