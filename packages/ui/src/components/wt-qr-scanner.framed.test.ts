@@ -42,7 +42,12 @@ test("films in a dark box painted from tokens, under four unnamed corner bracket
   const look = (node: HTMLElement, keys: string) =>
     keys.split(" ").map((key) => getComputedStyle(node).getPropertyValue(key));
   expect(box.contains(el.shadowRoot!.querySelector("video"))).toBe(true);
-  expect(look(box, "height background-color")).toEqual(["111px", "rgb(1, 2, 3)"]);
+  expect(look(box, "height background-color margin-left margin-right")).toEqual([
+    "111px",
+    "rgb(1, 2, 3)",
+    "0px",
+    "0px",
+  ]);
   const brackets = [...box.querySelectorAll<HTMLElement>("[data-scanner-bracket]")];
   expect(brackets.map((b) => b.dataset.scannerBracket)).toEqual([
     "top-start",
@@ -55,20 +60,32 @@ test("films in a dark box painted from tokens, under four unnamed corner bracket
   expect(look(brackets[3]!, sides)).toEqual(["21px", "9px", "13px", "5px", "0px", "rgb(4, 5, 6)"]);
   const caption = find(el, "caption")!;
   expect(box.contains(caption)).toBe(true);
-  expect([caption.textContent!.trim(), ...look(caption, "color")]).toEqual([
+  expect([caption.textContent!.trim(), ...look(caption, "color background-color")]).toEqual([
     "Point at a sticker",
     "rgb(4, 5, 6)",
+    "rgb(1, 2, 3)",
   ]);
   expect(el.shadowRoot!.textContent).not.toContain("Hold the code up");
 });
 
-test("without a caption the hint is the caption, and a refusal is drawn under the box", async () => {
+test("without a caption the hint is the caption, a refusal is drawn under the box, and turning the frame off and on keeps the picture on the camera and reading", async () => {
   const el = await framed("");
   expect(find(el, "caption")!.textContent!.trim()).toBe("Hold the code up");
   expect(find(el, "message")).toBeNull();
   el.message = "That is not the code";
   await el.updateComplete;
   expect(find(el, "camera")!.nextElementSibling).toBe(find(el, "message"));
+  for (const on of [false, true]) {
+    el.framed = on;
+    await el.updateComplete;
+    expect(find(el, "camera") !== null).toBe(on);
+    const video = el.shadowRoot!.querySelector("video")!;
+    expect(video.srcObject).toBe(filming!.stream);
+    const reads: string[] = [];
+    el.addEventListener("wt-qr-read", (event) => reads.push((event as CustomEvent).detail.text));
+    await expect.poll(() => reads[0]).toBe("hello");
+    expect(video.isConnected && !video.paused).toBe(true);
+  }
 });
 
 test("a refused camera draws no box, only the unavailable line", async () => {

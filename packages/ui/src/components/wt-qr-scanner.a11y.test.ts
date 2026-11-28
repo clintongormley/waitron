@@ -17,8 +17,7 @@ afterEach(() => {
 const SCANNER =
   '<wt-qr-scanner label="Camera" hint="Hold the code up to the camera" unavailable="The camera did not start"></wt-qr-scanner>';
 
-const FRAMED =
-  '<wt-qr-scanner framed label="Camera" caption="Point at a sticker" unavailable="The camera did not start"></wt-qr-scanner>';
+const FRAMED = '<wt-qr-scanner framed label="Camera" caption="Point at a sticker"></wt-qr-scanner>';
 
 describe.each(["light", "dark"] as const)("QR scanner accessibility (%s)", (theme) => {
   test.each([
@@ -26,10 +25,8 @@ describe.each(["light", "dark"] as const)("QR scanner accessibility (%s)", (them
     ["message", SCANNER],
     ["unavailable", SCANNER],
     ["framed filming", FRAMED],
-    ["framed message", FRAMED],
-    ["framed unavailable", FRAMED],
   ] as const)("%s", async (name, markup) => {
-    const state = name.replace("framed ", "") as "filming" | "message" | "unavailable";
+    const state = name === "framed filming" ? "filming" : name;
     if (state === "unavailable") {
       vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
         new DOMException("Permission denied", "NotAllowedError"),

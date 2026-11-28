@@ -6,7 +6,7 @@ import { t } from "../i18n/t.js";
 
 type Message = "scan_not_ours" | "scan_not_printer" | "scan_not_reader";
 
-/** How long a sticker must be out of view before `keep-going` sends it again. */
+/** How long frames without a sticker must be read before `keep-going` sends it again. */
 const RESEND_AFTER_MS = 2_000;
 
 /**
@@ -21,8 +21,12 @@ export class TillEquipmentScanner extends WtQrScanner {
   @property() kind: EquipmentKind | "any" = "printer";
   @property({ type: Boolean, attribute: "keep-going" }) keepGoing = false;
   @state() private code: Message | null = null;
-  /** When each accepted label was last read, so one held in view is sent once. */
-  #lastSeen = new Map<string, number>();
+  /**
+   * Each accepted label still taken as in view, with when frames without it began, or `null`
+   * while it is read. Only a frame read without it counts towards its absence, so a stall in the
+   * frame loop sends nothing again.
+   */
+  #inView = new Map<string, number | null>();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
@@ -32,7 +36,10 @@ export class TillEquipmentScanner extends WtQrScanner {
     this.message = this.code === null ? "" : t(`equipment.${this.code}`);
   }
 
-  protected override onRead(text: string): void {
+  protected override onFrame(text: string | null): void {
+    const held = text !== null && this.#inView.has(text);
+    if (this.keepGoing) this.#noteFrame(text);
+    if (text === null) return;
     const code = parseEquipmentCode(text);
     if (code === null) {
       this.code = "scan_not_ours";
@@ -40,14 +47,9 @@ export class TillEquipmentScanner extends WtQrScanner {
       this.code = this.kind === "printer" ? "scan_not_printer" : "scan_not_reader";
     } else {
       this.code = null;
-      if (this.keepGoing) {
-        const now = performance.now();
-        const seen = this.#lastSeen.get(text);
-        this.#lastSeen.set(text, now);
-        if (seen !== undefined && now - seen < RESEND_AFTER_MS) return;
-      } else {
-        this.stop();
-      }
+      if (held) return;
+      if (this.keepGoing) this.#inView.set(text, null);
+      else this.stop();
       this.dispatchEvent(
         new CustomEvent<{ id: string; kind: EquipmentKind }>("equipment-scanned", {
           detail: { id: code.id, kind: code.kind },
@@ -55,6 +57,15 @@ export class TillEquipmentScanner extends WtQrScanner {
           composed: true,
         }),
       );
+    }
+  }
+
+  #noteFrame(text: string | null): void {
+    const now = performance.now();
+    for (const [label, missingSince] of this.#inView) {
+      if (label === text) this.#inView.set(label, null);
+      else if (missingSince === null) this.#inView.set(label, now);
+      else if (now - missingSince >= RESEND_AFTER_MS) this.#inView.delete(label);
     }
   }
 }

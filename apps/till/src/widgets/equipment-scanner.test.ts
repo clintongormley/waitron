@@ -224,38 +224,51 @@ describe("till-equipment-scanner", () => {
 });
 
 describe("till-equipment-scanner keep-going", () => {
-  function showing(first: string) {
-    const camera = cameraShowing(first);
-    filming = camera;
-    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
-    return camera;
-  }
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  type Frames = { onFrame(text: string | null): void };
   const poll = { timeout: 10_000 };
-
-  it("sends each sticker once while it stays in view, and again after 2 s out of view", async () => {
-    const camera = showing(formatEquipmentCode("reader", READER));
-    const { scanned } = await mountScanner("any", { keepGoing: true });
-    await expect.poll(() => scanned, poll).toEqual([READER]);
-    camera.show(formatEquipmentCode("printer", PRINTER));
-    await expect.poll(() => scanned, poll).toEqual([READER, PRINTER]);
-    await wait(2_600);
-    expect(scanned).toEqual([READER, PRINTER]);
-
-    camera.show(null);
-    await wait(2_300);
-    camera.show(formatEquipmentCode("printer", PRINTER));
-    await expect.poll(() => scanned, poll).toEqual([READER, PRINTER, PRINTER]);
-    expect(camera.stream.getTracks().every((track) => track.readyState === "live")).toBe(true);
+  let now = 0;
+  beforeEach(() => {
+    now = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
   });
 
-  it("clears an earlier not-ours message once a sticker is accepted, and draws its caption", async () => {
-    const camera = showing("https://example.com");
+  it("sends a sticker again only once frames without it have been read for 2 s", async () => {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(new Promise(() => {}));
+    const { el, scanned } = await mountScanner("any", { keepGoing: true });
+    const at = (ms: number, text: string | null) => {
+      now = ms;
+      (el as unknown as Frames).onFrame(text);
+    };
+    const printer = formatEquipmentCode("printer", PRINTER);
+    at(0, printer);
+    at(250, printer);
+    at(2_500, printer);
+    at(2_750, null);
+    at(3_000, formatEquipmentCode("reader", READER));
+    at(4_000, "https://example.com");
+    at(4_749, null);
+    at(4_750, printer);
+    expect(scanned).toEqual([PRINTER, READER]);
+    at(5_000, null);
+    at(7_000, null);
+    at(7_250, printer);
+    expect(scanned).toEqual([PRINTER, READER, PRINTER]);
+  });
+
+  it("clears an earlier not-ours message once a sticker is accepted, draws its caption, and counts blank frames as the sticker gone", async () => {
+    const camera = cameraShowing("https://example.com");
+    filming = camera;
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
     const { el, scanned } = await mountScanner("any", {
       keepGoing: true,
       framed: true,
       caption: "Scan as many as you need",
     });
+    const { calls } = vi.spyOn(el as unknown as Frames, "onFrame").mock;
+    const frame = async (text: string | null) => {
+      const from = calls.length;
+      await expect.poll(() => calls.slice(from).some(([read]) => read === text), poll).toBe(true);
+    };
     await expect.poll(() => message(el), poll).toBe(t("equipment.scan_not_ours"));
     camera.show(formatEquipmentCode("printer", PRINTER));
     await expect.poll(() => scanned, poll).toEqual([PRINTER]);
@@ -263,5 +276,13 @@ describe("till-equipment-scanner keep-going", () => {
     expect(message(el)).toBe("");
     const caption = el.shadowRoot!.querySelector("[data-scanner-caption]")!;
     expect(caption.textContent!.trim()).toBe("Scan as many as you need");
+
+    camera.show(null);
+    await frame(null);
+    now = 2_000;
+    await frame(null);
+    camera.show(formatEquipmentCode("printer", PRINTER));
+    await expect.poll(() => scanned, poll).toEqual([PRINTER, PRINTER]);
+    expect(camera.stream.getTracks().every((track) => track.readyState === "live")).toBe(true);
   });
 });

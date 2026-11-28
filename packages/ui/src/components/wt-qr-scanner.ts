@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type jsQR from "jsqr";
 import { baseStyles } from "../base-styles.js";
@@ -47,7 +47,6 @@ export class WtQrScanner extends LitElement {
       .camera {
         position: relative;
         height: var(--wt-camera-height);
-        margin-inline: var(--wt-space-4);
         border-radius: calc(var(--wt-radius-md) + var(--wt-space-1));
         background: var(--wt-color-camera);
         overflow: hidden;
@@ -67,46 +66,59 @@ export class WtQrScanner extends LitElement {
         border: var(--wt-camera-bracket-line) solid var(--wt-color-on-camera);
       }
 
-      .bracket.top-start {
-        top: var(--wt-camera-bracket-inset-block);
-        left: var(--wt-camera-bracket-inset-inline);
-        border-right: 0;
-        border-bottom: 0;
-        border-top-left-radius: var(--wt-radius-md);
+      .bracket.top {
+        inset-block-start: var(--wt-camera-bracket-inset-block);
+        border-block-end: 0;
       }
 
-      .bracket.top-end {
-        top: var(--wt-camera-bracket-inset-block);
-        right: var(--wt-camera-bracket-inset-inline);
-        border-left: 0;
-        border-bottom: 0;
-        border-top-right-radius: var(--wt-radius-md);
+      .bracket.bottom {
+        inset-block-end: var(--wt-camera-bracket-inset-block);
+        border-block-start: 0;
       }
 
-      .bracket.bottom-start {
-        bottom: var(--wt-camera-bracket-inset-block);
-        left: var(--wt-camera-bracket-inset-inline);
-        border-right: 0;
-        border-top: 0;
-        border-bottom-left-radius: var(--wt-radius-md);
+      .bracket.start {
+        inset-inline-start: var(--wt-camera-bracket-inset-inline);
+        border-inline-end: 0;
       }
 
-      .bracket.bottom-end {
-        bottom: var(--wt-camera-bracket-inset-block);
-        right: var(--wt-camera-bracket-inset-inline);
-        border-left: 0;
-        border-top: 0;
-        border-bottom-right-radius: var(--wt-radius-md);
+      .bracket.end {
+        inset-inline-end: var(--wt-camera-bracket-inset-inline);
+        border-inline-start: 0;
       }
 
+      .bracket.top.start {
+        border-start-start-radius: var(--wt-radius-md);
+      }
+
+      .bracket.top.end {
+        border-start-end-radius: var(--wt-radius-md);
+      }
+
+      .bracket.bottom.start {
+        border-end-start-radius: var(--wt-radius-md);
+      }
+
+      .bracket.bottom.end {
+        border-end-end-radius: var(--wt-radius-md);
+      }
+
+      /* Its own strip, so the words read whatever the camera shows. */
       .caption {
         position: absolute;
-        inset-inline: var(--wt-space-2);
-        bottom: var(--wt-space-2);
+        inset-inline: 0;
+        inset-block-end: 0;
         margin: 0;
+        padding: var(--wt-space-2);
         text-align: center;
         color: var(--wt-color-on-camera);
+        background: var(--wt-color-camera);
         font-size: var(--wt-font-size-sm);
+      }
+
+      @media (forced-colors: active) {
+        .camera {
+          border: var(--wt-field-line-width) solid CanvasText;
+        }
       }
 
       .refusal {
@@ -119,15 +131,15 @@ export class WtQrScanner extends LitElement {
 
   /** The video's accessible name. */
   @property() label = "";
-  /** Shown while no `message` is set. */
+  /** Unframed, the line under the video while no `message` is set; framed, the caption's fallback. */
   @property() hint = "";
-  /** The caller's refusal of the latest code, drawn as a refusal; empty shows `hint`. */
+  /** The caller's refusal of the latest code, drawn under the video or box as an alert. */
   @property() message = "";
   /** Shown in place of everything else once the scanner fires `wt-qr-unavailable`. */
   @property() unavailable = "";
   /** Films inside a fixed dark camera box with corner brackets and `caption` along its foot. */
   @property({ type: Boolean, reflect: true }) framed = false;
-  /** The framed look's words over the picture; empty draws `hint` there. */
+  /** The framed look's fixed words along the foot of the box; empty draws `hint` there. */
   @property() caption = "";
   @state() private phase: "starting" | "filming" | "failed" = "starting";
   @query("video") private video?: HTMLVideoElement;
@@ -183,18 +195,10 @@ export class WtQrScanner extends LitElement {
       track.addEventListener("ended", () => this.#fail("failed"), { signal: this.#watch.signal });
     this.phase = "filming";
     // Loaded only once a camera answers, so a page that never films never downloads it.
-    const decoding = import("jsqr").then(
+    const decode = await import("jsqr").then(
       (module) => module.default,
       () => undefined,
     );
-    await this.updateComplete;
-    if (session !== this.#session) return;
-    const video = this.video!;
-    video.srcObject = stream;
-    void video.play().catch(() => {
-      if (session === this.#session) this.#fail("failed");
-    });
-    const decode = await decoding;
     if (session !== this.#session) return;
     if (decode === undefined) {
       this.#fail("unsupported");
@@ -232,12 +236,15 @@ export class WtQrScanner extends LitElement {
     if (canvas.height !== height) canvas.height = height;
     this.#frame.drawImage(video, 0, 0, width, height);
     const decoded = decode(this.#frame.getImageData(0, 0, width, height).data, width, height);
-    if (decoded === null) return;
-    this.onRead(decoded.data);
+    this.onFrame(decoded?.data ?? null);
   }
 
-  /** Hands a read code to the caller; a subclass that judges codes itself overrides it. */
-  protected onRead(text: string): void {
+  /**
+   * Hands each frame read to the caller: its code, or `null` when it holds none. A subclass that
+   * judges codes itself overrides it.
+   */
+  protected onFrame(text: string | null): void {
+    if (text === null) return;
     this.dispatchEvent(
       new CustomEvent<{ text: string }>("wt-qr-read", {
         detail: { text },
@@ -247,46 +254,49 @@ export class WtQrScanner extends LitElement {
     );
   }
 
-  override render() {
-    if (this.framed) return this.#renderFramed();
-    return html`${
-      this.phase === "filming"
-        ? html`<video muted playsinline aria-label=${this.label}></video>`
-        : nothing
-    }
-    ${
-      this.phase !== "failed" && this.message
-        ? html`<p class="message refusal" data-scanner-message role="alert">${this.message}</p>`
-        : html`<p class="message" data-scanner-message role="status">
-            ${this.phase === "failed" ? this.unavailable : this.hint}
-          </p>`
-    }`;
+  protected override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    // A change of look can draw a new video; the camera goes on in whichever one is on the page.
+    const video = this.video;
+    const stream = this.#stream;
+    if (video === undefined || stream === undefined || video.srcObject === stream) return;
+    video.srcObject = stream;
+    const session = this.#session;
+    void video.play().catch(() => {
+      if (session === this.#session && this.video === video) this.#fail("failed");
+    });
   }
 
-  #renderFramed() {
-    if (this.phase === "failed") {
-      return html`<p class="message" data-scanner-message role="status">${this.unavailable}</p>`;
-    }
-    const bracket = (corner: string) =>
+  override render() {
+    const failed = this.phase === "failed";
+    const video =
+      this.phase === "filming"
+        ? html`<video muted playsinline aria-label=${this.label}></video>`
+        : nothing;
+    const framed = this.framed && !failed;
+    const bracket = (top: string, side: string) =>
       html`<span
-        class="bracket ${corner}"
-        data-scanner-bracket=${corner}
+        class="bracket ${top} ${side}"
+        data-scanner-bracket="${top}-${side}"
         aria-hidden="true"
       ></span>`;
-    return html`<div class="camera" data-scanner-camera>
-        ${
-          this.phase === "filming"
-            ? html`<video muted playsinline aria-label=${this.label}></video>`
-            : nothing
-        }
-        ${bracket("top-start")}${bracket("top-end")}${bracket("bottom-start")}${bracket("bottom-end")}
-        <p class="caption" data-scanner-caption>${this.caption || this.hint}</p>
-      </div>
-      ${
-        this.message
-          ? html`<p class="message refusal" data-scanner-message role="alert">${this.message}</p>`
-          : nothing
-      }`;
+    return html`${
+      framed
+        ? html`<div class="camera" data-scanner-camera>
+            ${video}${bracket("top", "start")}${bracket("top", "end")}${bracket("bottom", "start")}${bracket("bottom", "end")}
+            <p class="caption" data-scanner-caption>${this.caption || this.hint}</p>
+          </div>`
+        : video
+    }
+    ${
+      !failed && this.message
+        ? html`<p class="message refusal" data-scanner-message role="alert">${this.message}</p>`
+        : framed
+          ? nothing
+          : html`<p class="message" data-scanner-message role="status">
+              ${failed ? this.unavailable : this.hint}
+            </p>`
+    }`;
   }
 }
 

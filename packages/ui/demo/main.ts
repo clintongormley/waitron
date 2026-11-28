@@ -161,7 +161,7 @@ const panel = (theme: "light" | "dark") => `
           allow-add
         ></wt-combobox>
       </div>
-      <div class="row" style="margin-top:16px">
+      <div class="row" style="margin-top: var(--wt-space-4)">
         <wt-combobox look="boxed" label="Card reader" search="never" class="demo-boxed"></wt-combobox>
         <wt-combobox
           look="boxed"
@@ -171,7 +171,10 @@ const panel = (theme: "light" | "dark") => `
           highlight
         ></wt-combobox>
       </div>
-      <div class="demo-framed-camera" style="margin-top:16px">
+      <div
+        class="demo-framed-camera"
+        style="margin-top: var(--wt-space-4); padding-inline: var(--wt-space-4)"
+      >
         <wt-button variant="secondary" class="start-framed-camera">Show the framed camera</wt-button>
       </div>
       <wt-address-lookup
