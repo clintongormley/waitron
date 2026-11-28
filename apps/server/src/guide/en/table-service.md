@@ -1053,8 +1053,8 @@ For a full invoice, [set up the bill before paying](table-service.md#full-invoic
 
 **Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
 Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
-a contribution. For an equal share, enter how many people are still to pay, including this
-guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
+a contribution. For an equal share on a table, set the number of guests with − and +, then press
+**Start** for the next guest's share. At the Counter, enter how many people are still to pay, including this guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 Choosing every dish pays the whole bill. If the card is declined or you choose **Cancel payment**,
 check this bill for the dishes before trying again. If they are on a separate bill, pay that bill
 from the table's bill switcher.
@@ -1113,8 +1113,9 @@ the till to confirm no payment was taken before trying again. If the card was ch
 shows the payment as taken.
 
 **Continue with the next guest.** After a part payment, check **Still to pay**. On a phone, press
-**Take the next** to continue; an equal split also shows which share is next. Check the remaining
-number of people if your group changes. After the final payment, choose the
+**Take the next** to continue; an equal split also shows which share is next. If your group changes, change
+the number of guests: on a table, choose **Split equally** again; at the Counter, change
+how many people are still to pay. After the final payment, choose the
 [document to give the guest](table-service.md#settlement-document). Finishing a table is a
 separate action after payment.
 

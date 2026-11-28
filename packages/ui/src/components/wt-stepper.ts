@@ -4,12 +4,20 @@ import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange } from "../interactive.js";
 import "./wt-icon.js";
 
-/** In a 10-unit square: bars 10 long and 2.5 thick, crossed for +. */
-const mark = (plus: boolean) =>
-  html`<svg class="mark" data-mark viewBox="0 0 10 10" aria-hidden="true" focusable="false">
-    <rect x="0" y="3.75" width="10" height="2.5"></rect>
-    ${plus ? svg`<rect x="3.75" y="0" width="2.5" height="10"></rect>` : nothing}
+/** Bars `length` long and 2.5 thick in a square of that side, crossed for +. */
+const mark = (plus: boolean, length: number) => {
+  const offset = (length - 2.5) / 2;
+  return html`<svg
+    class="mark"
+    data-mark
+    viewBox="0 0 ${length} ${length}"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect x="0" y=${offset} width=${length} height="2.5"></rect>
+    ${plus ? svg`<rect x=${offset} y="0" width="2.5" height=${length}></rect>` : nothing}
   </svg>`;
+};
 
 /** A count with − and + buttons and nothing to type. Given `removeLabel`, − is a bin at `min` that
  * sends `wt-remove` instead of stepping. */
@@ -134,6 +142,11 @@ export class WtStepper extends LitElement {
         background-color: var(--wt-color-surface);
       }
 
+      .round .mark {
+        width: calc(var(--wt-space-1) * 3.75);
+        height: calc(var(--wt-space-1) * 3.75);
+      }
+
       .round .count {
         min-width: calc(var(--wt-tap-min) + var(--wt-space-5));
         font-size: var(--wt-font-size-payment-amount);
@@ -219,6 +232,7 @@ export class WtStepper extends LitElement {
     const atMax = this.#atMax;
     const removeLabel = this.removeLabel;
     const portion = this.variant === "portion";
+    const markLength = this.variant === "round" ? 15 : 10;
     return html`
       <div
         class=${portion ? "stepper portion" : this.variant === "round" ? "stepper round" : "stepper"}
@@ -244,7 +258,7 @@ export class WtStepper extends LitElement {
                 ?disabled=${this.disabled || atMin}
                 @click=${(event: Event) => this.step(-1, event)}
               >
-                ${mark(false)}
+                ${mark(false, markLength)}
               </button>`
         }
         <span class="count" aria-live="polite"
@@ -257,7 +271,7 @@ export class WtStepper extends LitElement {
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >
-          ${mark(true)}
+          ${mark(true, markLength)}
         </button>
       </div>
     `;

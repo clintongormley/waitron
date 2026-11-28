@@ -1,6 +1,7 @@
 import { expect, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
+import type { WtShareList, WtStepper } from "@waitron/ui";
 import {
   adjustmentStubs,
   draftServer,
@@ -15,6 +16,7 @@ import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "../src/screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "../src/widgets/bill-pay-dialog.js";
+import type { TillSplitEqually } from "../src/widgets/split-equally.js";
 import type { FormFactor, CapabilityFlag } from "../src/layout.js";
 import type { TillApi } from "../src/api/client.js";
 import type { FloorZone, PartyBill, TableParty, TableState } from "../src/api/floor-api.js";
@@ -461,6 +463,107 @@ export async function type(el: TillApp, name: string, value: string): Promise<vo
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await flush(el);
+}
+
+const payDialog = (el: TillApp | TillBillPayDialog): TillBillPayDialog =>
+  el.localName === "till-bill-pay-dialog" ? (el as TillBillPayDialog) : dialog(el as TillApp)!;
+
+const shareField = (el: TillApp | TillBillPayDialog) =>
+  payDialog(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    'wt-input[name="people"]',
+  );
+
+const splitScreen = (el: TillApp | TillBillPayDialog) =>
+  payDialog(el).shadowRoot!.querySelector<TillSplitEqually>("till-split-equally");
+
+const shareWay = (el: TillApp | TillBillPayDialog) =>
+  payDialog(el).shadowRoot!.querySelector<HTMLElement & { selected?: boolean; checked?: boolean }>(
+    '[data-quiet-pay-way="share"], input[name="way"][value="share"]',
+  );
+
+async function settle(el: TillApp | TillBillPayDialog): Promise<void> {
+  const pay = payDialog(el);
+  if (pay !== el) return flush(el as TillApp);
+  for (let i = 0; i < 3; i++) {
+    await pay.updateComplete;
+    await splitScreen(el)?.updateComplete;
+  }
+}
+
+/** Splits the bill equally among `n` guests still to pay: on a table, on the Split equally
+ * screen (its − and + set `n` beside the guests already paid, then Start); on Counter, in the
+ * typed field. Chooses Split equally first when neither is shown. `el` is the app or the Pay
+ * dialog itself. */
+export async function splitAmong(el: TillApp | TillBillPayDialog, n: number): Promise<void> {
+  if (shareField(el) === null && splitScreen(el) === null) {
+    shareWay(el)!.click();
+    await settle(el);
+  }
+  const field = shareField(el);
+  if (field !== null) {
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = String(n);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    return settle(el);
+  }
+  const screen = splitScreen(el)!;
+  const stepper = screen.shadowRoot!.querySelector<WtStepper>("wt-stepper")!;
+  const target = n + screen.paid.length;
+  while (stepper.value !== target) {
+    const step = stepper.value < target ? 1 : -1;
+    const button = stepper.shadowRoot!.querySelector<HTMLButtonElement>(
+      `button[data-step="${step}"]`,
+    )!;
+    expect(button.disabled, `Split equally reaches ${target} guests`).toBe(false);
+    button.click();
+    await screen.updateComplete;
+    await stepper.updateComplete;
+  }
+  screen.shadowRoot!.querySelector<HTMLElement>("wt-button[data-split-start]")!.click();
+  await settle(el);
+}
+
+/** The guests the split still waits for. On Counter, the typed count, null when empty; on a
+ * table, the unpaid rows of the Split equally screen while it shows guests of the record, null
+ * otherwise. The screen is opened from the way already chosen and closed with its Back. */
+export async function guestsStillToPay(el: TillApp | TillBillPayDialog): Promise<number | null> {
+  const field = shareField(el);
+  if (field !== null) return field.value === "" ? null : Number(field.value);
+  const way = shareWay(el);
+  if (splitScreen(el) === null) {
+    if (way === null || !(way.selected === true || way.checked === true)) return null;
+    way.click();
+    await settle(el);
+  }
+  const screen = splitScreen(el)!;
+  const rows = screen.shadowRoot!.querySelector<WtShareList>("wt-share-list")!.shares.length;
+  const paid = screen.paid.length;
+  screen
+    .shadowRoot!.querySelector("wt-top-bar")!
+    .dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+  await settle(el);
+  return paid === 0 ? null : rows - paid;
+}
+
+/** Where the Split equally screen starts on a table: the stepper's count and its question. The
+ * screen is opened from Split equally, as a waiter opens it, and closed with its Back. */
+export async function splitStart(
+  el: TillApp | TillBillPayDialog,
+): Promise<{ count: number; question: string }> {
+  if (splitScreen(el) === null) {
+    shareWay(el)!.click();
+    await settle(el);
+  }
+  const screen = splitScreen(el)!;
+  const shown = {
+    count: screen.shadowRoot!.querySelector<WtStepper>("wt-stepper")!.value,
+    question: screen.shadowRoot!.querySelector("[data-split-question]")!.textContent!.trim(),
+  };
+  screen
+    .shadowRoot!.querySelector("wt-top-bar")!
+    .dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+  await settle(el);
+  return shown;
 }
 
 export async function choosePayWay(

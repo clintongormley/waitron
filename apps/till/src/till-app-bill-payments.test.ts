@@ -55,6 +55,7 @@ import {
   diskFullNotice,
   pollDiskNotice,
   roleOf,
+  splitAmong,
 } from "../test/bill-pay-app.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -1332,7 +1333,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "20.00", "60.00"));
 
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await type(el, "tendered", "20");
     await takeBillPaymentFromDialog(el);
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "40.00", "40.00"));
@@ -2761,7 +2762,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     const { el } = await mountApp({ previewBillPayment, getBillBalance });
     await openTable(el);
     await openDialog(el, "share");
-    await type(el, "people", "2");
+    await splitAmong(el, 2);
     await type(el, "tendered", "60");
     await press(el, "[data-pay-continue]");
 
@@ -6704,7 +6705,7 @@ describe("till-app: a bill payment on the card reader", () => {
     received = true;
     emit(dialog(el)!, "bill-pay-close");
     await flush(el);
-    await openDialog(el, "share");
+    await openDialog(el, "contribution");
     expect(dialog(el)!.confirmationLocked).toBe(false);
     expect(inDialog(el, "wt-form-actions")!.error).toBe("");
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));

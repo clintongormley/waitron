@@ -1119,8 +1119,10 @@ Para una factura completa, [prepara la cuenta antes de cobrar](table-service.md#
 
 **Elige qué paga este comensal.** Elige **Toda la cuenta** para cobrar todo lo que
 queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
-concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
-personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
+concretos o **Una cantidad** para aportar un importe. Para una parte igual en una mesa, indica el
+número de comensales con − y + y pulsa **Empezar** para la parte del siguiente comensal. En
+Mostrador, indica cuántas personas quedan
+por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
 si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
 rechaza o pulsas **Cancelar cobro**, comprueba si los platos están en esta cuenta antes de volver a
 cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa. Mientras su
@@ -1184,7 +1186,8 @@ muestra el cobro como realizado.
 
 **Sigue con el siguiente comensal.** Tras un pago parcial, comprueba **Queda por pagar**. En un
 teléfono, pulsa **Cobrar al siguiente** para continuar; un reparto igual también indica qué parte
-va a cobrarse. Revisa cuántas personas quedan si cambia el grupo. Tras el último pago, elige el
+va a cobrarse. Si cambia el grupo, cambia el número de comensales: en una mesa, vuelve a elegir **Dividir a partes
+iguales**; en Mostrador, cambia cuántas personas quedan por pagar. Tras el último pago, elige el
 [documento para el cliente](table-service.md#settlement-document). Cerrar la mesa es una acción
 aparte, después del cobro.
 

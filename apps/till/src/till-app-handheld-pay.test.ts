@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { formatEquipmentCode } from "@waitron/shared";
-import type { WtCombobox } from "@waitron/ui";
+import type { WtCombobox, WtShareList, WtTopBar } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -33,6 +33,7 @@ import type { TillProduct } from "./api/menu-api.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { TillSplitEqually } from "./widgets/split-equally.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
@@ -80,6 +81,9 @@ import {
   text,
   till,
   type,
+  guestsStillToPay,
+  splitAmong,
+  splitStart,
 } from "../test/bill-pay-app.js";
 import {
   openPartyMenu,
@@ -1378,7 +1382,7 @@ describe("an unanswered presented payment on a handheld", () => {
     );
     await pressPaySheet(el, await openPhoneTable(el));
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     if (out) expect(takeBillPayment).toHaveBeenCalledOnce();
@@ -1484,7 +1488,7 @@ describe("an unanswered presented payment on a handheld", () => {
       emit(order, "bill-pay", { way: "share", lines: [] });
       await flush(el);
       await choosePayWay(el, "share");
-      await type(el, "people", "3");
+      await splitAmong(el, 3);
       await choosePayMethod(el, "card");
       await takeBillPaymentFromDialog(el);
       expect(takeBillPayment).toHaveBeenCalledOnce();
@@ -1516,7 +1520,7 @@ describe("an unanswered presented payment on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     await expect
@@ -2980,7 +2984,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3014,7 +3018,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     getBillBalance.mockResolvedValue(paid);
     await takeBillPaymentFromDialog(el);
@@ -3047,7 +3051,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3090,7 +3094,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3123,7 +3127,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     await vi.waitFor(() =>
@@ -3198,7 +3202,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     const charge = await readyBillCharge(el);
     if (timeouts) {
@@ -3334,7 +3338,8 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "wt-form-actions")!.error).toBe(
         t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
       );
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({ count: 4, question: t("split_equally.question") });
       await tick(el, 3);
       expect(reads()).toBe(1);
     },
@@ -3486,15 +3491,180 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       const getBillBalance = vi.fn(async () => ownIs("pending"));
       const { el } = await pendingShare(getBillBalance);
       await press(el, "[data-pay-next]");
-      await type(el, "people", "5");
+      await splitAmong(el, 5);
       getBillBalance.mockResolvedValue(ownIs("received"));
 
       await tick(el);
 
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "5");
+      expect(await guestsStillToPay(el)).toBe(5);
       expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
       expect(dialog(el)!.taken).toBeNull();
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_received"));
+    });
+
+    it("keeps who has paid when Split equally opens again from the share's Pay and from its ways", async () => {
+      const getBillBalance = vi.fn(async () => ownIs("pending"));
+      const { el } = await pendingShare(getBillBalance);
+      await press(el, "[data-pay-next]");
+      getBillBalance.mockResolvedValue(ownIs("received"));
+      await tick(el);
+      expect(dialog(el)!.taken).toBeNull();
+      const split = () => inDialog(el, "till-split-equally") as TillSplitEqually | null;
+      const rows = () =>
+        split()!
+          .shadowRoot!.querySelector<WtShareList>("wt-share-list")!
+          .shares.map(({ name, state }) => [name, state]);
+      const back = async (bar: Element) => {
+        bar.dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+        await flush(el);
+      };
+      const ticked = [
+        ["Guest 1", "paid"],
+        ["Guest 2", "due"],
+        ["Guest 3", "due"],
+      ];
+
+      await back(inDialog(el, "[data-quiet-pay] wt-top-bar")!);
+      expect(rows()).toEqual(ticked);
+      await back(split()!.shadowRoot!.querySelector("wt-top-bar")!);
+      expect(split()).toBeNull();
+      await press(el, '[data-quiet-pay-way="share"]');
+
+      expect(rows()).toEqual(ticked);
+    });
+
+    describe("while Split equally is open", () => {
+      const split = (el: TillApp) => inDialog(el, "till-split-equally") as TillSplitEqually | null;
+      const rows = (el: TillApp) =>
+        split(el)!
+          .shadowRoot!.querySelector<WtShareList>("wt-share-list")!
+          .shares.map(({ name, detail, amount }) => [name, detail, amount]);
+      const inSplit = (el: TillApp, selector: string) =>
+        split(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+      const quoted = () => vi.mocked(api.previewBillPayment).mock.calls.at(-1)?.[1];
+
+      /** The next guest's Pay, then Split equally chosen again: Guest 1's card still at the
+       * reader. */
+      async function openOverPendingCard(getBillBalance: Mock) {
+        const { el } = await pendingShare(getBillBalance);
+        await press(el, "[data-pay-next]");
+        await press(el, 'input[name="way"][value="share"]');
+        expect(rows(el)).toEqual([
+          ["Guest 1", t("split_equally.card"), money("40.00")],
+          ["Guest 2", t("split_equally.due"), money("40.00")],
+          ["Guest 3", t("split_equally.due"), money("40.00")],
+        ]);
+        return el;
+      }
+
+      async function start(el: TillApp): Promise<void> {
+        inSplit(el, "wt-button[data-split-start]").click();
+        await flush(el);
+      }
+
+      it("a card declined shows every guest still to pay, and Start shares among them all", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+
+        await tick(el);
+
+        expect(rows(el)).toEqual(
+          ["Guest 1", "Guest 2", "Guest 3", "Guest 4"].map((guest) => [
+            guest,
+            t("split_equally.due"),
+            money("30.00"),
+          ]),
+        );
+        expect(text(inSplit(el, "[data-split-question]"))).toBe(t("split_equally.question"));
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 4 });
+      });
+
+      it("a card declined, then Back, leaves Pay with no count, and Split equally starts again among every guest", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+        await tick(el);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+
+        inSplit(el, "wt-top-bar").dispatchEvent(
+          new CustomEvent("wt-back", { bubbles: true, composed: true }),
+        );
+        await flush(el);
+
+        expect(split(el)).toBeNull();
+        expect(text(inDialog(el, "[data-quiet-pay-amount]"))).toBe(money("120.00"));
+        expect(inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(true);
+        const bar = dialog(el)!.shadowRoot!.querySelector<WtTopBar>("[data-quiet-pay] wt-top-bar")!;
+        expect(bar.backLabel).not.toBe(t("bill_pay.way_share"));
+        await press(el, '[data-quiet-pay-way="share"]');
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 4 });
+      });
+
+      it("a card declined, then Back, closes Pay without asking about unsaved changes", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+        await tick(el);
+        const back = async (bar: Element) => {
+          bar.dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+          await flush(el);
+        };
+
+        await back(inSplit(el, "wt-top-bar"));
+        await back(inDialog(el, "[data-quiet-pay] wt-top-bar")!);
+
+        const asked = () => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false;
+        await expect.poll(() => asked() || dialog(el) === null).toBe(true);
+        expect(asked()).toBe(false);
+        expect(dialog(el)).toBeNull();
+      });
+
+      it("a card received shows its guest paid, and Start shares among the rest", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("received"));
+
+        await tick(el);
+
+        expect(rows(el)).toEqual([
+          ["Guest 1", t("split_equally.paid"), money("40.00")],
+          ["Guest 2", t("split_equally.due"), money("40.00")],
+          ["Guest 3", t("split_equally.due"), money("40.00")],
+        ]);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 2 · ${money("40.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 2 });
+      });
+
+      it("with a guest paid, asks for every guest paying, and one fewer guest leaves one to pay", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("received"));
+        await tick(el);
+
+        expect(text(inSplit(el, "[data-split-question]"))).toBe(t("split_equally.question"));
+        const stepper = inSplit(el, "wt-stepper");
+        stepper.shadowRoot!.querySelector<HTMLElement>('button[data-step="-1"]')!.click();
+        await flush(el);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 2 · ${money("80.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 1 });
+      });
     });
 
     it("a second card at the reader keeps the first one watched: its decline is said beside the second's warning", async () => {
@@ -3514,7 +3684,14 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
       expect(dialog(el)!.refusal).toBeNull();
       await press(el, "[data-pay-next]");
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({
+        count: 2,
+        question: t("split_equally.question_left"),
+      });
+      expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
+        t("bill_pay.scope_share_empty").replace("{amount}", money("40.00")),
+      );
 
       getBillBalance.mockResolvedValue(bothAt("declined", { ...second, state: "received" }));
       await tick(el);
@@ -3553,7 +3730,14 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_not_charged"));
       expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
       await press(el, "[data-pay-next]");
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({
+        count: 2,
+        question: t("split_equally.question_left"),
+      });
+      expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
+        t("bill_pay.scope_share_empty").replace("{amount}", money("80.00")),
+      );
     });
   });
 
@@ -3824,7 +4008,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       const order = await openPhoneTable(el);
       await pressPaySheet(el, order);
       await choosePayWay(el, "share");
-      await type(el, "people", "3");
+      await splitAmong(el, 3);
       await choosePayMethod(el, "card");
       const charge = await readyBillCharge(el);
       vi.useFakeTimers({
@@ -3953,7 +4137,7 @@ describe("the document choice on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     for (const next of [2, 3]) {
       await takeBillPaymentFromDialog(el);
@@ -4383,7 +4567,7 @@ describe("the document choice on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -6692,7 +6876,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "cash");
     await type(el, "tendered", "40");
     await press(el, "[data-pay-continue]");

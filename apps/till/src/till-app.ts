@@ -11694,6 +11694,7 @@ export class TillApp extends LitElement {
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
         .itemsBarred=${this.#itemsBarredFor(open)}
         .sentWithoutReceipt=${open.surface === "counter" && open.printed !== true}
+        .counter=${open.surface === "counter"}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}

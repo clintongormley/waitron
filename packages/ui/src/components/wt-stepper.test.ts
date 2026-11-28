@@ -468,6 +468,28 @@ test('variant="round" draws − and + as separate circles beside a large number,
   expect(plus.getBoundingClientRect().left - count.getBoundingClientRect().right).toBe(24);
 });
 
+test('variant="round" draws longer bars than the box, as thick, centred in each circle', async () => {
+  const el = (await mount(
+    '<wt-stepper variant="round" label="Guests" value="3"></wt-stepper>',
+  )) as Stepper;
+  el.style.setProperty("--wt-tap-min", "50px");
+  el.style.setProperty("--wt-space-1", "8px");
+  el.style.setProperty("--wt-space-3", "10px");
+  const { minus, plus } = parts(el);
+  const bars = (button: HTMLElement) =>
+    [...button.querySelectorAll("[data-mark] rect")].map((bar) => {
+      const { width, height, left, top } = bar.getBoundingClientRect();
+      const { left: x, top: y } = button.getBoundingClientRect();
+      return { size: [width, height], centre: [left + width / 2 - x, top + height / 2 - y] };
+    });
+  // 3.75 spaces long and 0.625 of a space thick: 15 by 2.5 at the usual 4px space.
+  expect(bars(minus)).toEqual([{ size: [30, 5], centre: [30, 30] }]);
+  expect(bars(plus)).toEqual([
+    { size: [30, 5], centre: [30, 30] },
+    { size: [5, 30], centre: [30, 30] },
+  ]);
+});
+
 test('variant="round" steps as the default one does', async () => {
   const el = (await mount(
     '<wt-stepper variant="round" label="Guests" value="2" min="1"></wt-stepper>',
