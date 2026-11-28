@@ -339,6 +339,19 @@ describe("till attendance sign-in flow", () => {
     expect(clockPage(f.el)).toBeNull();
   });
 
+  it("Answer later goes to work if the clock read failed before questions could load", async () => {
+    const f = await clockApp();
+    f.api.getClockState.mockRejectedValueOnce(new TypeError("clock offline"));
+    await signIn(f.el);
+    await vi.waitFor(() => expect(questions(f.el)?.error).toBe(t("clock.read_error")));
+    await questionButton(f.el, "[data-cancel]");
+    await working(f.el);
+    expect(clockPage(f.el)).toBeNull();
+    expect(f.api.getAttendanceInbox).not.toHaveBeenCalled();
+    expect(f.api.clockIn).not.toHaveBeenCalled();
+    expect(f.api.endBreak).not.toHaveBeenCalled();
+  });
+
   it("Answer later offers End break even after the questions read failed", async () => {
     const f = await clockApp({ state: clockState("on_break", "break") });
     f.api.getAttendanceInbox.mockRejectedValueOnce(new TypeError("offline"));

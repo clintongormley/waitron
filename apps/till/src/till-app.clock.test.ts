@@ -697,5 +697,8 @@ it("the signed-in clock follows live time entries on the device connection", asy
   await vi.waitFor(() =>
     expect((clockPage(f.el) as HTMLElement & { canAct: boolean }).canAct).toBe(false),
   );
+  await vi.waitFor(() =>
+    expect(clockPage(f.el)!.shadowRoot!.querySelector(".subheading")).toBeNull(),
+  );
   expect(stream.reads.at(-1)!.types).toContain("time_entries");
 });

@@ -169,9 +169,13 @@ export class TillClockInScreen extends LitElement {
         <h1>
           ${name ? fill(t(endingBreak ? "clock.welcome_back" : "clock.hello"), { name }) : action}
         </h1>
-        <p class="subheading">
-          ${t(endingBreak ? "clock.on_break_intro" : "clock.not_clocked_in")}
-        </p>
+        ${
+          ready && !this.error
+            ? html`<p class="subheading">
+                ${t(endingBreak ? "clock.on_break_intro" : "clock.not_clocked_in")}
+              </p>`
+            : nothing
+        }
         ${this.#details()}
         ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("clock.reading")}</p>` : nothing}
       </main>
