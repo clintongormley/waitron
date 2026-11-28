@@ -17,7 +17,6 @@ import {
   contentLanguageCode,
   setMenuCopyOf,
   type BillSetMenuState,
-  type DishPlace,
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
@@ -399,12 +398,11 @@ export function setMenuLineDescriptions(
   );
 }
 
-/** Server-validated lines carry their placement order and reservation into pricing. */
+/** Server-validated lines carry their set menu and placement order into pricing. */
 export const SET_MENU_DRAFT_LINE = Symbol("setMenuDraftLine");
 
 export interface SetMenuDraftLine {
   draftLineId?: string;
   position: number;
   setMenuId: string;
-  reserved: DishPlace | null;
 }

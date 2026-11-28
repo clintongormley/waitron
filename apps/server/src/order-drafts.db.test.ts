@@ -4286,7 +4286,7 @@ describe("fresh drafts alongside existing bill families", () => {
     );
   }
 
-  async function seedDraftReservation(id: string) {
+  async function seedDraftSetMenu(id: string) {
     const setMenu = await inTx((tx) =>
       createMenu(tx, {
         name: "Lunch set menu",
@@ -4294,26 +4294,19 @@ describe("fresh drafts alongside existing bill families", () => {
         setPrice: "18.00",
       }),
     );
-    const reservation = {
-      setMenuId: setMenu.id,
-      setMenuReservedLineId: randomUUID(),
-      setMenuReservedPlace: 1,
-    };
-    await db.update(orderDraftLines).set(reservation).where(eq(orderDraftLines.id, id));
-    return reservation;
+    await db
+      .update(orderDraftLines)
+      .set({ setMenuId: setMenu.id })
+      .where(eq(orderDraftLines.id, id));
+    return setMenu.id;
   }
 
-  it("preserves a stored reservation when an existing draft line is saved again", async () => {
+  it("preserves a stored set-menu offer when an existing draft line is saved again", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const menu = await inTx((tx) =>
-      setMenuOnFullMenu(tx, v.menuId, v.productId.beer, "Reserved drinks"),
+      setMenuOnFullMenu(tx, v.menuId, v.productId.beer, "Set-menu drinks"),
     );
-    const reservation = {
-      setMenuId: menu.menuId,
-      setMenuReservedLineId: randomUUID(),
-      setMenuReservedPlace: 1,
-    };
     const dish = {
       menuItemId: menu.menuItemId,
       menuVersionId: menu.versionId,
@@ -4324,11 +4317,11 @@ describe("fresh drafts alongside existing bill families", () => {
         billId: tabId,
         draftId: null,
         revision: 0,
-        lines: [{ ...dish, ...reservation }],
+        lines: [{ ...dish, setMenuId: menu.menuId }],
       }),
     );
     const id = draft.lines[0]!.id;
-    expect((await draftsOf(partyId))[0]!.lines[0]).toMatchObject(reservation);
+    expect((await draftsOf(partyId))[0]!.lines[0]).toMatchObject({ setMenuId: menu.menuId });
 
     const saved = await inTx((tx) =>
       saveDraft(tx, partyId, ALEX, {
@@ -4339,7 +4332,11 @@ describe("fresh drafts alongside existing bill families", () => {
       }),
     );
 
-    expect(saved.lines[0]).toMatchObject({ id, note: "Bring after the starter", ...reservation });
+    expect(saved.lines[0]).toMatchObject({
+      id,
+      note: "Bring after the starter",
+      setMenuId: menu.menuId,
+    });
   });
 
   it("a direct bill merge absorbs same-owner fresh drafts, preserving slots, charges and both tick kinds", async () => {
@@ -4355,7 +4352,7 @@ describe("fresh drafts alongside existing bill families", () => {
     );
     const own = await billDraft(v, partyId, intoId);
     const source = await billDraft(v, partyId, tabId);
-    const reservation = await seedDraftReservation(source.lines[0]!.id);
+    const setMenuId = await seedDraftSetMenu(source.lines[0]!.id);
     const frozen = await family(v, tabId);
     const allergy = await inTx(async (tx) =>
       savePartyAllergy(
@@ -4401,7 +4398,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const [read] = await draftsOf(partyId);
     expect(await draftsOf(partyId)).toHaveLength(1);
     expect(read).toMatchObject({ id: own.id, billId: intoId, revision: 1 });
-    expect(read!.lines.find(({ id }) => id === source.lines[0]!.id)).toMatchObject(reservation);
+    expect(read!.lines.find(({ id }) => id === source.lines[0]!.id)).toMatchObject({ setMenuId });
     expect(read!.lines.map((line) => [line.id, line.slot])).toEqual([
       [own.lines[0]!.id, 1],
       [own.lines[1]!.id, 1],

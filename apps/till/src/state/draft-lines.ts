@@ -40,13 +40,7 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
     extras: toWireModifiers(line).extras ?? [],
     ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
-    ...(line.setMenuId === undefined
-      ? {}
-      : {
-          setMenuId: line.setMenuId,
-          setMenuReservedLineId: null,
-          setMenuReservedPlace: null,
-        }),
+    ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
   };
 }
 

@@ -764,8 +764,7 @@ _2026-11-27: The owner replaced rule C (the note below): a discount is held on t
 _2026-11-26: Every discount is an amount, on the whole bill, one dish or one set menu; a percentage is worked out as an amount when it is given (owner, rule C). A discount goes with its dish or set menu when that is cancelled or moved, and comes off with a notice offering to give it again when the dish's price changes or its set menu breaks up. PR 4 is no longer needed ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md), D45–D59). PR 3b (3b1 and 3b2) is done: a dish's own comp or discount now comes off (its share only) when its extras or variant change, and a set menu's when one of its dishes changes variant or it breaks up, and each open bill answers a notice of what came off and where to give it again (a set menu's notice names no place and stays until the bill closes). Left: a whole-bill discount as the set menus change (3c), and piece 4 (A1515-4), whose till draws the notice and counts a discounted set menu as going with its last chosen dish (D51)._
 
 _2026-11-27: A1515-4 still needs the Courses and Bill views with the unsent preview, Pay for items'
-price for the selected dishes on their own bill, and removal of the unused draft reservation
-fields and columns ([plan](../superpowers/plans/2026-11-27-a1515-4-till-set-menus.md))._
+price for the selected dishes on their own bill ([plan](../superpowers/plans/2026-11-27-a1515-4-till-set-menus.md))._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes were ordered,
@@ -785,16 +784,19 @@ by a set menu can be corrected through the API. Extras usage and routing include
 The till's zone offers now include published set-menu copies. They identify the newest copy on sale,
 and the server can read a bill's recorded copy after its full menu is republished.
 Shared ordering code calculates where a dish fits, what it costs there and which moves make room.
-Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
+Bill storage holds set menus, their recorded copies and dish places.
 The server reads the recorded copies and dish places.
 Kitchen tickets, station queues and service reads show the dishes from a set menu. The menu
 itself adds no kitchen work and does not count as a dish. A table can still order
 from its recorded copy after the menu period ends. The server can move a menu with its dishes
-between bills. Splitting a draft keeps the dish's menu offer and clears its
-place reservation on the old bill. The till API returns the bill's saved copies after a full menu
-is republished. The till restores saved set-menu dishes from the bill's copy, follows sold-out
-changes and explains refusals in English and Spanish. At a seated table the till orders from the
-bill's folders and moves a set menu with its dishes.
+between bills. Splitting a draft keeps the dish's menu offer. The till API returns the bill's saved
+copies after a full menu is republished. The till restores saved set-menu dishes from the bill's
+copy, follows sold-out changes and explains refusals in English and Spanish. At a seated table
+the till orders from the bill's folders and moves a set menu with its dishes.
+
+_2026-11-28: [D22](../superpowers/plans/2026-11-28-a1515-4-d22-draft-reservations.md) removed the
+draft reservation fields from requests and replies._
+
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price and inclusion

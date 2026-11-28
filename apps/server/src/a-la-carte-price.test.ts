@@ -373,8 +373,6 @@ it("writes the a la carte price on dishes a counter order saves, a la carte and 
       {
         ...inMenu(daily),
         menuVersionId: setMenus.recorded[daily.menuId],
-        setMenuReservedLineId: setMenus.setMenus[0].lineId,
-        setMenuReservedPlace: 0,
       },
       { menuItemId: venue.counterItem("Flan"), quantity: "1" },
     ],
@@ -447,8 +445,6 @@ it.each([
           ...inMenu(tapas),
           variantId: tortilla[which],
           menuVersionId: setMenus.recorded[tapas.menuId],
-          setMenuReservedLineId: setMenus.setMenus[0].lineId,
-          setMenuReservedPlace: 0,
         },
       ],
     });
@@ -525,8 +521,6 @@ it.each([
         ...inMenu(tapas),
         variantId: tortilla[which],
         menuVersionId: setMenus.recorded[tapas.menuId],
-        setMenuReservedLineId: setMenus.setMenus[0].lineId,
-        setMenuReservedPlace: 0,
       },
     ],
   });

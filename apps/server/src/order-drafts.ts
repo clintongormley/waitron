@@ -101,8 +101,6 @@ export interface FreshDraftLine {
 }
 export type DraftLine = FreshDraftLine & {
   setMenuId?: string;
-  setMenuReservedLineId?: string | null;
-  setMenuReservedPlace?: number | null;
 };
 
 export interface Draft {
@@ -197,7 +195,7 @@ export async function splitDraft(
       });
       await tx
         .update(orderDraftLines)
-        .set({ draftId: newDraftId, setMenuReservedLineId: null, setMenuReservedPlace: null })
+        .set({ draftId: newDraftId })
         .where(and(eq(orderDraftLines.draftId, id), inArray(orderDraftLines.id, lineIds)));
       const empty = selected.length === lines.length;
       if (empty) await closeBillDraft(tx, billId, input.operatorId, expectedEdit, "discarded");
@@ -257,8 +255,6 @@ export type FreshDraftLineInput = Omit<
 > & { id?: string };
 export type DraftLineInput = FreshDraftLineInput & {
   setMenuId?: string;
-  setMenuReservedLineId?: string | null;
-  setMenuReservedPlace?: number | null;
 };
 
 export interface SaveDraftInput {
@@ -334,14 +330,6 @@ export async function saveDraft(
         stored.menuItemId === line.menuItemId &&
         stored.menuVersionId === line.menuVersionId &&
         stored.variantId === line.variantId,
-      setMenuReservedLineId:
-        line.setMenuReservedLineId === undefined
-          ? stored?.setMenuReservedLineId
-          : line.setMenuReservedLineId,
-      setMenuReservedPlace:
-        line.setMenuReservedPlace === undefined
-          ? stored?.setMenuReservedPlace
-          : line.setMenuReservedPlace,
     };
   });
   await validateDraftPlaces(tx, partyId, lines);
@@ -1071,10 +1059,6 @@ export function draftPricingLine(line: DraftLine, position: number): GroupLine {
             draftLineId: line.id,
             position,
             setMenuId: line.setMenuId,
-            reserved:
-              line.setMenuReservedLineId == null || line.setMenuReservedPlace == null
-                ? null
-                : { setMenuLineId: line.setMenuReservedLineId, place: line.setMenuReservedPlace },
           },
         }),
     menuItemId: line.menuItemId,
@@ -1121,18 +1105,9 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     if (entry.sourceLineId !== undefined && entry.sourceLineId !== null)
       throw invalid(field("sourceLineId"));
     const setMenuId = optionalId(entry.setMenuId, field("setMenuId"));
-    const reservedId = optionalId(entry.setMenuReservedLineId, field("setMenuReservedLineId"));
-    const place = entry.setMenuReservedPlace;
-    if (place != null && (typeof place !== "number" || !Number.isSafeInteger(place) || place < 0))
-      throw invalid(field("setMenuReservedPlace"));
-    if ((reservedId !== null) !== (place != null) || (reservedId !== null && setMenuId === null))
-      throw invalid(field("setMenuReservedLineId"));
     return {
       ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
       ...(setMenuId === null ? {} : { setMenuId }),
-      ...(entry.setMenuReservedLineId === undefined && place === undefined
-        ? {}
-        : { setMenuReservedLineId: reservedId, setMenuReservedPlace: place ?? null }),
       sourceLineId: null,
       menuItemId: uuid(entry.menuItemId, field("menuItemId")),
       variantId: optionalId(entry.variantId, field("variantId")),
@@ -1359,13 +1334,7 @@ async function storedLines(
           slot: row.slot,
           joinGroupId: row.joinGroupId,
           afterGroupId: row.afterGroupId,
-          ...(row.setMenuId === null
-            ? {}
-            : {
-                setMenuId: row.setMenuId,
-                setMenuReservedLineId: row.setMenuReservedLineId,
-                setMenuReservedPlace: row.setMenuReservedPlace,
-              }),
+          ...(row.setMenuId === null ? {} : { setMenuId: row.setMenuId }),
           unavailable: false,
         },
       }) satisfies { draftId: string; position: number; addedAt: string; line: DraftLine },
@@ -1414,8 +1383,6 @@ async function replaceLines(
     joinGroupId: line.joinGroupId,
     afterGroupId: line.afterGroupId,
     setMenuId: line.setMenuId,
-    setMenuReservedLineId: line.setMenuReservedLineId,
-    setMenuReservedPlace: line.setMenuReservedPlace,
   }));
   for (const chunk of statementChunks(orderDraftLines, rows)) {
     await tx
@@ -1441,8 +1408,6 @@ async function replaceLines(
           joinGroupId: sql`excluded.join_group_id`,
           afterGroupId: sql`excluded.after_group_id`,
           setMenuId: sql`excluded.set_menu_id`,
-          setMenuReservedLineId: sql`excluded.set_menu_reserved_line_id`,
-          setMenuReservedPlace: sql`excluded.set_menu_reserved_place`,
         },
       });
   }

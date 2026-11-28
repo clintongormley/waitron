@@ -9,7 +9,7 @@ import { readBillSetMenus } from "./set-menu-bill.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { commandFor, inTx, join, seatWithNoAllergies } from "./testing/party-venue.js";
-import { saveSetMenuDraft, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
+import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { splitTable } from "./testing/table-action-fixture.js";
 
@@ -103,26 +103,16 @@ it("splits a table taking a set-menu dish alone, and both bills work out their s
   expect(await inTx(venue, (tx) => storedOrderTotal(tx, moved.billId))).toBe("5.00");
 });
 
-it("clears only the moved draft dish's reservation while keeping its set-menu offer", async () => {
+it("keeps both set-menu draft offers when one dish moves to a new bill", async () => {
   const { venue, copy } = fixture;
   const seated = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  const [staying, moving] = await inTx(venue, async (tx) => [
-    await seedBillSetMenu(tx, seated.tabId, copy, 1),
-    await seedBillSetMenu(tx, seated.tabId, copy, 2),
-  ]);
-  const dish = {
+  const offer = {
     menuItemId: copy.menuItemId,
     menuVersionId: copy.versionId,
     setMenuId: copy.menuId,
-    quantity: "1",
-    setMenuReservedPlace: 0,
   };
-  const draft = await saveSetMenuDraft(
-    venue,
-    seated,
-    { ...dish, setMenuReservedLineId: staying },
-    { ...dish, setMenuReservedLineId: moving },
-  );
+  const dish = { ...offer, quantity: "1" };
+  const draft = await saveSetMenuDraft(venue, seated, dish, dish);
   const [first, second] = draft.lines;
   const command = await commandFor(venue, seated.partyId);
   const result = await inTx(venue, async (tx) =>
@@ -134,26 +124,14 @@ it("clears only the moved draft dish's reservation while keeping its set-menu of
       lineIds: [second!.id],
     }),
   );
-  expect(result.source.draft?.lines).toMatchObject([
-    { id: first!.id, setMenuReservedLineId: staying, setMenuReservedPlace: 0 },
-  ]);
-  expect(result.destination.draft?.lines).toMatchObject([
-    {
-      id: second!.id,
-      menuItemId: copy.menuItemId,
-      menuVersionId: copy.versionId,
-      setMenuId: copy.menuId,
-      setMenuReservedLineId: null,
-      setMenuReservedPlace: null,
-    },
-  ]);
+  expect(result.source.draft?.lines).toMatchObject([{ ...offer, id: first!.id }]);
+  expect(result.destination.draft?.lines).toMatchObject([{ ...offer, id: second!.id }]);
   const [stored] = await venue.db
     .select()
     .from(orderDraftLines)
     .where(eq(orderDraftLines.id, second!.id));
   expect(stored).toMatchObject({
     draftId: result.destination.draft!.id,
-    setMenuReservedLineId: null,
-    setMenuReservedPlace: null,
+    setMenuId: copy.menuId,
   });
 });
