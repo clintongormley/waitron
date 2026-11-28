@@ -179,7 +179,7 @@ wait_for off || {
   left=
   link_gone || left='the wg-cloud interface'
   rules_gone || left="${left:+$left and }the INPUT firewall rules"
-  printf '%s\n' "FAIL 40 seconds after peer.json was removed, still present: ${left:-neither now, but one was at the deadline}" >&2
+  printf '%s\n' "FAIL after peer.json was removed, still present: ${left:-neither now, but one was at the deadline}" >&2
   exit 1
 }
 wait_for docker exec "$name-gateway" test -f /tmp/held.closed

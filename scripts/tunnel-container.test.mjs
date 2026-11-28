@@ -286,7 +286,7 @@ it("closes the proxy and interface when configuration is removed, then reconnect
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
 }, 60000);
 
-it("keeps the interface until the gateway has acknowledged closing the held stream", async () => {
+it("keeps the interface until the box reports the held stream closed", async () => {
   const run = await start(configuration, { openConnection: true });
   await expect
     .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
@@ -333,7 +333,7 @@ it("keeps the interface until the gateway has acknowledged closing the held stre
   await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.off");
 }, 30000);
 
-it("deletes the interface after a bounded wait when the gateway never acknowledges the close", async () => {
+it("deletes the interface after a bounded wait when the held stream never closes", async () => {
   const run = await start(configuration, { openConnection: true });
   await expect
     .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
