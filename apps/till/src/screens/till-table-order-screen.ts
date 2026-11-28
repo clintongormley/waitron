@@ -3930,8 +3930,11 @@ export class TillTableOrderScreen extends LitElement {
     const slice = members?.[0];
     const row = slice?.row;
     const count = members?.length ?? 1;
-    const joined = slice?.kind === "served" ? undefined : this.#sentTakeBack(members);
-    // Members and the served portions their row joins are identical portions, so the first one's
+    // A line served in part already counts whole in `count`; only other served lines add to it.
+    const joined = this.#sentTakeBack(members)?.filter(
+      (served) => !members!.some((member) => member.row === served.row),
+    );
+    // Members and the served lines their row joins are identical portions, so the first one's
     // amounts, times the row's count, are the row's; the window's actions take `count` of them.
     const rowCount = count + (joined?.length ?? 0);
     const times = (value: Decimal) => multiplyDecimal(value, decimal(String(rowCount)));
