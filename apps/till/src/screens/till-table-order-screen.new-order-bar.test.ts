@@ -273,10 +273,14 @@ describe("till-table-order-screen: the Menu's tile numbers", () => {
     [...browser(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button.tile")].find(
       (each) => each.querySelector(".name")?.textContent === name,
     )!;
-  const number = (el: TillTableOrderScreen, name: string) =>
-    tile(el, name).querySelector("[data-in-order-count]")?.textContent?.trim() ?? null;
+  const number = (el: TillTableOrderScreen, name: string) => {
+    const badge = tile(el, name).querySelector<HTMLElement & { count: number }>(
+      "[data-in-order-count]",
+    );
+    return badge ? String(badge.count) : null;
+  };
 
-  it("tapping a tile numbers it; a variant counts on its dish; removing the line clears it", async () => {
+  it("tapping a tile numbers it; a variant counts on its dish; removing the line clears it; side by side keeps the number", async () => {
     const { el, host } = await phone();
     expect(number(el, "Croquettes")).toBeNull();
 
@@ -308,6 +312,14 @@ describe("till-table-order-screen: the Menu's tile numbers", () => {
     host.style.width = "1280px";
     await resized(el);
     expect(store(el).lines).toHaveLength(1);
-    expect(number(el, "Croquettes")).toBeNull();
+    expect(number(el, "Croquettes")).toBe("1");
+    const wide = tile(el, "Croquettes");
+    const box = wide.querySelector("[data-in-order-count]")!.getBoundingClientRect();
+    const outer = wide.getBoundingClientRect();
+    const grid = wide.closest(".grid")!.getBoundingClientRect();
+    expect(box.top).toBeCloseTo(outer.top - 6, 1);
+    expect(box.right).toBeCloseTo(outer.right + 6, 1);
+    expect(box.top).toBeGreaterThanOrEqual(grid.top);
+    expect(box.right).toBeLessThanOrEqual(grid.right);
   });
 });

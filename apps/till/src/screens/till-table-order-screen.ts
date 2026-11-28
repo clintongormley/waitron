@@ -3019,7 +3019,7 @@ export class TillTableOrderScreen extends LitElement {
         EMPTY_MENU_FILTERS,
       )}
       .store=${store}
-      .inOrder=${this.wide ? undefined : this.#inOrder(store)}
+      .inOrder=${this.#inOrder(store)}
       weighs
     >
       ${

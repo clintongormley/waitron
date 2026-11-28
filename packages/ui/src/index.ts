@@ -142,6 +142,7 @@ export type {
   FloorMapOutline,
   FloorMapPulse,
 } from "./floor-map-fills.js";
+export { menuTileStyles } from "./menu-tile-styles.js";
 export { UndoHistory } from "./history.js";
 export { modalOpen, surfaceOutside, underModal } from "./modal-layer.js";
 export { inInertTree, renderedParent } from "./tabbable.js";

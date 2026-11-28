@@ -1,20 +1,13 @@
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
-import {
-  LitElement,
-  css,
-  html,
-  nothing,
-  unsafeCSS,
-  type PropertyValues,
-  type TemplateResult,
-} from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   ContentLanguageController,
   currentContentLanguages,
   baseStyles,
+  menuTileStyles,
   readableTextColor,
   reorder,
   visuallyHiddenStyles,
@@ -31,7 +24,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import {
   foldForSearch,
   searchFor,
-  HOME_GRID_COLUMNS,
   arrangeHome,
   indexDocument,
   openedSection,
@@ -118,6 +110,7 @@ export class DeviceHomePreview extends LitElement {
 
   static override styles = [
     baseStyles,
+    menuTileStyles,
     css`
       :host {
         display: block;
@@ -153,9 +146,7 @@ export class DeviceHomePreview extends LitElement {
         margin: 0;
       }
 
-      .empty,
-      .price,
-      .kind {
+      .empty {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -179,74 +170,6 @@ export class DeviceHomePreview extends LitElement {
         content: "";
         flex: 1;
         border-block-start: 1px solid var(--wt-color-border);
-      }
-
-      .grid {
-        display: grid;
-        gap: var(--wt-space-3);
-        grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
-      }
-
-      .section-kind {
-        ${visuallyHiddenStyles}
-      }
-
-      .tile,
-      .slot {
-        width: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
-      }
-
-      /* A product tile is not a control here, so it is drawn to look like the device's button. */
-      div.tile {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-      }
-
-      wt-button.tile::part(button) {
-        position: relative;
-        height: 100%;
-        min-height: calc(var(--wt-tap-min) * 1.5);
-        padding: var(--wt-space-2);
-      }
-
-      .label {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-width: 0;
-        text-align: center;
-        overflow-wrap: anywhere;
-      }
-
-      .label > * {
-        max-width: 100%;
-      }
-
-      .name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      div.tile[data-painted],
-      wt-button.tile[data-painted]::part(button) {
-        background: var(--tile-fill);
-        border-color: var(--tile-fill);
-        color: var(--tile-ink);
-      }
-
-      wt-button.tile[data-painted]::part(button):hover:not(:disabled) {
-        border-color: var(--tile-ink);
-      }
-
-      .tile[data-painted] .price,
-      .tile[data-painted] wt-icon {
-        color: inherit;
       }
 
       .breadcrumb ol {
@@ -678,7 +601,7 @@ export class DeviceHomePreview extends LitElement {
       };
     const section = ref.kind === "section" ? openedSection(ref.sectionId, index) : undefined;
     const product = ref.kind === "product" ? index.products.get(ref.productId) : undefined;
-    const tileColour = tileFill(section?.color ?? product?.color ?? null);
+    const tileColour = tileFill(product?.color ?? null);
     return {
       name: section ? this.#sectionName(section) : product!.name,
       face,
@@ -775,13 +698,9 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #sectionTile(section: SectionNode, opens: SectionStep[]): TemplateResult {
-    const fill = tileFill(section.color);
-    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
       class="tile"
       data-kind="section"
-      style=${paint ?? nothing}
-      ?data-painted=${paint !== undefined}
       @click=${() => {
         this.path = opens;
       }}

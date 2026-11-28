@@ -3030,7 +3030,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
     expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
   });
 
-  it("the order count badge stays inside the tile and clear of its name", async () => {
+  it("the order count badge sits 6 px outside the tile's top and end corner, clear of its name and inside the grid", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -3053,11 +3053,12 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         const tile = entry(el, "structure", dish.name);
         const box = badge(tile)!.getBoundingClientRect();
         const outer = tile.getBoundingClientRect();
+        const grid = tile.closest(".grid")!.getBoundingClientRect();
         expect(box.width).toBeGreaterThan(0);
-        expect(box.left).toBeGreaterThanOrEqual(outer.left);
-        expect(box.top).toBeGreaterThanOrEqual(outer.top);
-        expect(box.right).toBeLessThanOrEqual(outer.right);
-        expect(box.bottom).toBeLessThanOrEqual(outer.bottom);
+        expect(box.top).toBeCloseTo(outer.top - 6, 1);
+        expect(box.right).toBeCloseTo(outer.right + 6, 1);
+        expect(box.top).toBeGreaterThanOrEqual(grid.top);
+        expect(box.right).toBeLessThanOrEqual(grid.right);
         const text = document.createRange();
         text.selectNodeContents(tile.querySelector(".name")!);
         for (const line of text.getClientRects())

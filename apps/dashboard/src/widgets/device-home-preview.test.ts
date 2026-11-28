@@ -369,6 +369,24 @@ describe("dashboard-device-home-preview", () => {
       expect(water.hasAttribute("data-painted")).toBe(false);
     });
 
+    it("never paints a section's tile, even when the section has a colour, as the till draws it", async () => {
+      const { el } = await mount();
+      for (const region of ["shortcuts", "structure"]) {
+        const section = tile(el, region, "Drinks para clientes");
+        expect(section.hasAttribute("data-painted"), region).toBe(false);
+        expect(section.hasAttribute("style"), region).toBe(false);
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--wt-color-surface)";
+        probe.style.color = "var(--wt-color-border)";
+        section.parentElement!.appendChild(probe);
+        const look = getComputedStyle(section.shadowRoot!.querySelector("button")!);
+        expect(look.backgroundColor, region).toBe(getComputedStyle(probe).backgroundColor);
+        expect(look.borderTopColor, region).toBe(getComputedStyle(probe).color);
+        probe.remove();
+      }
+      expect(fillOf(tile(el, "structure", "Lemonade"))).toBe("rgb(37, 107, 177)");
+    });
+
     it("uses colour and the folder even with photos", async () => {
       const { el } = await mount({ document: lunch() });
       const lemonade = tile(el, "structure", "Lemonade");
