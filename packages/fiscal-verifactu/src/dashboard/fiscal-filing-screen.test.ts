@@ -1648,7 +1648,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
   it.each([
     [
       "sale.replacement_not_first",
-      "This invoice already has a refund or another corrective, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
+      "This invoice has already been replaced, so nothing was sent. The case stays open.",
     ],
     [
       "fiscal.correction_unsupported",

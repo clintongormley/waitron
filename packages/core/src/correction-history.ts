@@ -26,7 +26,11 @@ import {
   requireSupportedCorrection,
   requireTaxpayerDomicile,
 } from "./correction-eligibility.js";
-import { correctionTargetFor } from "./correction-target.js";
+import {
+  correctionTargetFor,
+  earlierCorrectionsOf,
+  type EarlierCorrections,
+} from "./correction-target.js";
 import { deductionsTaken, type TakenCents } from "./deductions-taken.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
@@ -227,14 +231,15 @@ export async function readCorrectionAmountHistory(
 
 type StoredFigures = Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakdown">;
 
-/** The invoice's and its earlier corrections' stored figures; refused when the sale is unknown or
- * is itself a correction other than a replacement. */
+/** The invoice's and its earlier corrections' stored figures and lines (`earlierCorrectionsOf`);
+ * refused when the sale is unknown or is itself a correction other than a replacement. */
 async function readStored(
   tx: Transaction,
   saleId: SaleId,
 ): Promise<{
   sale: StoredFigures & Pick<typeof sales.$inferSelect, "counterpartyTaxId">;
   corrections: StoredFigures[];
+  earlierLines: EarlierCorrections["lines"];
 }> {
   const figures = { id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown };
   const [sale] = await tx
@@ -248,8 +253,8 @@ async function readStored(
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("sale.not_found", { saleId });
   if (sale.correctsSaleId !== null && !sale.replacesOriginal) unusable();
-  const corrections = await tx.select(figures).from(sales).where(eq(sales.correctsSaleId, saleId));
-  return { sale, corrections };
+  const { corrections, lines } = await earlierCorrectionsOf(tx, saleId);
+  return { sale, corrections, earlierLines: lines };
 }
 
 /**
@@ -297,27 +302,13 @@ async function readHistory(
   invoiceLines: InvoiceLine[];
   partsTaken: Map<string, number>;
 }> {
-  const { sale, corrections } = stored ?? (await readStored(tx, saleId));
+  const { sale, corrections, earlierLines } = stored ?? (await readStored(tx, saleId));
 
   const lines = await tx
     .select()
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
-  const earlierLines = await tx
-    .select({
-      saleId: saleLines.saleId,
-      correctsLineId: saleLines.correctsLineId,
-      vatRate: saleLines.vatRate,
-      lineTotal: saleLines.lineTotal,
-      lineGross: saleLines.lineGross,
-      setMenuPart: saleLines.setMenuPart,
-    })
-    .from(saleLines)
-    .innerJoin(sales, eq(sales.id, saleLines.saleId))
-    .where(eq(sales.correctsSaleId, saleId))
-    .orderBy(saleLines.saleId, saleLines.lineNo);
-
   if (lines.some((line) => line.lineGross === null)) unusable();
   if (earlierLines.some((line) => line.lineGross === null || line.correctsLineId === null)) {
     unusable();

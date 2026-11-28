@@ -259,6 +259,53 @@ describe("recordReplacement — the replacement sale", () => {
     expect(lines[1]!.parentLineId).toBe(lines[0]!.id);
   });
 
+  it("files the original's whole total after an earlier partial refund of it", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const refund = await withTransaction(suite.db, (tx) =>
+      recordCorrection(tx, backend, {
+        operationDescription: "Sale on premises",
+        origin: deviceOrigin(deviceId),
+        nodeId,
+        seriesId: rectSeriesId,
+        correctsSaleId: originalId,
+        total: "-6.05",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Menu",
+            descriptions: { "es-ES": "Menu" },
+            quantity: "-1",
+            unitPrice: "6.05",
+            vatRate: "21.00",
+            lineTotal: "-5.00",
+          },
+        ],
+        authz: { sessionId: supervisorSessionId },
+        clock: steadyClock,
+      }),
+    );
+
+    const { saleId } = await replace(backend, originalId);
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row).toMatchObject({
+      total: 1210,
+      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+      correctsSaleId: originalId,
+      replacesOriginal: true,
+      invoiceNumber: 2,
+    });
+    expect(await rectSeriesNext()).toBe(3);
+    const records = await backend.recordsFor(nodeId);
+    expect(records.map((r) => [r.saleId, r.kind, r.total])).toEqual([
+      [originalId, "sale", "12.10"],
+      [refund.saleId, "correction", "-6.05"],
+      [saleId, "correction", "12.10"],
+    ]);
+    expect(await backend.replacementsFor(nodeId)).toEqual([saleId]);
+  });
+
   it("asks the backend for a correction by replacement, at the original's amounts", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
@@ -402,6 +449,64 @@ describe("recordReplacement — a full invoice", () => {
     });
     expect(recordCorrectionSpy).toHaveBeenCalledOnce();
     expect(recordCorrectionSpy.mock.calls[0]![1].counterparty).toEqual(counterparty);
+  });
+
+  it("replaces a full invoice already corrected by differences at its whole amount, the correction still counting", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend, {
+      taxId: "12345678Z",
+      legalName: "Ann Smith",
+      countryCode: "ES",
+    });
+    const fullRect = await seedFullCorrectiveSeries();
+    const fullCorrection = (total: string, lineTotal: string) =>
+      withTransaction(suite.db, (tx) =>
+        recordCorrection(tx, backend, {
+          operationDescription: "Sale on premises",
+          origin: deviceOrigin(deviceId),
+          nodeId,
+          seriesId: fullRect,
+          fullInvoice: true,
+          correctsSaleId: originalId,
+          total,
+          lines: [
+            {
+              lineNo: 1,
+              name: "Menu",
+              descriptions: { "es-ES": "Menu" },
+              quantity: "-1",
+              unitPrice: "6.05",
+              vatRate: "21.00",
+              lineTotal,
+            },
+          ],
+          authz: { sessionId: supervisorSessionId },
+          clock: steadyClock,
+        }),
+      );
+    const { saleId: r1 } = await fullCorrection("-6.05", "-5.00");
+
+    const { saleId } = await replace(backend, originalId, { seriesId: fullRect });
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row).toMatchObject({
+      total: 1210,
+      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+      correctsSaleId: originalId,
+      replacesOriginal: true,
+    });
+    expect((await backend.recordsFor(nodeId)).map((r) => [r.saleId, r.kind, r.total])).toEqual([
+      [originalId, "sale", "12.10"],
+      [r1, "correction", "-6.05"],
+      [saleId, "correction", "12.10"],
+    ]);
+    await expect(fullCorrection("-6.06", "-5.01")).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { remaining: "6.05", correction: "-6.06" },
+    });
+    const { saleId: last } = await fullCorrection("-6.05", "-5.00");
+    const [lastRow] = await suite.db.select().from(sales).where(eq(sales.id, last));
+    expect(lastRow).toMatchObject({ correctsSaleId: saleId, total: -605 });
   });
 });
 
@@ -619,32 +724,10 @@ describe("recordReplacement — refusals use no number", () => {
     );
   });
 
-  it("refuses an original an earlier partial refund already corrects", async () => {
+  it("refuses a second replacement of the same original", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    await withTransaction(suite.db, (tx) =>
-      recordCorrection(tx, backend, {
-        operationDescription: "Sale on premises",
-        origin: deviceOrigin(deviceId),
-        nodeId,
-        seriesId: rectSeriesId,
-        correctsSaleId: saleId,
-        total: "-6.05",
-        lines: [
-          {
-            lineNo: 1,
-            name: "Menu",
-            descriptions: { "es-ES": "Menu" },
-            quantity: "-1",
-            unitPrice: "6.05",
-            vatRate: "21.00",
-            lineTotal: "-5.00",
-          },
-        ],
-        authz: { sessionId: supervisorSessionId },
-        clock: steadyClock,
-      }),
-    );
+    await replace(backend, saleId);
 
     await expectRefused(
       backend,

@@ -1,6 +1,6 @@
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   insertInChunks,
@@ -21,6 +21,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { storedCounterparty } from "./counterparty.js";
 import { requireCorrectiveSeries } from "./corrective-series.js";
 import { requireTaxpayerDomicile } from "./correction-eligibility.js";
+import { correctionTargetFor } from "./correction-target.js";
 
 export interface RecordReplacementInput {
   origin: SaleOrigin;
@@ -51,7 +52,6 @@ export async function recordReplacement(
   backend: FiscalBackend,
   input: RecordReplacementInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
   const [original] = await tx
     .select({
       locale: sales.locale,
@@ -65,7 +65,6 @@ export async function recordReplacement(
       counterpartyAddress: sales.counterpartyAddress,
       vatBreakdown: sales.vatBreakdown,
       correctsSaleId: sales.correctsSaleId,
-      correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
     })
     .from(sales)
     .where(eq(sales.id, input.correctsSaleId));
@@ -113,9 +112,7 @@ export async function recordReplacement(
           override: input.authz.override,
         });
 
-  // A replacement carries the whole invoice; an earlier corrective's change would then be counted
-  // beside it.
-  if (original.correctionCount > 0) {
+  if ((await correctionTargetFor(tx, input.correctsSaleId)) !== input.correctsSaleId) {
     throw new AppError("sale.replacement_not_first", { saleId: input.correctsSaleId });
   }
 

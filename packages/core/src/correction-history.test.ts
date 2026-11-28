@@ -1214,3 +1214,77 @@ it("drops a rate only an advance holds, which must net to nothing, and leaves th
     code: "sale.correction_history_unusable",
   });
 });
+
+describe("a refund of the receipt before its replacement", () => {
+  // A 50.00 receipt: a dish of 30.00 at 21% and one of 20.00 at 10%; 5.00 refunded off the first.
+  async function refundedThenReplaced() {
+    const steak = invoiceLines()[1]!;
+    const { saleId, ids } = await sell(
+      [
+        { ...steak, lineNo: 1, unitPrice: "24.79", lineTotal: "24.79", lineGross: "30.00" },
+        {
+          ...steak,
+          lineNo: 2,
+          name: "Rice",
+          unitPrice: "18.18",
+          vatRate: "10.00",
+          lineTotal: "18.18",
+          lineGross: "20.00",
+        },
+      ],
+      "50.00",
+    );
+    await correct(saleId, "-5.00", [steakTaken(1, ids[0]!, "-4.13", "-5.00")]);
+    const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+      recordReplacement(tx, backend, {
+        operationDescription: "Sale on premises",
+        origin: deviceOrigin(deviceId),
+        nodeId,
+        seriesId: rectSeriesId,
+        correctsSaleId: saleId,
+        authz: { sessionId },
+        clock,
+      }),
+    );
+    const copies = await suite.db
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, replacementId))
+      .orderBy(saleLines.lineNo);
+    return { saleId, copies: copies.map((row) => row.id) };
+  }
+
+  it("still counts against the replacement's lines", async () => {
+    const { saleId, copies } = await refundedThenReplaced();
+
+    const lines = await withTransaction(suite.db, (tx) =>
+      readCorrectableLines(tx, backend, saleId, nodeId),
+    );
+    expect(lines.map(({ id, gross, left }) => ({ id, gross, left }))).toEqual([
+      { id: copies[0], gross: "30.00", left: "25.00" },
+      { id: copies[1], gross: "20.00", left: "20.00" },
+    ]);
+  });
+
+  it("leaves 45.00 to preview, and refuses a cent more", async () => {
+    const { saleId, copies } = await refundedThenReplaced();
+    const previewOf = (gross: string) =>
+      withTransaction(suite.db, (tx) =>
+        previewCorrectionAmounts(tx, backend, saleId, nodeId, { gross: decimal(gross) }),
+      );
+
+    const found = await previewOf("45.00");
+    expect(found.gross).toBe("45.00");
+    expect(
+      found.lines.map(({ correctsLineId, lineGross }) => ({ correctsLineId, lineGross })),
+    ).toEqual(
+      expect.arrayContaining([
+        { correctsLineId: copies[0], lineGross: "-25.00" },
+        { correctsLineId: copies[1], lineGross: "-20.00" },
+      ]),
+    );
+    expect(await captureError(() => previewOf("45.01"))).toMatchObject({
+      code: "sale.correction_amount_invalid",
+    });
+  });
+});

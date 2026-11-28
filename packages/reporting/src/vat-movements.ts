@@ -100,10 +100,14 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
   // `chain` walks each start up through the correctives it corrects to the invoice whose day they
   // take: an ordinary invoice (its own day) or a replacement (its `supply_day`, else its original's
   // own day). `placed`: each ordinary invoice and non-replacement corrective, with the day its VAT
-  // first belongs to and the day it belongs to now (an ordinary invoice's replacement's
-  // `supply_day`, voided or not, moves it). `sales_one_replacement_uq` admits at most one
-  // replacement per sale, so the joins add no rows. Each `indexed by` is there because a box gathers
-  // no planner statistics.
+  // first belongs to and the day a void of it takes it off. A replacement's `supply_day`, voided
+  // or not, is the second for the invoice it replaces and for each corrective under that invoice,
+  // except one voided before the replacement was stamped; a corrective stamped after the
+  // replacement has it as both. `moved_by` names the replacement for each corrective stamped by
+  // then and not voided before it: that corrective's VAT moves to the `supply_day` on the
+  // replacement's issue date, as the replacement's own two movements move the invoice.
+  // `sales_one_replacement_uq` admits at most one replacement per sale, so the joins add no rows.
+  // Each `indexed by` is there because a box gathers no planner statistics.
   const invoiceColumns = invoices
     ? sql`, ser.code as series_code, inv.invoice_number as number, ${issueDay("inv")} as issue_date,
         cser.code as corrected_series_code, cor.invoice_number as corrected_number,
@@ -145,8 +149,8 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
       select c.start_id, up.corrects_sale_id from chain c join sales up on up.id = c.cur_id
       where up.corrects_sale_id is not null and up.replaces_original = 0
     ),
-    rooted(id, corrects_sale_id, day) as (
-      select st.id, st.corrects_sale_id, case
+    rooted(id, corrects_sale_id, issued_at, root_id, day) as (
+      select st.id, st.corrects_sale_id, st.issued_at, root.id, case
         when root.replaces_original = 1 then coalesce(root.supply_day, ${ownDay("o")})
         else ${ownDay("root")}
       end
@@ -158,11 +162,24 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
         and st.replaces_original = 0
         and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = st.id)
     ),
-    placed(id, first_day, now_day) as (
-      select t.id, t.day,
-        case when t.corrects_sale_id is null then coalesce(r.supply_day, t.day) else t.day end
+    placed(id, first_day, now_day, moved_by) as (
+      select t.id,
+        case
+          when t.corrects_sale_id is not null and t.issued_at > r.issued_at
+          then coalesce(r.supply_day, t.day)
+          else t.day
+        end,
+        case when sv.voided_at < r.issued_at then t.day else coalesce(r.supply_day, t.day) end,
+        case
+          when t.corrects_sale_id is not null and r.supply_day is not null
+            and t.issued_at <= r.issued_at
+            and (sv.voided_at is null or sv.voided_at >= r.issued_at)
+          then r.id
+        end
       from rooted t
-      left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1
+      left join sales r on r.corrects_sale_id = t.root_id and r.replaces_original = 1
+      left join sale_voids sv indexed by sale_voids_sale_id_key
+        on sv.sale_id = t.id and t.corrects_sale_id is not null
     ),
     m as (
       select st.id as sale_id, st.corrects_sale_id, st.issued_at,
@@ -180,6 +197,14 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
         st.supply_day, st.vat_breakdown
       from starts x join sales st on st.id = x.id
       where st.replaces_original = 1 and st.supply_day is not null
+      union all
+      select st.id, st.corrects_sale_id, r.issued_at, 'date_moved_out', 2, -1, ${issueDay("r")},
+        p.first_day, st.vat_breakdown
+      from placed p join sales st on st.id = p.id join sales r on r.id = p.moved_by
+      union all
+      select st.id, st.corrects_sale_id, r.issued_at, 'date_moved_in', 3, 1, ${issueDay("r")},
+        p.now_day, st.vat_breakdown
+      from placed p join sales st on st.id = p.id join sales r on r.id = p.moved_by
       union all
       select st.id, st.corrects_sale_id, st.issued_at, 'void', 4, -1,
         ${stampDate(sql`sv.voided_at`, sql`st.issued_offset_minutes`)}, p.now_day, st.vat_breakdown

@@ -66,12 +66,6 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "a receipt with ANY corrective, its replacement included, is credited, never cancelled",
   },
   {
-    file: "packages/core/src/record-replacement.ts",
-    fragment: "select count(*) from sales c where c.corrects_sale_id",
-    lines: 1,
-    reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
-  },
-  {
     file: "packages/reporting/src/vat-movements.ts",
     fragment: "left join sales o on o.id = root.corrects_sale_id",
     lines: 1,
@@ -79,9 +73,10 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
   },
   {
     file: "packages/reporting/src/vat-movements.ts",
-    fragment: "left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1",
+    fragment: "left join sales r on r.corrects_sale_id = t.root_id and r.replaces_original = 1",
     lines: 1,
-    reason: "looks up a replaced sale's supply day, where a void of it takes its VAT off",
+    reason:
+      "finds a sale's replacement, whose supply day places the sale's correctives and their voids, and whose issue date dates the move of each corrective made before it",
   },
   {
     file: "packages/reporting/src/vat-movements.ts",
@@ -121,33 +116,6 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     fragment: "eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)",
     lines: 1,
     reason: "finds the replacement itself, the invoice a later correction is filed against",
-  },
-  {
-    file: "packages/core/src/record-correction.ts",
-    fragment: "select sum(c.total) from sales c where c.corrects_sale_id",
-    lines: 1,
-    reason:
-      "what is left on the correction target, which has no replacement (correctionTargetFor), so its own correctives are all that change it",
-  },
-  {
-    file: "packages/core/src/record-correction.ts",
-    fragment: "select count(*) from sales c where c.corrects_sale_id",
-    lines: 1,
-    reason: "the correction target's own earlier corrections; it has no replacement",
-  },
-  {
-    file: "packages/core/src/record-correction.ts",
-    fragment: "eq(sales.correctsSaleId, correctsSaleId)",
-    lines: 2,
-    reason:
-      "the partial-refund history of the correction target: its earlier corrections' VAT breakdowns and lines",
-  },
-  {
-    file: "packages/core/src/correction-history.ts",
-    fragment: "eq(sales.correctsSaleId, saleId)",
-    lines: 2,
-    reason:
-      "the partial-refund history of the correction target: its earlier corrections' figures and lines",
   },
   {
     file: "apps/server/src/tax-office-list.ts",

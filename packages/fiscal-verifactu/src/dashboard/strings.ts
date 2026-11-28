@@ -327,7 +327,7 @@ const en = {
   "fiscal_filing.refused.operation_date":
     "The box refused this day: it cannot be after today, after the invoice's date, or more than twenty years ago. Choose another day, then send again.",
   "fiscal_filing.refused.replacement_not_first":
-    "This invoice already has a refund or another corrective, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
+    "This invoice has already been replaced, so nothing was sent. The case stays open.",
   "fiscal_filing.refused.correction_unsupported":
     "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
   "fiscal_filing.refused.no_corrective_series":
@@ -729,7 +729,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.operation_date":
     "El servidor ha rechazado este día: no puede ser posterior a hoy ni a la fecha de la factura, ni de hace más de veinte años. Elige otro día y envía de nuevo.",
   "fiscal_filing.refused.replacement_not_first":
-    "Esta factura ya tiene una devolución u otro rectificativo, y Waitron no puede sustituir una factura que tenga uno, así que no se ha enviado nada. Aquí no se puede hacer nada; el caso sigue abierto.",
+    "Esta factura ya se ha sustituido, así que no se ha enviado nada. El caso sigue abierto.",
   "fiscal_filing.refused.correction_unsupported":
     "La AEAT tiene, o aún puede recibir, otro registro de esta factura, así que un rectificativo podría contar la venta dos veces. No se ha enviado nada y aquí no se puede hacer nada; el caso sigue abierto.",
   "fiscal_filing.refused.no_corrective_series":

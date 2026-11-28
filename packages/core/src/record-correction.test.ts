@@ -1975,3 +1975,192 @@ describe("recordCorrection — a full invoice's corrective, asked for with fullI
     });
   });
 });
+
+describe("recordCorrection — a refund of the receipt before its replacement still counts", () => {
+  // A 50.00 receipt: a dish of 30.00 at 21% and one of 20.00 at 10%.
+  const receipt: Partial<RecordSaleInput> = {
+    total: "50.00",
+    lines: [
+      {
+        lineNo: 1,
+        name: "Steak",
+        descriptions: { "es-ES": "Steak" },
+        quantity: "1",
+        unitPrice: "24.79",
+        vatRate: "21.00",
+        lineTotal: "24.79",
+        lineGross: "30.00",
+      },
+      {
+        lineNo: 2,
+        name: "Rice",
+        descriptions: { "es-ES": "Rice" },
+        quantity: "1",
+        unitPrice: "18.18",
+        vatRate: "10.00",
+        lineTotal: "18.18",
+        lineGross: "20.00",
+      },
+    ],
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "50.00", tipAmount: "0.00", settledAt: BASE }],
+    },
+  };
+
+  /** 5.00 off the steak (4.13 + 0.87 at 21%), naming the receipt's steak line. */
+  function steakRefund(receiptSteakId: string): Partial<RecordCorrectionInput> {
+    return {
+      total: "-5.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Steak",
+          descriptions: { "es-ES": "Steak" },
+          quantity: "-1",
+          unitPrice: "24.79",
+          vatRate: "21.00",
+          lineTotal: "-4.13",
+          lineGross: "-5.00",
+          correctsLineId: receiptSteakId,
+        },
+      ],
+    };
+  }
+
+  async function lineIdsOf(saleId: SaleId): Promise<string[]> {
+    const rows = await suite.db
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    return rows.map((row) => row.id);
+  }
+
+  async function replace(backend: FiscalBackend, saleId: SaleId): Promise<SaleId> {
+    const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+      recordReplacement(tx, backend, {
+        origin: deviceOrigin(deviceId),
+        operationDescription: "Venta en establecimiento",
+        nodeId,
+        seriesId: rectSeriesId,
+        correctsSaleId: saleId,
+        authz: { sessionId: supervisorSessionId },
+        clock: steadyClock,
+      }),
+    );
+    return replacementId;
+  }
+
+  /** The receipt, its 5.00 refund, then its replacement. */
+  async function refundedThenReplaced(backend: FiscalBackend) {
+    const { saleId: receiptId } = await sell(backend, receipt);
+    const [receiptSteak] = await lineIdsOf(receiptId);
+    await correct(backend, receiptId, steakRefund(receiptSteak!));
+    const replacementId = await replace(backend, receiptId);
+    return { receiptId, replacementId, replacementLines: await lineIdsOf(replacementId) };
+  }
+
+  it("refuses a refund one cent more than the 45.00 left, and writes nothing", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { receiptId, replacementId } = await refundedThenReplaced(backend);
+
+    // 37.20 at 21% is 45.01.
+    await expect(correct(backend, receiptId, credit("37.20", "-45.01"))).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: replacementId, remaining: "45.00", correction: "-45.01" },
+    });
+    expect(await countCorrectives(replacementId)).toBe(0);
+    expect(await rectSeriesNext()).toBe(3);
+  });
+
+  it("records a refund of the 45.00 left", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { receiptId, replacementId } = await refundedThenReplaced(backend);
+
+    // 37.19 at 21% is 45.00.
+    const { saleId } = await correct(backend, receiptId, credit("37.19", "-45.00"));
+
+    const [row] = await suite.db
+      .select({ total: sales.total, correctsSaleId: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(row).toEqual({ total: -4500, correctsSaleId: replacementId });
+  });
+
+  it("refuses a credit of the whole receipt", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { receiptId, replacementId, replacementLines } = await refundedThenReplaced(backend);
+    const whole = correctionInput(receiptId, {
+      wholeInvoice: true,
+      total: "-50.00",
+      lines: receipt.lines!.map((line, index) => ({
+        ...line,
+        quantity: "-1",
+        lineTotal: `-${line.lineTotal}`,
+        lineGross: `-${line.lineGross!}`,
+        correctsLineId: replacementLines[index]!,
+      })),
+    });
+
+    await expect(
+      withTransaction(suite.db, (tx) => recordCorrection(tx, backend, whole)),
+    ).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: replacementId, remaining: "45.00", correction: "-50.00" },
+    });
+    expect(await countCorrectives(replacementId)).toBe(0);
+  });
+
+  it("refuses a whole credit as not the first correction when the receipt's earlier ones net to nothing", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: receiptId } = await sell(backend, receipt);
+    const [receiptSteak] = await lineIdsOf(receiptId);
+    await correct(backend, receiptId, steakRefund(receiptSteak!));
+    await correct(backend, receiptId, credit("4.13", "5.00"));
+    const replacementId = await replace(backend, receiptId);
+    const replacementLines = await lineIdsOf(replacementId);
+    const whole = correctionInput(receiptId, {
+      wholeInvoice: true,
+      total: "-50.00",
+      lines: receipt.lines!.map((line, index) => ({
+        ...line,
+        quantity: "-1",
+        lineTotal: `-${line.lineTotal}`,
+        lineGross: `-${line.lineGross!}`,
+        correctsLineId: replacementLines[index]!,
+      })),
+    });
+
+    await expect(
+      withTransaction(suite.db, (tx) => recordCorrection(tx, backend, whole)),
+    ).rejects.toMatchObject({
+      code: "sale.correction_not_whole",
+      params: { saleId: replacementId, correctionCount: 2 },
+    });
+    expect(await countCorrectives(replacementId)).toBe(0);
+  });
+
+  it("refuses a checked split taking more off a dish than the earlier refund left of it", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { receiptId, replacementId, replacementLines } = await refundedThenReplaced(backend);
+
+    // 26.00 off the steak, of which 25.00 is left: 21.49 + 4.51 at 21%.
+    await expect(
+      correct(backend, receiptId, {
+        total: "-26.00",
+        lines: [
+          {
+            ...steakRefund(replacementLines[0]!).lines![0]!,
+            lineTotal: "-21.49",
+            lineGross: "-26.00",
+          },
+        ],
+        partialVatBreakdown: [
+          { rate: decimal("21.00"), base: decimal("-21.49"), tax: decimal("-4.51") },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "sale.correction_breakdown_invalid" });
+    expect(await countCorrectives(replacementId)).toBe(0);
+  });
+});

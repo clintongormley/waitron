@@ -533,13 +533,13 @@ it("refuses while the start's time check holds", async () => {
   await refuses(body, "clock.unconfirmed", 409);
 });
 
-it("refuses an original that already has a partial refund, using no number", async () => {
-  await withTransaction(suite.db, async (tx) => {
+it("replaces an original that already has a partial refund at its whole amount, leaving that refund's record as it was", async () => {
+  const refund = await withTransaction(suite.db, async (tx) => {
     const [original] = await tx
       .select({ saleId: verifactuRecords.saleId })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.id, body.registroId as string));
-    await recordCorrection(tx, backend(), {
+    return recordCorrection(tx, backend(), {
       origin: jobOrigin("operator_script"),
       nodeId: node.nodeId,
       seriesId: seriesId(correctiveId),
@@ -561,7 +561,48 @@ it("refuses an original that already has a partial refund, using no number", asy
       clock: generation.clock,
     });
   });
-  await refuses(body, "sale.replacement_not_first");
+  const before = await snapshot();
+  const refused = before.records.find((row) => row.id === body.registroId)!;
+  const earlier = before.records.find((row) => row.id === refund.fiscal.recordId)!;
+  expect(earlier).toMatchObject({
+    tipoFactura: "R5",
+    tipoRectificativa: "I",
+    numSerieFactura: "R/1",
+  });
+  const res = await send();
+  expect(res.status).toBe(200);
+  const result = (await res.json()) as { saleId: string; registroId: string };
+  const after = await snapshot();
+  expect(after.records).toHaveLength(before.records.length + 1);
+  expect(after.records.find((row) => row.id === earlier.id)).toEqual(earlier);
+  expect(after.records.find((row) => row.id === refused.id)).toEqual(refused);
+  expect(after.records.at(-1)).toMatchObject({
+    id: result.registroId,
+    saleId: result.saleId,
+    tipoFactura: "R5",
+    tipoRectificativa: "S",
+    numSerieFactura: "R/2",
+    importeTotal: "12.10",
+    importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+    anteriorHuella: earlier.huella,
+    facturasRectificadas: {
+      IDFacturaRectificada: [
+        {
+          IDEmisorFactura: refused.idEmisorFactura,
+          NumSerieFactura: refused.numSerieFactura,
+          FechaExpedicionFactura: "01-03-2026",
+        },
+      ],
+    },
+  });
+  expect(after.sales.find((row) => row.id === result.saleId)).toMatchObject({
+    correctsSaleId: refused.saleId,
+    replacesOriginal: true,
+    total: 1210,
+  });
+  expect((await withTransaction(suite.db, (tx) => verifyChain(tx, node.nodeId))).issues).toEqual(
+    [],
+  );
 });
 
 it("refuses when this node has no live corrective series", async () => {

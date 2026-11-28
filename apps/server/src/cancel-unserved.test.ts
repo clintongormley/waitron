@@ -15,7 +15,10 @@ import {
 } from "@waitron/db";
 import { recordReplacement, recordSubstitution } from "@waitron/core";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
-import { filedRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  correctiveRecordsOf,
+  filedRecordsOf,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
   acceptedByAeat,
   refusedByAeat,
@@ -626,7 +629,7 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(await voidsOf(saleId)).toEqual([]);
   });
 
-  it("one whose payment was given back in full and whose receipt AEAT refused, credited at once; Send the replacement then refuses it", async () => {
+  it("one whose payment was given back in full and whose receipt AEAT refused, credited at once; Send the replacement then replaces it at its whole amount, once", async () => {
     const party = await seatedWith(venue, "Tarta");
     const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
     const givenBack = await send(
@@ -652,6 +655,17 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(credited.status, JSON.stringify(credited.json)).toBe(200);
     expect(await fixture.creditsOf(venue, saleId)).toHaveLength(1);
     expect(await voidsOf(saleId)).toEqual([]);
+    const receipt = await fixture.invoiceOf(venue, party.tabId);
+
+    const replacementId = await sendReplacement(saleId);
+
+    expect(correctiveRecordsOf(venue.db, saleId)).toEqual([
+      expect.objectContaining({ type: "R5", by: "differences", total: -receipt.total }),
+      expect.objectContaining({ type: "R5", by: "replacement", total: receipt.total }),
+    ]);
+    expect(await filedRecordsOf(venue.db, replacementId)).toEqual([
+      { kind: "invoice", state: "pendiente" },
+    ]);
     await expect(sendReplacement(saleId)).rejects.toMatchObject({
       code: "sale.replacement_not_first",
       params: { saleId },
