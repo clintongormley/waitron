@@ -35,7 +35,12 @@ import {
   cake,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
-import { openSentRow, sentRowButton, sentServeButton, serveSentRow } from "../../test/open-sent-row.js";
+import {
+  openSentRow,
+  sentRowButton,
+  sentServeButton,
+  serveSentRow,
+} from "../../test/open-sent-row.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -621,11 +626,7 @@ describe("Current orders and Sent service", () => {
     ];
     expect(croqServes.length).toBeGreaterThan(0);
     for (const serve of croqServes) expect(serve.disabled).toBe(true);
-    for (const selector of [
-      "[data-serve-all]",
-      "[data-reminder-snooze]",
-      "[data-reminder-fire]",
-    ])
+    for (const selector of ["[data-serve-all]", "[data-reminder-snooze]", "[data-reminder-fire]"])
       expect(sq(el, selector)!.disabled, selector).toBe(true);
     expect(q(el, "[data-sent-line-unserve]")!.disabled).toBe(true);
     for (const serve of croqServes) serve.click();

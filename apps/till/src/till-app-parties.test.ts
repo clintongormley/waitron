@@ -70,7 +70,12 @@ import {
   held,
   setApi,
 } from "../test/party-app-fixture.js";
-import { openSentDetails, openSentRow, sentServeButton, serveSentRow } from "../test/open-sent-row.js";
+import {
+  openSentDetails,
+  openSentRow,
+  sentServeButton,
+  serveSentRow,
+} from "../test/open-sent-row.js";
 
 const NO_BILLS = { wholeBillIds: [], loose: [] };
 const oneBill = (billId: string) => ({ wholeBillIds: [billId], loose: [] });
@@ -9499,9 +9504,12 @@ describe("till-app: Current orders", () => {
               : element.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
           // Line 1 has one portion left, so its open row offers Serve 1 alone.
           await openSentRow(panel, "line-1");
-          const lineOneServe = '[data-sent-row="line-1"] + [data-sent-open] [data-sent-serve="one"]';
+          const lineOneServe =
+            '[data-sent-row="line-1"] + [data-sent-open] [data-sent-serve="one"]';
           expect(
-            panel.shadowRoot!.querySelectorAll('li:has([data-sent-row="line-1"]) [data-sent-serve]'),
+            panel.shadowRoot!.querySelectorAll(
+              'li:has([data-sent-row="line-1"]) [data-sent-serve]',
+            ),
           ).toHaveLength(1);
           try {
             let target: HTMLButtonElement;
@@ -9735,6 +9743,99 @@ describe("till-app: Current orders", () => {
       );
     });
 
+    describe("serving from the opened row", () => {
+      /** Table 4 with a fired dish of three, none served, whose list follows each serve. */
+      async function openThree(locale: "en" | "es") {
+        const state = structuredClone(orders);
+        state.reminder = null;
+        const row = state.groups[0]!.rows[0]!;
+        row.quantity = "3.000";
+        const served = () => Number(row.servedQuantity);
+        const markServed = vi.fn(async (_party: string, items: { quantity: string }[]) => {
+          row.servedQuantity = (served() + Number(items[0]!.quantity)).toFixed(3);
+          state.revision += 1;
+          return { revision: state.revision };
+        });
+        const unmarkServed = vi.fn(async (_party: string, items: { quantity: string }[]) => {
+          row.servedQuantity = (served() - Number(items[0]!.quantity)).toFixed(3);
+          state.revision += 1;
+          return { revision: state.revision };
+        });
+        const { el } = await mountApp({
+          readCurrentOrders: vi.fn(async () => structuredClone(state)),
+          markServed,
+          unmarkServed,
+        });
+        await toFloor(el);
+        setLocale(locale);
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+        await flush(el);
+        const panel = await visiblePanel(tableOrder(el)!);
+        const box = await openSentRow(panel, "line-1");
+        const count = () => box.querySelector("[data-sent-open-count]")!.textContent!.trim();
+        const serveOne = () => box.querySelector<HTMLButtonElement>('[data-sent-serve="one"]')!;
+        return { el, panel, box, count, serveOne, markServed, unmarkServed };
+      }
+
+      afterEach(() => setLocale("en"));
+
+      it("serves two of three by Serve 1 twice, one request a press, and Undo takes back the last", async () => {
+        const { el, box, count, serveOne, markServed, unmarkServed } = await openThree("en");
+        expect(count()).toBe("0 of 3 served");
+        const serves = [...box.querySelectorAll<HTMLButtonElement>("[data-sent-serve]")];
+        expect(serves.map((button) => button.textContent!.trim())).toEqual(["Serve 1", "Serve 3"]);
+        for (const button of serves) {
+          expect(button.checkVisibility()).toBe(true);
+          expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+          expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+        }
+
+        await userEvent.click(serveOne());
+        await flush(el, 6);
+        expect(markServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 3 },
+        );
+        await expect.poll(count).toBe("1 of 3 served");
+
+        await userEvent.click(serveOne());
+        await flush(el, 6);
+        expect(markServed).toHaveBeenCalledTimes(2);
+        expect(markServed).toHaveBeenLastCalledWith("v1", [{ lineId: "line-1", quantity: "1" }], {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 4,
+        });
+        await expect.poll(count).toBe("2 of 3 served");
+        expect(
+          [...box.querySelectorAll("[data-sent-serve]")].map((b) => b.textContent!.trim()),
+        ).toEqual(["Serve 1"]);
+
+        const toast = el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+        expect(toast.open).toBe(true);
+        await userEvent.click(toast.querySelector<HTMLElement>("[data-undo-served]")!);
+        await flush(el, 6);
+        expect(unmarkServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 5 },
+        );
+        await expect.poll(count).toBe("1 of 3 served");
+        expect(markServed).toHaveBeenCalledTimes(2);
+        expect(toast.open).toBe(false);
+      });
+
+      it("counts the served portions in Spanish on the opened row", async () => {
+        const { el, count, serveOne } = await openThree("es");
+        expect(count()).toBe("0 de 3 servidos");
+        expect(serveOne().textContent!.trim()).toBe("Servir 1");
+        await userEvent.click(serveOne());
+        await flush(el, 6);
+        await expect.poll(count).toBe("1 de 3 servidos");
+      });
+    });
+
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
       await showView(order, "order", { ifShown: true });
@@ -9901,7 +10002,9 @@ describe("till-app: Current orders", () => {
         sent.shadowRoot!.querySelector<HTMLElement>('[data-fired-line="line-1"] .row-ready');
       expect(readyOn(panel)!.checkVisibility()).toBe(true);
       expect(readyOn(panel)!.textContent!.trim()).toMatch(/^Ready /);
-      expect(panel.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+      expect(panel.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(
+        0,
+      );
       expect(panel.shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
       emit(first, "back-to-floor");
       await flush(el);
@@ -9913,7 +10016,9 @@ describe("till-app: Current orders", () => {
       await next.updateComplete;
       expect(readyOn(next)!.checkVisibility()).toBe(true);
       expect(readyOn(next)!.textContent!.trim()).toMatch(/^Ready /);
-      expect(next.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+      expect(next.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(
+        0,
+      );
       expect(next.shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
       expect(api.markServed).not.toHaveBeenCalled();
     });

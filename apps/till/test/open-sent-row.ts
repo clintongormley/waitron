@@ -86,17 +86,3 @@ export async function serveSentRow(
   await userEvent.click(await sentServeButton(panel, lineId, serve, kind));
   await panel.updateComplete;
 }
-
-/** Opens `lineId`'s row and presses whichever Serve serves everything left of it — Serve {N}, or
- * the one Serve a single portion or a weighed dish offers: what a tap on the row used to send. */
-export async function serveSentRowLeft(
-  panel: LitElement,
-  lineId: string,
-  kind?: SentRowKind,
-): Promise<void> {
-  const row = await openSentRow(panel, lineId, kind);
-  const serves = [...row.querySelectorAll<HTMLButtonElement>("[data-sent-serve]")];
-  expect(serves.length, `the open row for ${lineId} offers a Serve`).toBeGreaterThan(0);
-  await userEvent.click(serves.at(-1)!);
-  await panel.updateComplete;
-}

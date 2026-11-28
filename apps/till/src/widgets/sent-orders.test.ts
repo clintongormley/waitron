@@ -2,18 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { BillSetMenuState } from "@waitron/shared";
-import type {
-  CurrentOrderGroup,
-  CurrentOrderRow,
-  CurrentOrders,
-  TabLine,
-} from "../api/kitchen-api.js";
+import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/kitchen-api.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 import "./sent-orders.js";
-import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
+import {
+  at,
+  burgerDish as burger,
+  burgerLine as billLine,
+  now,
+  sentCurrent as current,
+  sentDish as row,
+  sentGroup as group,
+} from "../../test/sent-rows.js";
 
 type Panel = LitElement & {
   scope: string;
@@ -25,58 +28,6 @@ type Panel = LitElement & {
   lines: readonly TabLine[];
   setMenus: BillSetMenuState | null;
 };
-const now = Date.parse("2026-10-18T12:00:00Z");
-const at = (minute: number) => `2026-10-18T11:${String(minute).padStart(2, "0")}:00Z`;
-const row = (id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow =>
-  withRowRequestedAt({
-    lineId: id,
-    workingOrderId: "b1",
-    billStatus: "open",
-    lineNo: 1,
-    courseId: null,
-    name: id,
-    quantity: "1.000",
-    netAmount: "3.00",
-    unitPrecision: 0,
-    servedQuantity: "0.000",
-    servedAt: null,
-    released: true,
-    readyAt: null,
-    firedAt: at(40),
-    kitchen: null,
-    note: null,
-    extras: [],
-    ...over,
-  });
-const group = (
-  id: string,
-  rows: CurrentOrderRow[],
-  over: Partial<CurrentOrderGroup> = {},
-): CurrentOrderGroup => ({
-  id,
-  position: 1,
-  displayNumber: 7,
-  numberPartyId: "p1",
-  state: "held",
-  firedAt: null,
-  remindAt: null,
-  sentAt: at(30),
-  sentBy: "Ana",
-  rows,
-  ...over,
-});
-const current = (
-  rows: CurrentOrderRow[] = [],
-  groups: CurrentOrderGroup[] = [],
-): CurrentOrders => ({
-  revision: 4,
-  hasGroups: groups.length > 0,
-  nextDisplayNumber: 8,
-  retainedCourses: [],
-  reminder: null,
-  groups,
-  ungrouped: rows,
-});
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupWidgets();
@@ -1390,34 +1341,7 @@ it("refuses a retained serve control when the latest row has an unreleased compo
   expect(every(el, '[data-fired-line="Bravas"] [data-sent-serve]')).toEqual([]);
 });
 
-const billLine = (id: string, lineNo: number): TabLine => ({
-  id,
-  lineNo,
-  stationId: null,
-  changesAfterSending: null,
-  movable: true,
-  name: "Burger",
-  productId: "burger",
-  parentProductId: null,
-  parentLineNo: null,
-  quantity: "1.000",
-  priceQuantity: "1.000",
-  unitPrecision: 0,
-  unitPriceGross: "9.50",
-  servedAt: null,
-  courseId: null,
-  sentAt: at(40),
-  firedAt: at(40),
-  state: null,
-  groupId: null,
-  note: null,
-  listId: null,
-  menuItemId: "offer-burger",
-  portion: true,
-});
 const burgers = [billLine("burger-1", 1), billLine("burger-2", 2), billLine("burger-3", 3)];
-const burger = (id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}) =>
-  row(id, { name: "Burger", lineNo, netAmount: "9.50", ...over });
 
 it("A803 portion grouping: two identical sent portions show one row of 2, and its Serve 2 serves both", async () => {
   const el = await mount(

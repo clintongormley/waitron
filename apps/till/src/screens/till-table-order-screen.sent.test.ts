@@ -400,7 +400,9 @@ it("forwards due Snooze and Clear snooze once, with nothing in Sent to open firs
   const clear = collect(el, "unsnooze-group");
   await click(el, "[data-reminder-unsnooze]");
   expect(clear.map((e) => e.detail)).toEqual([{ groupId: "g3" }]);
-  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(
+    0,
+  );
   expect(panel(el).shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
 });
 
@@ -415,9 +417,13 @@ it('shows a passive ready update on its row, and a new bill\'s ready row, with n
   await el.updateComplete;
   await panel(el).updateComplete;
   expect(inside(el, '[data-fired-line="one"] .row-ready').textContent!.trim()).toBe("Ready 1 min");
-  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(
+    0,
+  );
   expect(
-    panel(el).shadowRoot!.querySelector('[data-sent-attention], [aria-expanded="true"], [data-open]'),
+    panel(el).shadowRoot!.querySelector(
+      '[data-sent-attention], [aria-expanded="true"], [data-open]',
+    ),
   ).toBeNull();
   el.orderId = "other";
   el.currentOrders = {
@@ -511,7 +517,9 @@ it("keeps every sent section drawn when the same bill starts a new visit", async
   await el.updateComplete;
   await panel(el).updateComplete;
   expect(sections()).toEqual(["g1", "g2", "g3", "g4", ""]);
-  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+  expect(panel(el).shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(
+    0,
+  );
   expect(panel(el).shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
 });
 
