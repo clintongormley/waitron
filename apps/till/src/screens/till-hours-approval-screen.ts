@@ -158,11 +158,7 @@ export class TillHoursApprovalScreen extends LitElement {
       this.readError = this.actionError = "";
       this.reading = this.busy = false;
     }
-    if (
-      this.active &&
-      !this.queue &&
-      (changed.has("active") || changed.has("api") || changed.has("personId"))
-    )
+    if (this.active && (changed.has("active") || changed.has("api") || changed.has("personId")))
       void this.refresh();
   }
 

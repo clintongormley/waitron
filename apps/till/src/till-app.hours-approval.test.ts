@@ -282,3 +282,19 @@ it("clears the previous count when a new sign-in opens More while its count is s
   expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
   held.resolve({ items: [], finishedDays: [] });
 });
+
+it("reads the current queue when browser Back reopens the approval screen", async () => {
+  const f = await manager({ items: [requested], finishedDays: [] });
+  await open(f.el);
+  const root = screen(f.el)!.shadowRoot!;
+  expect(root.textContent).toContain("Asked to change");
+  const back = root.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!;
+  await userEvent.click(back);
+  await vi.waitFor(() => expect(screen(f.el)?.active).toBe(false));
+  f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
+  history.back();
+  await vi.waitFor(() => expect(screen(f.el)?.active).toBe(true));
+  await vi.waitFor(() =>
+    expect(root.textContent).toContain("No hours are waiting for your approval."),
+  );
+});
