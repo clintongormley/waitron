@@ -610,7 +610,11 @@ describe("menu tiles", () => {
       await pageAt(844, 390);
       const reused = await draw();
       expect(await rooms(reused, "Chi")).toEqual([["Chickpeas with spinach", "both"]]);
+      const first = reused.shadowRoot!.querySelector('[data-region="results"] wt-button.tile');
       const afterOther = await rooms(reused, "Cro");
+      expect(reused.shadowRoot!.querySelector('[data-region="results"] wt-button.tile')).toBe(
+        first,
+      );
       cleanupWidgets();
       const fresh = await rooms(await draw(), "Cro");
       expect(fresh.length).toBeGreaterThan(0);

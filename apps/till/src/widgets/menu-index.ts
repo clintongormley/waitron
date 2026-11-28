@@ -10,6 +10,7 @@ import type { OrderingCopy } from "../state/set-menus.js";
 export type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 export type MenuIndex = HomeIndex<TillProduct>;
+
 export function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
   return members.some((member) =>
     member.kind === "set_menu"
