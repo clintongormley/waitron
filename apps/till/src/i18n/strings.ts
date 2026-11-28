@@ -1990,6 +1990,8 @@ export const en = {
     "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
   "table.action_move_bill": "Move this bill",
   "table.move_bill_heading": "Move {bill} to:",
+  "table.move_bill_destination_unreadable":
+    "Could not read the destination's bills. Choose a destination to try again.",
   "table.to_counter": "The counter",
   "held.move_to_table": "Move to table",
   "held.no_tables": "The floor lists no tables to move it to",
@@ -4064,7 +4066,7 @@ export const es: Record<StringKey, string> = {
   "table.action_move_guests": "Mover clientes",
   "table.action_join": "Unir mesas",
   "table.action_merge_bills": "Juntar cuentas",
-  "table.merge_into": "Juntar una cuenta con {bill}",
+  "table.merge_into": "Juntar una cuenta en la {bill}",
   "table.no_other_tables": "No hay otras mesas",
   "table.action_split_table": "Separar la mesa",
   "table.action_name": "Poner nombre a los clientes",
@@ -4477,6 +4479,8 @@ export const es: Record<StringKey, string> = {
     "Una cuenta de esta mesa no debe nada pero aún tiene dinero. Devuélvelo antes de cerrar la mesa",
   "table.action_move_bill": "Mover esta cuenta",
   "table.move_bill_heading": "Mover {bill} a:",
+  "table.move_bill_destination_unreadable":
+    "No se pudieron cargar las cuentas de la mesa de destino. Elige un destino para volver a intentarlo.",
   "table.to_counter": "El mostrador",
   "held.move_to_table": "Pasar a mesa",
   "held.no_tables": "El plano no tiene mesas a las que pasarlo",

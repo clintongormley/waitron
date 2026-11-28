@@ -3956,10 +3956,16 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
       }
-      const scope = t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2");
 
       it("lists The counter and every other table with its condition, under the bill it moves", async () => {
-        const { el } = await mount(onCheck());
+        const fixture = onCheck();
+        const { el } = await mount({
+          ...fixture,
+          tables: fixture.tables.map((table) => ({
+            ...table,
+            label: table.label.replace(/^Table /, ""),
+          })),
+        });
         await toMenu(el);
         expect(
           el
@@ -3969,11 +3975,22 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
-        expect(targetHeading(el)).toBe(t("table.move_bill_heading").replace("{bill}", scope));
+        const heading = "Move Bill 2 to";
+        expect(targetHeading(el)).toBe(heading);
+        expect(el.shadowRoot!.querySelector("[data-target-picker]")?.textContent).toContain(
+          heading,
+        );
+        expect(target(el, "t9")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+          "Table 9",
+        );
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
-        expect(target(el, "counter")!.textContent).toContain(t("table.to_counter"));
-        expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
-        expect(target(el, "t7")!.textContent).toContain(
+        expect(
+          target(el, "counter")!.shadowRoot!.querySelector("[part=label]")!.textContent,
+        ).toContain(t("table.to_counter"));
+        expect(target(el, "t9")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toContain(
+          t("floor.free"),
+        );
+        expect(target(el, "t7")!.shadowRoot!.querySelector("[part=hint]")!.textContent).toContain(
           t("table.held_by").replace("{party}", "Luis"),
         );
         expect(target(el, "t6")!.disabled).toBe(true);
@@ -4030,9 +4047,7 @@ describe("till-table-order-screen", () => {
         });
         await toMoveBill(el);
 
-        expect(targetHeading(el)).toBe(
-          t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
-        );
+        expect(targetHeading(el)).toBe("Move Bill 2 · {into} to");
       });
 
       it("sends the party the picker showed, though the floor read since seats another there", async () => {
@@ -4084,8 +4099,7 @@ describe("till-table-order-screen", () => {
         await toMoveBill(el);
         target(el, "t7")!.click();
         await el.updateComplete;
-        click(el, "[data-action-back]");
-        await el.updateComplete;
+        await closePicker(el);
         ready!();
         await el.updateComplete;
 
@@ -4412,12 +4426,16 @@ describe("till-table-order-screen", () => {
           await el.updateComplete;
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
           const counterChoice = el.shadowRoot!.querySelector('[data-target="counter"]')!;
-          expect(counterChoice.textContent).toContain(t("floor.closed"));
+          expect(counterChoice.shadowRoot?.textContent ?? counterChoice.textContent).toContain(
+            t("floor.closed"),
+          );
 
           el.zones = [...setUp.zones, counter(false)];
           await el.updateComplete;
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
-          expect(counterChoice.textContent).not.toContain(t("floor.closed"));
+          expect(counterChoice.shadowRoot?.textContent ?? counterChoice.textContent).not.toContain(
+            t("floor.closed"),
+          );
         });
 
         it("keeps the counter when its area is the bill's own closed area", async () => {
@@ -5177,8 +5195,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetIds(el)).toEqual(["wo-check"]);
-      expect(el.shadowRoot!.querySelector('[data-target="wo-check"]')!.textContent).toContain(
-        t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
+      expect(target(el, "wo-check")!.shadowRoot!.querySelector("[part=label]")!.textContent).toBe(
+        "Bill 2",
+      );
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")?.textContent).toContain(
+        t("table.merge_into").replace("{bill}", "Bill 1"),
       );
       let captured: CustomEvent | undefined;
       el.addEventListener("merge-bills", (e) => (captured = e as CustomEvent));
@@ -5209,18 +5230,23 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el)).toEqual(["wo-check"]);
     });
 
-    it("says which bill the chosen one merges into before anything is chosen", async () => {
-      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
-      await toMenu(el);
-      click(el, '[data-action="merge"]');
-      await el.updateComplete;
+    it.each([
+      ["en-GB", "Merge a bill into Bill 2"],
+      ["es-ES", "Juntar una cuenta en la cuenta 2"],
+    ])("names the bill that stays open after merging in %s", async (locale, heading) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+        await toMenu(el);
+        click(el, '[data-action="merge"]');
+        await el.updateComplete;
 
-      expect(targetHeading(el)).toBe(
-        t("table.merge_into").replace(
-          "{bill}",
-          t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
-        ),
-      );
+        expect(targetHeading(el)).toBe(heading);
+        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")?.textContent).toBe(heading);
+      } finally {
+        setLocale(previous);
+      }
     });
 
     it("offers no Move dishes, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
@@ -5285,6 +5311,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
         t("table.no_other_bills"),
       );
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")).toBeNull();
     });
 
     it("Back from a picker closes it", async () => {

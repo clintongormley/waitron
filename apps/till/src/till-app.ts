@@ -18888,7 +18888,12 @@ export class TillApp extends LitElement {
           ? []
           : [this.activeTabId]
         : this.partyBills.map((bill) => bill.workingOrderId);
-    const pending = this.#relocationEdits(ids, table?.party ?? null, refused);
+    const pending = this.#relocationEdits(
+      ids,
+      table?.party ?? null,
+      refused,
+      verb === "move-bill" ? "table.move_bill_destination_unreadable" : undefined,
+    );
     this.#relocationPrompts.set(prompt, pending);
     const asked = await pending;
     if (asked !== null && this.#billCompositionUnchanged(asked.source)) ready();
@@ -18898,6 +18903,7 @@ export class TillApp extends LitElement {
     sourceIds: string[],
     target: SeatedRead = null,
     refused?: (message: string) => void,
+    readRefusal: StringKey = "table.reread_failed",
   ): Promise<TableRelocation | null> {
     const source = this.#billComposition(sourceIds);
     if (source === null) return null;
@@ -18910,7 +18916,7 @@ export class TillApp extends LitElement {
         destination = snapshot.billEdits.map(expectedEditOf);
       } catch {
         if (this.#billCompositionCurrent(source)) {
-          if (refused) refused(t("table.reread_failed"));
+          if (refused) refused(t(readRefusal));
           else this.errorKey = "table.reread_failed";
         }
         return null;

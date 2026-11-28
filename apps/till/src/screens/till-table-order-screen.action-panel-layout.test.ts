@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   mountWidget,
+  panelBackButton,
   pageAt,
   resetPage,
   servedMenus,
@@ -50,53 +51,91 @@ const menus = servedMenus(
 
 const box = (element: Element) => element.getBoundingClientRect();
 
-// The panel goes under the order where the menu would otherwise be squeezed below its own width,
-// down to where the picker would leave the search's line.
-it("at 1024 px an open action panel goes under the order rather than squeezing the menu", async () => {
-  setLocale("en");
-  await pageAt(1024, 900);
-  const party = { ...switcherParty, tableIds: ["t4", "t5"] };
+async function openAction(action: string) {
+  const party = { ...switcherParty, tableIds: ["t1"] };
+  const targets = Array.from({ length: 18 }, (_, index) => index + 2);
+  const table = (number: number, held = false): TableState => ({
+    id: `t${number}`,
+    label: `Table ${number}`,
+    shortName: `Table ${number}`,
+    party: held ? party : null,
+    signals: [],
+    zoneId: null,
+    state: held ? "open-tab" : "free",
+    hasOpenTab: held,
+    condition: held ? "held" : "free",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    timingBand: "fresh",
+    nextReservation: null,
+    today: null,
+  });
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
     menus,
     lines: [],
-    orderId: "wo-2",
+    orderId: "wo-1",
     draftStore: new DraftStore(),
     party,
-    bills: [partyBill("wo-1", 1, "10.00"), partyBill("wo-2", 2, "54.00")],
-    tables: party.tableIds.map(
-      (id) =>
-        ({
-          id,
-          label: id,
-          shortName: id,
-          party,
-          signals: [],
-          zoneId: null,
-          state: "open-tab",
-          hasOpenTab: true,
-          condition: "held",
-          pendingDeliveries: 0,
-          pendingToServe: 0,
-          readyToServe: 0,
-          timingBand: "fresh",
-          nextReservation: null,
-          today: null,
-        }) as TableState,
-    ),
+    bills: [partyBill("wo-1", 1, "10.00"), ...targets.map((n) => partyBill(`wo-${n}`, n, "5.00"))],
+    tables: [table(1, true), ...targets.map((n) => table(n))],
   });
   await resized(el);
-  await userEvent.click(el.shadowRoot!.querySelector("[data-table-menu]")!);
-  await userEvent.click(el.shadowRoot!.querySelector('[data-table-menu] [data-action="merge"]')!);
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector("[data-table-menu]")!.shadowRoot!.querySelector("button")!;
+  await userEvent.click(trigger);
+  await userEvent.click(root.querySelector(`[data-table-menu] [data-action="${action}"]`)!);
   await resized(el);
+  return { root, trigger };
+}
 
-  const ordering = el.shadowRoot!.querySelector(".ordering")!;
-  const panel = el.shadowRoot!.querySelector("[data-action-panel]")!;
-  expect(panel).not.toBeNull();
+it("at 1024 px Move dishes goes under the order without squeezing the menu", async () => {
+  await pageAt(1024, 900);
+  const { root } = await openAction("move-dishes");
+  const ordering = root.querySelector(".ordering")!;
+  const panel = root.querySelector("[data-action-panel]")!;
   expect(box(panel).top).toBeGreaterThanOrEqual(box(ordering).bottom);
-  const browser = el.shadowRoot!.querySelector("till-menu-browser")!;
+  const browser = root.querySelector("till-menu-browser")!;
   const picker = box(browser.querySelector("till-menu-switcher")!);
   const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);
   expect(Math.abs(picker.bottom - search.bottom)).toBeLessThanOrEqual(1);
   expect(picker.right).toBeLessThanOrEqual(search.left);
 });
+
+it.each(["merge", "move-bill"])(
+  "%s keeps Back above a scrollable list and fits the order at both widths",
+  async (action) => {
+    await pageAt(1024, 600);
+    const { root, trigger } = await openAction(action);
+
+    const panel = root.querySelector<HTMLElement>("[data-action-panel]")!;
+    const bounds = () => {
+      const { left, top, right, bottom } = box(panel.shadowRoot?.querySelector("dialog") ?? panel);
+      return [left, top, right, bottom].map(Math.round);
+    };
+    const orderLeft = Math.round(box(root.querySelector("[data-draft-pane]")!).left);
+    expect(orderLeft).toBeGreaterThan(0);
+    await expect.poll(bounds).toEqual([orderLeft, 0, 1024, 600]);
+    const browser = root.querySelector("till-menu-browser")!;
+    const picker = box(browser.querySelector("till-menu-switcher")!);
+    const search = box(browser.shadowRoot!.querySelector('[data-region="search"]')!);
+    expect(Math.abs(picker.bottom - search.bottom)).toBeLessThanOrEqual(1);
+    expect(picker.right).toBeLessThanOrEqual(search.left);
+
+    const body = panel
+      .querySelector("wt-full-screen-panel")!
+      .shadowRoot!.querySelector('[part="body"]')!;
+    const back = panelBackButton(panel.querySelector<HTMLElement>("[data-action-back]")!);
+    body.scrollTop = body.scrollHeight;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(box(back).top).toBeGreaterThanOrEqual(0);
+    expect(box(back).bottom).toBeLessThanOrEqual(600);
+
+    await pageAt(390, 844);
+    await expect.poll(bounds).toEqual([0, 0, 390, 844]);
+    await userEvent.click(back);
+    await expect.poll(() => root.querySelector("[data-action-panel]")).toBeNull();
+    expect(trigger.getRootNode()).toHaveProperty("activeElement", trigger);
+  },
+);
