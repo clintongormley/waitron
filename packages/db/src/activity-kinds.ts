@@ -153,6 +153,12 @@ export interface ActivityKindData {
     readonly to: string;
     readonly rows: number;
   };
+  /** A held discount an invoice wrote although it no longer held as given, and what it took. */
+  readonly "discount.written_as_it_stood": {
+    readonly discountId: string;
+    readonly why: "set_menu_gone" | "cut_down";
+    readonly takes: string;
+  };
   /** Who kept as a tip what a bill was paid over its total: the whole amount, and
    * how much each bill payment moved from its applied money to its tip. */
   readonly "bill.overpaid_kept_as_tip": {
@@ -208,5 +214,6 @@ export const ACTIVITY_KINDS = {
   "accountant_export.downloaded": { subject: "report" },
   "tax_office.month_requested": { subject: "report" },
   "bill.overpaid_kept_as_tip": { subject: "working_order" },
+  "discount.written_as_it_stood": { subject: "working_order" },
 } as const satisfies Record<ActivityKind, ActivityKindRule>;
 export type ActivitySubjectKind = (typeof ACTIVITY_KINDS)[ActivityKind]["subject"];

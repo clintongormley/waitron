@@ -34,6 +34,21 @@ declare module "@waitron/shared" {
      * an extra that is not a whole count for each dish, of which no part can be taken, only the
      * whole. `lineNo` is the line asked about. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
+    /** Held discounts the bill's invoice would write other than as given: `set_menu_gone`, its
+     * set menu broke up, so it takes nothing; `cut_down`, an amount larger than what it is on.
+     * `on` names the dish, extra or set menu it was given on, or the bill; amounts are decimal
+     * strings. */
+    "adjustment.no_longer_applies": {
+      workingOrderId: string;
+      discounts: {
+        discountId: string;
+        why: "set_menu_gone" | "cut_down";
+        on: { kind: "dish" | "extra" | "set_menu" | "bill"; targetName: string | null };
+        action: "comp" | "discount_percent" | "discount_amount";
+        percentBp: number | null;
+        amount: string | null;
+      }[];
+    };
     /** A configuration bundle row the venue could not hold; `field` is `table.column`, or the
      * table alone when no row keeps a Void reason asking for a note. */
     "setup.request_invalid": { field: string };
