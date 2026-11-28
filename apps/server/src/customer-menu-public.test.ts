@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { checkServerIdentity } from "node:tls";
 import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
@@ -21,11 +22,12 @@ import {
   MENU_CHANGE_SOURCES,
   previewMenu,
   publishMenu,
+  queueMenuPublication,
   saveCustomerMenuOnlineSettings,
   updateMenuDetails,
   writeContentLanguages,
 } from "@waitron/menu";
-import { expect, it, onTestFinished } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import { startCustomerMenuListener } from "./customer-menu-public.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { createPublicMenuView } from "./customer-menu-public-view.js";
@@ -89,6 +91,31 @@ it("redraws the published text after a new edition and removes an address switch
     saveCustomerMenuOnlineSettings(tx, menu.id, { ...online, enabled: false }),
   );
   expect(await english()).toBeUndefined();
+});
+
+it("serves a scheduled edition at its due time before the activation job writes", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const startsAt = Date.now();
+  const { menu, person, view } = await fixture();
+  const due = startsAt + 60_000;
+  await withTransaction(suite.db, async (tx) => {
+    await updateMenuDetails(tx, menu.id, { names: { en: "Dinner", es: "Menu" } });
+    await queueMenuPublication(
+      tx,
+      menu.id,
+      (await previewMenu(tx, menu.id)).hash,
+      new Date(due),
+      person,
+    );
+  });
+  const english = async () => (await view.read()).menus.get("lunch")?.get("en")?.menu.name;
+  vi.setSystemTime(due - 1);
+  expect(await english()).toBe("Lunch");
+  vi.setSystemTime(due);
+  expect(await english()).toBe("Dinner");
 });
 
 it("refreshes enabled languages and the prepared style without republishing", async () => {
@@ -156,7 +183,8 @@ async function httpsFixture() {
     { root, socketPath, stateDir },
     f.view,
     () => {},
-    async () => serving,
+    async () => true,
+    () => serving,
   );
   onTestFinished(() => listener?.close());
   expect(listener?.isListening()).toBe(true);
@@ -169,7 +197,7 @@ async function httpsFixture() {
       await install();
       listener!.checkNow();
     },
-    ask(path: string, method = "GET", host = hostname) {
+    ask(path: string, method = "GET", host = hostname, servername = hostname) {
       return new Promise<{ status: number; body: string; headers: Record<string, unknown> }>(
         (resolve, reject) => {
           const req = request(
@@ -177,7 +205,9 @@ async function httpsFixture() {
               socketPath,
               path,
               method,
-              servername: hostname,
+              servername,
+              checkServerIdentity: (_name, certificate) =>
+                checkServerIdentity(hostname, certificate),
               ca,
               agent: false,
               headers: { Host: host },
@@ -224,6 +254,9 @@ it("serves the guest snapshot and exact HTTPS reads, with relative redirects and
     expect((await ask(path)).status, path).toBe(404);
   expect((await ask("/lunch/en", "POST")).status).toBe(404);
   expect((await ask("/lunch/en", "GET", "other.waitron.local")).status).toBe(404);
+  expect((await ask("/lunch/en", "GET", "staff.waitron.local", "other.waitron.local")).status).toBe(
+    404,
+  );
 });
 
 it("strips queries only from page paths", async () => {
@@ -253,6 +286,9 @@ it("refuses even installed assets after the serving gate closes", async () => {
   const { ask, stepDown } = await httpsFixture();
   expect((await ask("/_customer-menu/assets/menu-123.js")).status).toBe(200);
   stepDown();
-  expect((await ask("/_customer-menu/assets/menu-123.js")).status).toBe(404);
-  expect((await ask("/lunch/en")).status).toBe(404);
+  for (const path of ["/_customer-menu/assets/menu-123.js", "/lunch/en"])
+    expect(await ask(path)).toMatchObject({
+      status: 503,
+      headers: { "cache-control": "no-store" },
+    });
 });

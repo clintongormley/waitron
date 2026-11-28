@@ -71,9 +71,9 @@ it("requires opening the built customer menu and fails when its smoke check fail
     candidate.startsWith("name: Open the built customer menu"),
   );
   mandatory(step);
-  expect(existsSync(new URL("apps/customer-menu/test/bundle-smoke.mjs", root))).toBe(true);
+  expect(existsSync(new URL("apps/server/test/customer-menu-bundle-smoke.mjs", root))).toBe(true);
   expect(step).toMatch(
-    /^ {8}run: timeout 90 pnpm --filter @waitron\/customer-menu exec node test\/bundle-smoke\.mjs$/m,
+    /^ {8}run: timeout 90 pnpm --filter @waitron\/server exec node test\/customer-menu-bundle-smoke\.mjs$/m,
   );
 });
 

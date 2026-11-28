@@ -379,7 +379,8 @@ has no SSH support feature.
 ### Pair a test gateway with the customer menu
 
 Route the gateway to the serving box's WireGuard address on port `8443`. Use the staff
-hostname from the signed route for both TLS server name and HTTP Host. The box checks that
+hostname from the signed route for both TLS server name and HTTP Host, with no port in
+the Host header. The box checks that
 identity, the serving gate and the saved remote-access switch before serving the menu. Compose
 shares `customer-menu.sock` with the tunnel companion, which forwards customer traffic
 independently of staff HTTPS on port `443`. [Box listener](../../apps/server/src/customer-menu-public.ts)
@@ -389,13 +390,15 @@ Send GET or HEAD. A visit to `/lunch` returns a relative redirect to `/lunch/en`
 English is the default. A language path serves only a stored enabled language. At `/`, one
 online menu redirects and several produce a list. A query on any of these published page
 paths redirects to that same path with the query removed. Forward relative redirects and
-their cache headers. An absent or switched-off menu returns 404. [Route contract](../superpowers/plans/2026-11-28-h-a1637-public-customer-menu.md#what-cloud-can-request)
+their cache headers. The box uses the new edition when a scheduled publication falls due.
+An absent or switched-off menu returns 404. [Route contract](../superpowers/plans/2026-11-28-h-a1637-public-customer-menu.md#what-cloud-can-request)
 
 The page can be embedded on another site. Pages, redirects and brand icons keep for at most
 60 seconds. Content-named assets and listed photo recipes keep for one year. Asset and photo
 requests require a query-free URL. The box caps customer work at eight concurrent requests
-and 120 admissions per one-second window. It returns 429 when full and 503 for a temporary
-failure. [Box handler](../../apps/server/src/customer-menu-public.ts)
+and 120 admissions per one-second window. It returns 429 when full and 503 when a read
+times out or the box is stepping down. Work still running after a timeout counts against
+the limit until it finishes. [Box handler](../../apps/server/src/customer-menu-public.ts)
 
 ### Staff-certificate status discovery, 6 November 2026
 

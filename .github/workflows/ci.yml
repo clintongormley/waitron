@@ -773,7 +773,7 @@ jobs:
 
       - name: Open the built customer menu
         timeout-minutes: 2
-        run: timeout 90 pnpm --filter @waitron/customer-menu exec node test/bundle-smoke.mjs
+        run: timeout 90 pnpm --filter @waitron/server exec node test/customer-menu-bundle-smoke.mjs
 
       # sharp's native addon cannot be bundled and esbuild does not refuse to try: without
       # `--external:sharp` the build passes and the bundle is a syntax error (bundled sharp declares

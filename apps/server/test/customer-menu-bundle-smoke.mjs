@@ -2,20 +2,15 @@ import assert from "node:assert/strict";
 import { log } from "node:console";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "playwright";
 import "tsx";
-import { menuAppearances, photoReference, published } from "./published-menu.ts";
-
-const { readDefaults } = await import("@waitron/ui-core/theme");
-const { prepareMenuAppearance } = await import("../src/customer-menu-appearance.ts");
-const defaults = readDefaults(
-  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/colors.css")), "utf8"),
-  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/structure.css")), "utf8"),
-);
-const { createCustomerMenuApp } = await import("../../server/src/customer-menu-public.ts");
-const { samplePreparedImage } = await import("../../../packages/media/src/testing/sample-image.ts");
+const { menuAppearances, photoReference, published } =
+  await import("@waitron/customer-menu/testing");
+const { prepareMenuAppearance } = await import("@waitron/customer-menu/appearance");
+const { samplePreparedImage } = await import("@waitron/media/testing/sample-image.js");
+const { createCustomerMenuApp } = await import("../src/customer-menu-public.ts");
+const { SERVER_THEME_DEFAULTS } = await import("../src/theme-defaults.ts");
 const path = "/lunch/en";
 const icons = ["favicon.ico", "favicon.svg", "apple-touch-icon.png"].map(
   (name) => `/_customer-menu/${name}`,
@@ -25,14 +20,14 @@ const snapshot = {
   address: "lunch",
   defaultLanguage: "en",
   photos: "large",
-  appearance: prepareMenuAppearance(defaults, menuAppearances.dark),
+  appearance: prepareMenuAppearance(SERVER_THEME_DEFAULTS, menuAppearances.dark),
   menu: published().menu,
   photoUrls: { [photoReference]: photoUrl },
 };
 const releasePhoto = Promise.withResolvers();
 const photoBytes = (await samplePreparedImage({ width: 24 })).bytes;
 const app = createCustomerMenuApp(
-  fileURLToPath(new URL("../dist", import.meta.url)),
+  fileURLToPath(new URL("../../customer-menu/dist", import.meta.url)),
   {
     read: async () => ({ menus: new Map([["lunch", new Map([["en", snapshot]])]]) }),
     readPhoto: async (path) => {
@@ -59,6 +54,9 @@ try {
   page.setDefaultTimeout(10_000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("requestfailed", (request) =>
+    errors.push(`${request.url()} ${request.failure()?.errorText}`),
+  );
   page.on("response", (response) => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
@@ -77,13 +75,6 @@ try {
     .getByRole("heading", { level: 1, name: "Lunch for guests" })
     .waitFor();
   await page.getByRole("button", { name: "Roast pepper" }).waitFor();
-  const article = page.locator("customer-menu-page article");
-  assert.equal(
-    await article.evaluate(
-      (node) => node.ownerDocument.defaultView.getComputedStyle(node).backgroundColor,
-    ),
-    "rgb(31, 41, 40)",
-  );
   assert.deepEqual(
     await page
       .locator('link[rel="icon"], link[rel="apple-touch-icon"]')

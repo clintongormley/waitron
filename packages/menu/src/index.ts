@@ -272,6 +272,7 @@ export {
   activateDueMenuPublications,
   cancelMenuPublication,
   listMenuPublications,
+  nextQueuedMenuActivation,
   queueMenuPublication,
   rescheduleMenuPublication,
 } from "./menu-schedule.js";

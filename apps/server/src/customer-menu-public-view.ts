@@ -12,6 +12,7 @@ import {
 import {
   customerMenuAppearanceFor,
   EACH_UNIT_ID,
+  nextQueuedMenuActivation,
   readContentLanguages,
   readLiveDocuments,
 } from "@waitron/menu";
@@ -44,12 +45,13 @@ async function buildView(db: Database, venueLocale: string) {
     .orderBy(menus.onlineAddress);
   const snapshots = new Map<string, Map<string, CustomerMenuSnapshot>>();
   const photos = new Map<string, Photo>();
-  if (online.length === 0) return { menus: snapshots, photos };
+  const view = { menus: snapshots, photos };
+  if (online.length === 0) return { view, expiresAt: Infinity };
+  const menuIds = online.map(({ id }) => id);
+  // An edition can fall due during the rebuild, so read the deadline before the versions.
+  const next = await nextQueuedMenuActivation(db, new Date(), menuIds);
   const languages = await readContentLanguages(db, venueLocale);
-  const live = await readLiveDocuments(
-    db,
-    online.map(({ id }) => id),
-  );
+  const live = await readLiveDocuments(db, menuIds);
   for (const { id, address, photos: size } of online) {
     const edition = live.get(id);
     if (!edition || address === null) continue;
@@ -99,7 +101,7 @@ async function buildView(db: Database, venueLocale: string) {
       ),
     );
   }
-  return { menus: snapshots, photos };
+  return { view, expiresAt: next?.getTime() ?? Infinity };
 }
 
 const VIEW_CHANGES = new Set([
@@ -123,7 +125,7 @@ export function createPublicMenuView(db: Database, venueLocale: string) {
   });
 
   async function read() {
-    while (ready === undefined) {
+    while (ready === undefined || ready.expiresAt <= Date.now()) {
       if (pending === undefined) {
         const building = revision;
         pending = buildView(db, venueLocale)
@@ -136,7 +138,7 @@ export function createPublicMenuView(db: Database, venueLocale: string) {
       }
       await pending;
     }
-    return ready;
+    return ready.view;
   }
 
   return {

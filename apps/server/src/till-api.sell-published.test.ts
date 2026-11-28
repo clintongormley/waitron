@@ -359,10 +359,26 @@ async function written(): Promise<{ sales: number; records: number; orders: numb
 
 it("files a till sale and serves its photo while public photo requests wait for their renderer", async () => {
   const v = await setupLunch();
-  const prepared = await samplePreparedImage({ width: 24 });
+  const images = await Promise.all(
+    Array.from({ length: 8 }, (_, index) => samplePreparedImage({ width: 24 + index })),
+  );
   await withTransaction(suite.db, async (tx) => {
-    const { image } = await media.uploadImage(tx, { image: prepared, names: { es: "Lemonade" } });
-    await updateProduct(tx, v.lemonade.productId, { image: image.filename });
+    for (const [index, prepared] of images.entries()) {
+      const name = index === 0 ? "Lemonade" : `Dish ${index}`;
+      const { image } = await media.uploadImage(tx, { image: prepared, names: { es: name } });
+      if (index === 0) {
+        await updateProduct(tx, v.lemonade.productId, { image: image.filename });
+      } else {
+        const { id } = await createProduct(tx, {
+          name,
+          categoryId: null,
+          unitId: null,
+          unitPrice: "5.00",
+          image: image.filename,
+        });
+        await addProductToMenu(tx, { menuId: v.menuId, productId: id });
+      }
+    }
   });
   const version = await publish(v.menuId);
   await withTransaction(suite.db, (tx) =>
@@ -382,8 +398,7 @@ it("files a till sale and serves its photo while public photo requests wait for 
     () => {},
   );
   const view = createPublicMenuView(suite.db, LOCALE);
-  const source = prepared.filename;
-  const photoPath = `/_customer-menu/photos/v1/${source}/square/5000-5000-100.webp`;
+  const source = images[0]!.filename;
   let markRendering!: () => void, releaseRender!: () => void;
   const rendering = new Promise<void>((resolve) => {
     markRendering = resolve;
@@ -397,7 +412,11 @@ it("files a till sale and serves its photo while public photo requests wait for 
     await held;
     return render(...args);
   });
-  const publicReads = Promise.all(Array.from({ length: 12 }, () => view.readPhoto(photoPath)));
+  const publicReads = Promise.all(
+    images.map(({ filename }) =>
+      view.readPhoto(`/_customer-menu/photos/v1/${filename}/square/5000-5000-100.webp`),
+    ),
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -421,10 +440,12 @@ it("files a till sale and serves its photo while public photo requests wait for 
   } finally {
     clearTimeout(timer);
     releaseRender();
-    await publicReads;
-    worker.mockRestore();
-    view.close();
+    await publicReads.finally(() => {
+      worker.mockRestore();
+      view.close();
+    });
   }
+  expect(await publicReads).toEqual(images.map(() => expect.any(Uint8Array)));
 });
 
 describe("a basket that spans a publish (Review Focus 2)", () => {

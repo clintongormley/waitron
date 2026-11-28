@@ -45,7 +45,7 @@ export function createCustomerMenuApp(
     const { method, url } = c.req.raw;
     const { pathname } = new URL(url);
     c.header("Cache-Control", "no-store");
-    if ((method !== "GET" && method !== "HEAD") || !serving()) return c.notFound();
+    if (method !== "GET" && method !== "HEAD") return c.notFound();
     const asset = assets.get(pathname);
     const photo = pathname.startsWith(CUSTOMER_PHOTOS);
     const [empty, address, language, extra] = pathname.split("/");
@@ -59,6 +59,7 @@ export function createCustomerMenuApp(
     if (!page && asset === undefined && !photo) return c.notFound();
     const query = url.includes("?");
     if (query && !page) return c.notFound();
+    if (!serving()) return c.body(null, 503);
 
     const now = performance.now();
     if (now >= windowUntil) {
@@ -76,7 +77,7 @@ export function createCustomerMenuApp(
         "Cache-Control": SHORT_CACHE,
       });
     const reply = (data: string | Uint8Array, contentType: string, cache: string) => {
-      if (!serving()) return c.notFound();
+      if (!serving()) return c.body(null, 503);
       if (Buffer.byteLength(data) > MAX_REPLY_BYTES) return c.body(null, 503);
       return new Response(typeof data === "string" ? data : new Uint8Array(data), {
         headers: {
@@ -87,7 +88,8 @@ export function createCustomerMenuApp(
       });
     };
     const send = async () => {
-      if (!(await allowed(c.req.raw)) || !serving()) return c.notFound();
+      if (!(await allowed(c.req.raw))) return c.notFound();
+      if (!serving()) return c.body(null, 503);
       if (asset !== undefined) {
         const bytes = await readFile(join(root, asset));
         return reply(
@@ -101,7 +103,7 @@ export function createCustomerMenuApp(
         return bytes === null ? c.notFound() : reply(bytes, "image/webp", LONG_CACHE);
       }
       const { menus } = await view.read();
-      if (!serving()) return c.notFound();
+      if (!serving()) return c.body(null, 503);
       if (pathname === "/") {
         const entries = [...menus.values()].map((snapshots) => snapshots.values().next().value!);
         const first = entries[0];
