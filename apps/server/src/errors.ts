@@ -68,8 +68,10 @@ declare module "@waitron/shared" {
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };
     "table.delivery_in_progress": { tableId: string; workingOrderId: string };
-    "invoice_delivery.email_unavailable": Record<string, never>;
-    "invoice_delivery.printer_invalid": Record<string, never>;
+    /** `field`: the give-back form's corrective way that asked for it. */
+    "invoice_delivery.email_unavailable": { field?: string };
+    /** `field`: the give-back form's corrective way that asked for it. */
+    "invoice_delivery.printer_invalid": { field?: string };
     "invoice_delivery.receipt_invalid": Record<string, never>;
     "invoice_delivery.active": Record<string, never>;
     "invoice_delivery.not_found": Record<string, never>;

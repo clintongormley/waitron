@@ -18,6 +18,7 @@ import {
   saleId,
   type Decimal,
 } from "@waitron/shared";
+import type { CorrectiveDelivery } from "./corrective-delivery.js";
 import { readCorrectionMoney, readCorrectionRow } from "./invoice-correction-legs.js";
 import { fileCorrectionIn, previewOrRefusal } from "./invoice-corrections.js";
 import { storedDeviceOrigin } from "./request-config.js";
@@ -174,6 +175,8 @@ export function raiseCorrectionUnfinished(
 export async function fileCorrectionAutomatically(
   deps: TenderRefundDeps,
   correctionId: string,
+  /** The way staff chose for its R1 on the give-back form, when the press files it. */
+  correctiveDelivery?: CorrectiveDelivery,
 ): Promise<void> {
   const row = await readCorrectionRow(deps.db, correctionId);
   const { completed, pendingRefundId } = await readCorrectionMoney(deps.db, correctionId);
@@ -198,6 +201,8 @@ export async function fileCorrectionAutomatically(
           correctionId,
           { invoiceCorrectionId: correctionId },
           null,
+          undefined,
+          correctiveDelivery,
         );
       });
   } catch (error) {

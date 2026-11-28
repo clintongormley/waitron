@@ -53,7 +53,7 @@ import {
   waitsForRecordsCheck,
 } from "./invoice-correction-legs.js";
 import { linkCorrectionToCancels } from "./cancelled-lines.js";
-import { sendFiledCorrective } from "./corrective-delivery.js";
+import { sendFiledCorrective, type CorrectiveDelivery } from "./corrective-delivery.js";
 import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
 import { deviceMayPrintReceipts, enqueueOriginalReceipt } from "./receipt-print.js";
@@ -464,6 +464,8 @@ export async function fileCorrectionIn(
   /** Null when filed automatically, with nobody asking. */
   endedBy: string | null,
   asked?: { expectedSplit?: readonly SplitLine[]; print: true },
+  /** For an R1, the way staff chose on the give-back form. */
+  correctiveDelivery?: CorrectiveDelivery,
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
   const { completed, legs } = await readSettledMoney(tx, correction);
@@ -524,7 +526,8 @@ export async function fileCorrectionIn(
     await linkCorrectionToCancels(tx, saleId, legs, {
       filed: { allocations: preview.allocations, openedAt: correction.createdAt },
     });
-  if (fullInvoice) await sendFiledCorrective(tx, deps, cfg, correction, correctiveSaleId);
+  if (fullInvoice)
+    await sendFiledCorrective(tx, deps, cfg, correction, correctiveSaleId, correctiveDelivery);
   else if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;

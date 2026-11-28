@@ -219,11 +219,14 @@ function restOf(ask: GiveBackWrite, answer: GiveBackOutcome["parts"]): GiveBackR
       .reduce((total, part) => total + part.amount, 0);
   const amount = sum(["refund", "correction"]);
   const extra = sum(["extra"]);
-  const { purpose, lineIds, way } = ask.request;
+  const { purpose, lineIds, way, correctiveDelivery } = ask.request;
   if (amount === 0) return { purpose: "extra", amount: centsToDecimal(extra), extra: "0.00", way };
   return {
     purpose,
     ...(lineIds === undefined ? {} : { lineIds }),
+    ...(correctiveDelivery !== undefined && left.some((part) => part.kind === "correction")
+      ? { correctiveDelivery }
+      : {}),
     amount: centsToDecimal(amount),
     extra: centsToDecimal(extra),
     way,
@@ -259,7 +262,7 @@ export async function outcomeOf(
         correctiveSaleId === null
           ? null
           : await optionalDocument(tx, "readSentCorrective", correctiveSaleId, () =>
-              readSentCorrective(tx, cfg, row.id, correctiveSaleId),
+              readSentCorrective(tx, cfg, row.id, correctiveSaleId, ask.request.correctiveDelivery),
             );
       answer.push({
         kind: "correction",

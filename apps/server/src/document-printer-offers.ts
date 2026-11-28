@@ -130,34 +130,21 @@ export async function readDocumentOffers(
   const full = deliversAsFullInvoice(sale);
   if (!full && document !== "receipt")
     throw new AppError("management.request_invalid", { field: "document" });
-  // Both kinds can deliver a document. The device's profile narrows the list below.
-  let offered: DocumentOffers["printers"] = await tx
-    .select({ id: printers.id, name: printers.name, kind: printers.kind })
-    .from(printers)
-    .where(eq(printers.active, true));
+  const offers = await readOfferedPrinters(
+    tx,
+    authorized.context.deviceId === null
+      ? null
+      : { deviceId: authorized.context.deviceId, profileId: authorized.context.profileId! },
+    document,
+  );
+  const offered = offers.printers;
   let chosenPrinterId: string | null = null;
   let defaultPrinterId: string | null = null;
   let invoiceRevision: number | null = null;
   const deviceId = authorized.context.deviceId;
   if (deviceId !== null) {
-    const equipment = await readPrinterEquipment(tx, [deviceId], { lists: true });
+    const state = offers.role!;
     const role = document === "invoice" ? "invoice" : "receipt";
-    const state = equipment.roles.get(deviceId)!.find((candidate) => candidate.role === role)!;
-    const allowed = new Set(
-      equipment.listed
-        .filter(
-          (printer) =>
-            printer.profileId === authorized.context.profileId &&
-            printer.role === role &&
-            printer.active,
-        )
-        .map((printer) => printer.id),
-    );
-    offered = offered.filter((printer) => {
-      if (!allowed.has(printer.id)) return false;
-      const info = equipment.printers.get(printer.id)!;
-      return role === "invoice" || !info.portable || info.holderDeviceId === deviceId;
-    });
     const eligible = (id: string | null) =>
       offered.some((printer) => printer.id === id) ? id : null;
     chosenPrinterId = role === "receipt" ? state.chosenId : eligible(state.chosenId);
@@ -169,9 +156,6 @@ export async function readDocumentOffers(
       .where(eq(devices.id, deviceId));
     invoiceRevision = revision?.value ?? 0;
   }
-  offered.sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-  );
   let emailAllowed = deps.emailAvailable;
   if (authority.surface === "dashboard") {
     const session = await resolveManagementSession(tx, authority.managementSessionId, {
@@ -212,4 +196,46 @@ export async function readDocumentOffers(
       retryAttemptId: state?.actions.retryOriginal != null ? state.current!.id : null,
     },
   };
+}
+
+/** The active printers a document may be printed on, by name: on a device, those its profile
+ * lists for the document's role (a portable receipt printer only while this device holds it), with
+ * the device's state for that role; with no device, every active printer. */
+export async function readOfferedPrinters(
+  tx: Transaction,
+  device: { deviceId: string; profileId: string } | null,
+  document: DocumentChoice,
+): Promise<{
+  printers: DocumentOffers["printers"];
+  role: { chosenId: string | null; defaultId: string | null } | null;
+}> {
+  // Both kinds can deliver a document. The device's profile narrows the list below.
+  let offered: DocumentOffers["printers"] = await tx
+    .select({ id: printers.id, name: printers.name, kind: printers.kind })
+    .from(printers)
+    .where(eq(printers.active, true));
+  let role: { chosenId: string | null; defaultId: string | null } | null = null;
+  if (device !== null) {
+    const { deviceId } = device;
+    const equipment = await readPrinterEquipment(tx, [deviceId], { lists: true });
+    const roleName = document === "invoice" ? "invoice" : "receipt";
+    role = equipment.roles.get(deviceId)!.find((candidate) => candidate.role === roleName)!;
+    const allowed = new Set(
+      equipment.listed
+        .filter(
+          (printer) =>
+            printer.profileId === device.profileId && printer.role === roleName && printer.active,
+        )
+        .map((printer) => printer.id),
+    );
+    offered = offered.filter((printer) => {
+      if (!allowed.has(printer.id)) return false;
+      const info = equipment.printers.get(printer.id)!;
+      return roleName === "invoice" || !info.portable || info.holderDeviceId === deviceId;
+    });
+  }
+  offered.sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+  );
+  return { printers: offered, role };
 }

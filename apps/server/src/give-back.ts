@@ -542,7 +542,13 @@ export async function giveBack(
         deps,
         cfg,
         opened.correction.id,
-        { submissionId: ask.ids.leg, amount: centsToDecimal(leg) },
+        {
+          submissionId: ask.ids.leg,
+          amount: centsToDecimal(leg),
+          ...(ask.request.correctiveDelivery === undefined
+            ? {}
+            : { correctiveDelivery: ask.request.correctiveDelivery }),
+        },
         {
           personId: who.personId,
           authz: { sessionId: who.sessionId, override: who.override },
