@@ -881,7 +881,7 @@ expected total).
   `state/bill-payment.ts:393-419`: 6a).
 
 **The change.**
-1. `apps/server/src/pending-off-sql.ts` (new): the bills with no sale holding pending rows, open or
+1. `apps/server/src/bill-discounts-off-sql.ts` (new): the bills with no sale holding pending rows, open or
    placed (D23; the counter's waiting list shows placed Counter orders, `working-order-counter.ts:441-442`,
    its total `:460`), worked out once per read, as a SQL `json_each` table; each SQL site above
    subtracts it (one or two lines each; `orders-list.ts` has 4 lines of room).
@@ -906,7 +906,7 @@ pins the exact shape with `toEqual`; listed in the pull request).
 golden huella, `inmutabilidad`, `scripts/product-file-size.test.ts`,
 `scripts/live-subscriptions.test.ts`.
 
-**Files.** `pending-off-sql.ts` (new), `parties.ts`, `working-order-held-read.ts`,
+**Files.** `bill-discounts-off-sql.ts` (new), `parties.ts`, `working-order-held-read.ts`,
 `working-order-counter.ts`, `working-order-table-state.ts`, `orders-list.ts`, `find-bill-bills.ts`,
 `packages/shared/src/adjustment-policy-types.ts` (the wire type),
 `apps/dashboard/src/widgets/order-detail-dialog.ts`, their tests.

@@ -54,8 +54,7 @@ import { soldProduct } from "./stored-order-lines.js";
 import { readBillSignals } from "./table-signals.js";
 import type { WorkingOrderDeps } from "./working-order-context.js";
 import { optional } from "./working-order-station-queue.js";
-import { readPendingOff } from "./pending-off-sql.js";
-import { readBillPendingDiscounts } from "./bill-discounts-list.js";
+import { readPendingOff } from "./bill-discounts-off-sql.js";
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
@@ -503,7 +502,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id], "published")).get(id)! : {}),
       ...discountNoticesOf(await readBillsDiscountNotices(tx, [id]), id),
-      discounts: await readBillPendingDiscounts(tx, id),
+      discounts: (await readPendingOff(tx, { bills: [id] })).discountsOf(id),
       lines,
     };
   });

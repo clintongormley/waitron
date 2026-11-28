@@ -23,7 +23,7 @@ import {
   ordersWordRank,
   readOrderListPlaces,
 } from "./orders-list-places.js";
-import { readPendingOff, type PendingOff } from "./pending-off-sql.js";
+import { readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 import "./errors.js";
 
 export const ORDER_STATUSES = [
@@ -375,8 +375,16 @@ export function ordersPageSql(filter: OrderListFilter, off: PendingOff): SQL {
     limit ${filter.limit + 1}`;
 }
 
-export async function listOrders(tx: Transaction, filter: OrderListFilter): Promise<OrderPage> {
-  const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter, await readPendingOff(tx)));
+/** `off` is read for the page unless the caller has read it already for what the page shows. */
+export async function listOrders(
+  tx: Transaction,
+  filter: OrderListFilter,
+  off?: PendingOff,
+): Promise<OrderPage> {
+  const pending =
+    off ??
+    (await readPendingOff(tx, filter.only === undefined ? undefined : { bills: [filter.only] }));
+  const { rows: read } = await tx.execute<RawRow>(ordersPageSql(filter, pending));
   const raw = read.slice(0, filter.limit);
   const last = raw[filter.limit - 1];
   const next =

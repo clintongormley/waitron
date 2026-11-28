@@ -14,7 +14,7 @@ import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { recordedTableNamesSql } from "./orders-list-places.js";
-import { readPendingOff, type PendingOff } from "./pending-off-sql.js";
+import { readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 import "./errors.js";
 
 type RawBill = {
@@ -245,7 +245,7 @@ export async function readFindBill(
   inZones?: OrderZoneCondition,
 ): Promise<BillRow> {
   const { rows } = await tx.execute<RawBill>(
-    sql`${findBillsRelation(await readPendingOff(tx), inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
+    sql`${findBillsRelation(await readPendingOff(tx, { bills: [workingOrderId] }), inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
   );
   if (rows.length === 0) throw new AppError("working_order.not_found", { workingOrderId });
   return (await projectBills(tx, rows))[0]!;

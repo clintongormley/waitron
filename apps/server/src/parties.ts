@@ -50,8 +50,7 @@ import { readCorrectiveNumbers } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
 import { discountNoticesOf, readBillsDiscountNotices } from "./discount-notices.js";
-import { readPendingOff } from "./pending-off-sql.js";
-import { readPendingDiscountViews } from "./bill-discounts-list.js";
+import { NO_PENDING_OFF, readPendingOff, type PendingOff } from "./bill-discounts-off-sql.js";
 import "./errors.js";
 
 /** A staged delivery choice as a bill shows it: who staged it stays on the server. */
@@ -597,7 +596,8 @@ export async function readPartyBills(
   if ((await readParty(tx, partyId)) === undefined) {
     throw new AppError("party.not_open", { partyId });
   }
-  const bills = (await readBillsOfParties(tx, [partyId], log)).get(partyId)!;
+  const { bills: family, off } = await readFamilyBills(tx, [partyId], log);
+  const bills = family.get(partyId)!;
   const choices =
     bills.length === 0
       ? []
@@ -658,11 +658,12 @@ export async function readPartyBills(
     bills.map((bill) => bill.workingOrderId),
     "published",
   );
-  const owing = bills.flatMap(({ workingOrderId, status }) =>
-    status === "open" || status === "placed" ? [workingOrderId] : [],
+  const notices = await readBillsDiscountNotices(
+    tx,
+    bills.flatMap(({ workingOrderId, status }) =>
+      status === "open" || status === "placed" ? [workingOrderId] : [],
+    ),
   );
-  const notices = await readBillsDiscountNotices(tx, owing);
-  const discounts = await readPendingDiscountViews(tx, owing);
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -700,7 +701,7 @@ export async function readPartyBills(
       ...(choice.reopenedFrom === null ? {} : { reopenedFrom: choice.reopenedFrom }),
       ...dinings.get(bill.workingOrderId)!,
       ...discountNoticesOf(notices, bill.workingOrderId),
-      discounts: discounts.get(bill.workingOrderId) ?? [],
+      discounts: off.discountsOf(bill.workingOrderId),
     };
   });
 }
@@ -740,17 +741,28 @@ export type FamilyBill = Omit<
 
 /**
  * {@link readPartyBills} for several parties at once, keyed by each party asked about, without
- * reading whether each bill's receipt can be printed again.
+ * reading whether each bill's receipt can be printed again. `off` is read for the parties' bills
+ * unless the caller has read it already, for them or venue-wide.
  */
 export async function readBillsOfParties(
   tx: Transaction,
   partyIds: readonly string[],
   log?: Logger,
+  off?: PendingOff,
 ): Promise<Map<string, FamilyBill[]>> {
-  if (partyIds.length === 0) return new Map();
+  return (await readFamilyBills(tx, partyIds, log, off)).bills;
+}
+
+async function readFamilyBills(
+  tx: Transaction,
+  partyIds: readonly string[],
+  log: Logger | undefined,
+  read?: PendingOff,
+): Promise<{ bills: Map<string, FamilyBill[]>; off: PendingOff }> {
+  if (partyIds.length === 0) return { bills: new Map(), off: read ?? NO_PENDING_OFF };
   const families = await partyFamilies(tx, partyIds);
   const members = [...new Set([...families.values()].flat())];
-  const off = await readPendingOff(tx);
+  const off = read ?? (await readPendingOff(tx, { parties: members }));
   const rows = await tx
     .select({
       workingOrderId: workingOrders.id,
@@ -817,12 +829,15 @@ export async function readBillsOfParties(
       (a.billNumber ?? Infinity) - (b.billNumber ?? Infinity) ||
       (a.workingOrderId < b.workingOrderId ? -1 : a.workingOrderId > b.workingOrderId ? 1 : 0),
   );
-  return new Map(
-    [...families].map(([root, family]) => {
-      const inFamily = new Set(family);
-      return [root, bills.filter((bill) => inFamily.has(bill.partyId))];
-    }),
-  );
+  return {
+    bills: new Map(
+      [...families].map(([root, family]) => {
+        const inFamily = new Set(family);
+        return [root, bills.filter((bill) => inFamily.has(bill.partyId))];
+      }),
+    ),
+    off,
+  };
 }
 
 /** Keys a retry may change without being another command: the id itself and re-read revisions. */
