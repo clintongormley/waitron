@@ -1259,3 +1259,13 @@ WHEN new.id IS NOT old.id OR new.node_id IS NOT old.node_id OR new.code IS NOT o
   OR new.purpose IS NOT old.purpose
   OR (old.retired_at IS NOT NULL AND new.retired_at IS NOT old.retired_at)
 BEGIN SELECT RAISE(ABORT, 'invoice_series: only retired_at may be set, once'); END;
+--> statement-breakpoint
+CREATE TRIGGER working_orders_abandoned_clears_bill_discounts
+AFTER UPDATE OF status ON working_orders
+FOR EACH ROW
+WHEN new.status = 'abandoned' AND old.status IS NOT 'abandoned'
+BEGIN
+  DELETE FROM bill_discounts
+  WHERE working_order_id = new.id
+     OR line_id IN (SELECT id FROM working_order_lines WHERE working_order_id = new.id);
+END;

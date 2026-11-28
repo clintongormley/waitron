@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1377df69-a3cc-4bfc-b499-5affe24853ea",
+  "id": "f5e2c79d-29eb-4e52-9a96-4e625dbfb958",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16248,6 +16248,349 @@
         "adjustment_endings_line_ck": {
           "name": "adjustment_endings_line_ck",
           "value": "\"adjustment_endings\".\"line_id\" is null or \"adjustment_endings\".\"why\" in ('extras_changed', 'variant_changed')"
+        }
+      }
+    },
+    "bill_discounts": {
+      "name": "bill_discounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_line_id": {
+          "name": "set_menu_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_id": {
+          "name": "set_menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_name": {
+          "name": "set_menu_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "percent_bp": {
+          "name": "percent_bp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shared_from": {
+          "name": "shared_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shared_from_bill_name": {
+          "name": "shared_from_bill_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shared_from_percent_bp": {
+          "name": "shared_from_percent_bp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "given_together": {
+          "name": "given_together",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason_id": {
+          "name": "reason_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason_name": {
+          "name": "reason_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "policy_snapshot": {
+          "name": "policy_snapshot",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "given_at": {
+          "name": "given_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bill_discounts_working_order_idx": {
+          "name": "bill_discounts_working_order_idx",
+          "columns": [
+            "working_order_id"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_line_idx": {
+          "name": "bill_discounts_line_idx",
+          "columns": [
+            "line_id"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_set_menu_line_idx": {
+          "name": "bill_discounts_set_menu_line_idx",
+          "columns": [
+            "set_menu_line_id"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_set_menu_idx": {
+          "name": "bill_discounts_set_menu_idx",
+          "columns": [
+            "set_menu_id"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_shared_from_idx": {
+          "name": "bill_discounts_shared_from_idx",
+          "columns": [
+            "shared_from"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_requested_by_idx": {
+          "name": "bill_discounts_requested_by_idx",
+          "columns": [
+            "requested_by"
+          ],
+          "isUnique": false
+        },
+        "bill_discounts_approved_by_idx": {
+          "name": "bill_discounts_approved_by_idx",
+          "columns": [
+            "approved_by"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "bill_discounts_working_order_fk": {
+          "name": "bill_discounts_working_order_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_line_fk": {
+          "name": "bill_discounts_line_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_set_menu_line_fk": {
+          "name": "bill_discounts_set_menu_line_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "set_menu_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_set_menu_fk": {
+          "name": "bill_discounts_set_menu_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "set_menu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_shared_from_fk": {
+          "name": "bill_discounts_shared_from_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "bill_discounts",
+          "columnsFrom": [
+            "shared_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_requested_by_fk": {
+          "name": "bill_discounts_requested_by_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_discounts_approved_by_fk": {
+          "name": "bill_discounts_approved_by_fk",
+          "tableFrom": "bill_discounts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bill_discounts_action_ck": {
+          "name": "bill_discounts_action_ck",
+          "value": "\"bill_discounts\".\"action\" in ('comp', 'discount_percent', 'discount_amount')"
+        },
+        "bill_discounts_origin_ck": {
+          "name": "bill_discounts_origin_ck",
+          "value": "\"bill_discounts\".\"origin\" in ('given', 'bill_share')"
+        },
+        "bill_discounts_reason_name_ck": {
+          "name": "bill_discounts_reason_name_ck",
+          "value": "length(trim(\"bill_discounts\".\"reason_name\")) > 0"
+        },
+        "bill_discounts_position_ck": {
+          "name": "bill_discounts_position_ck",
+          "value": "typeof(\"bill_discounts\".\"position\") = 'integer' and \"bill_discounts\".\"position\" >= 0"
+        },
+        "bill_discounts_target_ck": {
+          "name": "bill_discounts_target_ck",
+          "value": "(\"bill_discounts\".\"line_id\" is not null and \"bill_discounts\".\"working_order_id\" is null\n          and \"bill_discounts\".\"set_menu_line_id\" is null and \"bill_discounts\".\"set_menu_id\" is null and \"bill_discounts\".\"set_menu_name\" is null)\n        or (\"bill_discounts\".\"line_id\" is null and \"bill_discounts\".\"working_order_id\" is not null\n          and \"bill_discounts\".\"set_menu_line_id\" is null and \"bill_discounts\".\"set_menu_id\" is null and \"bill_discounts\".\"set_menu_name\" is null)\n        or (\"bill_discounts\".\"line_id\" is null and \"bill_discounts\".\"working_order_id\" is not null\n          and \"bill_discounts\".\"set_menu_id\" is not null and \"bill_discounts\".\"set_menu_name\" is not null)"
+        },
+        "bill_discounts_value_ck": {
+          "name": "bill_discounts_value_ck",
+          "value": "(\"bill_discounts\".\"action\" = 'comp' and \"bill_discounts\".\"percent_bp\" is null and \"bill_discounts\".\"amount\" is null)\n        or (\"bill_discounts\".\"action\" = 'discount_percent' and \"bill_discounts\".\"amount\" is null\n          and typeof(\"bill_discounts\".\"percent_bp\") = 'integer' and \"bill_discounts\".\"percent_bp\" between 1 and 10000)\n        or (\"bill_discounts\".\"action\" = 'discount_amount' and \"bill_discounts\".\"percent_bp\" is null\n          and typeof(\"bill_discounts\".\"amount\") = 'integer' and \"bill_discounts\".\"amount\" > 0)"
+        },
+        "bill_discounts_bill_level_ck": {
+          "name": "bill_discounts_bill_level_ck",
+          "value": "\"bill_discounts\".\"line_id\" is not null or \"bill_discounts\".\"set_menu_id\" is not null\n        or \"bill_discounts\".\"action\" in ('discount_percent', 'discount_amount')"
+        },
+        "bill_discounts_shared_from_ck": {
+          "name": "bill_discounts_shared_from_ck",
+          "value": "(\"bill_discounts\".\"origin\" = 'given'\n          and \"bill_discounts\".\"shared_from_bill_name\" is null and \"bill_discounts\".\"shared_from_percent_bp\" is null)\n        or (\"bill_discounts\".\"origin\" = 'bill_share' and \"bill_discounts\".\"shared_from_bill_name\" is not null\n          and (\"bill_discounts\".\"shared_from_percent_bp\" is null\n            or (typeof(\"bill_discounts\".\"shared_from_percent_bp\") = 'integer'\n              and \"bill_discounts\".\"shared_from_percent_bp\" between 1 and 10000)))"
+        },
+        "bill_discounts_share_ck": {
+          "name": "bill_discounts_share_ck",
+          "value": "\"bill_discounts\".\"origin\" = 'given' or (\"bill_discounts\".\"line_id\" is not null and \"bill_discounts\".\"action\" = 'discount_amount')"
         }
       }
     },

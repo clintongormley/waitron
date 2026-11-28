@@ -36,8 +36,13 @@ interface Held {
   list: number | null;
 }
 
+/** As `gatherBillDiscountInputs` keys a line: with the list price a discount would stamp. */
 function fields(spec: Spec) {
-  return { product: spec.product, unitPrecision: spec.unitPrecision ?? 0 };
+  return {
+    product: spec.product,
+    unitPrecision: spec.unitPrecision ?? 0,
+    list: spec.list ?? spec.unit,
+  };
 }
 
 function stored(bill: ReadonlyMap<string, Held>): {
@@ -101,8 +106,8 @@ function invoice(bill: ReadonlyMap<string, Held>): { rows: string[]; total: numb
 
 /**
  * The bill's discounts worked out, and what it files before any and after each: every discount
- * checked to take what the invoice total loses. A bound line's group is what the invoice compares
- * but the prices and the quantity, as `BillDiscountLine` asks of its caller.
+ * checked to take what the invoice total loses. A bound line's group is its {@link fields}, as
+ * `BillDiscountLine` asks of its caller.
  */
 function workedAndFiled(specs: readonly Spec[], discounts: readonly PendingBillDiscount[]) {
   const bill = new Map<string, Held>(
@@ -226,6 +231,44 @@ describe("workOutBillDiscounts against the rows projectPortionSale files", () =>
       // The pair's 10.00 took one cent and the wine, by its larger remainder, the other.
       ["p1 1.000@5.00 = 5.00", "p2 1.000@4.99 = 4.99", "wine 1.000@4.99 = 4.99"],
     ]);
+  });
+
+  it("keeps apart a bound portion whose list price is above its price", () => {
+    const croquettes = (id: string, lineNo: number, ordinal: number, list?: number): Spec => ({
+      id,
+      lineNo,
+      product: "Croquettes",
+      unit: 1000,
+      cohort: { id: "c", ordinal },
+      ...(list === undefined ? {} : { list }),
+    });
+    const sauce = (id: string, lineNo: number, parent: string): Spec => ({
+      id,
+      lineNo,
+      product: "Sauce",
+      unit: 1006,
+      quantity: 125,
+      unitPrecision: 3,
+      parent,
+    });
+    const { result, filed } = workedAndFiled(
+      [
+        croquettes("p1", 1, 1),
+        croquettes("p2", 2, 2, 1000),
+        croquettes("p3", 3, 3, 1200),
+        sauce("s1", 4, "p1"),
+        sauce("s2", 5, "p2"),
+        sauce("s3", 6, "p3"),
+      ],
+      [discount("one", bill, { amount: 1 }, 1)],
+    );
+    expect(filed[0]).toEqual([
+      "p1+p2 2.000@10.00 = 20.00",
+      "s1+s2 0.250@10.06 = 2.52",
+      "p3 1.000@10.00 = 10.00",
+      "s3 0.125@10.06 = 1.26",
+    ]);
+    expect(worked(result.discounts, "one")).toMatchObject({ holds: "yes", takes: 1 });
   });
 
   it("files bound portions' extras by their dishes, whatever their own line numbers", () => {

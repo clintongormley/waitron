@@ -409,6 +409,11 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "which rows each comp or discount that came off gave back; nothing may change or remove it",
   ),
+  classify(
+    "bill_discounts",
+    "state",
+    "comps and discounts given on an open bill, not yet written into its prices",
+  ),
 ];
 
 /**

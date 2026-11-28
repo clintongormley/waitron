@@ -18,6 +18,7 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       ["adjustment_lines", "ledger", true],
       ["adjustment_endings", "ledger", true],
       ["adjustment_ending_lines", "ledger", true],
+      ["bill_discounts", "state", undefined],
     ]);
     expect(ADJUSTMENTS_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(true);
   });
@@ -44,6 +45,7 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       { table: "adjustment_lines", type: "adjustment_lines" },
       { table: "adjustment_endings", type: "adjustment_endings" },
       { table: "adjustment_ending_lines", type: "adjustment_ending_lines" },
+      { table: "bill_discounts", type: "bill_discounts" },
     ]);
   });
 });

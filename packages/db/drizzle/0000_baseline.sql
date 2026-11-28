@@ -2471,6 +2471,69 @@ CREATE TABLE `adjustment_endings` (
 --> statement-breakpoint
 CREATE INDEX `adjustment_endings_adjustment_idx` ON `adjustment_endings` (`adjustment_id`,`working_order_id`);--> statement-breakpoint
 CREATE INDEX `adjustment_endings_working_order_idx` ON `adjustment_endings` (`working_order_id`);--> statement-breakpoint
+CREATE TABLE `bill_discounts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`working_order_id` text,
+	`line_id` text,
+	`set_menu_line_id` text,
+	`set_menu_id` text,
+	`set_menu_name` text,
+	`action` text NOT NULL,
+	`percent_bp` integer,
+	`amount` integer,
+	`origin` text NOT NULL,
+	`shared_from` text,
+	`shared_from_bill_name` text,
+	`shared_from_percent_bp` integer,
+	`given_together` text NOT NULL,
+	`position` integer NOT NULL,
+	`reason_id` text NOT NULL,
+	`reason_name` text NOT NULL,
+	`policy_snapshot` text NOT NULL,
+	`requested_by` text NOT NULL,
+	`approved_by` text,
+	`note` text,
+	`given_at` text NOT NULL,
+	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`set_menu_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`shared_from`) REFERENCES `bill_discounts`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`approved_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "bill_discounts_action_ck" CHECK("bill_discounts"."action" in ('comp', 'discount_percent', 'discount_amount')),
+	CONSTRAINT "bill_discounts_origin_ck" CHECK("bill_discounts"."origin" in ('given', 'bill_share')),
+	CONSTRAINT "bill_discounts_reason_name_ck" CHECK(length(trim("bill_discounts"."reason_name")) > 0),
+	CONSTRAINT "bill_discounts_position_ck" CHECK(typeof("bill_discounts"."position") = 'integer' and "bill_discounts"."position" >= 0),
+	CONSTRAINT "bill_discounts_target_ck" CHECK(("bill_discounts"."line_id" is not null and "bill_discounts"."working_order_id" is null
+          and "bill_discounts"."set_menu_line_id" is null and "bill_discounts"."set_menu_id" is null and "bill_discounts"."set_menu_name" is null)
+        or ("bill_discounts"."line_id" is null and "bill_discounts"."working_order_id" is not null
+          and "bill_discounts"."set_menu_line_id" is null and "bill_discounts"."set_menu_id" is null and "bill_discounts"."set_menu_name" is null)
+        or ("bill_discounts"."line_id" is null and "bill_discounts"."working_order_id" is not null
+          and "bill_discounts"."set_menu_id" is not null and "bill_discounts"."set_menu_name" is not null)),
+	CONSTRAINT "bill_discounts_value_ck" CHECK(("bill_discounts"."action" = 'comp' and "bill_discounts"."percent_bp" is null and "bill_discounts"."amount" is null)
+        or ("bill_discounts"."action" = 'discount_percent' and "bill_discounts"."amount" is null
+          and typeof("bill_discounts"."percent_bp") = 'integer' and "bill_discounts"."percent_bp" between 1 and 10000)
+        or ("bill_discounts"."action" = 'discount_amount' and "bill_discounts"."percent_bp" is null
+          and typeof("bill_discounts"."amount") = 'integer' and "bill_discounts"."amount" > 0)),
+	CONSTRAINT "bill_discounts_bill_level_ck" CHECK("bill_discounts"."line_id" is not null or "bill_discounts"."set_menu_id" is not null
+        or "bill_discounts"."action" in ('discount_percent', 'discount_amount')),
+	CONSTRAINT "bill_discounts_shared_from_ck" CHECK(("bill_discounts"."origin" = 'given'
+          and "bill_discounts"."shared_from_bill_name" is null and "bill_discounts"."shared_from_percent_bp" is null)
+        or ("bill_discounts"."origin" = 'bill_share' and "bill_discounts"."shared_from_bill_name" is not null
+          and ("bill_discounts"."shared_from_percent_bp" is null
+            or (typeof("bill_discounts"."shared_from_percent_bp") = 'integer'
+              and "bill_discounts"."shared_from_percent_bp" between 1 and 10000)))),
+	CONSTRAINT "bill_discounts_share_ck" CHECK("bill_discounts"."origin" = 'given' or ("bill_discounts"."line_id" is not null and "bill_discounts"."action" = 'discount_amount'))
+);
+--> statement-breakpoint
+CREATE INDEX `bill_discounts_working_order_idx` ON `bill_discounts` (`working_order_id`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_line_idx` ON `bill_discounts` (`line_id`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_set_menu_line_idx` ON `bill_discounts` (`set_menu_line_id`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_set_menu_idx` ON `bill_discounts` (`set_menu_id`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_shared_from_idx` ON `bill_discounts` (`shared_from`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_requested_by_idx` ON `bill_discounts` (`requested_by`);--> statement-breakpoint
+CREATE INDEX `bill_discounts_approved_by_idx` ON `bill_discounts` (`approved_by`);--> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -4167,3 +4230,13 @@ WHEN new.id IS NOT old.id OR new.node_id IS NOT old.node_id OR new.code IS NOT o
   OR new.purpose IS NOT old.purpose
   OR (old.retired_at IS NOT NULL AND new.retired_at IS NOT old.retired_at)
 BEGIN SELECT RAISE(ABORT, 'invoice_series: only retired_at may be set, once'); END;
+--> statement-breakpoint
+CREATE TRIGGER working_orders_abandoned_clears_bill_discounts
+AFTER UPDATE OF status ON working_orders
+FOR EACH ROW
+WHEN new.status = 'abandoned' AND old.status IS NOT 'abandoned'
+BEGIN
+  DELETE FROM bill_discounts
+  WHERE working_order_id = new.id
+     OR line_id IN (SELECT id FROM working_order_lines WHERE working_order_id = new.id);
+END;

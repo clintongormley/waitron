@@ -1111,7 +1111,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `master_keys`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles` and `product_takeaway_vat_rates`, and `node.db`'s `box`, `node_pair_link`, `node_take_failures`, `node_handover_operations`,
+`venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `master_keys`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles`, `product_takeaway_vat_rates` and `bill_discounts`, and `node.db`'s `box`, `node_pair_link`, `node_take_failures`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
@@ -1129,6 +1129,10 @@ correction; `reserveTenderRefund` calls it. `bill_advances` is written only in
 `packages/menu/src/takeaway-vat-rates.ts` and by the configuration import's table-by-table copy in
 `packages/provisioning/src/configuration-transfer.ts`, which builds the table's name at run time
 and so is outside the guard (plan D16 of `docs/superpowers/plans/2026-11-22-vat-rates-a.md`).
+`bill_discounts` is written only in `packages/adjustments/src/pending-discounts.ts`; outside the
+guard, the trigger `working_orders_abandoned_clears_bill_discounts` (`packages/db/triggers/core.sql`)
+deletes an abandoned bill's rows, and its foreign keys delete a deleted line's rows and empty
+`set_menu_line_id` and `shared_from`.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`

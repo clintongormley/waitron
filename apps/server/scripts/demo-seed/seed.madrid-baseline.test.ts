@@ -462,6 +462,7 @@ const ADDED_TABLES = [
   "adjustment_lines",
   "adjustment_endings",
   "adjustment_ending_lines",
+  "bill_discounts",
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",

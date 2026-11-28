@@ -138,6 +138,7 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
   "working_order_lines_cohort_fixed",
+  "working_orders_abandoned_clears_bill_discounts",
   "working_orders_dining_fixed",
   "working_orders_enforce_transition",
   "working_orders_invoice_type_insert",
