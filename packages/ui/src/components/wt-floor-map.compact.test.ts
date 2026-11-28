@@ -127,26 +127,98 @@ it("uses the compact job when the whole action would take more than two lines", 
   expect(target.getAttribute("aria-label")).toBe(`T12, ${job.text}, 9 min, Free`);
 });
 
-it("keeps the wait visible when the compact job label itself needs clipping", async () => {
+it("shows a whole short job with its wait or leaves the narrow table in its job colour", async () => {
   await page.viewport(390, 700);
   const { map } = await compactMap(260, 340, [
     {
       ...table("T1", 5, 7),
-      cue: { icon: "floor-timer", text: "Overdue" },
-      job: { text: "Running late", time: "11 min", compact: "Overdue", compactTime: "11′" },
+      fill: "danger",
+      cue: { icon: "floor-timer", text: "Forgotten" },
+      job: {
+        text: "Chase the downstairs kitchen",
+        time: "11 min",
+        compact: "Chase",
+        compactTime: "11′",
+      },
     },
-    table("T2", 25, 7),
+    {
+      ...table("T2", 11, 7, 4, 2),
+      cue: { icon: "floor-ready", text: "2" },
+      job: { text: "Collect from Bar", time: "9 min", compact: "Bar", compactTime: "9′" },
+    },
+    table("T3", 25, 7),
+  ]);
+  const narrow = button(map, "T1");
+  expect(narrow.querySelector('[part="cue"]')).toBeNull();
+  expect(narrow.getAttribute("aria-label")).toContain("Chase the downstairs kitchen, 11 min");
+  expect(narrow.querySelector('[part="shape"]')?.getAttribute("data-fill")).toBe("danger");
+
+  const cue = button(map, "T2").querySelector<HTMLElement>('[part="cue"]')!;
+  expect(cue.textContent?.trim()).toBe("Bar 9′");
+  expect(cue.scrollWidth).toBeLessThanOrEqual(cue.clientWidth);
+  expect(getComputedStyle(cue).fontWeight).toBe("600");
+});
+
+it("leaves the delivery icon on a table too small for the whole delivery label", async () => {
+  await page.viewport(390, 700);
+  const delivery = { icon: "floor-step", text: "2 to deliver", keepTextWhole: true } as const;
+  const { map } = await compactMap(260, 340, [
+    { ...table("T1", 5, 7), cue: delivery },
+    { ...table("T2", 11, 7, 6, 2), cue: delivery },
+    table("T3", 25, 7),
+  ]);
+  const narrow = button(map, "T1");
+  const wide = button(map, "T2");
+  expect(narrow.querySelector("wt-icon")?.getAttribute("name")).toBe("floor-step");
+  expect(narrow.querySelector('[part="cue"]')?.textContent?.trim()).toBe("");
+  expect(narrow.getAttribute("aria-label")).toContain("2 to deliver");
+  expect(wide.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2 to deliver");
+});
+
+it("can leave coloured fills without a field line while preserving free and clearing outlines", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(340, 280, [
+    { ...table("Occupied", 3, 7), fill: "calm" },
+    table("Free", 7, 7),
+    { ...table("Clear", 11, 7), fill: "calm", outline: "clearing" },
+  ]);
+  map.style.setProperty("--wt-floor-map-filled-line", "transparent");
+  map.style.setProperty("--wt-color-field-line", "rgb(7, 8, 9)");
+  const shape = (id: string) => getComputedStyle(button(map, id).querySelector('[part="shape"]')!);
+  expect(shape("Occupied").borderTopColor).toBe("rgba(0, 0, 0, 0)");
+  expect(shape("Free").borderTopColor).toBe("rgb(7, 8, 9)");
+  expect(shape("Clear").borderTopStyle).toBe("dashed");
+});
+
+it("leaves an inset beside a full job and wraps whole words", async () => {
+  await page.viewport(390, 700);
+  const { map } = await compactMap(250, 210, [
+    {
+      ...table("T1", 2, 2, 9, 8),
+      label: "Riverside 1234",
+      shortName: "R12",
+      cue: { icon: "floor-ready", text: "2" },
+      job: {
+        text: "Collect from the Kitchen",
+        time: "9 min",
+        compact: "Kitchen",
+        compactTime: "9′",
+      },
+    },
   ]);
   const target = button(map, "T1");
-  const cue = target.querySelector<HTMLElement>('[part="cue"]')!;
-  const text = cue.querySelector<HTMLElement>(".cue-text")!;
-  expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
-  const time = cue.querySelector<HTMLElement>(".cue-time");
-  expect(time?.textContent).toBe("11′");
-  expect(time!.getBoundingClientRect().right).toBeLessThanOrEqual(
-    target.getBoundingClientRect().right,
-  );
-  expect(time!.scrollWidth).toBeLessThanOrEqual(time!.clientWidth);
+  expect(target.querySelector('[part="name"]')?.textContent).toBe("R12");
+  const job = target.querySelector('[part="job"]')!;
+  expect(job.textContent).toBe("Collect from the Kitchen");
+  const tile = target.getBoundingClientRect();
+  const label = document.createRange();
+  label.selectNodeContents(job);
+  const lines = [...label.getClientRects()];
+  expect(lines).toHaveLength(2);
+  for (const line of lines) {
+    expect(line.left - tile.left).toBeGreaterThanOrEqual(10);
+    expect(tile.right - line.right).toBeGreaterThanOrEqual(10);
+  }
 });
 
 it("uses the compact wait if the allergy mark leaves too little height for a full job", async () => {
@@ -156,7 +228,7 @@ it("uses the compact wait if the allergy mark leaves too little height for a ful
       ...table("T1", 5, 7, 3),
       allergy: true,
       cue: { icon: "floor-timer", text: "Forgotten" },
-      job: { text: "Chase the Kitchen", time: "17 min", compact: "Kitchen", compactTime: "17′" },
+      job: { text: "Chase the Bar", time: "17 min", compact: "Bar", compactTime: "17′" },
     },
     table("T2", 14, 7, 3),
   ]);
@@ -167,9 +239,9 @@ it("uses the compact wait if the allergy mark leaves too little height for a ful
   const box = target.getBoundingClientRect();
   expect(box.height).toBeGreaterThanOrEqual(68);
   expect(box.height).toBeLessThan(80);
-  const time = target.querySelector<HTMLElement>(".cue-time");
-  expect(time?.textContent).toBe("17′");
-  expect(time!.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+  const cue = target.querySelector<HTMLElement>('[part="cue"]');
+  expect(cue?.textContent?.trim()).toContain("17′");
+  expect(cue!.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
 });
 
 it("fits a landscape floor by its height and leaves room at its edges", async () => {

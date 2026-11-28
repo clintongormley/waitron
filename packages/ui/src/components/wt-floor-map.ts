@@ -304,6 +304,10 @@ export class WtFloorMap extends LitElement {
         pointer-events: auto;
       }
 
+      [part="shape"]:where(:not([data-fill="free"], [data-fill="plain"])) {
+        border-color: var(--wt-floor-map-filled-line, var(--wt-color-field-line));
+      }
+
       [part="shape"][data-outline="clearing"] {
         border: var(--wt-space-1) dashed var(--wt-color-warning);
       }

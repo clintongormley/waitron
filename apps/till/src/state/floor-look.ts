@@ -209,7 +209,7 @@ export function kindCue(
       };
     }
     case "delivery":
-      return { icon: "floor-step", text: kindWords(kind, members, now) };
+      return { icon: "floor-step", text: kindWords(kind, members, now), keepTextWhole: true };
     case "held": {
       const { dueAt } = soonestHeld(members, now);
       const text =
@@ -299,10 +299,10 @@ function mapJob(
         text,
         t(
           kind === "forgotten"
-            ? "floor.forgotten"
+            ? "floor.job_chase_short"
             : kind === "overdue"
-              ? "signal.wait_overdue"
-              : "signal.wait_warm",
+              ? "floor.job_overdue_short"
+              : "floor.job_waiting_short",
         ),
         stamp(dish?.waitingSince),
         now,
@@ -311,7 +311,7 @@ function mapJob(
     case "bill":
       return timedJob(
         t("floor.job_bill"),
-        t("floor.cue_bill"),
+        t("floor.job_bill_short"),
         oldestSignal(members, "bill_requested"),
         now,
       );
@@ -336,7 +336,7 @@ function mapJob(
       return {
         text: t("floor.job_fire"),
         time: t("floor.job_now"),
-        compact: t("floor.cue_fire"),
+        compact: t("floor.job_fire_short"),
         compactTime: t("floor.job_now"),
       };
     case "held": {
@@ -358,9 +358,9 @@ function mapJob(
     case "moving":
       return { text: t("floor.job_move"), compact: t("floor.cue_move") };
     case "unavailable":
-      return { text: t("floor.job_unavailable"), compact: t("floor.cue_out") };
+      return { text: t("floor.job_unavailable"), compact: t("floor.job_unavailable_short") };
     case "not-sent":
-      return { text: t("floor.job_not_sent"), compact: t("floor.unsent_mark") };
+      return { text: t("floor.job_not_sent"), compact: t("floor.job_not_sent") };
     default:
       return null;
   }

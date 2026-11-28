@@ -184,13 +184,22 @@ describe("mapLook", () => {
     });
     expect(mapLook([warm, forgotten], now).job).toMatchObject({
       text: "Chase the Bar",
+      compact: "Chase",
       time: "17 min",
     });
     const noMatchingTime = table({ ...warm, signals: [wait("forgotten")] });
     expect(mapLook([noMatchingTime], now).job).toEqual({
       text: "Chase the kitchen",
-      compact: "Forgotten",
+      compact: "Chase",
     });
+  });
+
+  it.each([
+    ["overdue", "Late"],
+    ["warm", "On its way"],
+  ] as const)("shortens the %s job without reusing the state name", (timingBand, compact) => {
+    const row = table({ timingBand, waitingSince: inMinutes(-11) });
+    expect(mapLook([row], now).job).toMatchObject({ compact, compactTime: "11′" });
   });
 
   it("changes the map cache key at the displayed minute boundary", () => {
@@ -363,7 +372,7 @@ describe("mapLook", () => {
         fill: "seated",
         outline: null,
         pulse: null,
-        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}` },
+        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}`, keepTextWhole: true },
       },
     ],
     [
@@ -734,7 +743,7 @@ describe("mapLook", () => {
     expect(mapKinds(delivery, now)).toEqual(["delivery"]);
     expect(mapLook([delivery], now)).toMatchObject({
       fill: "seated",
-      cue: { icon: "floor-step", text: "2 to deliver" },
+      cue: { icon: "floor-step", text: "2 to deliver", keepTextWhole: true },
       description: "2 to deliver",
     });
   });
@@ -746,7 +755,7 @@ describe("mapLook", () => {
     ];
     const words = `3 ${en["floor.pending_delivery"]}`;
     expect(mapLook(merged, now)).toMatchObject({
-      cue: { icon: "floor-step", text: words },
+      cue: { icon: "floor-step", text: words, keepTextWhole: true },
       description: words,
     });
   });

@@ -31,13 +31,17 @@ export const captionStyles = css`
 
   /* Clear, left and right, of the thickest outline drawn inside the shape: Overdue's. */
   [part="table"]:has(> [part="shape"][data-outline]) > [part="name"],
-  [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"] {
+  [part="table"]:has(> [part="shape"][data-outline]) > [part="caption"]:not([data-job]) {
     max-width: calc(100% - 2 * (var(--wt-space-1) + 1px));
   }
 
   [part="table"]:has(> [part="allergy"]) > [part="caption"] {
     margin-block-start: var(--wt-space-3);
     max-block-size: calc(100% - var(--wt-space-3));
+  }
+
+  [part="caption"][data-job] {
+    max-width: calc(100% - 2 * (var(--wt-space-2) + var(--wt-space-1) / 2));
   }
 
   [part="caption"][data-compact] {
@@ -60,10 +64,6 @@ export const captionStyles = css`
     text-overflow: ellipsis;
   }
 
-  .cue-time {
-    flex: none;
-  }
-
   [part="cue"] wt-icon {
     flex: none;
     color: inherit;
@@ -82,15 +82,18 @@ export const captionStyles = css`
     visibility: hidden;
   }
 
+  [part="cue"].whole-cue,
   [part="job"],
   .job-probe {
+    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
+    font-weight: var(--wt-font-weight-bold);
+  }
+
+  [part="job"] {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     overflow: hidden;
-    overflow-wrap: anywhere;
-    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
-    font-weight: var(--wt-font-weight-bold);
   }
 
   [part="time"] {
@@ -102,10 +105,13 @@ export const captionStyles = css`
 
 export interface CaptionMetrics {
   widthOf: (text: string) => number;
+  jobWidthOf: (text: string) => number;
   fitsJob: (text: string, width: number) => boolean;
   nameSize: number;
   badgeSpace: number;
   inset: number;
+  jobInset: number;
+  cueIconSpace: number;
 }
 
 let measuring: CanvasRenderingContext2D | null = null;
@@ -122,14 +128,19 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
     `${fontWeight} ${fontSize} ${fontFamily}`;
   const nameFont = fontFor(styles);
   const jobFont = fontFor(getComputedStyle(job));
+  const jobWidthOf = (text: string) => {
+    canvas.font = jobFont;
+    return canvas.measureText(text).width;
+  };
+  const inset = Number.parseFloat(styles.getPropertyValue("--wt-space-1")) || 0;
   return {
     widthOf: (text) => {
       canvas.font = nameFont;
       return canvas.measureText(text).width;
     },
+    jobWidthOf,
     fitsJob: (text, width) => {
-      canvas.font = jobFont;
-      if (canvas.measureText(text).width <= width) return true;
+      if (jobWidthOf(text) <= width) return true;
       for (const { index, 0: gap } of text.matchAll(/\s+/g)) {
         if (canvas.measureText(text.slice(0, index)).width > width) return false;
         if (canvas.measureText(text.slice(index + gap.length)).width <= width) return true;
@@ -138,7 +149,9 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
     },
     nameSize: Number.parseFloat(styles.fontSize),
     badgeSpace: Number.parseFloat(styles.getPropertyValue("--wt-space-3")) || 0,
-    inset: Number.parseFloat(styles.getPropertyValue("--wt-space-1")) || 0,
+    inset,
+    jobInset: (Number.parseFloat(styles.getPropertyValue("--wt-space-2")) || 0) + inset / 2,
+    cueIconSpace: (Number.parseFloat(styles.getPropertyValue("--wt-font-size-sm")) || 0) + inset,
   };
 }
 
@@ -167,15 +180,30 @@ export function renderCaption({
 }) {
   const inset = metrics?.inset ?? 0;
   const space = width - (outlined ? 2 * (inset + 1) : 0) - (fill === undefined ? 0 : 2 * inset);
+  const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
+  const jobSpace = width - 2 * ((metrics?.jobInset ?? 0) + (fill === undefined ? 0 : inset));
+  const full =
+    job !== null &&
+    (metrics === undefined ||
+      (captionHeight >= metrics.nameSize * 4 &&
+        metrics.fitsJob(job.text, jobSpace) &&
+        (job.time === undefined || metrics.jobWidthOf(job.time) <= jobSpace)));
+  const compact =
+    job?.compactTime === undefined ? job?.compact : `${job.compact} ${job.compactTime}`;
+  const showCompact =
+    compact !== undefined &&
+    (metrics === undefined ||
+      (captionHeight >= metrics.nameSize * 2.4 && metrics.jobWidthOf(compact) <= jobSpace));
+  const nameSpace = cue !== null && (full || showCompact) ? jobSpace : space;
   const fullWidth = shortLabel === undefined ? 0 : (metrics?.widthOf(label) ?? 0);
   const name =
     shortLabel !== undefined &&
     metrics !== undefined &&
-    fullWidth > space &&
+    fullWidth > nameSpace &&
     metrics.widthOf(shortLabel) < fullWidth
       ? shortLabel
       : label;
-  if (cue === null) {
+  if (cue === null || (job !== null && !full && !showCompact)) {
     const wrap = !allergy && metrics !== undefined && height >= metrics.nameSize * 2.4;
     return {
       name,
@@ -184,24 +212,25 @@ export function renderCaption({
       >`,
     };
   }
-  const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
-  const full =
-    job !== null &&
-    (metrics === undefined ||
-      (captionHeight >= metrics.nameSize * 4 && metrics.fitsJob(job.text, space)));
-  const compact = job?.compact ?? cue.text;
-  const compactTime = job?.compactTime;
+  const showCueText =
+    cue.text !== "" &&
+    (!cue.keepTextWhole ||
+      metrics === undefined ||
+      metrics.jobWidthOf(cue.text) + (cue.icon === null ? 0 : metrics.cueIconSpace) <= space);
   const detail = full
     ? html`<span part="job">${job.text}</span
         >${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}`
-    : html`<span part="cue"
-        >${cue.icon === null || job !== null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${compact === "" ? nothing : html`<span class="cue-text">${compact}</span>`}${compactTime === undefined ? nothing : html` <span class="cue-time">${compactTime}</span>`}</span
-      >`;
+    : job === null
+      ? html`<span part="cue" class=${cue.keepTextWhole ? "whole-cue" : nothing}
+          >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${showCueText ? html`<span class="cue-text">${cue.text}</span>` : nothing}</span
+        >`
+      : html`<span part="cue" class="whole-cue">${compact}</span>`;
   return {
     name,
     content: html`<span
       part="caption"
       data-fill=${fill ?? nothing}
+      ?data-job=${job !== null}
       ?data-compact=${job !== null && !full}
     >
       <span part="name">${name}</span> ${detail}

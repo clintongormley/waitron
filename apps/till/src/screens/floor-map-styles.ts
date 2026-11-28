@@ -9,6 +9,7 @@ export const floorMapStyles = css`
   }
 
   wt-floor-map {
+    --wt-floor-map-filled-line: transparent;
     align-self: center;
     width: min(
       100%,
