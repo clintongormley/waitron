@@ -396,7 +396,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
       aria-label=${heading}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
-      <wt-full-screen-panel rising body-label=${this.#text("enter_pin")}>
+      <wt-full-screen-panel rising body-label=${heading}>
         <div slot="header" class="sheet-header">
           <h2>${heading}</h2>
           <p class="prompt">${prompt}</p>

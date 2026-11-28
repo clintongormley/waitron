@@ -85,9 +85,26 @@ describe("till-supervisor-override-dialog", () => {
     await choose("Administradora");
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     await userEvent.click(page.getByRole("button", { name: "1", exact: true }));
+    await choose("Administradora");
+    expect(pad(el)!.value).toBe("1");
     await choose("Responsable");
     expect(pad(el)!.value).toBe("");
     await expect.element(authorize).toBeDisabled();
+  });
+
+  it("names the scrollable sheet body when nobody can approve", async () => {
+    await pageAt(390, 164);
+    try {
+      await mount({
+        authorizers: [],
+        sheet: { heading: "Refund approval", prompt: "Approval is required." },
+      });
+      await expect
+        .element(page.getByRole("group", { name: "Refund approval" }), { timeout: 2000 })
+        .toBeVisible();
+    } finally {
+      await resetPage();
+    }
   });
 
   it("renders one picker button per authorizer, no PIN pad until one is chosen", async () => {
