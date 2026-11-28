@@ -295,7 +295,7 @@ it("explains a counter move refusal and keeps the zone in its original departmen
   await expect
     .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent)
     .toBe(
-      "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+      "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
     );
   expect(el.model!.zones[0]!.departmentId).toBe("d1");
 });

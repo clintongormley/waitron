@@ -553,7 +553,7 @@ const en = {
   "venue.move_to_department": "Move to department",
   "venue.department_name_taken": "A department with this name already exists.",
   "venue.counter_has_tables":
-    "{zoneName} has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+    "{zoneName} has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
   "venue.zone_name_taken": "A zone with this name already exists.",
   "venue.table_tab": "Table service",
   "venue.ticket_then_pay": "Prepare then pay",
@@ -1514,7 +1514,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.move_to_department": "Mover a departamento",
   "venue.department_name_taken": "Ya existe un departamento con este nombre.",
   "venue.counter_has_tables":
-    "{zoneName} tiene mesas. Mantén el servicio de mesa o retira las mesas en Planos de sala y actualiza el plano de hoy.",
+    "{zoneName} tiene mesas. El servicio en mostrador requiere una zona sin mesas. Elige Servicio de mesa para esta zona o retira sus mesas en Planos de sala y pulsa Actualizar plano en la caja.",
   "venue.zone_name_taken": "Ya existe una zona con este nombre.",
   "venue.table_tab": "Servicio de mesa",
   "venue.ticket_then_pay": "Preparar y después pagar",

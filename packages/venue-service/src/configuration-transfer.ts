@@ -602,7 +602,7 @@ function validateCounterTables(tables: Tables): void {
   );
   // Imports omit on_floor, so a retained dining row cannot supply today's layout.
   if (tables.floor_plan_tables?.some((row) => counterIds.has(row.zone_id)))
-    refuse("floor_plan_tables.zone_id");
+    refuse("floor_plan_tables.counter_zone");
 }
 
 function validateDepartmentDining(tables: Tables): void {

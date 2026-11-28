@@ -8,3 +8,8 @@
 - [ ] **Verify and document.** Watch each new check fail first. Run the named server and venue-service suites, the Madrid comparison, affected dashboard settings tests and focused till Floor/Counter cases. Update both table-service guides, the split table and backlog. Capture the demo seating beside frame `x` and the Counter without seats. Follow the lane’s language, theme, size and visual clearance requirements.
 
 **Resets venues.** Re-seed existing mixed demo installations. Payment at a seated table before sending belongs to N 9e. Budget 180–270 added product and copy lines and 240–450 test lines, including the Madrid comparison, plus guides. Aim for one three-hour slice.
+
+
+### Visual review follow-up · 28 November
+
+Lane P’s first review and the watcher’s 01:22 clearance asked for all three stools to fit on the first map, with a larger label on the till. Move B2 and B3 into a compact group and check the new coordinates against the frozen Madrid data. Keep their size in grid units, the fixed-stool flag and the preparation routing. At narrow till widths keep the whole Transfers button in view. Capture Floor-to-Counter on a fixed till, the bar seating zone chooser and the refusals in settings and setup. An import that assigns saved tables to a counter explains how to correct and re-export the configuration.

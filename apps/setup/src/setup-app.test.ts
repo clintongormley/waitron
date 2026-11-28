@@ -3914,6 +3914,31 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     return bottomOf(await screenHost(el, "live-source"));
   };
 
+  it.each([
+    [
+      "en-GB",
+      "This export assigns tables to a counter. On the original box, choose Table service for that zone or remove its tables in Floor plans. Export the configuration again.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación asigna mesas a un mostrador. En el servidor de origen, elige Servicio de mesa para esa zona o retira sus mesas en Planos de sala. Vuelve a exportar la configuración.",
+    ],
+  ] as const)(
+    "shows how to fix tables assigned to a counter in an export (%s)",
+    async (locale, sentence) => {
+      try {
+        expect(
+          await refusedWith(locale, {
+            code: "setup.request_invalid",
+            params: { field: "floor_plan_tables.counter_zone" },
+          }),
+        ).toBe(sentence);
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
   const PARTS_DIFFER_EN =
     "This export comes from a newer version of Waitron. Update the software on this box then load the export again.";
   const PARTS_DIFFER_ES =

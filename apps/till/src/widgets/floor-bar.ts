@@ -39,7 +39,17 @@ export const floorToastStyles = css`
   }
 `;
 
-export const floorScreenFooterStyles = css`
+export const floorScreenLayoutStyles = css`
+  wt-floor-map {
+    border-radius: var(--wt-radius-md);
+    outline: 1px solid var(--wt-color-border);
+    outline-offset: -1px;
+  }
+  wt-floor-map::part(name) {
+    --wt-floor-table-weight: 700;
+    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
+    font-weight: var(--wt-floor-table-weight);
+  }
   .screen[data-floor-footer] {
     position: relative;
     padding: 0 max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-1)
@@ -63,13 +73,6 @@ export const floorScreenFooterStyles = css`
     aspect-ratio: auto;
     min-block-size: calc(var(--wt-tap-min) * 3);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
-    outline: 1px solid var(--wt-color-border);
-    outline-offset: -1px;
-  }
-  .screen[data-floor-footer] wt-floor-map::part(name) {
-    --wt-floor-table-weight: 700;
-    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
-    font-weight: var(--wt-floor-table-weight);
   }
 `;
 

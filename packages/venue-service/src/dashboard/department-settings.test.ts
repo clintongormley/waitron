@@ -1521,7 +1521,7 @@ it("shows how to fix a department's refusal to switch seated zones to counter se
   await expect.poll(() => el.tab).toBe("service");
   const service = shownPanel(el).querySelector("dashboard-service-settings-fields")!;
   expect(service.errors.orderStart).toBe(
-    "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+    "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
   );
   expect(save(el).disabled).toBe(false);
 });

@@ -1285,6 +1285,7 @@ describe("configuration transfer database path", () => {
     expect(transferred.tables.dining_tables).toEqual([
       expect.objectContaining({ label: "Former table", plan_table_id: null }),
     ]);
+    expect(transferred.tables.dining_tables![0]).not.toHaveProperty("on_floor");
     await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,

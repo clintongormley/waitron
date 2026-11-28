@@ -298,7 +298,7 @@ it.each([
   ["department.not_found", "This value was not accepted. Change it and save again."],
   [
     "zone.counter_has_tables",
-    "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+    "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
   ],
 ])("puts a refused move destination beside its field: %s", async (code, message) => {
   const { el } = await mount(

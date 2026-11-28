@@ -952,7 +952,7 @@ describe("configuration order starts", () => {
       floor_zones: [zone],
       floor_plan_tables: [{ id: "spare", zone_id: zone.id }],
     };
-    expect(() => validate(tables)).toThrowError(refusal("floor_plan_tables.zone_id"));
+    expect(() => validate(tables)).toThrowError(refusal("floor_plan_tables.counter_zone"));
     zone.order_start = "table";
     expect(() => validate(tables)).not.toThrow();
   });

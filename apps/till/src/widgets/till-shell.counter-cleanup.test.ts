@@ -78,6 +78,48 @@ it.each([
   },
 );
 
+it.each([
+  [390, 844, "en-GB"],
+  [700, 390, "es-ES"],
+] as const)(
+  "keeps the entire Transfers button inside the counter bar at %i × %i",
+  async (width, height, locale) => {
+    const before = { width: innerWidth, height: innerHeight, locale: currentLocale() };
+    await page.viewport(width, height);
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
+        activeScreen: "counter",
+        phone: width === 390,
+        operatorName: "Administrator",
+        transferAvailable: true,
+        showFloor: true,
+        showCounter: true,
+        counterZones: [
+          { id: "bar", name: "Downstairs bar" },
+          { id: "deli", name: "Deli" },
+        ],
+        selectedCounterZoneId: "bar",
+      });
+      el.style.setProperty("--wt-page-padding", "24px");
+      el.style.width = "calc(100% - 48px)";
+      const strip = el.shadowRoot!.querySelector<HTMLElement>(".counter-shortcuts")!;
+      const transfer = strip.querySelector("wt-button")!;
+      await transfer.updateComplete;
+      await vi.waitFor(() => {
+        const button = transfer.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+        const shown = transfer.closest(".till-strip")!.getBoundingClientRect();
+        expect(button.left).toBeGreaterThanOrEqual(shown.left);
+        expect(button.right).toBeLessThanOrEqual(shown.right + 0.5);
+      });
+    } finally {
+      setLocale(before.locale);
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
 it("A738 Kitchen is only inside Testing when both testing and capability allow it", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
     formFactor: "till",

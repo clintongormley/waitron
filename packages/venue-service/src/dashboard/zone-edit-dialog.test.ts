@@ -186,7 +186,7 @@ it("puts the counter service refusal beside Order start so it can be corrected",
   await expect
     .poll(() => fields.errors.orderStart)
     .toBe(
-      "Terrace has tables. Keep table service, or remove its tables in Floor plans and update today's layout.",
+      "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
     );
   expect(modal.open).toBe(true);
   expect(zoneSave(el).disabled).toBe(false);

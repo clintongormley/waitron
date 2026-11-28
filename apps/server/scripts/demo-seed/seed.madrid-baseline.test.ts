@@ -3196,6 +3196,10 @@ for (const locale of ["en", "es"] as const) {
         });
         beforeOffers.tables.floor_zones!.rows = byName(zones);
         const moved = new Map<unknown, string>();
+        const movedSeats: Record<string, { x: number; y: number }> = {
+          B2: { x: 22, y: 59 },
+          B3: { x: 19, y: 65 },
+        };
         for (const [name, columns] of [
           ["floor_plan_tables", ["zone_id", "label"]],
           ["dining_tables", ["zone_id", "label"]],
@@ -3214,6 +3218,19 @@ for (const locale of ["en", "es"] as const) {
             const newId = `@${name}:${stable(columns.map((column) => update[column]))}`;
             if (id === newId) return [id, row] as const;
             moved.set(id, newId);
+            const label =
+              name === "floor_plan_placements"
+                ? beforeOffers.tables.floor_plan_tables!.rows[String(update.plan_table_id)]?.label
+                : row.label;
+            const seat = movedSeats[String(label)];
+            if (seat !== undefined) {
+              if (name === "dining_tables") {
+                update.today_x = seat.x;
+                update.today_y = seat.y;
+              } else if (name === "floor_plan_placements" || name === "floor_reset_tables") {
+                Object.assign(update, seat);
+              }
+            }
             return [newId, { ...update, id: newId }] as const;
           });
           table.rows = byName(Object.fromEntries(replaced));

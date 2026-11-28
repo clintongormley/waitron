@@ -438,8 +438,8 @@ describe("seedFloor", () => {
     const bar = res.plans.flatMap((p) => p.tables).filter((t) => t.label.startsWith("B"));
     expect(bar.map((t) => t.placement)).toEqual([
       { x: 17, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
-      { x: 53, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
-      { x: 89, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 22, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 19, y: 65, width: 2, height: 2, shape: "round", rotation: 0 },
     ]);
   });
 

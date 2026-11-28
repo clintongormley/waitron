@@ -1,7 +1,7 @@
 import {
   floorOtherZone,
   pendingFloorControls,
-  floorScreenFooterStyles,
+  floorScreenLayoutStyles,
   floorZoneControls,
   zoneTabMarks,
   type ZoneTabMark,
@@ -349,7 +349,7 @@ export class TillFloorScreen extends LitElement {
     servicePeriodStyles,
     edgeFadeStyles,
     floorTrayStyles,
-    floorScreenFooterStyles,
+    floorScreenLayoutStyles,
     firstReadNoticeStyles,
     floorRingStyles,
     signalChipStyles,

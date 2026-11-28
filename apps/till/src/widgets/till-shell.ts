@@ -1644,6 +1644,7 @@ export class TillShell extends LitElement {
                 <header
                   class=${this.phone ? "head phone" : "head"}
                   ?data-narrow-counter=${narrowCounter}
+                  ?data-counter-transfers=${activeScreen === "counter" && this.transferAvailable}
                   ?data-inline-counter=${counterOnPhone && !hasShortcuts}
                 >
                   ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
