@@ -941,6 +941,19 @@ it("exports an overnight dispute on the shift's work date until it is settled", 
     (entry) => entry.entryKind === "out",
   )!;
   expect(await statuses()).toEqual([{ personId, date, status: "pending" }]);
+  const { approval } = await workDay(date);
+  await run((tx) =>
+    api.approveAttendanceDay(tx, {
+      personId,
+      date,
+      digest: approval!.digest,
+      actorPersonId: manager,
+      nodeId,
+      now,
+      origin,
+    }),
+  );
+  expect(await statuses()).toEqual([{ personId, date, status: "approved" }]);
   const proposal = await dayEdit(
     [
       retime(out.entryId, "2026-01-06T03:00:00Z"),
@@ -961,6 +974,32 @@ it("exports an overnight dispute on the shift's work date until it is settled", 
   expect(await statuses({ start: end, end: "2026-01-07" })).toEqual([]);
   await send(await command({ action: "approve", itemId: proposal.commandId }), manager);
   expect(await statuses()).toEqual([{ personId, date, status: "approved" }]);
+});
+
+it("does not label the morning of an overnight dispute as a second disputed day", async () => {
+  await clock("2026-01-05T06:00:00Z");
+  await clockEnd("2026-01-06T02:00:00Z");
+  const out = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "out",
+  )!;
+  const proposal = await command({
+    action: "propose",
+    personId,
+    reason: "Stayed until three",
+    changes: [retime(out.entryId, "2026-01-06T03:00:00Z")],
+  });
+  const { entryIds } = await send(proposal, manager);
+  await send(await command({ action: "disagree", itemId: entryIds[0]!, reason: "Left at two" }));
+  const statuses = (start: string, end: string) =>
+    run(
+      async (tx) =>
+        (await api.readTimeRecordWithDayStatuses(tx, { personId, period: { start, end } }, null))
+          .dayStatuses,
+    );
+  expect(await statuses("2026-01-05", "2026-01-06")).toEqual([
+    { personId, date: "2026-01-05", status: "disputed" },
+  ]);
+  expect(await statuses("2026-01-06", "2026-01-07")).toEqual([]);
 });
 
 it.each([false, true])(

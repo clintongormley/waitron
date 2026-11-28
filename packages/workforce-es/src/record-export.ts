@@ -259,7 +259,7 @@ export function formatTimeRecordExport(
   input: RecordExportInput,
   people: ReadonlyMap<string, string>,
   venueName: string,
-  dayStatuses: readonly RecordDayStatus[] = [],
+  dayStatuses: readonly RecordDayStatus[],
 ): RecordExportDocument {
   const language = input.locale === "es" ? 1 : 0;
   const name = (id: string) =>

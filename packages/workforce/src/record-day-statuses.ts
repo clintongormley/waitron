@@ -38,7 +38,7 @@ export async function readRecordDayStatuses(
     ),
   ];
   if (disputedPeople.length > 0) {
-    // A proposal can contain times outside the export period, with one settlement for the group.
+    // A dispute can refer to a shift that started before the entries read for this export.
     const history = groupByPerson(await readRecordedEntriesForPeople(tx, disputedPeople));
     const commands = groupByPerson(
       await tx

@@ -582,6 +582,7 @@ it("selects only declared scalar keys even when live and frozen objects gain dat
     input({ audience: "representatives" }),
     new Map([[worker, "María Worker"]]),
     "Deli",
+    [],
   );
   const text = JSON.stringify(exported);
   for (const value of ["EXTRA-EMAIL-CANARY", "EXTRA-ID-CANARY", "EXTRA-PHONE-CANARY"])
@@ -609,6 +610,7 @@ it("retains unknown actor references instead of dropping their decisions", async
     input({ locale: "es" }),
     new Map([[worker, "María Worker"]]),
     "Deli",
+    [],
   );
   expect(cells(exported, "history").find((r) => r.authorPersonId === manager)).toMatchObject({
     authorName: "Persona desconocida",

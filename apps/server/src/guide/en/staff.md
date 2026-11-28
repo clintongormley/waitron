@@ -254,6 +254,9 @@ Check the recorded times under **Finished days**, then choose **Approve all**. I
 while you review it, check the refreshed times before approving again. Open **Hours** to see changes
 that are waiting for a worker’s reply.
 
+To check the status of each day in an export, look for **Day approval** in the PDF or the
+**day-approvals** rows in Excel.
+
 ## Close monthly hours {#monthly-hours-close}
 
 Open **Hours** in the dashboard. Use **Previous** and **Next** beside the month to move between
