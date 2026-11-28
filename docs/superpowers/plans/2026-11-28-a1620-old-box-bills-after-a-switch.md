@@ -1,7 +1,8 @@
 # A1620 — after a switch, the old box's bills can be closed as paid later and are tidied at end of day
 
 Status: PLAN FOR APPROVAL (lane B, 2026-11-28). Fiscal: the owner lands it. Read against main
-f462a47c6e. One pull request, `feat/a1620-old-box-bills`, about two hours of building.
+f462a47c6e; read once by a fresh reader (no Critical; two Important and three Minor findings, all
+taken in below). One pull request, `feat/a1620-old-box-bills`, about two hours of building.
 
 ## What staff can do when it lands
 
@@ -33,9 +34,17 @@ The owner's words, 27 Nov ~09:52, on the watcher's audit
   `:259`. Receipt: `rg -n 'beforeRestore|before_restore' apps packages -g '*.ts' -g '*.sql'`
   (outside tests and generated migrations, the only other hits are `core.sql`'s update triggers,
   which already let the flag go from 0 to 1 on open and placed bills, as the restore does).
-- A bill's `nodeId` is read, outside tests, only at the five sites above plus `close-of-day.ts:280`
-  (`UNTRUSTED`, the bills whose opening time this box stamps when its own time hold ends). Receipt:
-  `rg -n 'workingOrders\.nodeId|order\.nodeId|bill\.nodeId|working_orders.*node_id' apps packages -g '*.ts' -g '!*.test.ts'`.
+- A bill's `nodeId` is read, outside tests, at the five sites above, at `close-of-day.ts:280`
+  (`UNTRUSTED`, the bills whose opening time this box stamps when its own time hold ends), and by
+  three report queries through the alias `wo.node_id`: `packages/reporting/src/closed-bills.ts:26`
+  and `cash-up.ts:103`, `:111`. Those already take every box this one took over from
+  (`readHistoryNodes`, `packages/db/src/history-nodes.ts:11-30`, both handover kinds), so they are
+  unchanged. Receipt: `rg -n 'workingOrders\.nodeId|order\.nodeId|bill\.nodeId|node_id' apps packages -g '*.ts' -g '!*.test.ts'`,
+  read for bills.
+- An old box returning its records (`packages/fiscal-verifactu/src/handover-return.ts:516-531`)
+  copies its bills in under its own id with `before_restore` 0. Those are only bills holding a card
+  payment whose refund is pending, which already have an issued sale, and the close skips any bill
+  with a sale (`close-of-day.ts:267`), so dropping the node check does not reach them.
 - The only writer of a takeover record is the activation transaction,
   `apps/server/src/handover-activation.ts:151-165` (`insertHandoverActivationTx`), which knows the
   operation's `scenario`, `"emergency"` or `"controlled"`. It runs once: on a repeat the
@@ -57,7 +66,9 @@ The owner's words, 27 Nov ~09:52, on the watcher's audit
    `insertHandoverActivationTx` when `operation.scenario === "emergency"`.
 3. **End of day takes every box's bills.** Drop the node condition at `close-of-day.ts:182` and
    `:257`; `readCloseableBill` loses its `nodeId` argument, and `closeOfDayEnd`'s `scope` parameter
-   goes if nothing else uses it (callers in `sale-day.ts` only).
+   goes if nothing else uses it (callers in `sale-day.ts` only). The comments at `:159-160` and
+   `:207-215` that say "opened by this node" go with it. The close still runs only on the main box,
+   unfenced (`close-of-day.ts:340-345`).
 
 ## Decisions for the watcher
 
@@ -78,13 +89,17 @@ The owner's words, 27 Nov ~09:52, on the watcher's audit
 ## Tests (failing first)
 
 - `deferred-close.test.ts`: a bill another box opened closes as paid later and its invoice is on this
-  box's series; a bill another box issued closes, its sale's `fiscal_state` and the record count are
+  box's series; a bill another box issued (the sale seeded under the other box, not updated
+  after insert) closes, its sale's `fiscal_state` and the record count are
   unchanged, and its settlement is `deferred`. Deletion control: restore either check, the case
   fails with `other_node`.
 - `handover-activation.test.ts`: an emergency activation marks the copy's open and placed bills
   `before_restore` and leaves a settled bill alone; a controlled one marks none.
 - `close-of-day.test.ts`: a due bill another box opened is issued; one marked `before_restore`
   after an emergency switch is still left (`not_due`).
+- `close-of-day-job.test.ts`: the job's own scan (`dueBills`) issues another box's due bill and
+  leaves one marked `before_restore` (the `close-of-day.test.ts` cases call `issueBillAtClose`
+  directly and would pass with the scan's filter kept).
 - `close-of-day.later-sale-date.test.ts`: a due bill another box opened, paid after its day ended,
   is dated by that day's end.
 - `close-of-day-restore.test.ts` and the restore suites pass unchanged (the move in step 2 keeps the
