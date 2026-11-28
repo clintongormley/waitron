@@ -808,7 +808,8 @@ describe("workOutBillDiscounts: bound portions", () => {
 
   it("reports what an amount took off its line's price where the filed rows take less", () => {
     // At 1.00 the second dish files with the first, and their sauces as one row of 2.51 where
-    // apart they were 1.25 each: the invoice loses nothing, though the dish's price lost 0.01.
+    // apart they were 1.25 each: the invoice loses nothing, though spreading it would take 0.01
+    // off the dish's price: no line moves.
     const lines = [
       boundDish("d1", 1, 100, 0),
       boundDish("d2", 2, 101, 1),

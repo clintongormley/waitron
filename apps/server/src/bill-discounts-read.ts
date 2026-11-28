@@ -135,11 +135,13 @@ export async function gatherBillDiscountInputs(
  * `bill`'s discounts worked out once, as the shown total, the check before payment and the
  * invoice all read them. A fixed amount holds only if its rows, those sharing its
  * `given_together` (one till row, and the parts a split left it on), together take what they
- * were given; otherwise every row of it is `cut_down`. Each share takes only what its own part's
+ * were given, off the prices they are spread over or off the invoice; otherwise every row of it
+ * is `cut_down`. Each share takes only what its own part's
  * whole-cent prices allow (plan D10), and a split copies no share of nothing, so a split can
  * leave a weighed line taking less than it took whole. An amount is not `cut_down` when its
- * lines' own prices lose all of it and only the invoice's filed rows take less (bound portions
- * filed together again), nor when the filed rows take all of it. What each takes is `workOutBillDiscounts`'
+ * shares would take all of it off the prices they are spread over and only the invoice's filed
+ * rows take less (then, if the invoice would lose nothing, no line changes), nor when the filed
+ * rows take all of it. What each takes is `workOutBillDiscounts`'
  * figure, unchanged.
  */
 export function workOutHeldBill(bill: HeldBill): WorkedBill {

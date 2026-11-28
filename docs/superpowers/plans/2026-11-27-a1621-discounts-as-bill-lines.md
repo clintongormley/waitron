@@ -115,7 +115,7 @@ dish was cancelled. Moving dishes, paying for some items alone, splitting a tabl
 takes the right share of a whole-bill discount with the dishes. Changing the extras of a discounted
 dish asks nothing; changing a discounted dish's variant asks only when the discount is an amount
 ("keep the 2.00 off, or remove it?"). Just before the invoice, if a discount no longer applies (its
-set menu broke up, or an amount can no longer be taken in full), the till says so and offers
+set menu broke up, or an amount its prices can no longer take in full), the till says so and offers
 **Remove it** or **Give a different discount**. Receipts, invoices, refunds and reports look as they
 do today.
 
@@ -226,9 +226,10 @@ Recommendations, each with why. None changes what the owner decided, except wher
   (`adjustments-apply.ts:1029-1105`, `:1185-1227` (†)), so the records keep today's shape and the
   amount charged is the amount shown. A record's reduction is what the invoice takes off, and its
   before and after are what its lines cost around the write; where measured extras file as one row,
-  the receipt, which prints against its own rows, can show a cent less off than the record (seen
-  only with inserted rows; whether ordering can reach it is not checked). The `asked` check reads the same working-out, and the bill's
-  pending rows are deleted before any price changes, after that check. The record's `created_at`
+  the receipt, which prints against its own rows, can show a cent more or less off than the
+  record (seen only with inserted rows; whether ordering can reach it is not checked). The
+  `asked` check reads the same working-out, and the bill's pending rows are deleted before any
+  price changes, after that check. The record's `created_at`
   is the moment of the invoice; the people, reason and note are the pending row's. Rows sharing
   `given_together` are one discount and one record (rows of one group worked out with another
   discount between them get one record per run). A discount that takes nothing is recorded with
@@ -261,9 +262,10 @@ Recommendations, each with why. None changes what the owner decided, except wher
   (`set_menu_gone` or `cut_down`), what it was given on (dish, extra or set-menu name, or the bill),
   its action, percentage or amount. A condition of its own (spec 6.6 kind 2) is left out: none exists
   (owner Q3). `cut_down` also marks a fixed amount whose rows (one, or those sharing
-  `given_together`) together take less than they were given, both off their lines' own prices and
-  off the invoice, as on a weighed line a split left in parts. Bound portions the invoice files
-  together again, so that it takes less than the prices lost, are no reason to ask. Such a
+  `given_together`) together take less than they were given, both off the prices it was spread over
+  and off the invoice, as on a weighed line a split left in parts. Where bound portions would file
+  together again so that the invoice takes less than those prices would lose, or nothing (and then
+  no price changes), it is not asked about. Such a
   discount is listed once, under its first row's id, with its rows' amounts added up
   (the builder, answering the run-it review, 2026-11-28).
 - **D8. A share of a whole-bill discount arriving on an existing bill** (owner Q4: "calculate the
@@ -1224,9 +1226,9 @@ The overpaid refusal carries the bill and the excess only (`refuseExcess`, `bill
    discount: the same refusals (reason, note, percentage range, amount at most the bill's shown
    total, `adjustment.exceeds_amount`), limits with standing figures that add pending discounts'
    working-out to today's records, the pending row written, the revision bumped,
-   `discount.given` recorded. It refuses a fixed amount its target cannot take in full at
-   whole-cent prices (2b would mark it `cut_down` from the start, asked at every Pay), so only a
-   later split can leave a held amount short; 7b–7d's targets keep that refusal.
+   `discount.given` recorded. It refuses a fixed amount that, worked out on the bill with it
+   added (`workOutHeldBill`), would be `cut_down` (2b would otherwise ask about it at every Pay);
+   7b–7d's targets keep that refusal.
    `planAdjustment`/`applyAdjustment` hand a whole-bill discount to it.
    The apply takes `replacesDiscountId` (D22): the old discount is deleted in the same transaction.
    With `replacesDiscountId` it also accepts a placed bill with no sale (D23, point 2); without it, a

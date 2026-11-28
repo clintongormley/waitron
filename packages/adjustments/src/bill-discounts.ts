@@ -302,8 +302,9 @@ export interface BillDiscountRow {
  * to zero (the server's `workOutHeldBill` also marks a fixed amount whose rows together take less
  * than they were given, by `spreadTakes` and by `takes`); `set_menu_gone`: its set-menu row is gone, so it takes nothing.
  * `spreadTakes`, on a fixed amount whose `takes` the filed rows made differ from it: what its
- * shares took off the prices they were spread over (the filed rows' for a whole-bill amount, its
- * lines' otherwise).
+ * shares take off the prices they are spread over (the filed rows' for a whole-bill amount, its
+ * lines' otherwise), whether or not they are written; where the invoice would lose nothing or
+ * rise, no line moves.
  */
 export interface WorkedBillDiscount {
   id: string;
