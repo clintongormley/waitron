@@ -258,6 +258,18 @@ export async function pageButton(el: TillApp, selector: string) {
   await vi.waitFor(() => expect(surface()).not.toBeNull());
   await userEvent.click(surface()!.shadowRoot!.querySelector<HTMLElement>(selector)!);
 }
+export function clockOutSheet(el: HTMLElement) {
+  return el.shadowRoot!.querySelector("till-clock-out-sheet");
+}
+
+export async function clockOutButton(el: HTMLElement, selector: string): Promise<HTMLElement> {
+  return vi.waitFor(() => {
+    const button = clockOutSheet(el)?.shadowRoot?.querySelector<HTMLElement>(selector);
+    expect(button).toBeTruthy();
+    return button!;
+  });
+}
+
 export async function shellAction(el: TillApp, selector: string) {
   const shell = el.shadowRoot!.querySelector("till-shell")!;
   const button = shell.shadowRoot!.querySelector<HTMLElement>(selector)!;

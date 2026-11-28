@@ -34,7 +34,6 @@ export const floorClockStyles = css`
   }
 
   .floor-clock-actions {
-    --wt-button-justify: center;
     --wt-action-text-align: center;
     --wt-action-border: initial;
     --wt-action-border-color: initial;
@@ -50,6 +49,7 @@ export const floorClockStyles = css`
   }
 
   .floor-clock-actions wt-button::part(button) {
+    justify-content: center;
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
   }
 

@@ -11,6 +11,8 @@ import { ServerRouter } from "./api/server-router.js";
 import type { MyShift, TillClockState } from "./api/attendance-api.js";
 import {
   clockApp,
+  clockOutButton,
+  clockOutSheet,
   clockPage,
   clockState,
   deferred,
@@ -25,18 +27,6 @@ afterEach(() => {
   localStorage.clear();
   setLocale(originalLocale);
 });
-
-function clockOutSheet(el: HTMLElement) {
-  return el.shadowRoot!.querySelector("till-clock-out-sheet");
-}
-
-async function clockOutButton(el: HTMLElement, selector: string): Promise<HTMLElement> {
-  return vi.waitFor(() => {
-    const button = clockOutSheet(el)?.shadowRoot?.querySelector<HTMLElement>(selector);
-    expect(button).toBeTruthy();
-    return button!;
-  });
-}
 
 describe("till clocking integration", () => {
   it.each(["clock-in", "attendance-questions"] as const)(
