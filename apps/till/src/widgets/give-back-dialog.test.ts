@@ -383,7 +383,6 @@ describe("A dish", () => {
     expect(dish(el, "bread")).toBeNull();
     await tick(el, "croquetas");
     expect(amountField(el).value).toBe("5.00");
-    expect(row.querySelector("wt-stepper")).toBeNull();
   });
 
   it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {

@@ -41,3 +41,9 @@ and stepper land. Use today's receipt entry while Lane O's replacement is in fli
 
 **Size:** about 180 production lines and 130 test lines. The receipt, request, filing, and
 refund writes stay as built. The approval, destination and result layouts are later slices.
+
+**28 November, 11:59 (watcher clearance after the owner's picture review).** Remove the
+unlock hint. When an earlier correction reduced a dish row, show its remaining balance and
+the amount already refunded. Leave fully refunded dishes out of the picker and keep the
+cancellation display. The next pull request lets staff combine a partial row with other dishes
+and passes the chosen amount for each row through to the correction.
