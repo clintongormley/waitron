@@ -172,6 +172,25 @@ it.each(["zone.name_taken", "management.request_invalid", "server.internal"])(
     await expect.poll(() => calls).toBe(2);
   },
 );
+it("puts the counter service refusal beside Order start so it can be corrected", async () => {
+  const { el, modal } = await mountZoneEditor((async (_path, method = "GET") => {
+    if (method === "GET") return { tables: [] };
+    throw {
+      code: "zone.counter_has_tables",
+      params: { field: "orderStart", zoneName: "Terrace" },
+    };
+  }) as import("@waitron/dashboard-kit").DashboardRequest);
+  await editZoneName(el, "Garden");
+  zoneSave(el).click();
+  const fields = await zoneFields(el);
+  await expect
+    .poll(() => fields.errors.orderStart)
+    .toBe(
+      "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
+    );
+  expect(modal.open).toBe(true);
+  expect(zoneSave(el).disabled).toBe(false);
+});
 it("an explicit value equal to the department remains explicit and choosing inheritance submits null", async () => {
   const { el, writes } = await mountZoneEditor();
   el.zoneId = "z3";

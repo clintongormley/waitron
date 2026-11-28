@@ -110,6 +110,11 @@ export async function seedFloor(
     zoneIds.set(zone.key, zoneId);
   }
 
+  const barSeating = await createServiceZone(tx, {
+    departmentId: defaultPolicy.department_id,
+    name: plain(floor.barSeatingZone),
+    displayOrder: 5,
+  });
   const upstairsBarZone = await createServiceZone(tx, {
     departmentId: defaultPolicy.department_id,
     name: plain(floor.upstairsBarZone),
@@ -237,7 +242,12 @@ export async function seedFloor(
       throw new Error(`seedFloor: no zone seeded for key "${table.zoneKey}"`);
     }
   }
-  for (const zoneId of [...zoneIds.values(), upstairsBarZone.id, deliCounterZone.id]) {
+  for (const zoneId of [
+    ...zoneIds.values(),
+    barSeating.id,
+    upstairsBarZone.id,
+    deliCounterZone.id,
+  ]) {
     const [existing] = await tx
       .select({ label: diningTables.label })
       .from(diningTables)
@@ -259,7 +269,10 @@ export async function seedFloor(
     );
   }
   for (const [zoneKey, zoneId] of zoneIds) {
-    const layout = { setId: setOf.get(defaultPolicy.department_id)!, zoneId };
+    const layout = {
+      setId: setOf.get(defaultPolicy.department_id)!,
+      zoneId: zoneKey === "bar" ? barSeating.id : zoneId,
+    };
     const tables = floor.tables.filter((table) => table.zoneKey === zoneKey);
     if (tables.length === 0) continue;
     await saveLayout(tx, [], layout, {

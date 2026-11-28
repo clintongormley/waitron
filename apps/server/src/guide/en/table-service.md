@@ -932,6 +932,13 @@ The bar lists only the tables in the zones this device shows, and it goes away o
 till instead shows a **Ready** list above the tables, one line for each station. The list counts
 ready food at tables in every zone the till's profile allows, not only the zones it shows.
 
+## Set up bar seating and pickup {#bar-seating}
+
+If you serve guests seated at a bar and also hand over pickup orders there, make two zones in
+**Departments and zones**. Choose **Table service** for the seats and **Counter service** for
+pickup. Draw the seats in **Floor plans**. On the till, choose the seating zone from **Floor**
+when you serve seated guests, and the pickup zone from **Counter** when you hand over orders.
+
 ## Show a zone as a map or a list {#floor-view}
 
 Tap **List** or **Map** to change the view. On a narrow floor, find the button at the bottom. The device keeps your choice for each zone, so the zone opens the same way

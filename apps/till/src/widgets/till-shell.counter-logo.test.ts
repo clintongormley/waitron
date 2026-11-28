@@ -354,6 +354,21 @@ describe("the cash register's bar measures its room again", () => {
     });
   });
 
+  it("leaves the logo out when Counter, Transfers and the session cannot share a landscape row", async () => {
+    await atViewport(740, 390, async () => {
+      const el = await mountWithLogo(BUSY, WIDE);
+      await widthTo(el, 510);
+      await expect.poll(() => shown(el)).toBe(false);
+      const transfer = head(el).querySelector("[data-open-transfers]")!.getBoundingClientRect();
+      expect(transfer.right).toBeLessThanOrEqual(strip(el).getBoundingClientRect().right + 0.5);
+      el.affordances = [];
+      el.counterZones = [];
+      el.operatorName = "Ana";
+      await widthTo(el, 730);
+      await expect.poll(() => shown(el)).toBe(true);
+    });
+  });
+
   it("a transfer count growing past the room takes the logo out", async () => {
     await atViewport(1280, 800, async () => {
       const { wStar } = await edge(BUSY);

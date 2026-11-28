@@ -44,7 +44,7 @@ const noFloor: FloorDeletion = {
 it("deleted zones leave active zone reads while their department is retained", async () => {
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx);
-    const department = await createDepartment(tx, { name: "Dining" });
+    const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
     await tx
       .update(departments)
       .set({ needsClearing: true })

@@ -1,3 +1,4 @@
+import { effectiveOrderStart } from "./zone-order-start.js";
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
   floorPlanSets,
@@ -102,13 +103,15 @@ export async function dueFloorLayouts(
   at: Date,
   prepared?: PreparedServiceDay,
 ): Promise<ReadonlyMap<string, ZoneFloorLayout>> {
-  const placed =
+  const zoneRows =
     zones.length === 0
       ? []
       : await tx
           .select({
             zoneId: floorZones.id,
             departmentId: floorZones.departmentId,
+            zoneOrderStart: floorZones.orderStart,
+            departmentOrderStart: departments.orderStart,
           })
           .from(floorZones)
           .innerJoin(departments, eq(departments.id, floorZones.departmentId))
@@ -122,6 +125,9 @@ export async function dueFloorLayouts(
               ),
             ),
           );
+  const placed = zoneRows.filter(
+    (row) => effectiveOrderStart(row.zoneOrderStart, row.departmentOrderStart) === "table",
+  );
   const departmentOf = new Map(placed.map((row) => [row.zoneId, row.departmentId]));
   const departmentIds = [...new Set(placed.map((row) => row.departmentId))];
   const recordedSetIds = [

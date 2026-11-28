@@ -83,7 +83,7 @@ async function provisionVenue(): Promise<TradingContext> {
 }
 
 /** A department with one zone and one set. */
-async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
+async function setAndZone(orderStart?: "counter"): Promise<{ setId: string; zoneId: string }> {
   return withTransaction(suite.db, async (tx) => {
     const dept = await createDepartment(tx, {
       name: `Dept-${randomUUID().slice(0, 6)}`,
@@ -92,6 +92,7 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
     const zone = await createServiceZone(tx, {
       name: `Inside-${randomUUID().slice(0, 6)}`,
       departmentId: dept.id,
+      orderStart,
     });
 
     const set = { id: await addFloorPlanSet(tx, { departmentId: dept.id, name: "Dinner" }) };
@@ -167,6 +168,22 @@ describe("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", () =
       revision: 1,
       tables: [{ id: ids.a, label, placement: PLACE }],
     });
+  });
+
+  it("refuses to read or save a counter zone's layout", async () => {
+    const at = await setAndZone("counter");
+    const get = await layout(at, { method: "GET" }, managerCookie);
+    const put = await layout(
+      at,
+      { method: "PUT", body: JSON.stringify({ revision: 0, tables: [] }) },
+      managerCookie,
+    );
+    for (const response of [get, put]) {
+      expect({ status: response.status, body: await response.json() }).toEqual({
+        status: 400,
+        body: { error: { code: "floor_plan_set.invalid", params: { field: "zoneId" } } },
+      });
+    }
   });
 
   it("refuses a set id that is not a UUID as an unknown set", async () => {

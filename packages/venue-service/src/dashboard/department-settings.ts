@@ -38,6 +38,7 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import { counterZoneRefusal } from "./refusal.js";
 import {
   stepsEqual,
   toStepDrafts,
@@ -892,6 +893,12 @@ export class DepartmentSettings extends LitElement {
     ];
     if (code === "management.request_invalid" && fields.includes(params?.field as Field))
       field = params!.field as Field;
+    const counter = counterZoneRefusal(error, "orderStart");
+    if (counter !== undefined) {
+      if (this.draft?.orderStart !== submitted.orderStart) return;
+      field = "orderStart";
+      message = counter;
+    }
     if (code === "department.name_taken") {
       if (this.draft?.name.trim() !== submitted.name.trim()) return;
       field = "name";

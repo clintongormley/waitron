@@ -4,7 +4,7 @@ import type { FloorPlanSetSummary, PreparedServiceDay } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
 
-/** The zones that have a plan on the till: those whose department has a set. */
+/** The table zones whose department has a set. */
 export function plannedZones(sets: readonly FloorPlanSetSummary[]): Set<string> {
   return new Set(sets.flatMap((set) => set.zoneIds));
 }
@@ -19,11 +19,11 @@ export interface ZoneLayoutState {
   zoneId: string;
   /** Null when today's record is missing or from an earlier business day. */
   recorded: LayoutRecord | null;
-  /** Whether the zone's department has a set. */
+  /** Whether this table zone's department has a set. */
   planned: boolean;
   /** The recorded set's name; null with no record, or when that set is gone. */
   recordedSetName: string | null;
-  /** Null when the zone's department has no set (or it is in none). */
+  /** Null without a due set for this table zone. */
   due: {
     setId: string;
     setName: string;

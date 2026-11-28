@@ -97,8 +97,7 @@ const zones: Partial<TillShell> = {
   selectedCounterZoneId: "z1",
 };
 
-/** What `.till-strip` is left with the long name and the "?" on the bar (the plan's M2). */
-const TILL_STRIP_WIDTH: Record<number, number> = { 320: 8, 360: 48, 390: 78 };
+const COUNTER_STRIP_WIDTH: Record<number, number> = { 320: 296, 360: 336, 390: 366 };
 
 const widths = [320, 360, 390] as const;
 const locales = ["en-GB", "es-ES"] as const;
@@ -170,10 +169,8 @@ describe("till-shell's language chooser in More, beside the Help switch", () => 
         const box = strip.getBoundingClientRect();
         const last = strip.lastElementChild!.getBoundingClientRect();
         expect(last.right).toBeLessThanOrEqual(box.right + 0.5);
-        // Known limit, not a target: the strip is only this wide with a long name (plan decision 3;
-        // its backlog entry asks the owner whether the name should give room). A change that narrows
-        // it further fails here; a fix for decision 3 updates these numbers on purpose.
-        expect(Math.abs(strip.clientWidth - TILL_STRIP_WIDTH[width]!)).toBeLessThanOrEqual(2);
+        // The session can wrap to give Counter and Transfers the full inner width.
+        expect(Math.abs(strip.clientWidth - COUNTER_STRIP_WIDTH[width]!)).toBeLessThanOrEqual(2);
       },
     );
   });

@@ -42,6 +42,21 @@ export const counterHeaderStyles = css`
     flex-wrap: wrap;
   }
 
+  @media (max-width: 740px) {
+    .head[data-counter-transfers] {
+      flex-wrap: wrap;
+    }
+
+    .head[data-counter-transfers] .till-strip {
+      flex: 1 0 max-content;
+      max-inline-size: 100%;
+    }
+
+    .head[data-counter-transfers] .session {
+      margin-inline-start: auto;
+    }
+  }
+
   .counter-shortcuts.edge-fade {
     --fade-width: var(--wt-space-4);
     scroll-padding-inline: var(--fade-start) var(--fade-end);

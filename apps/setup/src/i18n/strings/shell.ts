@@ -193,6 +193,8 @@ export const shellEn = {
     "This export comes from a newer version of Waitron. Update the software on this box then load the export again.",
   "shell.configuration.passphrase_invalid":
     "This passphrase does not open the export. Check it and try again.",
+  "shell.configuration.counter_tables":
+    "This export assigns tables to a counter. On the original box, set each zone with tables to Table service, then export the configuration again.",
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
   "shell.configuration.unreadable":
@@ -410,6 +412,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.",
   "shell.configuration.passphrase_invalid":
     "Esta frase de contraseña no abre la exportación. Revísala e inténtalo de nuevo.",
+  "shell.configuration.counter_tables":
+    "Esta exportación asigna mesas a un mostrador. En el servidor de origen, elige Servicio de mesa para cada zona con mesas y vuelve a exportar la configuración.",
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
   "shell.configuration.unreadable":

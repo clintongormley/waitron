@@ -775,6 +775,13 @@ describe("seedDemoRestaurant", () => {
     ]);
     expect(read.serviceZones).toEqual([
       {
+        zone_name: "Bar seating",
+        department_name: "Restaurant and bar",
+        order_start: "table",
+        is_counter_default: false,
+        menus: ["Casa Delgado", "Drinks", "Lunch menus"],
+      },
+      {
         zone_name: "Deli counter",
         department_name: "Deli",
         order_start: "counter",

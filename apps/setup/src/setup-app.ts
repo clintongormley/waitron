@@ -707,6 +707,8 @@ function describeConfigurationRefusal(error: unknown): Message {
   if (code === "recovery.passphrase_invalid") return say("shell.configuration.passphrase_invalid");
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
   if (code === "setup.configuration_unreadable") return say("shell.configuration.unreadable");
+  if (code === "setup.request_invalid" && params?.field === "floor_plan_tables.counter_zone")
+    return say("shell.configuration.counter_tables");
   if (code === "setup.configuration_newer" || code === "setup.configuration_parts_differ") {
     return say("shell.configuration.newer");
   }

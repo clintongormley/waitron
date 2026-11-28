@@ -154,6 +154,6 @@ export const DEMO_TABLES = [
     rotation: 90,
   },
   { label: "B1", zoneKey: "bar", capacity: 2, posX: 150, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B2", zoneKey: "bar", capacity: 2, posX: 450, posY: 750, shape: "rect", rotation: 0 },
-  { label: "B3", zoneKey: "bar", capacity: 2, posX: 750, posY: 750, shape: "rect", rotation: 0 },
+  { label: "B2", zoneKey: "bar", capacity: 2, posX: 192, posY: 750, shape: "rect", rotation: 0 },
+  { label: "B3", zoneKey: "bar", capacity: 2, posX: 167, posY: 825, shape: "rect", rotation: 0 },
 ] as const satisfies readonly CountryDemoRawTable[];

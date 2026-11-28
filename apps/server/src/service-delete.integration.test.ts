@@ -34,7 +34,6 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   createDepartment,
   createServiceZone,
-  configureZone,
   departments,
   addFloorPlanSet,
   menuPeriods,
@@ -53,6 +52,7 @@ import {
   commandFor,
   counterOrder,
   pricedInZone,
+  orderForParty,
   join,
   seat,
   setupPartyVenue,
@@ -980,21 +980,29 @@ it.each(["zone", "department"] as const)(
     const earlier = await run(completeSnapshot);
     await expect(remove()).rejects.toMatchObject({ code: "zone.table_in_use" });
     expect(await run(completeSnapshot)).toEqual(earlier);
+    const tableOffer = await pricedInZone(venue, f.zoneId, "Water", "2.00");
+    await orderForParty(
+      { ...venue, item: () => tableOffer },
+      seated.partyId,
+      ["Water"],
+      seated.tabId,
+    );
+    await cashContribution(venue, seated.tabId, "2.00");
     const finishCommand = await commandFor(venue, seated.partyId);
     await run((tx) => finishTable(tx, { partyId: seated.partyId, ...finishCommand }));
-    await run((tx) =>
-      configureZone(tx, {
-        zoneId: f.zoneId,
+    const pickup = await run((tx) =>
+      createServiceZone(tx, {
+        name: `Pickup ${randomUUID()}`,
         departmentId: f.departmentId,
         orderStart: "counter",
       }),
     );
-    const targetItem = await pricedInZone(venue, f.zoneId, "Water", "2.00");
+    const targetItem = await pricedInZone(venue, pickup.id, "Water", "2.00");
     const targetOrder = async () => {
       const id = randomUUID();
       await parkOrder({ db: venue.db }, venue.cfg, {
         id,
-        zoneId: f.zoneId,
+        zoneId: pickup.id,
         lines: [{ menuItemId: targetItem, quantity: "1" }],
         operatorId: venue.operator.personId,
       });
@@ -1096,6 +1104,7 @@ it.each(["zone", "department"] as const)(
       return createServiceZone(tx, {
         name: `Replacement ${randomUUID()}`,
         departmentId: counterPolicy!.departmentId,
+        orderStart: "table",
       });
     });
     const replacementSave = () =>
@@ -1121,9 +1130,13 @@ it.each(["zone", "department"] as const)(
     await cashContribution(venue, unaffected, "2.00");
     const history = await run(retainedHistory);
     const rows = (name: string) => history[name] as Record<string, unknown>[];
-    for (const orderId of [delivery, contributed]) {
+    for (const [orderId, zoneId] of [
+      [seated.tabId, f.zoneId],
+      [delivery, pickup.id],
+      [contributed, pickup.id],
+    ]) {
       expect(rows("orderContexts").find((row) => row.working_order_id === orderId)).toMatchObject({
-        zone_id: f.zoneId,
+        zone_id: zoneId,
         department_id: f.departmentId,
       });
       const sale = rows("sales").find((row) => row.working_order_id === orderId)!;

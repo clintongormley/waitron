@@ -176,8 +176,9 @@ describe("seedFloor", () => {
     });
 
     expect(policies.departments).toHaveLength(2);
-    expect(policies.zones).toHaveLength(5);
+    expect(policies.zones).toHaveLength(6);
     expect(policies.zones.map((zone) => zone.effective.paidWhen)).toEqual([
+      "prepay",
       "prepay",
       "prepay",
       "prepay",
@@ -295,6 +296,7 @@ describe("seedFloor", () => {
       "Downstairs bar",
       "Upstairs bar",
       "Deli counter",
+      "Bar seating",
     ]);
     expect(res.zones.every((z) => z.active === 1)).toBe(true);
 
@@ -306,6 +308,41 @@ describe("seedFloor", () => {
       expect(table.y).not.toBeNull();
       expect(table.shape).not.toBeNull();
     }
+  });
+
+  it("keeps pickup and seated service separate at the downstairs bar", async () => {
+    await provisionVenue();
+    const rows = await withTransaction(suite.db, async (tx) => {
+      await seedFloor(tx, {
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+      return tx.all(sql`
+        select z.name, z.is_counter_default, coalesce(z.order_start, dep.order_start) as order_start,
+          d.label, d.on_floor
+        from floor_zones z join departments dep on dep.id = z.department_id
+        left join dining_tables d on d.zone_id = z.id
+        where z.name in ('Downstairs bar', 'Bar seating')
+        order by z.is_counter_default desc, d.label
+      `);
+    });
+    expect(rows).toEqual([
+      {
+        name: "Downstairs bar",
+        is_counter_default: 1,
+        order_start: "counter",
+        label: null,
+        on_floor: null,
+      },
+      ...["B1", "B2", "B3"].map((label) => ({
+        name: "Bar seating",
+        is_counter_default: 0,
+        order_start: "table",
+        label,
+        on_floor: 1,
+      })),
+    ]);
   });
 
   it("gives every zone with tables a default set layout and today's plan, every table placed and none overlapping", async () => {
@@ -401,8 +438,8 @@ describe("seedFloor", () => {
     const bar = res.plans.flatMap((p) => p.tables).filter((t) => t.label.startsWith("B"));
     expect(bar.map((t) => t.placement)).toEqual([
       { x: 17, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
-      { x: 53, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
-      { x: 89, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 22, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+      { x: 19, y: 65, width: 2, height: 2, shape: "round", rotation: 0 },
     ]);
   });
 

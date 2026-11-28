@@ -15,6 +15,7 @@ import {
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
+import { counterZoneRefusal } from "./refusal.js";
 import { periodsPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
@@ -129,9 +130,10 @@ export class DepartmentsList extends LitElement {
     } catch (error) {
       if (this.isConnected && this.generation === generation)
         this.moveFailure =
-          (error as { code?: string } | undefined)?.code === "zone.profile_in_use"
+          counterZoneRefusal(error, "departmentId") ??
+          ((error as { code?: string } | undefined)?.code === "zone.profile_in_use"
             ? t("venue.move_zone_profile_in_use")
-            : t("venue.save_error");
+            : t("venue.save_error"));
     } finally {
       if (this.generation === generation) {
         const moving = new Set(this.moving);

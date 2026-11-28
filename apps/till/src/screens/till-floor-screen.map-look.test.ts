@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
 import type { FloorMapTable, WtFloorMap } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
@@ -115,6 +115,24 @@ const lookOf = ({ fill, outline, pulse, cue, description }: FloorMapTable) => ({
 afterEach(cleanupWidgets);
 
 describe("till-floor-screen: the map's look", () => {
+  it("draws the table name in bold on the fixed till's map", async () => {
+    await pageAt(1180, 820);
+    try {
+      const el = await mount([free("t1", 17), free("t2", 22)]);
+      const map = mapOf(el);
+      await map.updateComplete;
+      await expect
+        .poll(() => {
+          const label = map.shadowRoot!.querySelector('[part="name"]');
+          return label === null
+            ? null
+            : [getComputedStyle(label).fontWeight, getComputedStyle(label).fontSize];
+        })
+        .toEqual(["700", "17px"]);
+    } finally {
+      await resetPage();
+    }
+  });
   it("hands the map each table's look", async () => {
     const el = await mount([
       seated("t1", 0, { timingBand: "forgotten" }),

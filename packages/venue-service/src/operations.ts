@@ -1,3 +1,5 @@
+import { effectiveOrderStart, type OrderStart } from "./zone-order-start.js";
+import { assertNoCounterTables } from "./counter-zone-tables.js";
 import { saveDepartmentCourseSettings, type DepartmentCourseSetting } from "./release-reminders.js";
 import { rangeSpanInDay } from "./service-day.js";
 import { readServiceDayPlan, serviceDayOf } from "./day-resolver.js";
@@ -138,7 +140,9 @@ export async function listServiceZones(
     }) => {
       const paidWhen = zonePaidWhen ?? departmentPaidWhen ?? "prepay";
       const serviceMode: ServiceMode =
-        (zoneOrderStart ?? departmentOrderStart ?? "counter") === "table" ? "table_tab" : paidWhen;
+        effectiveOrderStart(zoneOrderStart, departmentOrderStart) === "table"
+          ? "table_tab"
+          : paidWhen;
       return {
         ...row,
         ...(options.withActiveFlag ? { active } : {}),
@@ -170,8 +174,6 @@ async function requireDepartmentName(tx: Transaction, name: string, ownId?: stri
   if (other === undefined) return;
   throw new AppError("department.name_taken", { name });
 }
-
-type OrderStart = "table" | "counter";
 
 export async function createDepartment(
   tx: Transaction,
@@ -254,6 +256,8 @@ export async function updateDepartment(
           : { estimatedMarginBp: input.estimatedMarginBp }),
       })
       .where(eq(departments.id, departmentId));
+  if (input.orderStart === "counter")
+    await assertNoCounterTables(tx, eq(floorZones.departmentId, departmentId), "orderStart");
 }
 
 export type VenueReadinessIssue =
@@ -404,6 +408,12 @@ export async function configureZone(
       ...(input.orderStart === undefined ? {} : { orderStart: input.orderStart }),
     })
     .where(and(eq(floorZones.id, input.zoneId), eq(floorZones.active, true)));
+  if (zone.departmentId !== input.departmentId || input.orderStart !== undefined)
+    await assertNoCounterTables(
+      tx,
+      eq(floorZones.id, input.zoneId),
+      input.orderStart === undefined ? "departmentId" : "orderStart",
+    );
   // A zone cell may name only its department's periods.
   await tx
     .delete(routingCellPeriods)
@@ -498,7 +508,7 @@ export async function resolveZoneContext(
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     serviceMode:
-      (row.zoneOrderStart ?? row.departmentOrderStart ?? "counter") === "table"
+      effectiveOrderStart(row.zoneOrderStart, row.departmentOrderStart) === "table"
         ? "table_tab"
         : (row.zonePaidWhen ?? row.departmentPaidWhen ?? "prepay"),
   };
@@ -548,7 +558,7 @@ export async function resolveSalePolicy(
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     tradingName: row.tradingName,
-    orderStart: row.zoneOrderStart ?? row.departmentOrderStart,
+    orderStart: effectiveOrderStart(row.zoneOrderStart, row.departmentOrderStart),
     paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
     collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
     printTradingName: row.printTradingName,
@@ -631,7 +641,7 @@ export async function listSalePolicies(tx: Transaction) {
       return {
         ...raw,
         effective: {
-          orderStart: raw.orderStart ?? inherited?.orderStart ?? "counter",
+          orderStart: effectiveOrderStart(raw.orderStart, inherited?.orderStart),
           paidWhen: raw.paidWhen ?? inherited?.paidWhen ?? "prepay",
           collectionNumber: raw.collectionNumber ?? inherited?.collectionNumber ?? "none",
           printTradingName: inherited?.printTradingName ?? false,
@@ -647,11 +657,9 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
   field: K,
   value: DepartmentPolicyField[K],
 ): Promise<void> {
-  const [department] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
-  if (department === undefined) throw new AppError("department.not_found", { departmentId });
+  if (field === "orderStart")
+    return updateDepartment(tx, departmentId, { orderStart: value as OrderStart });
+  await assertDepartment(tx, departmentId);
   await tx
     .update(departments)
     .set({ [field]: value })
@@ -671,6 +679,8 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     .update(floorZones)
     .set({ [field]: value })
     .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
+  if (field === "orderStart" && value !== "table")
+    await assertNoCounterTables(tx, eq(floorZones.id, zoneId), "orderStart");
 }
 
 export interface DepartmentEditInput
@@ -695,6 +705,7 @@ export async function saveDepartmentEditSettings(
   await updateDepartment(tx, departmentId, {
     name: input.name,
     tradingName: input.tradingName,
+    orderStart: input.orderStart,
     ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
     ...(input.lateSendNeedsManager === undefined
       ? {}
@@ -704,7 +715,6 @@ export async function saveDepartmentEditSettings(
       : { estimatedMarginBp: input.estimatedMarginBp }),
   });
   const settings = {
-    orderStart: input.orderStart,
     paidWhen: input.paidWhen,
     collectionNumber: input.collectionNumber,
     ...(input.dining === undefined ? {} : { dining: input.dining }),

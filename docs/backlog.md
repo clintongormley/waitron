@@ -589,6 +589,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   On the narrow floor the zone chooser opens Counter by zone name on tills that already run
   Counter, and opens the device's kitchen boards. At phone width, Floor stays visible on Counter.
   Counter opens to the selected counter’s ready, sent and parked orders beside **New order**.
+  Demo bar seats have their own table zone and the dashboard offers floor plans for table zones.
   **Kitchen-entry counts** still need board
   data for dishes to send out and dishes cooking. The kitchen boards need
   station titles, upright-phone controls and the shared Back treatment.

@@ -989,6 +989,14 @@ cuando no queda nada listo. Una caja muestra en cambio una lista **Listo** encim
 una línea por cada estación. La lista cuenta la comida lista de las mesas de todas las zonas que
 permite su perfil, no solo de las que enseña.
 
+## Configurar las mesas del bar y la recogida {#bar-seating}
+
+Si atiendes a clientes sentados en el bar y también entregas pedidos para recoger, crea dos
+zonas en **Departamentos y zonas**. Elige **Servicio de mesa** para las mesas y **Servicio en
+mostrador** para la recogida. Dibuja las mesas en **Planos de sala**. En la caja, elige la zona
+de mesas en **Sala** cuando atiendas a clientes sentados y la zona de recogida en
+**Mostrador** cuando entregues pedidos.
+
 ## Ver una zona como mapa o lista {#floor-view}
 
 Toca **Lista** o **Mapa** para cambiar la vista. En una pantalla estrecha, el botón está abajo. El dispositivo guarda tu elección para cada zona, así

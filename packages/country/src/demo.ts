@@ -152,6 +152,7 @@ interface CountryDemoDataFields<L extends string = string> {
       readonly restaurant: DemoPlainText<L>;
       readonly deli: DemoPlainText<L>;
     };
+    readonly barSeatingZone: DemoPlainText<L>;
     readonly upstairsBarZone: DemoPlainText<L>;
     readonly deliCounterZone: DemoPlainText<L>;
   };

@@ -39,6 +39,12 @@ export class TillCounterFloor extends LitElement {
         letter-spacing: var(--wt-letter-spacing-caps);
         text-transform: uppercase;
       }
+      .no-orders {
+        margin: 0;
+        padding: 0 var(--wt-space-3) var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .new-order {
         padding: var(--wt-space-3);
       }
@@ -56,6 +62,7 @@ export class TillCounterFloor extends LitElement {
   @property({ type: String }) zoneId = "";
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
   @property({ attribute: false }) parked: HeldOrderSummary[] = [];
+  @property({ type: Boolean }) ordersAnswered = false;
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
@@ -131,6 +138,11 @@ export class TillCounterFloor extends LitElement {
           >${t("counter.floor_new")}</wt-button
         >
       </div>
+      ${
+        this.ordersAnswered && ready.length === 0 && openCount === 0
+          ? html`<p class="no-orders">${t("counter.floor_empty")}</p>`
+          : nothing
+      }
       ${
         openCount === 0
           ? nothing

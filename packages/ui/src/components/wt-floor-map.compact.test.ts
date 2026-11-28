@@ -76,6 +76,25 @@ it("fits a landscape floor by its height and leaves room at its edges", async ()
   expect(hint(map)).toBeNull();
 });
 
+it("keeps a small floor at seating size on a large portrait screen", async () => {
+  await page.viewport(820, 1180);
+  const { map } = await compactMap(796, 1039, [
+    table("B1", 17, 59),
+    table("B2", 22, 59),
+    table("B3", 19, 65),
+  ]);
+  const area = plan(map).getBoundingClientRect();
+  for (const label of ["B1", "B2", "B3"]) {
+    const stool = button(map, label).getBoundingClientRect();
+    expect(stool.width).toBe(96);
+    expect(stool.left).toBeGreaterThan(area.left);
+    expect(stool.right).toBeLessThan(area.right);
+    expect(stool.top).toBeGreaterThan(area.top);
+    expect(stool.bottom).toBeLessThan(area.bottom);
+  }
+  expect(hint(map)).toBeNull();
+});
+
 it("leaves an inset on both sides of a floor fitted to a portrait screen", async () => {
   await page.viewport(390, 700);
   const { map } = await compactMap(340, 500, [table("Near", 5, 7), table("Far", 11, 11)]);

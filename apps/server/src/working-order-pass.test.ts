@@ -12,7 +12,6 @@ import {
   cardOf,
 } from "./testing/pass-board-probe.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
-import { offerProducts } from "./testing/zone-offers.js";
 import {
   setupVenue,
   db,
@@ -177,7 +176,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
       const coffeeProduct = await makeProduct(tx, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, label, zone_id, created_at)
-        values (${randomUUID()}, 'Terrace 8', ${(await offerProducts(tx)).zoneId}, ${nowIso()})
+        values (${randomUUID()}, 'Terrace 8', ${(await tableOffers(tx)).zoneId}, ${nowIso()})
         returning id`);
       await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, rows[0]!.id));
       const { id } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);

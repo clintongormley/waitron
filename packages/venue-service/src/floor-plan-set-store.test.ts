@@ -89,7 +89,7 @@ describe("a department's floor plan sets", () => {
     });
   });
 
-  it("lists a set with its department's zones", async () => {
+  it("lists a set with its department's table zones", async () => {
     await withTransaction(suite.db, async (tx) => {
       const { restaurant, bar } = await venue(tx);
       const terrace = await createServiceZone(tx, {
@@ -103,6 +103,13 @@ describe("a department's floor plan sets", () => {
         displayOrder: 1,
       });
       await createServiceZone(tx, { name: "Counter", departmentId: bar, displayOrder: 0 });
+
+      await createServiceZone(tx, {
+        name: "Pickup",
+        departmentId: restaurant,
+        orderStart: "counter",
+        displayOrder: 3,
+      });
 
       const set = await addFloorPlanSet(tx, { departmentId: restaurant, name: "Standard" });
       const [summary] = await readFloorPlanSets(tx, { setIds: [set] });

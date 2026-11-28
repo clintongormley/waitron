@@ -16,6 +16,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import {
@@ -67,6 +68,7 @@ it("exports neither today's keep-open nor station closure, and imports both as o
       sql`update floor_zones set kept_open_day='2026-11-12', kept_open_from='22:00:00', kept_open_until='23:30:00'`,
     );
     const [zone] = await tx.select({ id: floorZones.id }).from(floorZones);
+    await setZoneSalePolicyOverride(tx, zone!.id, "orderStart", "table");
     const [master] = await tx
       .insert(floorPlanTables)
       .values({ zoneId: zone!.id, label: "Saved table", shortName: "S1" })

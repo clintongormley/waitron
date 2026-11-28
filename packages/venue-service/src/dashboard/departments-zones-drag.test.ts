@@ -281,6 +281,24 @@ it("a pending move disables only conflicting grips and a refusal preserves assig
   expect(el.model!.zones[0]!.departmentId).toBe("d1");
   expect(writes).toHaveLength(1);
 });
+it("explains a counter move refusal and keeps the zone in its original department", async () => {
+  const { el, table, grip } = await setup(async () => {
+    throw {
+      code: "zone.counter_has_tables",
+      params: { field: "departmentId", zoneName: "Terrace" },
+    };
+  });
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", point(target));
+  pointer(document, "pointerup", point(target));
+  await expect
+    .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent)
+    .toBe(
+      "Terrace has tables. Counter service needs a zone without tables. Set this zone to Table service, or remove its tables in Floor plans and choose Update layout on the till.",
+    );
+  expect(el.model!.zones[0]!.departmentId).toBe("d1");
+});
 it("a lifted target makes room and the released full row slides into its slot", async () => {
   const { table, grip } = await setup();
   const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;

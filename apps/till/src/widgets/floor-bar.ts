@@ -1,4 +1,4 @@
-import { css, html, nothing, type TemplateResult } from "lit";
+import { css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TillClockState } from "../api/attendance-api.js";
 import type { ResolvedKitchenScreen } from "../api/device-session-api.js";
@@ -13,6 +13,7 @@ import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
 
 import { storedAttendanceTime, withHourArticle } from "./attendance-history.js";
+import { PHONE_WIDTH } from "./chooser-styles.js";
 
 import "@waitron/ui/src/components/wt-menu-row.js";
 
@@ -39,7 +40,23 @@ export const floorToastStyles = css`
   }
 `;
 
-export const floorScreenFooterStyles = css`
+export const floorScreenLayoutStyles = css`
+  wt-floor-map {
+    border-radius: var(--wt-radius-md);
+    outline: 1px solid var(--wt-color-border);
+    outline-offset: -1px;
+  }
+  wt-floor-map::part(name) {
+    --wt-floor-table-weight: 700;
+    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
+    font-weight: var(--wt-floor-table-weight);
+  }
+  @media not all and ${unsafeCSS(PHONE_WIDTH)} {
+    wt-floor-map::part(name) {
+      text-wrap: wrap;
+      max-block-size: 100%;
+    }
+  }
   .screen[data-floor-footer] {
     position: relative;
     padding: 0 max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-1)
@@ -63,13 +80,6 @@ export const floorScreenFooterStyles = css`
     aspect-ratio: auto;
     min-block-size: calc(var(--wt-tap-min) * 3);
     border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
-    outline: 1px solid var(--wt-color-border);
-    outline-offset: -1px;
-  }
-  .screen[data-floor-footer] wt-floor-map::part(name) {
-    --wt-floor-table-weight: 700;
-    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
-    font-weight: var(--wt-floor-table-weight);
   }
 `;
 
