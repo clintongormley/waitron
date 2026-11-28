@@ -109,6 +109,10 @@ export interface MoveBillResult {
 /** Issues a bill whose set menus the move regrouped, if that left it fully paid. */
 export type IssueMovedBill = (billId: string) => Promise<TillSaleResult | null>;
 
+interface BillFromDishSplit {
+  kitchenBefore: SentWork | null;
+}
+
 /** Where the bill goes: the counter, a free table, or a table another party holds. */
 type Destination =
   | { kind: "counter"; zoneId: string | null }
@@ -164,7 +168,7 @@ export async function moveBill(
   options: MoveBillOptions,
   attendance?: OrderAttendance,
   issue?: IssueMovedBill,
-  kitchenBefore?: SentWork | null,
+  fromDishSplit?: BillFromDishSplit,
 ): Promise<MoveBillResult> {
   if ((options.submissionId === undefined) !== (options.allergy === undefined))
     throw new AppError("management.request_invalid", { field: "allergy" });
@@ -186,11 +190,11 @@ export async function moveBill(
       command.submissionId,
       "bill.move.allergy",
       { billId, to, ...command, zoneConfirmation: undefined },
-      () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue, kitchenBefore),
+      () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue, fromDishSplit),
       cfg.madeHereSink,
     );
   }
-  return moveBillOnce(tx, cfg, billId, to, options, attendance, issue, kitchenBefore);
+  return moveBillOnce(tx, cfg, billId, to, options, attendance, issue, fromDishSplit);
 }
 
 async function moveBillOnce(
@@ -201,7 +205,7 @@ async function moveBillOnce(
   options: MoveBillOptions,
   attendance?: OrderAttendance,
   issue?: IssueMovedBill,
-  kitchenBefore?: SentWork | null,
+  fromDishSplit?: BillFromDishSplit,
 ): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
   if (options.allergy !== undefined && path.partyId !== null)
@@ -246,7 +250,8 @@ async function moveBillOnce(
       destination.kind === "counter" ? "refuse" : "keep",
       { keepWaiting: destination.kind !== "counter" },
     ));
-  const before = kitchenBefore === undefined ? await readSentWork(tx, billId) : kitchenBefore;
+  const before =
+    fromDishSplit === undefined ? await readSentWork(tx, billId) : fromDishSplit.kitchenBefore;
 
   let result: MoveBillResult;
   let held: string[] = [];
@@ -301,7 +306,8 @@ async function moveBillOnce(
       tableId: destination.tableId,
     });
     await seatMergeMembers(tx, partyId, destination.tableId);
-    await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
+    if (fromDishSplit === undefined)
+      await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId, {
@@ -327,7 +333,8 @@ async function moveBillOnce(
     result = { partyId, billId };
   } else {
     const partyId = destination.partyId;
-    await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
+    if (fromDishSplit === undefined)
+      await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, zoneId, {

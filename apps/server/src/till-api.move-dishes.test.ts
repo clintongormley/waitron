@@ -1,5 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { readPartyAllergy, writePartyAllergy } from "@waitron/venue-service";
+import { readPartyAllergy, writeKitchenNote, writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -32,6 +32,7 @@ import { addFixtureExtra } from "./testing/portion-bill.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { readPartyKitchenNote } from "./order-kitchen-note.js";
 import "./errors.js";
 
 // The HTTP surface of Move dishes: the session guard, the body screens, the answer, the status of
@@ -224,6 +225,8 @@ describe("moving dishes to another table", () => {
     const target = await seated("Tarta");
     const [beer, cake] = lineIdsOf(source.tabId);
     const { rice, extra } = await inTx(venue, async (tx) => {
+      await writeKitchenNote(tx, { partyId: source.partyId }, 0, "Bring cake at the end");
+      await writeKitchenNote(tx, { partyId: target.partyId }, 0, "Change the cutlery");
       await placeGroups(tx, venue.cfg, source.partyId, {
         billId: source.tabId,
         operatorId: venue.operatorId,
@@ -278,6 +281,10 @@ describe("moving dishes to another table", () => {
     expect(lineIdsOf(source.tabId)).toEqual([cake]);
     expect(lineIdsOf(target.tabId)).toEqual(targetLines);
     expect(lineIdsOf(moved)).toEqual(expect.arrayContaining([beer, rice, extra]));
+    await inTx(venue, async (tx) => {
+      expect((await readPartyKitchenNote(tx, source.partyId)).note).toBe("Bring cake at the end");
+      expect((await readPartyKitchenNote(tx, target.partyId)).note).toBe("Change the cutlery");
+    });
     expect(
       venue.db.all(sql`
       select wo.party_id, wl.parent_line_id from working_orders wo
@@ -309,9 +316,10 @@ describe("moving dishes to another table", () => {
   it("seats a free table and puts the selected dish on its new bill", async () => {
     const source = await seated("Seafood rice", "Small beer");
     const [rice, beer] = lineIdsOf(source.tabId);
-    const table = await inTx(venue, (tx) =>
-      createTable(tx, { label: "Free table for dishes", zoneId: venue.zoneId }),
-    );
+    const table = await inTx(venue, async (tx) => {
+      await writeKitchenNote(tx, { partyId: source.partyId }, 0, "Bring cake at the end");
+      return createTable(tx, { label: "Free table for dishes", zoneId: venue.zoneId });
+    });
 
     const answer = await post(source.tabId, await toTable(source, [beer!], { tableId: table.id }));
 
@@ -320,6 +328,7 @@ describe("moving dishes to another table", () => {
     const partyId = await inTx(venue, (tx) => holderOf(tx, table.id));
     expect(partyId).not.toBeNull();
     expect(partyId).not.toBe(source.partyId);
+    expect((await inTx(venue, (tx) => readPartyKitchenNote(tx, partyId!))).note).toBeNull();
     expect(venue.db.all(sql`select id from working_orders where party_id = ${partyId}`)).toEqual([
       { id: bill },
     ]);

@@ -282,7 +282,7 @@ async function moveDishesToTable(
     },
     attendance,
     undefined,
-    before,
+    { kitchenBefore: before },
   );
   await refuseTakenOff(tx, [tableId]);
   return { billId };
