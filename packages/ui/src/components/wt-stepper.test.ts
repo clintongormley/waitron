@@ -39,6 +39,35 @@ test("+ and − step the count, show it and emit it as a number", async () => {
   expect(parts(el).count.textContent?.trim()).toBe("1");
 });
 
+test("the portion stepper shows the selected count out of the maximum as it changes", async () => {
+  const el = (await mount(
+    '<wt-stepper variant="portion" label="Burger" value="1" max="3"></wt-stepper>',
+  )) as Stepper;
+  const { count, plus, minus, group } = parts(el);
+  el.style.setProperty("--wt-color-text-muted", "rgb(70, 85, 100)");
+  expect(getComputedStyle(group).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(count).color).toBe("rgb(70, 85, 100)");
+  for (const button of [minus, plus])
+    expect(getComputedStyle(button.querySelector("[data-mark]")!).color).toBe("rgb(70, 85, 100)");
+  expect(count.textContent?.trim()).toBe("1 of 3");
+  expect(group.getBoundingClientRect().height).toBe(36);
+  const target = minus.getBoundingClientRect();
+  expect(target.height).toBeGreaterThanOrEqual(44);
+  expect(target.width).toBeGreaterThanOrEqual(44);
+  const hostBox = el.getBoundingClientRect();
+  expect(target.top).toBeGreaterThanOrEqual(hostBox.top);
+  expect(target.bottom).toBeLessThanOrEqual(hostBox.bottom);
+
+  el.formatCount = (value, max) => `${value} de ${max}`;
+  plus.click();
+  await el.updateComplete;
+  expect(count.textContent?.trim()).toBe("2 de 3");
+
+  el.max = null;
+  await el.updateComplete;
+  expect(count.textContent?.trim()).toBe("2");
+});
+
 test("wt-change bubbles out of a shadow root", async () => {
   const el = await mountInShadowRoot('<wt-stepper label="Burger" value="1"></wt-stepper>');
   const seen: number[] = [];

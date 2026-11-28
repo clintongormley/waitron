@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
-import { giveBackStyles } from "./give-back-styles.js";
+import { giveBackDialogStyles } from "./give-back-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillApi } from "../api/client.js";
@@ -99,7 +99,7 @@ export type { GiveBackAsk, GiveBackFill };
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
-  static override styles = [baseStyles, giveBackStyles, helpAnchorStyles];
+  static override styles = [baseStyles, giveBackDialogStyles, helpAnchorStyles];
   @property({ attribute: false }) api!: GiveBackApi;
   /** Saves each press before sending it. */
   @property({ attribute: false }) session!: GiveBackSession;
@@ -220,7 +220,7 @@ export class TillGiveBackDialog extends LitElement {
     (
       this.shadowRoot!.querySelector<HTMLElement>("[data-send-again]:not([disabled])") ??
       this.shadowRoot!.querySelector<HTMLElement>(
-        ".body :is(wt-choice-row, wt-switch, wt-price-input, wt-button):not([disabled])",
+        ".body :is(wt-choice-row, wt-dish-pick-row, wt-switch, wt-price-input, wt-button):not([disabled])",
       )
     )?.focus();
   }

@@ -49,18 +49,6 @@ export const giveBackStyles = css`
   .unavailable .hint {
     font-size: var(--wt-font-size-sm);
   }
-  .lines {
-    display: grid;
-    justify-items: start;
-    gap: var(--wt-space-2);
-  }
-  .extra-of {
-    padding-inline-start: var(--wt-space-6);
-  }
-  .free {
-    display: flex;
-    flex-direction: column;
-  }
   .option {
     display: flex;
     align-items: center;
@@ -97,5 +85,15 @@ export const giveBackStyles = css`
     display: flex;
     flex-direction: column;
     gap: var(--wt-space-1);
+  }
+`;
+
+export const giveBackDialogStyles = css`
+  ${giveBackStyles}
+
+  @media (width <= 480px) {
+    .body {
+      inline-size: calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5));
+    }
   }
 `;

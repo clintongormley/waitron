@@ -343,9 +343,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   others. [Detail](backlog/fiscal.md#offer-2-5-and-75-taken-away-once-modelo-303-can-report-them)
 
 - **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
-  A802 slice 5b, #3108).** The Refund window ticks whole dishes; an earlier ordinary refund does not
-  count towards a correction; a refund of cancelled dishes on a receipt does not yet file its
-  corrective in the same step (a full invoice's goes on its R1, CORRECT-FULL-INVOICE PR 2b) (A758
+  A802 slice 5b, #3108).** Picking part of a row of identical portions in Refund remains open.
+  An earlier ordinary refund does not count towards a correction. A refund of cancelled dishes on a
+  receipt does not yet file its corrective in the same step (a full invoice's goes on its R1, CORRECT-FULL-INVOICE PR 2b) (A758
   §3.8, owner Q43 e).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 

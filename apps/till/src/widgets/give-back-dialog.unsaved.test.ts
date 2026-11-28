@@ -118,7 +118,7 @@ it("a ticked dish asks first", async () => {
   const { app, form } = await mount();
   await choose(form, "dishes");
   form
-    .shadowRoot!.querySelector('wt-switch[data-line="croquetas"]')!
+    .shadowRoot!.querySelector('wt-dish-pick-row[data-line="croquetas"]')!
     .shadowRoot!.querySelector("input")!
     .click();
   await form.updateComplete;
@@ -132,7 +132,7 @@ it("a dish ticked and unticked again, with nothing typed, closes without asking"
   await choose(form, "dishes");
   const toggle = async () => {
     form
-      .shadowRoot!.querySelector('wt-switch[data-line="croquetas"]')!
+      .shadowRoot!.querySelector('wt-dish-pick-row[data-line="croquetas"]')!
       .shadowRoot!.querySelector("input")!
       .click();
     await form.updateComplete;
@@ -163,7 +163,7 @@ it("Back with a ticked dish asks first, keeps it on Keep and goes back on Discar
   const { app, form } = await mount();
   await choose(form, "dishes");
   form
-    .shadowRoot!.querySelector('wt-switch[data-line="croquetas"]')!
+    .shadowRoot!.querySelector('wt-dish-pick-row[data-line="croquetas"]')!
     .shadowRoot!.querySelector("input")!
     .click();
   await form.updateComplete;
@@ -223,7 +223,7 @@ it("a window filled in after a cancel closes without asking, and asks once a dis
   await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-purpose]")).not.toBeNull());
   expect(unload()).toBe(false);
   form
-    .shadowRoot!.querySelector('wt-switch[data-line="paella"]')!
+    .shadowRoot!.querySelector('wt-dish-pick-row[data-line="paella"]')!
     .shadowRoot!.querySelector("input")!
     .click();
   await form.updateComplete;

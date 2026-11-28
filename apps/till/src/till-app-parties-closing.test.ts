@@ -2026,8 +2026,8 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value;
     const ticked = (el: TillApp) =>
       [
-        ...giving(el)!.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-switch"]>(
-          "wt-switch[data-line]",
+        ...giving(el)!.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          "wt-dish-pick-row[data-line]",
         ),
       ]
         .filter((row) => row.checked)
@@ -2305,7 +2305,10 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         expect(giving(el)!.fill).toBeNull();
         inForm(el, "[data-choice=dishes]")!.click();
         await giving(el)!.updateComplete;
-        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="dish-sale-wo-4"]')!
+        inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          el,
+          'wt-dish-pick-row[data-line="dish-sale-wo-4"]',
+        )!
           .shadowRoot!.querySelector("input")!
           .click();
         await giving(el)!.updateComplete;

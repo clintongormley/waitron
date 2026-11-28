@@ -3393,9 +3393,9 @@ describe("till-app: service cancellation consent", () => {
     /** Gives €7.50 back with the cancel's reason, which asks for a note. */
     async function submitGiveBack(el: TillApp) {
       await filledForm(el);
-      const wine = inForm<HTMLElementTagNameMap["wt-switch"]>(
+      const wine = inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
         el,
-        'wt-switch[data-line="wine-line"]',
+        'wt-dish-pick-row[data-line="wine-line"]',
       )!;
       if (!wine.checked) wine.shadowRoot!.querySelector("input")!.click();
       await giving(el)!.updateComplete;
@@ -3995,7 +3995,10 @@ describe("till-app: service cancellation consent", () => {
       expect(vi.mocked(api.readGiveBack)).toHaveBeenCalledWith("own-sale", {});
       expect(inForm(el, "[data-purpose]")!.textContent!.trim()).toBe(t("give_back.dishes"));
       expect(
-        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.checked,
+        inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          el,
+          'wt-dish-pick-row[data-line="wine-line"]',
+        )!.checked,
       ).toBe(true);
       expect(
         inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value,
@@ -4371,13 +4374,13 @@ describe("till-app: service cancellation consent", () => {
     });
 
     it.each([
-      ["en-GB", "0.500", "0.5 × Filed wine"],
-      ["es-ES", "0.500", "0,5 × Filed wine"],
-      ["en-GB", "1.000", "Filed wine"],
-      ["es-ES", "1.000", "Filed wine"],
+      ["en-GB", "0.500", "0.5"],
+      ["es-ES", "0.500", "0,5"],
+      ["en-GB", "1.000", "1"],
+      ["es-ES", "1.000", "1"],
     ] as const)(
       "words the cancelled dish's quantity in the till's language (%s, %s)",
-      async (locale, quantity, words) => {
+      async (locale, quantity, shownQuantity) => {
         setLocale(locale);
         const view = owedView();
         view.lines[0] = { ...view.lines[0]!, quantity };
@@ -4396,9 +4399,15 @@ describe("till-app: service cancellation consent", () => {
         });
         await flush(el);
         await filledForm(el);
-        expect(
-          inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.label,
-        ).toBe(`${words} · ${formatMoney("30.00", locale)}`);
+        const dish = inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          el,
+          'wt-dish-pick-row[data-line="wine-line"]',
+        )!;
+        expect([dish.quantity, dish.label, dish.amount]).toEqual([
+          shownQuantity,
+          "Filed wine",
+          formatMoney("30.00", locale),
+        ]);
       },
     );
 
@@ -4421,12 +4430,18 @@ describe("till-app: service cancellation consent", () => {
       inForm(el, "[data-choice=dishes]")!.click();
       await giving(el)!.updateComplete;
       expect(
-        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.checked,
+        inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          el,
+          'wt-dish-pick-row[data-line="wine-line"]',
+        )!.checked,
       ).toBe(false);
       expect(
         inForm<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=reason]")!.value,
       ).toBe("");
-      inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!
+      inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+        el,
+        'wt-dish-pick-row[data-line="wine-line"]',
+      )!
         .shadowRoot!.querySelector("input")!
         .click();
       await giving(el)!.updateComplete;
@@ -4594,7 +4609,10 @@ describe("till-app: service cancellation consent", () => {
         await expect.poll(() => inForm(el, "[data-choice=dishes]")).not.toBeNull();
         inForm(el, "[data-choice=dishes]")!.click();
         await giving(el)!.updateComplete;
-        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!
+        inForm<HTMLElementTagNameMap["wt-dish-pick-row"]>(
+          el,
+          'wt-dish-pick-row[data-line="wine-line"]',
+        )!
           .shadowRoot!.querySelector("input")!
           .click();
         await giving(el)!.updateComplete;
