@@ -323,9 +323,9 @@ manual-remedy confirmation and current business-invoice delivery qualification a
 Future structured B2B integration has its own entry above. F3 conversion remains a separate
 decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a, PR 2b
 (a cancelled dish's money goes on the corrective) and PR 3 (a line given back in part prints with no quantity and no
-unit price) are built;
-PR 4a and 4b (the corrective goes out the way the original went, staff's choice stored and tried
-again) and PR 5 (staff can change it on the till) are still to come.
+unit price) are built, and with PR 4a the corrective goes out once, when it is filed, the way the
+original went; PR 4b (staff's choice stored and tried again) and PR 5 (staff can change it on the
+till) are still to come.
 
 ## When the business e-invoicing regime starts
 
