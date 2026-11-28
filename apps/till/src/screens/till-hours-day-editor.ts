@@ -70,11 +70,12 @@ export function managerDayField(
     });
   const label =
     kind === "in" || kind === "out" || kind === "break_start" || kind === "break_end"
-      ? t(`clock.${kind}`)
+      ? t(`hours.entry_${kind}`)
       : t("attendance.time");
   return {
+    kind,
     label,
-    notes: [before, asked].filter(Boolean).join(" "),
+    notes: [before, asked].filter(Boolean).join(" · "),
     requiredTarget: !!request && day.item?.direction === "worker_request",
   };
 }

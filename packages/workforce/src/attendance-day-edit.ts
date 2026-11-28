@@ -53,7 +53,7 @@ export function previewDayMinutes(view: AttendanceDayView, changes: AttendanceCh
               correctsEntryId: null,
               eventAt: at,
               offsetMinutes,
-              extension: originalEntry(entry, byId).extension ?? null,
+              extension: originalEntry(entry, byId).extension,
             },
           ]
         : [];

@@ -87,6 +87,12 @@ it("previews corrections to an overnight day using its effective times and paid 
   expect(rows).toHaveLength(4);
   expect(rows[0]?.target).toEqual({ entryId: "corrected-in" });
   expect(previewDayMinutes(view, rows)).toBe(435);
+  expect(
+    previewDayMinutes(view, [
+      ...rows,
+      { target: { entryId: initial.entryId }, at: initial.eventAt, offsetMinutes: 0 },
+    ]),
+  ).toBe(435);
 });
 
 describe("localWallClock", () => {

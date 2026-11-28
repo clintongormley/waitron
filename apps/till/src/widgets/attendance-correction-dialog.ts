@@ -7,6 +7,7 @@ import {
   FormFeedback,
   formMessage,
   formMessageStyles,
+  visuallyHiddenStyles,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -88,31 +89,83 @@ export class AttendanceCorrectionDialog extends LitElement {
         max-width: 100%;
       }
       .manager-fields {
+        --wt-tap-min: var(--wt-dropdown-row-height);
+        --wt-field-height: var(--wt-dropdown-row-height);
         box-sizing: border-box;
         padding: var(--wt-space-4);
+        gap: calc((var(--wt-space-2) + var(--wt-space-3)) / 2);
+      }
+      .manager-fields wt-input::part(field),
+      .manager-fields wt-textarea::part(field),
+      .manager-fields wt-combobox::part(field) {
+        background: var(--wt-color-surface);
+      }
+      .manager-fields :is(wt-textarea, wt-combobox)::part(field) {
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        box-shadow: none;
+      }
+      .manager-fields :is(wt-textarea, wt-combobox):focus-within::part(field) {
+        border-color: var(--wt-color-primary);
+      }
+      .manager-fields wt-textarea::part(control) {
+        box-sizing: border-box;
+        color: var(--wt-color-text);
+        field-sizing: content;
+        block-size: auto;
+        inline-size: 100%;
+        min-block-size: calc(
+          2 * var(--wt-space-6) + var(--wt-space-3) - 2 * var(--wt-field-line-width)
+        );
+        max-block-size: calc(6 * var(--wt-space-6));
+        resize: none;
       }
       .manager-fields p {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      .manager-fields .time-note {
+        margin-block-start: calc(var(--wt-space-1) / 2);
+      }
       .dates summary {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        min-block-size: var(--wt-tap-min);
         color: var(--wt-color-primary-text);
         cursor: pointer;
+        font-weight: var(--wt-font-weight-bold);
+        list-style: none;
       }
-      .manager-actions {
-        padding: var(--wt-space-3) var(--wt-space-4);
-        background: var(--wt-color-surface);
-        border-block-start: 1px solid var(--wt-color-border);
+      .dates summary::-webkit-details-marker {
+        display: none;
+      }
+      .dates[open] summary wt-icon {
+        rotate: 180deg;
+      }
+      .spoken-total {
+        ${visuallyHiddenStyles}
       }
       .manager-actions {
         display: grid;
         gap: var(--wt-space-2);
+        padding: var(--wt-space-3) var(--wt-space-4);
+        background: var(--wt-color-surface);
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+      .manager-actions > * {
+        inline-size: 100%;
+        max-inline-size: calc(var(--wt-form-max-width) - 2 * var(--wt-space-4));
+      }
+      .manager-actions wt-button[data-save] {
+        --wt-tap-min: var(--wt-menu-row-height);
+        --wt-action-font-size: var(--wt-menu-row-label-size);
       }
       .clock-label {
         display: block;
         margin-block-end: var(--wt-space-1);
         color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+        font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
       }
       .clock-label strong {
         color: var(--wt-color-danger);
@@ -249,12 +302,17 @@ export class AttendanceCorrectionDialog extends LitElement {
         this.#choices(row).length > 1 && row.offset === "" ? t("attendance.offset_required") : "",
     }));
     const changes = this.#changes();
-    if (
-      !this.managerDay &&
-      changes?.length === 2 &&
-      Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)
-    )
-      rows[1]!.time = t("attendance.time_order");
+    if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)) {
+      const day = this.managerDay;
+      if (
+        !day ||
+        this.draft.rows.every(
+          (row, i) =>
+            managerDayField(day, row.target, row.date, row.time).kind === (i === 0 ? "in" : "out"),
+        )
+      )
+        rows[1]!.time = t("attendance.time_order");
+    }
     const reason = this.draft.reason.trim();
     return {
       rows,
@@ -316,6 +374,8 @@ export class AttendanceCorrectionDialog extends LitElement {
       return;
     this.#feedback.press();
     if (this.#invalid()) {
+      if (this.managerDay && this.#errors().rows.some(({ date }) => date))
+        this.renderRoot.querySelector<HTMLDetailsElement>(".dates")!.open = true;
       await this.#feedback.focus(this.renderRoot);
       return;
     }
@@ -343,7 +403,8 @@ export class AttendanceCorrectionDialog extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy) return;
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    const reason = event.type === "wt-back" ? "navigation" : "cancel";
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose(reason);
   }
   #closed(event: Event): void {
     event.stopPropagation();
@@ -364,16 +425,18 @@ export class AttendanceCorrectionDialog extends LitElement {
   }
 
   #dateField(row: TimeDraft, index: number, label: string, error: string) {
-    return html`<wt-input
-      name=${`attendanceDate${index}`}
-      type="date"
-      required
-      .label=${label}
-      .value=${live(row.date)}
-      .disabled=${this.busy || this.blocked}
-      .error=${this.#feedback.attempted ? error : ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "date")}
-    ></wt-input>`;
+    return html`${this.managerDay ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
+      <wt-input
+        .variant=${this.managerDay ? "outlined" : "filled"}
+        name=${`attendanceDate${index}`}
+        type="date"
+        required
+        .label=${label}
+        .value=${live(row.date)}
+        .disabled=${this.busy || this.blocked}
+        .error=${this.#feedback.attempted ? error : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "date")}
+      ></wt-input>`;
   }
   override render() {
     const errors = this.#errors();
@@ -388,9 +451,26 @@ export class AttendanceCorrectionDialog extends LitElement {
       this.blocked ||
       action.unchanged ||
       invalid ||
-      (!!manager && all !== null && (!managerDayEdits(manager, all).length || !!errors.reason));
+      (!!manager && all !== null && !managerDayEdits(manager, all).length);
+    const dayFields =
+      manager?.view &&
+      this.draft.rows.map((row) => managerDayField(manager, row.target, row.date, row.time));
+    const lastNote = dayFields?.findLastIndex(({ notes }) => !!notes) ?? -1;
+    const minutes = manager && all ? previewDayMinutes(manager.view, all) : undefined;
+    const worked =
+      minutes === undefined
+        ? nothing
+        : html` <span aria-hidden="true"
+              >${fill(t("hours.worked_would_be"), {
+                time: `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`,
+              })}</span
+            ><span class="spoken-total" aria-live="polite"
+              >${fill(t("hours.worked_would_be"), {
+                time: formatDuration(minutes * 60_000, currentLocale()),
+              })}</span
+            >`;
     const fields = html` ${this.draft.rows.map((row, index) => {
-        const field = manager && managerDayField(manager, row.target, row.date, row.time);
+        const field = dayFields?.[index];
         const label = field
           ? row.date && row.date !== manager?.view.date
             ? `${field.label} · ${row.date}`
@@ -424,7 +504,7 @@ export class AttendanceCorrectionDialog extends LitElement {
                 ></wt-combobox>`
               : nothing
           }
-          ${field?.notes ? html`<p>${field.notes}</p>` : nothing}
+          ${field?.notes ? html`<p class="time-note">${field.notes} ${index === lastNote ? worked : nothing}</p>` : nothing}
           ${
             manager && "missingKind" in row.target && !field?.requiredTarget
               ? html`<wt-button
@@ -451,32 +531,43 @@ export class AttendanceCorrectionDialog extends LitElement {
               ${this.#dateField(row, index, t("attendance.date"), errors.rows[index]!.date)}${times}
             </fieldset>`;
       })}
-      ${all && manager ? html`<p aria-live="polite">${fill(t("hours.worked_would_be"), { time: formatDuration(previewDayMinutes(manager.view, all) * 60_000, currentLocale()) })}</p>` : nothing}
-      <wt-textarea
-        name="attendanceReason"
-        required
-        .label=${t(manager ? "hours.why" : "attendance.reason")}
-        .value=${live(this.draft.reason)}
-        .disabled=${this.busy || this.blocked}
-        .error=${this.#feedback.attempted && errors.reason ? errors.reason : reasonRefusal}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, null, "reason")}
-      ></wt-textarea>
-
+      ${lastNote === -1 && worked !== nothing ? html`<p>${worked}</p>` : nothing}
+      <div>
+        ${manager ? html`<span class="clock-label" aria-hidden="true">${t("hours.why")} <strong>*</strong></span>` : nothing}
+        <wt-textarea
+          .hideLabel=${!!manager}
+          name="attendanceReason"
+          required
+          .label=${t(manager ? "hours.why" : "attendance.reason")}
+          .value=${live(this.draft.reason)}
+          .disabled=${this.busy || this.blocked}
+          .error=${this.#feedback.attempted && errors.reason ? errors.reason : reasonRefusal}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, null, "reason")}
+        ></wt-textarea>
+      </div>
       ${
         manager
           ? html`<details class="dates">
-                <summary>${t("hours.edit_dates")}</summary>
+                <summary>
+                  ${t("hours.edit_dates")}
+                  <wt-icon name="chevron-down" aria-hidden="true"></wt-icon>
+                </summary>
                 ${this.draft.rows.map((row, index) => {
-                  const label = managerDayField(manager, row.target, row.date, row.time).label;
-                  return this.#dateField(row, index, label, errors.rows[index]!.date);
+                  const label = dayFields![index]!.label;
+                  return this.#dateField(
+                    row,
+                    index,
+                    `${t("attendance.date")} · ${label}`,
+                    errors.rows[index]!.date,
+                  );
                 })}
               </details>
               <wt-combobox
                 name="missingTime"
-                .label=${t("hours.add_time")}
+                .placeholder=${t("hours.add_time")}
                 .value=${live("")}
                 .disabled=${this.busy || this.blocked}
-                .options=${clockKinds.filter((kind) => !this.draft.rows.some(({ target }) => "missingKind" in target && target.missingKind === kind)).map((kind) => ({ value: kind, label: t(`clock.${kind}`) }))}
+                .options=${clockKinds.filter((kind) => !this.draft.rows.some(({ target }) => "missingKind" in target && target.missingKind === kind)).map((kind) => ({ value: kind, label: t(`hours.entry_${kind}`) }))}
                 @wt-change=${(event: CustomEvent<{ value: (typeof clockKinds)[number] }>) => this.#addTime(event, manager.view.date)}
               ></wt-combobox>`
           : nothing

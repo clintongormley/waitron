@@ -185,6 +185,8 @@ it("counts actionable days and approves only the displayed eligible day", async 
   const worked = root.querySelector("[data-worked]")!;
   expect(worked.querySelector<HTMLElement>('[aria-hidden="true"]')?.innerText).toBe("7 h 00");
   expect(worked.textContent).toContain("7 hours");
+  await expect.element(page.getByRole("button", { name: /Edit.*Javier.*7 hours/ })).toBeVisible();
+
   f.getAttendanceManagerQueue.mockResolvedValue({
     items: [],
     finishedDays: [{ ...own, times: [...times] }],
@@ -250,7 +252,7 @@ it.each([
   if (item === requested) {
     await expectNoA11yViolations(form);
     expect(root.querySelectorAll<HTMLElement>(".clock-label")[1]!.innerText).toBe(
-      "Clock out · 2026-10-14 *",
+      "Clocked out · 2026-10-14 *",
     );
   }
   if (item) {
@@ -269,6 +271,10 @@ it.each([
   ] as const) {
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
   }
+  await vi.waitFor(() => expect(send.disabled).toBe(false));
+  await userEvent.click(send);
+  await vi.waitFor(() => expect(reason.error).toBe("Enter a reason for the change."));
+  expect(send.disabled).toBe(true);
   reason.dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "  Closing took longer  " },
@@ -305,6 +311,76 @@ it.each([
   await expect
     .element(page.getByText("No hours are waiting for your approval.", { exact: true }))
     .toBeVisible();
+});
+
+it("refreshes a finished day when a worker’s request arrived while the list was open", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  f.getAttendanceManagerDay.mockResolvedValue({ ...view, items: [requested] });
+  f.getAttendanceManagerQueue.mockResolvedValue({ items: [requested], finishedDays: [] });
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  const root = screen(f.el)!.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(root.querySelector("[role=alert]")?.textContent).toContain("These hours changed"),
+  );
+  expect(root.querySelector("till-attendance-correction-dialog")).toBeNull();
+  await expect.element(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+});
+
+it.each([
+  { type: "date", value: "", error: "Choose a valid date." },
+  {
+    type: "time",
+    value: "09:00",
+    error: "The end must be after the start. Choose the actual dates.",
+  },
+])("shows the manager’s invalid $type beside the field", async ({ type, value, error }) => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
+  const root = form.shadowRoot!;
+  const field = root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+    `wt-input[type="${type}"]`,
+  )[1]!;
+  for (const [control, input] of [
+    [field, value],
+    [root.querySelector("wt-textarea")!, "Checking hours"],
+  ] as const) {
+    control.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: input }, bubbles: true }),
+    );
+  }
+  await page.getByRole("button", { name: "Save and send to Javier" }).click();
+  await vi.waitFor(() => expect(field.error).toBe(error));
+  if (type === "date") expect(root.querySelector("details")?.open).toBe(true);
+  await expect.poll(() => root.activeElement).toBe(field);
+  expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("asks before going back from a changed day edit", async () => {
+  const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!;
+  const editor = root.querySelector("till-attendance-correction-dialog")!;
+  const field = editor.shadowRoot!.querySelector("wt-textarea")!;
+  await userEvent.fill(
+    page.elementLocator(field.shadowRoot!.querySelector("textarea")!),
+    "My draft",
+  );
+  await page.getByRole("button", { name: "To approve", exact: true }).click();
+  const question = f.el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  expect(field.value).toBe("My draft");
+  await page.getByRole("button", { name: "To approve", exact: true }).click();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await vi.waitFor(() =>
+    expect(root.querySelector("till-attendance-correction-dialog")).toBeNull(),
+  );
 });
 
 it("keeps a worker’s requested missing time available for the manager to fill", async () => {
@@ -467,7 +543,10 @@ it("keeps the finished day’s times together and keeps both notes visible at ph
 
 it("counts a dispute the manager can edit even without a worker time to take", async () => {
   const unsolved = { ...disputed, workerVersion: undefined };
-  const f = await manager({ items: [unsolved], finishedDays: [] });
+  const f = await manager({
+    items: [unsolved, attendanceItem({ status: "waiting-worker" })],
+    finishedDays: [],
+  });
   await open(f.el);
   const root = screen(f.el)!.shadowRoot!;
   expect(root.textContent).toContain("I closed the bar.");

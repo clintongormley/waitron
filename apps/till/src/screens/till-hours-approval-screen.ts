@@ -13,7 +13,7 @@ import type {
 } from "@waitron/workforce/attendance-contract";
 import "@waitron/ui/src/components/wt-full-screen-panel.js";
 import "@waitron/ui/src/components/wt-top-bar.js";
-import "@waitron/ui/src/components/wt-icon-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "../widgets/attendance-correction-dialog.js";
 import type { ManagerDay } from "./till-hours-day-editor.js";
 import { isNetworkFailure, type TillApi } from "../api/client.js";
@@ -187,20 +187,34 @@ export class TillHoursApprovalScreen extends LitElement {
         list-style: none;
       }
       .finished li {
-        padding-block: var(--wt-space-1);
-        padding-inline: var(--wt-space-4) var(--wt-space-3);
         border-block-start: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface);
       }
-      .day-facts {
+      .day-facts:not([data-edit-day]),
+      [data-edit-day]::part(button) {
         display: grid;
         grid-template-columns: calc(3 * var(--wt-space-6)) minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--wt-space-2);
-        min-block-size: calc(var(--wt-tap-min) - var(--wt-space-1));
+        min-block-size: var(--wt-dropdown-row-height);
+        padding: var(--wt-space-1) var(--wt-space-3) var(--wt-space-1) var(--wt-space-4);
       }
-      .day-facts:has([data-edit-day]) {
+      [data-edit-day] {
+        display: block;
+      }
+      [data-edit-day]::part(button) {
         grid-template-columns: calc(3 * var(--wt-space-6)) minmax(0, 1fr) auto auto;
+        border: 0;
+        border-radius: 0;
+        text-align: start;
+        font-weight: var(--wt-font-weight-normal);
+      }
+      [data-edit-day] wt-icon,
+      .finished li > p {
+        color: var(--wt-color-text-muted);
+      }
+      .finished li > p {
+        padding-inline: var(--wt-space-4);
       }
       .day-facts time,
       .time-range,
@@ -313,6 +327,13 @@ export class TillHoursApprovalScreen extends LitElement {
       : item.personId !== this.personId;
   }
 
+  #canEdit(item: CorrectionItem): boolean {
+    return (
+      item.personId !== this.personId &&
+      (item.status === "waiting-manager" || item.status === "disputed")
+    );
+  }
+
   #name(personId: string): string {
     return (
       this.lookups?.people.find((person) => person.personId === personId)?.displayName ?? personId
@@ -339,9 +360,8 @@ export class TillHoursApprovalScreen extends LitElement {
       this.#emit(
         "hours-approval-count",
         queue.finishedDays.filter((day) => this.#canApprove(day.personId)).length +
-          queue.items.filter(
-            (item) => item.personId !== this.personId || this.#canSettle(item, "approve"),
-          ).length,
+          queue.items.filter((item) => this.#canEdit(item) || this.#canSettle(item, "approve"))
+            .length,
       );
     } catch (error) {
       if (lifetime.aborted) return;
@@ -398,7 +418,11 @@ export class TillHoursApprovalScreen extends LitElement {
       const current = view.items.find(
         ({ id, status }) => id === item?.id && status === item.status,
       );
-      if (item && !current) throw { code: "attendance.state_changed" };
+      const pending = view.items.some(
+        ({ status }) =>
+          status === "waiting-manager" || status === "waiting-worker" || status === "disputed",
+      );
+      if (item ? !current : pending) throw { code: "attendance.state_changed" };
       this.editor = { view, item: current, name: this.#name(view.personId).split(" ")[0]! };
     });
   }
@@ -525,7 +549,7 @@ export class TillHoursApprovalScreen extends LitElement {
       }
       <div class="actions">
         ${this.#canSettle(item, "approve") ? html`<wt-button data-approve-request variant=${blocked || disputed ? "secondary" : "primary"} .disabled=${blocked} @click=${() => this.#settle(item, "approve")}>${disputed ? fill(t("hours.take_worker_time"), { name: firstName }) : t("hours.approve")}</wt-button>` : nothing}
-        ${item.personId !== this.personId ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#editDay({ personId: item.personId, date }, item)}>${t("hours.edit")}</wt-button>` : nothing}
+        ${this.#canEdit(item) ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#editDay({ personId: item.personId, date }, item)}>${t("hours.edit")}</wt-button>` : nothing}
         ${this.#canSettle(item, "decline") ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#settle(item, "decline")}>${t("hours.decline")}</wt-button>` : nothing}
       </div>
     </article>`;
@@ -620,39 +644,41 @@ export class TillHoursApprovalScreen extends LitElement {
                       .filter(Boolean)
                       .join(" · ");
                     const minutes = day.workedMinutes;
+                    const facts = html`
+                      <strong>${this.#name(day.personId)}</strong>
+                      <span>
+                        <time datetime=${day.date}>${weekdayAndDay(day.date)}</time>
+                        ${starts.map((start, i) => html` · <span class="time-range">${clock(start)} – ${clock(ends[i]!)}</span>`)}
+                        ${notes ? html`<small class="muted">${notes}</small>` : nothing}
+                      </span>
+                      ${
+                        minutes === undefined
+                          ? nothing
+                          : html`<strong data-worked>
+                              <span aria-hidden="true"
+                                >${Math.floor(minutes / 60)} h
+                                ${String(minutes % 60).padStart(2, "0")}</span
+                              >
+                              <span class="spoken-duration"
+                                >${formatDuration(minutes * 60_000, currentLocale())}</span
+                              >
+                            </strong>`
+                      }
+                    `;
                     return html`<li>
-                      <div class="day-facts">
-                        <strong>${this.#name(day.personId)}</strong>
-                        <span>
-                          <time datetime=${day.date}>${weekdayAndDay(day.date)}</time>
-                          ${starts.map((start, i) => html` · <span class="time-range">${clock(start)} – ${clock(ends[i]!)}</span>`)}
-                          ${notes ? html`<small class="muted">${notes}</small>` : nothing}
-                        </span>
-                        ${
-                          minutes === undefined
-                            ? nothing
-                            : html`<strong data-worked>
-                                <span aria-hidden="true"
-                                  >${Math.floor(minutes / 60)} h
-                                  ${String(minutes % 60).padStart(2, "0")}</span
-                                >
-                                <span class="spoken-duration"
-                                  >${formatDuration(minutes * 60_000, currentLocale())}</span
-                                >
-                              </strong>`
-                        }
-                        ${
-                          day.personId !== this.personId
-                            ? html`<wt-icon-button
-                                data-edit-day
-                                icon="chevron-right"
-                                .label=${fill(t("hours.edit_day"), { name: this.#name(day.personId), date: shortDate(day.date) })}
-                                .disabled=${blocked}
-                                @click=${() => this.#editDay(day)}
-                              ></wt-icon-button>`
-                            : nothing
-                        }
-                      </div>
+                      ${
+                        day.personId === this.personId
+                          ? html`<div class="day-facts">${facts}</div>`
+                          : html`<wt-button
+                              class="day-facts"
+                              data-edit-day
+                              variant="ghost"
+                              .disabled=${blocked}
+                              @click=${() => this.#editDay(day)}
+                              ><span class="spoken-duration">${t("hours.edit")}</span
+                              >${facts}<wt-icon name="chevron-right" aria-hidden="true"></wt-icon
+                            ></wt-button>`
+                      }
                       ${
                         !this.#canApprove(day.personId)
                           ? html`<p class="muted">${t("hours.cannot_approve_own")}</p>`
