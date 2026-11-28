@@ -49,12 +49,13 @@ describe("menu tile styles", () => {
     const name = (await drawTile(390, true)).querySelector<HTMLElement>(".name")!;
     const style = getComputedStyle(name);
     const room = getComputedStyle(name, "::before");
-    // Half the 14 px name size each side for "…"; beside the first line, the rest of the 24 px
-    // count less the 6 px outside the tile.
-    expect(style.paddingInlineStart).toBe("7px");
-    expect(style.paddingInlineEnd).toBe("7px");
+    // Half the phone's 15 px name size each side for "…"; beside the first line, the rest of the
+    // 24 px count less the 6 px outside the tile.
+    expect(style.fontSize).toBe("15px");
+    expect(style.paddingInlineStart).toBe("7.5px");
+    expect(style.paddingInlineEnd).toBe("7.5px");
     expect(room.float).toBe("inline-end");
-    expect(room.width).toBe("11px");
+    expect(room.width).toBe("10.5px");
     expect(room.height).toBe(`${name.getBoundingClientRect().height}px`);
   });
 });

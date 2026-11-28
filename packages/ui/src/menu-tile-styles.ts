@@ -35,6 +35,9 @@ export const menuTileStyles: CSSResult = css`
     padding-block-start: calc(var(--count-outside) + var(--count-ring));
     padding-inline-end: calc(var(--count-outside) + var(--count-ring));
     --menu-tile-height: calc(var(--wt-tap-min) + var(--wt-space-6));
+    /* 15 px on a phone, as drawn: no font-size token holds it. The till's side-by-side tiles are
+       narrower than drawn, where 15 px would cut a name a tile showing a count holds whole. */
+    --menu-name-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
   }
 
   /* A viewport query, not a size container: containment would stop the browser's content counting
@@ -42,6 +45,7 @@ export const menuTileStyles: CSSResult = css`
   @media (width >= 720px) {
     .grid {
       --menu-tile-height: calc(2 * var(--wt-tap-min) - var(--wt-space-1));
+      --menu-name-size: var(--wt-font-size-md);
     }
   }
 
@@ -101,9 +105,9 @@ export const menuTileStyles: CSSResult = css`
     text-overflow: ellipsis;
     /* Chromium centres a cut line without its "…", which then reaches up to half its width past
        the line; even room on both sides keeps it inside and the name centred. */
-    --name-ellipsis-room: calc(var(--wt-font-size-md) / 2);
+    --name-ellipsis-room: calc(var(--menu-name-size, var(--wt-font-size-md)) / 2);
     padding-inline: var(--name-ellipsis-room);
-    font-size: var(--wt-font-size-md);
+    font-size: var(--menu-name-size, var(--wt-font-size-md));
     font-weight: var(--wt-font-weight-bold);
   }
 
@@ -137,9 +141,26 @@ export const menuTileStyles: CSSResult = css`
     line-height: 1.2;
   }
 
+  /* 13 px: no font-size token holds it. */
+  .price {
+    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
+    font-weight: var(--wt-font-weight-medium);
+  }
+
   .tile[data-kind="section"] wt-icon,
   .tile[data-kind="set_menu"] wt-icon {
+    width: var(--wt-font-size-xl);
+    height: var(--wt-font-size-xl);
+    margin-block-end: var(--wt-space-1);
     color: var(--wt-color-text-muted);
+  }
+
+  /* An emptied section also stacks a two-line notice, which leaves no room in the tile's fixed
+     height for the full-size folder. */
+  .tile[data-filtered] wt-icon {
+    width: var(--wt-font-size-md);
+    height: var(--wt-font-size-md);
+    margin-block-end: 0;
   }
 
   .in-order {

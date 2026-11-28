@@ -1,15 +1,10 @@
 import { html, nothing, type TemplateResult } from "lit";
-import { currentContentLanguages, menuTilePaint, registerIcons } from "@waitron/ui";
+import { currentContentLanguages, menuTilePaint } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import type { TillProduct } from "../api/menu-api.js";
 import { countText, t } from "../i18n/t.js";
 import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
-
-registerIcons({
-  "menu-section":
-    "M1.5 3.5a1 1 0 0 1 1-1H6l1.5 1.5h6a1 1 0 0 1 1 1v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z",
-});
 
 export interface DishTileHandlers {
   /** Opens the dish's information window. */

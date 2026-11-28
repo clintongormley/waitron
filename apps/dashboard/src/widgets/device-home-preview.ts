@@ -693,7 +693,7 @@ export class DeviceHomePreview extends LitElement {
       }}
     >
       <span class="label">
-        <wt-icon name="folder" aria-hidden="true"></wt-icon>
+        <wt-icon name="menu-section" aria-hidden="true"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
         <span class="section-kind">${t("home.tile_section")}</span>
       </span>

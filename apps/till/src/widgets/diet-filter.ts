@@ -188,7 +188,7 @@ export class TillDietFilter extends LitElement {
           this.expanded = true;
         }}
       >
-        <wt-icon name="table-filter"></wt-icon>
+        <wt-icon name="menu-filter"></wt-icon>
         <span class="icon-tooltip" aria-hidden="true">${label}</span>
         ${count ? html`<span data-filter-count>${count}</span>` : nothing}
       </button>

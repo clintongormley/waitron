@@ -77,6 +77,16 @@ it.each(["search", "card", "cash", "undo"])("registers the shared %s icon", asyn
   expect(icon.shadowRoot!.querySelector("svg path")?.getAttribute("d")).toMatch(/^M/);
 });
 
+it.each([
+  ["menu-section", "a folder outline, its outside and its inside", 2],
+  ["menu-filter", "three bars", 3],
+])("draws %s as %s", async (name, _shape, parts) => {
+  const icon = await mount(`<wt-icon name="${name}"></wt-icon>`);
+  const d = icon.shadowRoot!.querySelector("svg path")?.getAttribute("d") ?? "";
+  expect(d.match(/M/g)).toHaveLength(parts);
+  expect(d.match(/Z/g)).toHaveLength(parts);
+});
+
 it("draws the home icon: walls and roof inked, the door left open", async () => {
   const icon = await mount(`<wt-icon name="home"></wt-icon>`);
   const d = icon.shadowRoot!.querySelector("svg path")?.getAttribute("d") ?? "";

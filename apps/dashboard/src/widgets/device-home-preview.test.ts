@@ -370,7 +370,7 @@ describe("dashboard-device-home-preview", () => {
       }
       const section = tile(el, "structure", "Drinks para clientes");
       expect(image(section)).toBeNull();
-      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
       expect(
         section.querySelector(".section-kind")!.getBoundingClientRect().width,
       ).toBeLessThanOrEqual(1);
@@ -388,7 +388,7 @@ describe("dashboard-device-home-preview", () => {
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
       const section = tile(el, "structure", "Drinks para clientes");
       expect(image(section)).toBeNull();
-      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
     });
 
     it("draws an uncoloured product with its name and price", async () => {

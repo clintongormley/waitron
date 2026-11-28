@@ -192,8 +192,9 @@ it.each(["es", "en"])("one long word in a 70 px box under lang=%s", async (lang)
   }
 });
 
-/** A product name's computed size on Waitron's look at each text size. */
+/** A product name's computed size on Waitron's look at each text size, on a phone and from 720 px. */
 const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
+const PHONE_NAME_SIZE: Record<number, string> = { 100: "15px", 130: "19.25px" };
 
 /** Fails unless the counter's product names are drawn at `scale`%, so a sheet that stopped reaching
  * the widgets cannot let a 130% case pass as its 100% twin. */
@@ -202,7 +203,8 @@ function expectDrawnAt(el: HTMLElement, scale: number): void {
     el.shadowRoot!.querySelector("till-menu-browser"),
     '[data-kind="product"] .name',
   );
-  expect(getComputedStyle(name).fontSize, `product name at ${scale}%`).toBe(NAME_SIZE[scale]);
+  const sizes = window.innerWidth < 720 ? PHONE_NAME_SIZE : NAME_SIZE;
+  expect(getComputedStyle(name).fontSize, `product name at ${scale}%`).toBe(sizes[scale]);
 }
 
 it.each([100, 130])(

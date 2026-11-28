@@ -174,7 +174,7 @@ describe("menu tiles", () => {
       expect(tile(el, name).getBoundingClientRect().height, name).toBe(height);
   });
 
-  it("draws tiles 8 apart with 8 px corners, the name bold at the medium size and the price small", async () => {
+  it("draws tiles 8 apart with 8 px corners, the name 15 px bold and the price 13 px medium, quieter than the name", async () => {
     const { el } = await mount(390);
     const dish = tile(el, "Bravas");
     const grid = getComputedStyle(dish.closest(".grid")!);
@@ -182,9 +182,36 @@ describe("menu tiles", () => {
     expect(grid.rowGap).toBe("8px");
     expect(getComputedStyle(face(dish)).borderTopLeftRadius).toBe("8px");
     const name = getComputedStyle(dish.querySelector(".name")!);
-    expect(name.fontSize).toBe("14px");
+    expect(name.fontSize).toBe("15px");
     expect(name.fontWeight).toBe("600");
-    expect(getComputedStyle(dish.querySelector(".price")!).fontSize).toBe("12px");
+    const price = getComputedStyle(dish.querySelector(".price")!);
+    expect(price.fontSize).toBe("13px");
+    expect(price.fontWeight).toBe("500");
+    expect(price.color).toBe(resolved(dish, "color", "var(--wt-color-text-muted)"));
+    // A painted tile's price keeps the full ink: drawn at 85%, white on blue read 4.46:1.
+    const painted = tile(el, "Croquettes");
+    expect(painted.hasAttribute("data-painted")).toBe(true);
+    const paintedPrice = getComputedStyle(painted.querySelector(".price")!);
+    expect(paintedPrice.color).toBe(getComputedStyle(painted.querySelector(".name")!).color);
+    expect(paintedPrice.opacity).toBe("1");
+  });
+
+  it("writes a name 14 px from 720 px, where the till's tiles are narrower than drawn", async () => {
+    const { el } = await mount(1280);
+    expect(getComputedStyle(tile(el, "Bravas").querySelector(".name")!).fontSize).toBe("14px");
+  });
+
+  it("draws a section's folder 22 px, in the muted colour, 4 px above its name", async () => {
+    const { el } = await mount(390);
+    const section = tile(el, "Starters");
+    const icon = section.querySelector<HTMLElement>('wt-icon[name="menu-section"]')!;
+    const box = icon.getBoundingClientRect();
+    expect([box.width, box.height]).toEqual([22, 22]);
+    expect(getComputedStyle(icon).color).toBe(
+      resolved(section, "color", "var(--wt-color-text-muted)"),
+    );
+    const name = section.querySelector(".name")!.getBoundingClientRect();
+    expect(Math.round(name.top - box.bottom)).toBe(4);
   });
 
   it("never paints a section tile, even when its section has a colour", async () => {

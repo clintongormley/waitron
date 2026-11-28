@@ -148,6 +148,11 @@ export class TillMenuBrowser extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      /* The path's own tap height already spaces it from the tiles below. */
+      [data-menu-head]:has(> .breadcrumb) {
+        margin-block-end: calc(-1 * (var(--wt-space-3) + var(--wt-space-1) / 2));
+      }
+
       :host([pinned-head]) [data-menu-head] {
         position: sticky;
         top: 0;

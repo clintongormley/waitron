@@ -147,6 +147,19 @@ describe("the menu path", () => {
     expect(getComputedStyle(current).color).toBe(text);
   });
 
+  it.each([390, 1280])(
+    "puts the first tile row 32 px below the middle of the path's words at %i px",
+    async (width) => {
+      const { el, current } = await opened(width);
+      const words = current.getBoundingClientRect();
+      const first = el.shadowRoot!.querySelector<HTMLElement>(
+        '[data-region="section"] wt-button.tile',
+      )!;
+      const gap = first.getBoundingClientRect().top - (words.top + words.height / 2);
+      expect(Math.round(gap)).toBe(32);
+    },
+  );
+
   it("goes to a step when it is tapped", async () => {
     const { el, steps } = await opened();
     steps[1]!.click();

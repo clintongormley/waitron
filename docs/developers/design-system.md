@@ -580,7 +580,14 @@ columns. Empty tracks preserve the width of each tile when the last row is short
 preview use painted or neutral tiles with centred names. The owner removed tile photos and the nutrition mark
 on 24 November (“i think we drop the photos, and the icon”). You can still use the till's filter or
 long-press a product for its information. A folder identifies a section and the accessible name
-includes "Section". A section emptied by a diet filter keeps its notice. A product tile shows its
+includes "Section": the outlined `menu-section` icon, `--wt-font-size-xl` (22 px) square in
+`--wt-color-text-muted`, `--wt-space-1` above the name. A section emptied by a diet filter keeps its
+notice, and draws its folder at `--wt-font-size-md` with no gap so the notice fits the tile. A
+product tile's name is bold, 15 px below a 720 px viewport and `--wt-font-size-md` from it, where
+the till's tiles are narrower than the drawings; its price is 13 px at `--wt-font-weight-medium`,
+in `--wt-color-text-muted`, or in a painted tile's own ink at full strength (the drawings' 85% falls
+under 4.5:1 on some colours). No font-size token holds 15 or 13 px, so both are drawn from the
+`--wt-font-size-*` tokens. A product tile shows its
 menu price or the range of its variant prices, including sold-out variants, with one amount when
 the prices are equal. It appends the unit once for units other than Each.
 
@@ -626,7 +633,8 @@ functions or in components.
 
 **The till's menu head.** Above the tiles the browser draws one block (`[data-menu-head]`): the
 menu picker (`till-menu-switcher`) on its own line when the screen gives it one, then the search
-with the diet and allergen filter's 44 px outlined icon button beside it, then, inside a section
+with the diet and allergen filter's 44 px outlined icon button beside it, drawing the `menu-filter`
+icon (three lines, each shorter than the one above), then, inside a section
 only, the path (`apps/till/src/widgets/menu-path.ts`). The search is `wt-input variant="outlined"`
 with the `search` icon in its `start` slot and "Search the menu" / "Buscar en la carta" as its
 placeholder. The path starts with a ghost button showing only the `home` icon and named "Home" /
@@ -635,7 +643,9 @@ and carries `aria-current="location"`; `›` separators in `--wt-color-text-mute
 screen readers. Its buttons are in `--wt-color-primary-text` and the section shown in
 `--wt-color-text`, all bold, 15 px below a 720 px viewport and 16 px from it (no font-size token
 holds either, so both are drawn from `--wt-font-size-md` and `--wt-font-size-lg`), and each step is
-at least `--wt-tap-min` tall. Opening a section scrolls the path into view. The head scrolls with the
+at least `--wt-tap-min` tall. Under the path the head pulls the tiles up by
+`--wt-space-3` plus half `--wt-space-1`, so the first row's top sits 32 px below the middle of the
+path's words, the grid's own room for a count included. Opening a section scrolls the path into view. The head scrolls with the
 tiles unless the browser carries `pinned-head`, which makes it `position: sticky; top: 0` on
 `--wt-color-bg`. Guards: `menu-path.test.ts`, `menu-browser.toolbar.test.ts` and the "head" cases in
 `menu-browser.test.ts`.
