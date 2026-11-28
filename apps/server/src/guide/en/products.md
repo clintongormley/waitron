@@ -416,6 +416,10 @@ menu's **Preview** tab before switching it on. Choose **None**, **Small** or **L
 photos will look, then choose **Save**. On a phone, switch between **Settings** and **Preview**
 within **Customer menu**.
 
+Choose **Change…** in **Style** to edit the default colours and fonts. Check the preview and
+the names of the other menus that will change, then choose **Save style**. You can keep the
+published edition as it is.
+
 In the customer menu preview, choose **Computer** for a wider view or **Phone** to review the list.
 On a phone, scroll the **Computer** preview sideways to see the full menu width.
 Use **Language** to check the words for each content language. Use **Search dishes**

@@ -1,6 +1,7 @@
 import {
   EACH_UNIT_ID,
   assertMenuWritable,
+  customerMenuAppearanceFor,
   readContentLanguages,
   readLiveDocuments,
   refuseSetMenu,
@@ -30,8 +31,10 @@ export function mountMenuCustomerPreviewRoute(
         const live = (await readLiveDocuments(tx, [menuId])).get(menuId);
         if (!live) return { state: "unpublished" };
         const languages = await readContentLanguages(tx, venueLocale);
+        const appearance = await customerMenuAppearanceFor(tx, menuId);
         return {
           state: "published",
+          ...(appearance && { appearance }),
           menu: publicGuestMenu(live.document, languages, requested ?? [], EACH_UNIT_ID),
         };
       });

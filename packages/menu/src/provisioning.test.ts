@@ -72,6 +72,19 @@ async function storedUnits() {
 }
 
 describe("menu provisioning", () => {
+  it("seeds one editable default customer menu style across repeated setup", async () => {
+    const node = await venue("GB", "London", "en-GB");
+    const seed = () => withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));
+    await seed();
+    await seed();
+    const styles = await suite.db.execute<{
+      name: string;
+      is_default: number;
+      appearance: string;
+    }>(sql`select name, is_default, appearance from customer_menu_styles`);
+    expect(styles.rows).toEqual([{ name: "Default", is_default: 1, appearance: "{}" }]);
+  });
+
   it("makes the starter menu the default when there is none", async () => {
     const node = await venue("GB", "London", "en-GB");
     await withTransaction(suite.db, (tx) => MENU_PROVISIONING.seed!.run(tx, node));

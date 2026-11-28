@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f5e2c79d-29eb-4e52-9a96-4e625dbfb958",
+  "id": "49fba495-2db6-4913-9e8e-5652cbb00a19",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7680,6 +7680,101 @@
         }
       }
     },
+    "customer_menu_styles": {
+      "name": "customer_menu_styles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name_key": {
+          "name": "name_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "appearance": {
+          "name": "appearance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "logo_image": {
+          "name": "logo_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "customer_menu_styles_name_key_uq": {
+          "name": "customer_menu_styles_name_key_uq",
+          "columns": [
+            "name_key"
+          ],
+          "isUnique": true
+        },
+        "customer_menu_styles_one_default_uq": {
+          "name": "customer_menu_styles_one_default_uq",
+          "columns": [
+            "is_default"
+          ],
+          "isUnique": true,
+          "where": "\"customer_menu_styles\".\"is_default\" = 1"
+        }
+      },
+      "foreignKeys": {
+        "customer_menu_styles_logo_image_media_images_filename_fk": {
+          "name": "customer_menu_styles_logo_image_media_images_filename_fk",
+          "tableFrom": "customer_menu_styles",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "logo_image"
+          ],
+          "columnsTo": [
+            "filename"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "customer_menu_styles_appearance_ck": {
+          "name": "customer_menu_styles_appearance_ck",
+          "value": "json_valid(\"customer_menu_styles\".\"appearance\") and json_type(\"customer_menu_styles\".\"appearance\") = 'object'"
+        }
+      }
+    },
     "categories": {
       "name": "categories",
       "columns": {
@@ -7832,6 +7927,13 @@
           "autoincrement": false,
           "default": "'large'"
         },
+        "customer_menu_style_id": {
+          "name": "customer_menu_style_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "kind": {
           "name": "kind",
           "type": "text",
@@ -7880,7 +7982,21 @@
           "where": "\"menus\".\"is_default\" = 1"
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "menus_customer_menu_style_id_customer_menu_styles_id_fk": {
+          "name": "menus_customer_menu_style_id_customer_menu_styles_id_fk",
+          "tableFrom": "menus",
+          "tableTo": "customer_menu_styles",
+          "columnsFrom": [
+            "customer_menu_style_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {

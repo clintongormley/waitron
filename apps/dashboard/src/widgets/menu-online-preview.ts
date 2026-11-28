@@ -1,4 +1,5 @@
 import "@waitron/customer-menu";
+import { prepareMenuAppearance } from "@waitron/customer-menu/appearance";
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import {
   contentLanguageDisplayName,
@@ -10,6 +11,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { MenuApi } from "../api/menu-api.js";
@@ -30,7 +32,7 @@ export class MenuOnlinePreview extends LitElement {
     css`
       :host {
         display: block;
-        padding-block: var(--wt-space-4);
+        padding-block: var(--menu-preview-space, var(--wt-space-4));
         container-type: inline-size;
       }
       p {
@@ -42,14 +44,14 @@ export class MenuOnlinePreview extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
-        margin-block: var(--wt-space-4);
+        margin-block: var(--menu-preview-space, var(--wt-space-4));
       }
       wt-combobox {
         inline-size: min(100%, 16ch);
       }
       @container online-editor (inline-size <= 760px) {
         .computer {
-          min-inline-size: 720px;
+          min-inline-size: var(--menu-preview-computer-width, 720px);
         }
         @container (width < 720px) {
           .canvas:has(.computer) {
@@ -77,6 +79,7 @@ export class MenuOnlinePreview extends LitElement {
   @property({ attribute: false }) waitingForSettings = false;
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
+  @property({ attribute: false }) draftAppearance?: ReturnType<typeof prepareMenuAppearance>;
 
   @state() private answer: CustomerMenuPreview | null = null;
   @state() private failed = false;
@@ -96,15 +99,15 @@ export class MenuOnlinePreview extends LitElement {
     if (changed.has("menuId") || changed.has("api")) {
       this.language = "";
       this.languages = [];
-      void this.#load();
+      void this.reload();
       return;
     }
     const previous = changed.get("status");
     if (previous && this.status && editionOf(previous) !== editionOf(this.status))
-      void this.#load();
+      void this.reload();
   }
 
-  async #load(): Promise<void> {
+  async reload(): Promise<void> {
     const request = ++this.#request;
     this.answer = null;
     this.failed = false;
@@ -154,7 +157,7 @@ export class MenuOnlinePreview extends LitElement {
           event.stopPropagation();
           if (event.detail.value === this.language) return;
           this.language = event.detail.value;
-          void this.#load();
+          void this.reload();
         }}
       ></wt-combobox>
     </div>`;
@@ -163,7 +166,7 @@ export class MenuOnlinePreview extends LitElement {
   #page() {
     if (this.failed)
       return html`<p role="alert">${t("customer_menu.load_error")}</p>
-        <wt-button variant="secondary" @click=${() => void this.#load()}
+        <wt-button variant="secondary" @click=${() => void this.reload()}
           >${t("menus.retry")}</wt-button
         >`;
     if (this.answer === null) return html`<p role="status">${t("customer_menu.loading")}</p>`;
@@ -181,7 +184,7 @@ export class MenuOnlinePreview extends LitElement {
       <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
-        .appearance=${this.answer.appearance}
+        .appearance=${this.draftAppearance ?? prepareMenuAppearance(WAITRON_DEFAULTS, this.answer.appearance)}
         .photos=${this.photos}
         .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}

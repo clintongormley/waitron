@@ -1182,6 +1182,20 @@ CREATE TABLE `drawer_opens` (
       ))
 );
 --> statement-breakpoint
+CREATE TABLE `customer_menu_styles` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`name_key` text NOT NULL,
+	`is_default` integer DEFAULT false NOT NULL,
+	`appearance` text NOT NULL,
+	`logo_image` text,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`logo_image`) REFERENCES `media_images`(`filename`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "customer_menu_styles_appearance_ck" CHECK(json_valid("customer_menu_styles"."appearance") and json_type("customer_menu_styles"."appearance") = 'object')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `customer_menu_styles_name_key_uq` ON `customer_menu_styles` (`name_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `customer_menu_styles_one_default_uq` ON `customer_menu_styles` (`is_default`) WHERE "customer_menu_styles"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `categories` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -1204,10 +1218,12 @@ CREATE TABLE `menus` (
 	`online_enabled` integer DEFAULT false NOT NULL,
 	`online_address` text,
 	`online_photos` text DEFAULT 'large' NOT NULL,
+	`customer_menu_style_id` text,
 	`kind` text DEFAULT 'menu' NOT NULL,
 	`set_price` integer,
 	`set_vat_class` text,
 	`set_takeaway_vat_class` text,
+	FOREIGN KEY (`customer_menu_style_id`) REFERENCES `customer_menu_styles`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "menus_home_order_ck" CHECK("menus"."home_order" in ('home_first', 'menu_first')),
 	CONSTRAINT "menus_online_photos_ck" CHECK("menus"."online_photos" in ('none', 'small', 'large')),
 	CONSTRAINT "menus_set_offline_ck" CHECK("menus"."kind" = 'menu' or ("menus"."online_enabled" = 0 and "menus"."online_address" is null)),

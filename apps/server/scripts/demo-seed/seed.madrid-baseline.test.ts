@@ -31,6 +31,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
 import { getCountryPack } from "@waitron/country-packs";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage } from "@waitron/media";
+import { STARTER_CUSTOMER_MENU_STYLE_NAMES } from "@waitron/menu/src/starter-content.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
 import { demoMediaPath } from "./seed-media.js";
@@ -742,17 +743,26 @@ for (const locale of ["en", "es"] as const) {
       alias: (value) =>
         value.replace(/\b[a-f0-9]{64}\b/g, (hash) => photoAliases.get(hash) ?? hash),
     });
-    const menuOnlineDefaults = { online_enabled: 0, online_address: null, online_photos: "large" };
+    const menuCustomerDefaults = {
+      online_enabled: 0,
+      online_address: null,
+      online_photos: "large",
+      customer_menu_style_id: null,
+    };
     const historicalSeeded = madridWithRenamedTables(canonical.seeded, { menus: "catalogues" });
+    delete historicalSeeded.tables.customer_menu_styles;
     const historicalMenus = historicalSeeded.tables.catalogues!;
-    for (const [name, value] of Object.entries(menuOnlineDefaults)) {
+    historicalMenus.foreignKeys = historicalMenus.foreignKeys.filter(
+      (key) => key.from !== "customer_menu_style_id",
+    );
+    for (const [name, value] of Object.entries(menuCustomerDefaults)) {
       for (const row of Object.values(historicalMenus.rows)) {
         expect(row[name], `${String(row.id)}/${name}`).toBe(value);
         delete row[name];
       }
     }
     historicalMenus.columns = historicalMenus.columns.filter(
-      (column) => !Object.hasOwn(menuOnlineDefaults, column.name),
+      (column) => !Object.hasOwn(menuCustomerDefaults, column.name),
     );
     for (const row of Object.values(historicalSeeded.tables.sections!.rows))
       if (row.role === "menu_root")
@@ -3206,12 +3216,43 @@ for (const locale of ["en", "es"] as const) {
         { name: "online_enabled", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
         { name: "online_address", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "online_photos", type: "TEXT", notnull: 1, dflt_value: "'large'", pk: 0 },
+        { name: "customer_menu_style_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "kind", type: "TEXT", notnull: 1, dflt_value: "'menu'", pk: 0 },
         { name: "set_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
         { name: "set_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "set_takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(menus.rows)) Object.assign(row, menuOnlineDefaults);
+      for (const row of Object.values(menus.rows)) Object.assign(row, menuCustomerDefaults);
+      menus.foreignKeys.push({
+        id: 0,
+        seq: 0,
+        table: "customer_menu_styles",
+        from: "customer_menu_style_id",
+        to: "id",
+        on_update: "NO ACTION",
+        on_delete: "RESTRICT",
+        match: "NONE",
+      });
+      const styleName = STARTER_CUSTOMER_MENU_STYLE_NAMES.Default.es;
+      const styleId = `@customer_menu_styles:${stable([styleName])}`;
+      expected[phase].tables.customer_menu_styles = {
+        ...structuredClone(canonical[phase].tables.customer_menu_styles!),
+        rows:
+          phase === "before"
+            ? {}
+            : {
+                [styleId]: {
+                  id: styleId,
+                  name: styleName,
+                  name_key: styleName.toLowerCase(),
+                  is_default: 1,
+                  appearance: {},
+                  logo_image: null,
+                  updated_at: "2026-10-08T10:00:00.000Z",
+                },
+              },
+      };
+      phases[phase]!.customer_menu_styles = phase === "before" ? 0 : 1;
 
       delete phases[phase]!.menu_details;
       delete phases[phase]!.category_details;

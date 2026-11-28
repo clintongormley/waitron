@@ -53,6 +53,7 @@ import { readMenuStatus, mountMenuDetailRoutes } from "./menu-details-routes.js"
 import { mountMenuPublishingRoutes } from "./menu-publishing-routes.js";
 import { mountMenuCustomerOnlineSettingsRoutes } from "./menu-customer-online-settings-routes.js";
 import { mountMenuCustomerPreviewRoute } from "./menu-customer-preview-route.js";
+import { mountMenuCustomerStyleRoutes } from "./menu-customer-style-routes.js";
 import { mountMenuItemPriceRoutes } from "./menu-item-prices-routes.js";
 import { mountMenuCategoryRoutes } from "./menu-categories-routes.js";
 import {
@@ -187,6 +188,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
 
   mountMenuCollectionRoutes(app, deps, gated, log);
   mountMenuCustomerOnlineSettingsRoutes(app, gated, log);
+  mountMenuCustomerStyleRoutes(app, gated, log);
   mountMenuCustomerPreviewRoute(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
 
   app.get("/management-api/menus/:id/read", (c) =>

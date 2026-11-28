@@ -93,6 +93,7 @@ import {
   activityLog,
   outgoingMail,
   menus,
+  customerMenuStyles,
   saveVenueFields,
   readVenueSettings,
   categories,
@@ -480,7 +481,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 64,
+  version: 65,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1972,6 +1973,94 @@ it("round-trips current menus and their Home positions while leaving deleted men
       [0, "Removed menu"],
     ]);
   });
+});
+
+it("round-trips the edited customer menu style and its menu reference", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const appearance = { pageColor: "#fbf7ef", headingFont: "serif" } as const;
+  const sourceStyle = await withTransaction(suite.db, async (tx) => {
+    const [style] = await tx
+      .update(customerMenuStyles)
+      .set({ appearance })
+      .where(eq(customerMenuStyles.isDefault, true))
+      .returning({ id: customerMenuStyles.id });
+    const menu = await createMenu(tx, { name: "Customer style menu" });
+    await tx.update(menus).set({ customerMenuStyleId: style!.id }).where(eq(menus.id, menu.id));
+    return style!.id;
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date(),
+    versions,
+  );
+  expect(bundle.tables.customer_menu_styles).toMatchObject([
+    { id: sourceStyle, appearance: JSON.stringify(appearance), is_default: 1 },
+  ]);
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  const styles = await targetSuite.db.select().from(customerMenuStyles);
+  expect(styles).toHaveLength(1);
+  expect(styles[0]!.id).not.toBe(sourceStyle);
+  expect(styles[0]!.appearance).toEqual(appearance);
+  const [menu] = await targetSuite.db
+    .select()
+    .from(menus)
+    .where(eq(menus.name, "Customer style menu"));
+  expect(menu!.customerMenuStyleId).toBe(styles[0]!.id);
+});
+
+it.each([
+  {
+    caseName: "zero defaults",
+    changed: () => [],
+    field: "customer_menu_styles.is_default",
+  },
+  {
+    caseName: "two defaults",
+    changed: (row: Record<string, unknown>) => [
+      row,
+      { ...row, id: "aed59ddd-e71c-48c0-952d-01ffbbf20636", name: "Another", name_key: "another" },
+    ],
+    field: "customer_menu_styles.is_default",
+  },
+  {
+    caseName: "an unreadable appearance",
+    changed: (row: Record<string, unknown>) => [
+      { ...row, appearance: JSON.stringify({ headingFont: "display" }) },
+    ],
+    field: "customer_menu_styles.appearance",
+  },
+  {
+    caseName: "a logo",
+    changed: (row: Record<string, unknown>) => [{ ...row, logo_image: `${"a".repeat(64)}.webp` }],
+    field: "customer_menu_styles.logo_image",
+  },
+])("refuses a customer menu style transfer with $caseName", async ({ changed, field }) => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date(),
+    versions,
+  );
+  bundle.tables.customer_menu_styles = changed(bundle.tables.customer_menu_styles![0]!);
+  expect(() => validateConfigurationBundle(bundle, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } }),
+  );
 });
 
 it("transfers set-menu terms, course choices and variant exclusions", async () => {
@@ -6377,7 +6466,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(64);
+  expect(exported.version).toBe(65);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

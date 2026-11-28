@@ -21,6 +21,7 @@ import {
   HOME_ORDERS,
   type AllergenMap,
 } from "@waitron/shared";
+import { customerMenuStyles } from "./menu/customer-styles.js";
 import { units } from "./menu/units.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
@@ -43,6 +44,9 @@ export const menus = table(
     onlineEnabled: flag("online_enabled").notNull().default(false),
     onlineAddress: label("online_address"),
     onlinePhotos: onlinePhotos("online_photos").notNull().default("large"),
+    customerMenuStyleId: id("customer_menu_style_id").references(() => customerMenuStyles.id, {
+      onDelete: "restrict",
+    }),
     kind: menuKind("kind").notNull().default("menu"),
     setPrice: money("set_price"),
     setVatClass: label("set_vat_class"),

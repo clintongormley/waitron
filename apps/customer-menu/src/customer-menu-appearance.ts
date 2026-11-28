@@ -1,13 +1,15 @@
 import { isStoredColor, type CustomerMenuAppearance } from "@waitron/shared";
 import {
   contrastRatio,
+  deriveThemeFrom,
   fromOklch,
   type Mode,
   toOklch,
   typefaceStack,
   WAITRON_CHOICES,
+  type WaitronDefaults,
 } from "@waitron/ui-core/theme";
-import { deriveTheme, WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
+import type { PreparedMenuAppearance } from "./customer-menu-snapshot.js";
 
 function menuColorScheme(pageColor?: string): Mode {
   return pageColor && contrastRatio(pageColor, "#ffffff") > contrastRatio(pageColor, "#000000")
@@ -27,9 +29,10 @@ function tintedSecondaryText(palette: Readonly<Record<string, string>>, tint: st
 function menuAppearanceTokens(
   appearance: CustomerMenuAppearance,
   scheme: Mode,
+  defaults: WaitronDefaults,
 ): Record<string, string> {
   const { pageColor, textColor, headingColor, textFont, headingFont } = appearance;
-  const { [scheme]: palette } = deriveTheme({
+  const { [scheme]: palette } = deriveThemeFrom(defaults, {
     ...WAITRON_CHOICES,
     brandColor: headingColor ?? null,
     brandFix: { [scheme]: true },
@@ -46,7 +49,7 @@ function menuAppearanceTokens(
   return {
     ...palette,
     ...(tint && { "--wt-color-text-muted": tintedSecondaryText(palette, tint) }),
-    "--wt-menu-heading-font": typefaceStack(headingFont ?? "system", WAITRON_DEFAULTS),
+    "--wt-menu-heading-font": typefaceStack(headingFont ?? "system", defaults),
     ...(headingFont === "serif" && {
       "--wt-menu-heading-weight": "var(--wt-font-weight-normal)",
     }),
@@ -60,13 +63,11 @@ function menuAppearanceTokens(
   };
 }
 
-const builtIn = { scheme: "light" as const, tokens: {} };
-
-export function resolveMenuAppearance(appearance?: CustomerMenuAppearance): {
-  scheme: Mode;
-  tokens: Record<string, string>;
-} {
-  if (appearance == null) return builtIn;
+export function prepareMenuAppearance(
+  defaults: WaitronDefaults,
+  appearance?: CustomerMenuAppearance,
+): PreparedMenuAppearance | undefined {
+  if (appearance == null) return undefined;
   const { pageColor, textColor, headingColor, textFont, headingFont } = appearance;
   const invalidColor = [pageColor, textColor, headingColor].some(
     (color) =>
@@ -75,7 +76,7 @@ export function resolveMenuAppearance(appearance?: CustomerMenuAppearance): {
   const invalidFont = [textFont, headingFont].some(
     (font) => font !== undefined && font !== "system" && font !== "serif",
   );
-  if (invalidColor || invalidFont) return builtIn;
+  if (invalidColor || invalidFont) return undefined;
   const scheme = menuColorScheme(pageColor);
-  return { scheme, tokens: menuAppearanceTokens(appearance, scheme) };
+  return { scheme, tokens: menuAppearanceTokens(appearance, scheme, defaults) };
 }

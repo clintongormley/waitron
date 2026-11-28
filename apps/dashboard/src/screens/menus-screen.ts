@@ -16,6 +16,7 @@ import {
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { guard } from "lit/directives/guard.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   ChangeObserver,
@@ -106,6 +107,7 @@ import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
 import "../widgets/menu-online-preview.js";
+import "../widgets/menu-customer-style-dialog.js";
 import { MenuOnlineSave, menuOnlineStyles } from "../widgets/menu-online-save.js";
 
 const TABS = ["structure", "home", "preview", "customer-menu"] as const;
@@ -3330,7 +3332,24 @@ export class MenusScreen extends LitElement {
             this.view === "customer-menu"
               ? html`${this.#onlineSave.viewControl()}
                   <div class="online-workspace" data-view=${this.#onlineSave.view}>
-                    ${this.#onlineSave.settings(this.status?.state === "unpublished", previewHref, openPreview)}
+                    ${this.#onlineSave.settings(
+                      this.status?.state === "unpublished",
+                      previewHref,
+                      openPreview,
+                      keyed(
+                        menuId,
+                        html`<dashboard-menu-customer-style-dialog
+                          .api=${this.api}
+                          .readApi=${this.api.background ?? this.api}
+                          .menuId=${menuId}
+                          .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
+                          .photos=${this.#onlineSave.draft?.photos ?? "none"}
+                          .previewHref=${previewHref}
+                          .openPreview=${openPreview}
+                          @customer-style-saved=${() => void this.renderRoot.querySelector("dashboard-menu-online-preview")?.reload()}
+                        ></dashboard-menu-customer-style-dialog>`,
+                      ),
+                    )}
                     <dashboard-menu-online-preview
                       .api=${this.api.background ?? this.api}
                       .menuId=${menuId}

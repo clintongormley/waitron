@@ -1,4 +1,12 @@
-import { menus, readTaxpayer, readVenue, readSettings, saveSettings, units } from "@waitron/db";
+import {
+  customerMenuStyles,
+  menus,
+  readTaxpayer,
+  readVenue,
+  readSettings,
+  saveSettings,
+  units,
+} from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
   getCountryPack,
@@ -11,9 +19,15 @@ import type { VatClass } from "@waitron/shared";
 import { readSavedContentLanguages, writeContentLanguages } from "./content-languages.js";
 import { createMenuShell } from "./menu-structure.js";
 import { assignMenuToVenue } from "./operations.js";
-import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
+import {
+  STARTER_CUSTOMER_MENU_STYLE_NAMES,
+  STARTER_MENU_NAMES,
+  STARTER_UNIT_NAMES,
+} from "./starter-content.js";
 import { MENU_SETTINGS } from "./settings.js";
 import { readDefaultMenuId } from "./operations.js";
+import { eq } from "drizzle-orm";
+import { foldName } from "./name-uniqueness.js";
 
 /** The starter units, by their English staff names; their words in other languages are in
  * `starter-content.ts`. */
@@ -106,6 +120,23 @@ export const MENU_PROVISIONING: ModuleProvisioning = {
           expectedRevision: revision,
           personId: null,
         });
+      const [style] = await tx
+        .select({ id: customerMenuStyles.id })
+        .from(customerMenuStyles)
+        .where(eq(customerMenuStyles.isDefault, true));
+      if (!style) {
+        const name = starterName(
+          STARTER_CUSTOMER_MENU_STYLE_NAMES,
+          "Default",
+          starter.staffLanguage,
+        );
+        await tx.insert(customerMenuStyles).values({
+          name,
+          nameKey: foldName(name),
+          isDefault: true,
+          appearance: {},
+        });
+      }
       let menuId = await readDefaultMenuId(tx);
       if (menuId === null) {
         const [created] = await tx

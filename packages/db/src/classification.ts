@@ -275,6 +275,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 
   // menu
+  classify("customer_menu_styles", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("menu_items", "state", MENU_STATE),
   classify("menu_item_variant_overrides", "state", MENU_STATE),

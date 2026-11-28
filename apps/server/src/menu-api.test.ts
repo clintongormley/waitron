@@ -9,6 +9,7 @@ import {
   CORE_MIGRATIONS,
   settings as settingsTable,
   categories,
+  customerMenuStyles,
   dashboardSessions,
   personRoles,
   products,
@@ -21,6 +22,7 @@ import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   addMember,
   createMenu,
+  deleteMenu,
   menuReleases,
   menuVersions,
   readTakeawayVatSchedules,
@@ -30,7 +32,7 @@ import {
 } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
-import { type ContentLanguageRules } from "@waitron/shared";
+import { type ContentLanguageRules, type CustomerMenuStyle } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { TradingContext } from "./trading-context.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/menu/test/library-images.js";
@@ -4780,6 +4782,82 @@ describe("publishing a menu", () => {
       .where(eq(menuVersions.menuId, menuId))
       .orderBy(menuVersions.number);
   }
+
+  it("saves the default customer appearance and refreshes a published preview without republishing", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const other = await createMenuVia(app, "Evening menu");
+    const set = await withTransaction(suite.db, (tx) =>
+      createMenu(tx, { name: "Chef's lunch", kind: "set_menu", setPrice: "14.00" }),
+    );
+    const removed = await withTransaction(suite.db, async (tx) => {
+      const archived = await createMenu(tx, {
+        name: "Archived set menu",
+        kind: "set_menu",
+        setPrice: "12.00",
+      });
+      await deleteMenu(tx, archived.id, managerPersonId);
+      return archived.id;
+    });
+    await suite.db.insert(customerMenuStyles).values({
+      name: "Default",
+      nameKey: "default",
+      isDefault: true,
+      appearance: {},
+    });
+    const { hash } = await preview(app, menuId);
+    const published = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
+      body: { expectedHash: hash },
+    });
+    expect(published.status).toBe(200);
+    await published.json();
+    const before = await versionsOf(menuId);
+
+    const path = `/management-api/menus/${menuId}/customer-style`;
+    const initial = await send(app, "GET", path);
+    expect(initial.status).toBe(200);
+    const style = (await initial.json()) as CustomerMenuStyle;
+    expect(style).toMatchObject({
+      name: "Default",
+      appearance: {},
+      affectedMenus: expect.arrayContaining([
+        { id: other, name: "Evening menu" },
+        { id: set.id, name: "Chef's lunch" },
+      ]),
+    });
+    const affectedIds = style.affectedMenus.map(({ id }) => id);
+    expect(affectedIds).not.toContain(menuId);
+    expect(affectedIds).not.toContain(removed);
+    const appearance = { pageColor: "#fbf7ef", headingFont: "serif" };
+    const saved = await send(app, "PUT", path, { body: appearance });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ appearance });
+    const online = await send(app, "GET", `/management-api/menus/${menuId}/customer-preview`);
+    expect(online.status).toBe(200);
+    expect(await online.json()).toMatchObject({ state: "published", appearance });
+    expect(await versionsOf(menuId)).toEqual(before);
+  });
+
+  it("refuses customer style edits without menu permission and refuses a logo on save", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Customer style permissions");
+    const path = `/management-api/menus/${menuId}/customer-style`;
+    for (const method of ["GET", "PUT"] as const) {
+      const denied = await send(app, method, path, {
+        cookie: staffCookie,
+        ...(method === "PUT" && { body: {} }),
+      });
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    }
+    const invalid = await send(app, "PUT", path, { body: { logo: `${"a".repeat(64)}.webp` } });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "logo" } },
+    });
+  });
 
   it("serves the published customer page while a different price is being edited", async () => {
     const app = mountApp();
