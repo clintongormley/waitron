@@ -1220,7 +1220,10 @@ The overpaid refusal carries the bill and the excess only (`refuseExcess`, `bill
    discount: the same refusals (reason, note, percentage range, amount at most the bill's shown
    total, `adjustment.exceeds_amount`), limits with standing figures that add pending discounts'
    working-out to today's records, the pending row written, the revision bumped,
-   `discount.given` recorded. `planAdjustment`/`applyAdjustment` hand a whole-bill discount to it.
+   `discount.given` recorded. It refuses a fixed amount its target cannot take in full at
+   whole-cent prices (2b would mark it `cut_down` from the start, asked at every Pay), so only a
+   later split can leave a held amount short; 7b–7d's targets keep that refusal.
+   `planAdjustment`/`applyAdjustment` hand a whole-bill discount to it.
    The apply takes `replacesDiscountId` (D22): the old discount is deleted in the same transaction.
    With `replacesDiscountId` it also accepts a placed bill with no sale (D23, point 2); without it, a
    placed bill is refused `tab.not_open`, as today.
