@@ -461,6 +461,7 @@ describe("disposable server routing", () => {
       ]),
     ];
     const context = routingContext();
+    const prefix = context.vars.DISPOSABLE_TESTS_LABEL_PREFIX;
     context.vars.DISPOSABLE_TESTS_CAPACITY = '{"slots":12,"serverRunning":0,"serverWaiting":0}';
     context.needs.changes.outputs.server_jobs = JSON.stringify(
       Object.fromEntries(routes.map(([id]) => [id, 256])),
@@ -492,14 +493,15 @@ describe("disposable server routing", () => {
                 : route;
             const labels = Array.isArray(selection) ? selection : [selection];
             const selfHosted = labels.includes("self-hosted");
-            if (!selfHosted && !labels.some((label) => String(label).startsWith("dt-"))) continue;
+            if (!selfHosted && !labels.some((label) => String(label).startsWith(`${prefix}-`)))
+              continue;
             if (matrix) expect(Object.keys(matrix), id).toEqual(["shard"]);
             const template = workflowJobs[id]?.name ?? (matrix ? `${id} (${shard})` : id);
             const name = template.replace(/\$\{\{ .*? \}\}/g, (value) =>
               expressionValue(value, context),
             );
             checked.add(name);
-            const expected = `dt-42-1234-${attempt}-${admitted.get(name)}`;
+            const expected = `${prefix}-42-1234-${attempt}-${admitted.get(name)}`;
             if (
               !selfHosted ||
               !admitted.has(name) ||
@@ -513,7 +515,9 @@ describe("disposable server routing", () => {
       }
     }
     expect([...violations]).toEqual([]);
-    expect([...checked]).toEqual(expect.arrayContaining(["changes", "server-probe"]));
+    expect(
+      [...admitted.keys()].filter((name) => name !== "image / smoke" && !checked.has(name)),
+    ).toEqual([]);
   });
 
   it.each([
