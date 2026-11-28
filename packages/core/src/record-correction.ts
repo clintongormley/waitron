@@ -1,7 +1,7 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { insertInChunks, allocateInvoiceNumber, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -10,7 +10,6 @@ import {
   compareDecimal,
   decimal,
   negateDecimal,
-  rawCentsToDecimal,
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
@@ -37,7 +36,7 @@ import {
 import { storedCounterparty } from "./counterparty.js";
 import { authorizeCorrectionApproval } from "./correction-approval.js";
 import { authorizeReopenedCredit } from "./correction-reopen.js";
-import { correctionTargetFor } from "./correction-target.js";
+import { correctionTargetFor, earlierCorrectionsOf } from "./correction-target.js";
 import {
   checkPartialCorrectionBreakdown,
   checkPartialCorrectionHistory,
@@ -168,7 +167,6 @@ export async function recordCorrection(
   const correctsSaleId = await correctionTargetFor(tx, input.correctsSaleId);
 
   // The corrective inherits the original's `locale` and `invoiceLocales`.
-  // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
   const [original] = await tx
     .select({
       locale: sales.locale,
@@ -183,8 +181,6 @@ export async function recordCorrection(
       correctsSaleId: sales.correctsSaleId,
       replacesOriginal: sales.replacesOriginal,
       vatBreakdown: sales.vatBreakdown,
-      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
-      correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
     })
     .from(sales)
     .where(eq(sales.id, correctsSaleId));
@@ -249,10 +245,10 @@ export async function recordCorrection(
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
   const totalCents = stringToCents(input.total);
   const correction = centsToDecimal(totalCents);
-  const remaining = sumDecimals([
-    centsToDecimal(original.total),
-    rawCentsToDecimal(original.corrections),
-  ]);
+  const earlier = await earlierCorrectionsOf(tx, correctsSaleId);
+  const remaining = centsToDecimal(
+    earlier.corrections.reduce((sum, row) => sum + row.total, original.total),
+  );
   if (
     compareDecimal(correction, ZERO) < 0 &&
     compareDecimal(sumDecimals([remaining, correction]), ZERO) < 0
@@ -266,7 +262,13 @@ export async function recordCorrection(
 
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
-    derived ?? wholeInvoiceBreakdown(correctsSaleId, original, totalCents, input.lines);
+    derived ??
+    wholeInvoiceBreakdown(
+      correctsSaleId,
+      { ...original, correctionCount: earlier.corrections.length },
+      totalCents,
+      input.lines,
+    );
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
@@ -311,21 +313,8 @@ export async function recordCorrection(
       invoiceBreakdown: original.vatBreakdown,
       // Read above: every line of a checked split names an invoice line.
       invoiceLines: onInvoice!,
-      earlierBreakdowns: (
-        await tx
-          .select({ vatBreakdown: sales.vatBreakdown })
-          .from(sales)
-          .where(eq(sales.correctsSaleId, correctsSaleId))
-      ).map((row) => row.vatBreakdown),
-      earlierLines: await tx
-        .select({
-          correctsLineId: saleLines.correctsLineId,
-          vatRate: saleLines.vatRate,
-          lineGross: saleLines.lineGross,
-        })
-        .from(saleLines)
-        .innerJoin(sales, eq(sales.id, saleLines.saleId))
-        .where(eq(sales.correctsSaleId, correctsSaleId)),
+      earlierBreakdowns: earlier.corrections.map((row) => row.vatBreakdown),
+      earlierLines: earlier.lines,
     });
   }
 

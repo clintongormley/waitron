@@ -67,9 +67,8 @@ declare module "@waitron/shared" {
      * a customer. With `fullInvoice`, the invoice names nobody, is not an F1 or the replacement
      * of one, or a whole-invoice credit was asked. */
     "sale.correction_unsupported": { saleId: string };
-    /** Thrown by `recordReplacement` when a corrective already names the invoice: a replacement
-     * carries the whole invoice, so it must be the first corrective of it. Refused before a number
-     * is allocated. */
+    /** Thrown by `recordReplacement` when the invoice already has a replacement. Refused before a
+     * number is allocated. */
     "sale.replacement_not_first": { saleId: string };
     /** Thrown by `recordCorrection` when a negative correction would take the invoice below zero:
      * `remaining` is the invoice's total net of the corrections already recorded against it, and
