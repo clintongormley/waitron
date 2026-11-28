@@ -3368,9 +3368,18 @@ export class TillApp extends LitElement {
       ? html`<till-drawer-cash
           .api=${this.api}
           .printerId=${dialog.printerId}
+          .printerName=${dialog.printerName}
           .opensDrawer=${dialog.opensDrawer}
           .opener=${dialog.opener}
           @drawer-cash-dismiss=${dismiss}
+          @drawer-cash-saved=${() => {
+            const toast = this.renderRoot.querySelector<WtToast>("[data-drawer-key-toast]");
+            if (toast === null) return;
+            toast.message = t(
+              dialog.opensDrawer ? "drawer_close.key_if_needed" : "drawer_close.use_key",
+            );
+            toast.show();
+          }}
         ></till-drawer-cash>`
       : html`<till-drawer-close
           .api=${this.api}
@@ -3384,7 +3393,15 @@ export class TillApp extends LitElement {
   #showDrawerDialog(kind: "close" | "cash", opener: HTMLElement | null): void {
     const printerId = this.deviceEquipment?.drawerPrinterId;
     if (printerId && this.#inShell())
-      this.drawerDialog = { kind, printerId, opensDrawer: this.#mayOpenDrawer, opener };
+      this.drawerDialog = {
+        kind,
+        printerId,
+        printerName:
+          this.deviceEquipment?.roles.find((role) => role.role === "cash_drawer")?.resolved?.name ??
+          "",
+        opensDrawer: this.#mayOpenDrawer,
+        opener,
+      };
   }
 
   /** The person every request names, one object per sign-in: a refusal hands back the object its
@@ -3749,6 +3766,7 @@ export class TillApp extends LitElement {
   @state() private drawerDialog: {
     kind: "close" | "cash";
     printerId: string;
+    printerName: string;
     opensDrawer: boolean;
     opener: HTMLElement | null;
   } | null = null;
@@ -24627,6 +24645,12 @@ export class TillApp extends LitElement {
           .items=${this.#makeNow.items}
           @dismiss=${this.#makeNow.dismiss}
         ></till-make-now>
+        <wt-toast
+          class="equipment-toast"
+          data-drawer-key-toast
+          tone="info"
+          close-label=${t("equipment.close")}
+        ></wt-toast>
         <wt-toast
           class="equipment-toast"
           data-equipment-toast

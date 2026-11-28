@@ -97,6 +97,8 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
   @property() value = "";
 
   @property() mode: "decimal" | "pin" = "decimal";
+  @property({ type: Boolean }) ascending = false;
+  @property({ type: Boolean }) disabled = false;
 
   #unregister?: () => void;
 
@@ -119,6 +121,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
 
   /** A key the keyboard router hands this pad, the one in front. */
   receiveKey(input: PadInput, event: KeyboardEvent): void {
+    if (this.disabled) return;
     if (input.kind === "key") this.#press(input.key, event);
     else
       this.dispatchEvent(
@@ -146,16 +149,9 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
         { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
       ];
     }
+    const digits = this.ascending ? "123456789" : "789456123";
     return [
-      { key: "7", glyph: "7" },
-      { key: "8", glyph: "8" },
-      { key: "9", glyph: "9" },
-      { key: "4", glyph: "4" },
-      { key: "5", glyph: "5" },
-      { key: "6", glyph: "6" },
-      { key: "1", glyph: "1" },
-      { key: "2", glyph: "2" },
-      { key: "3", glyph: "3" },
+      ...Array.from(digits, (key) => ({ key, glyph: key })),
       { key: ".", glyph: decimalMark(currentLocale()), label: t("pad.decimal") },
       { key: "0", glyph: "0" },
       { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
@@ -173,14 +169,22 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`
       : glyph;
     return html`
-      <wt-button class="key" data-key=${key} @click=${(event: Event) => this.#press(key, event)}>
+      <wt-button
+        class="key"
+        exportparts="button:key"
+        data-key=${key}
+        .disabled=${this.disabled}
+        @click=${(event: Event) => this.#press(key, event)}
+      >
         ${content}
       </wt-button>
     `;
   }
 
   override render() {
-    return html`<div class="pad">${this.#keys().map((padKey) => this.#renderKey(padKey))}</div>`;
+    return html`<div class="pad" part="pad">
+      ${this.#keys().map((padKey) => this.#renderKey(padKey))}
+    </div>`;
   }
 }
 

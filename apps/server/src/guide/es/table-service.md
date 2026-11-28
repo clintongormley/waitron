@@ -42,9 +42,10 @@ la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guar
 
 ## Registrar una entrada o salida de efectivo {#drawer-cash-entry}
 
-Si repones cambio o retiras efectivo, abre **Más** y elige **Entrada o salida de efectivo** en un
-caja asignada al cajón. Elige **Abrir cajón** o usa la llave si sigue cerrado. Elige **Entrada**
-o **Salida**, indica el importe y el motivo del movimiento y pulsa **Guardar**.
+Si repones cambio o retiras efectivo, abre **Más** y elige **Entrada o salida de efectivo** en una
+caja asignada al cajón. Elige **Entrada** o **Salida**, indica el importe y el motivo, y pulsa
+**Añadir** o **Retirar** con el importe. Waitron registra el movimiento y abre el cajón. Si sigue
+cerrado, usa la llave.
 
 ## Cerrar un cajón de efectivo {#close-drawer}
 
