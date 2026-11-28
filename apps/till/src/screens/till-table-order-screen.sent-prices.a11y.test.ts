@@ -10,6 +10,7 @@ import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { WtDialog } from "@waitron/ui";
 import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -51,9 +52,7 @@ describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
         expect(panel.shadowRoot!.querySelector('[data-served-line="dish"]')!.textContent).toContain(
           "Recorded pizza",
         );
-        await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="dish"]')!,
-        );
+        await openSentDetails(panel, "dish");
         await el.updateComplete;
         const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
         await dialog.updateComplete;

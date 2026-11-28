@@ -4,6 +4,7 @@ import type { WtDialog, WtRowActions } from "@waitron/ui";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { resized, showView } from "./till-table-order-screen.test-helpers.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 export async function sentPanelFor(screen: TillTableOrderScreen): Promise<TillSentOrders> {
   screen.style.width = "1280px";
@@ -18,16 +19,7 @@ export async function openSentDish(
   lineId: string,
   kind: "fired" | "held" | "served" = "fired",
 ): Promise<WtDialog> {
-  const panel = await sentPanelFor(screen);
-  const info = (kind === "served" ? ["served", "fired"] : [kind])
-    .map((rowKind) =>
-      panel.shadowRoot!.querySelector<HTMLElement>(
-        `[data-${rowKind}-line="${lineId}"] [data-sent-info]`,
-      ),
-    )
-    .find((found) => found !== null)!;
-  expect(info.checkVisibility(), `Sent information for ${lineId} is visible`).toBe(true);
-  await userEvent.click(info);
+  await openSentDetails(await sentPanelFor(screen), lineId, kind);
   await screen.updateComplete;
   const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
   await dialog.updateComplete;

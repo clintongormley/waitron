@@ -18,6 +18,7 @@ import {
   closePartyMenu,
   openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -86,11 +87,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       expect(
         panel.shadowRoot!.querySelector('[data-held-line="stored-dish"]')!.textContent,
       ).toContain("Recorded dish");
-      await userEvent.click(
-        panel.shadowRoot!.querySelector<HTMLElement>(
-          '[data-held-line="stored-dish"] [data-sent-info]',
-        )!,
-      );
+      await openSentDetails(panel, "stored-dish", "held");
       await el.updateComplete;
       const more = q("[data-sent-line-dialog] wt-row-actions") as WtRowActions;
       await more.updateComplete;

@@ -9,6 +9,7 @@ import { current, groups, now } from "./till-table-order-screen.current-orders.t
 import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -65,11 +66,7 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const kind of ["held", "served"] as const) {
-        await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>(
-            `[data-sent-info="${kind === "held" ? "l-flan" : "l-croq"}"]`,
-          )!,
-        );
+        await openSentDetails(panel, kind === "held" ? "l-flan" : "l-croq");
         await el.updateComplete;
         const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
         await dialog.updateComplete;

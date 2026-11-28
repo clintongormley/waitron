@@ -16,6 +16,7 @@ import {
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -60,9 +61,7 @@ describe.each(["en", "es"] as const)("Sent dish facts in %s", (locale) => {
             minute: "2-digit",
           }).format(new Date(kind === "fired" ? sentAt : heldAt));
           const id = kind === "fired" ? "l-croq" : "l-flan";
-          await userEvent.click(
-            panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${id}"]`)!,
-          );
+          await openSentDetails(panel, id);
           await el.updateComplete;
           const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
           await dialog.updateComplete;

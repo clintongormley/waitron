@@ -13,6 +13,7 @@ import {
 import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 function snapshot() {
   const data = structuredClone(current());
@@ -93,9 +94,7 @@ describe.each(["en", "es"] as const)("stored nutrition on the table in %s", (loc
         element: panel,
         path: `__screenshots__/a773-sent-nutrition-${locale}-${theme}-${width}.png`,
       });
-      await userEvent.click(
-        panel.shadowRoot!.querySelector<HTMLElement>('[data-held-line="l-flan"] [data-sent-info]')!,
-      );
+      await openSentDetails(panel, "l-flan", "held");
       await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
       await dialog.updateComplete;

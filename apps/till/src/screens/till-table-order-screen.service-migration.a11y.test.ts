@@ -18,6 +18,7 @@ import {
   closePartyMenu,
   openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openSentDetails } from "../../test/open-sent-row.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -77,9 +78,7 @@ describe.each(["en", "es"] as const)("Sent service migration in %s", (locale) =>
           path: `__screenshots__/a773-service-migration-${locale}-${theme}-${width}-reminder.png`,
         });
         await closePartyMenu(el);
-        await userEvent.click(
-          panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-info=l-flan]")!,
-        );
+        await openSentDetails(panel, "l-flan");
         await el.updateComplete;
         const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
         await dialog.updateComplete;
