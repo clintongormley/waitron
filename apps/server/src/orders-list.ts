@@ -343,7 +343,8 @@ function whereOf(clauses: SQL[]): SQL {
 
 /**
  * One page of rows: closest match first when searched by words, then newest first by `at`, then
- * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due,
+ * by id. Its queries do not grow with the page: the bills holding pending discounts (two more,
+ * their discounts and lines, when any does), the page, then the invoices' amounts due,
  * payments before an invoice (two), corrective numbers, tables and staff, each for the whole page
  * and each skipped when the page has nothing to ask.
  */

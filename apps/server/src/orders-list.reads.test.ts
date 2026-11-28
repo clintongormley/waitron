@@ -91,7 +91,7 @@ async function readsFor(limit: number, table = false) {
 }
 
 describe("reads per page", () => {
-  it("asks the same seven reads for three rows of every shape as for fifty", async () => {
+  it("asks the same eight reads for three rows of every shape as for fifty, none holding a pending discount", async () => {
     for (let n = 0; n < 17; n++) await oneOfEach();
     const three = await readsFor(3);
     expect(three.statuses).toEqual(["left_without_paying", "waiting_for_payment", "open"]);
