@@ -27,7 +27,7 @@ import { gatherBillDiscountInputs, readBillDiscounts } from "./bill-discounts-re
 import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
 import { receiptLines } from "./receipt-adjustments.js";
 import { priceStoredOrder, readStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
-import { holdDiscount } from "./testing/bill-discounts.js";
+import { holdDiscount, writtenAsItStood } from "./testing/bill-discounts.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { send } from "./testing/bill-venue.js";
 import {
@@ -919,17 +919,7 @@ describe("a split line's pending discounts", () => {
     );
     const shares = await inTx(venue, (tx) => pendingOn(tx, billId));
     expect(await crystallisesAsShown(billId, false)).toBe(3);
-    const entries = await inTx(venue, (tx) =>
-      tx
-        .select({ data: activityLog.data })
-        .from(activityLog)
-        .where(
-          and(
-            eq(activityLog.kind, "discount.written_as_it_stood"),
-            eq(activityLog.subjectId, billId),
-          ),
-        ),
-    );
+    const entries = await writtenAsItStood(venue, billId);
     expect(entries).toEqual([
       {
         data: expect.objectContaining({
