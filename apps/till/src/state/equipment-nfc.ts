@@ -12,6 +12,8 @@ export class EquipmentNfc {
   #lifetime?: AbortController;
   #scan?: AbortController;
   #Reader?: new () => NfcReader;
+  /** NFC failed to start in this page. */
+  unavailable = false;
 
   constructor(
     private readonly onCode: (code: EquipmentCode | null) => void,
@@ -91,6 +93,7 @@ export class EquipmentNfc {
       this.#scan = undefined;
       if ((error as { name?: string } | null)?.name === "NotAllowedError")
         this.onPermission("denied");
+      this.unavailable = true;
       this.onUnavailable();
     }
   }

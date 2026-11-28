@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-notice.js";
 import "./equipment-scanner.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
-import type { DeviceEquipment, EquipmentItem } from "../api/device-session-api.js";
+import type { DeviceEquipment, EquipmentItem, EquipmentRole } from "../api/device-session-api.js";
 import type { EquipmentCode } from "../state/equipment-nfc.js";
 import {
   type PayPrinter,
@@ -28,10 +28,8 @@ export function printerWarning(printer: PayPrinter): string | null {
   return printer.kind === "unset" ? t("pay_equipment.printer_none") : null;
 }
 
-export type PayEquipmentRole = "card_terminal" | "receipt";
-
 export interface PayEquipmentPick {
-  role: PayEquipmentRole;
+  role: EquipmentRole;
   id: string;
   takeOver: boolean;
 }
@@ -239,8 +237,8 @@ export class TillPayEquipment extends LitElement {
   /** A card is the payment method, so the reader is required. */
   @property({ type: Boolean }) cardRequired = false;
   @property({ type: Boolean, reflect: true }) open = false;
-  @property({ attribute: false }) saving: { role: PayEquipmentRole; id: string } | null = null;
-  @property({ attribute: false }) fieldErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  @property({ attribute: false }) saving: { role: EquipmentRole; id: string } | null = null;
+  @property({ attribute: false }) fieldErrors: Partial<Record<EquipmentRole, string>> = {};
   /** Why the phone no longer has the reader it had, shown above the row. */
   @property({ attribute: false }) readerReason: string | null = null;
   /** What to do about it, under the reason, inside its box. */
@@ -250,7 +248,7 @@ export class TillPayEquipment extends LitElement {
   @property({ type: Boolean }) disabled = false;
   /** A practice payment label: shown, never chosen. */
   @property({ attribute: false }) fixedReader: { id?: string; name: string } | null = null;
-  @state() private asking: { role: PayEquipmentRole; item: EquipmentItem } | null = null;
+  @state() private asking: { role: EquipmentRole; item: EquipmentItem } | null = null;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") && !this.open) this.asking = null;
@@ -324,7 +322,7 @@ export class TillPayEquipment extends LitElement {
     </div>`;
   }
 
-  #onPick(role: PayEquipmentRole, shown: string, choices: EquipmentItem[], value: string): void {
+  #onPick(role: EquipmentRole, shown: string, choices: EquipmentItem[], value: string): void {
     if (this.asking?.role === role) this.asking = null;
     if (value === "" || value === shown) return;
     const picked = choices.find((choice) => choice.id === value);
@@ -336,7 +334,7 @@ export class TillPayEquipment extends LitElement {
   }
 
   #field(
-    role: PayEquipmentRole,
+    role: EquipmentRole,
     ready: { id: string; name: string } | null,
     choices: EquipmentItem[],
     warning: string | null = null,

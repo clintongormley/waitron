@@ -9,6 +9,27 @@ import type {
   TillActiveReader,
 } from "../api/device-session-api.js";
 
+/** No pay-sheet pick made yet of any role. */
+export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
+  receipt: 0,
+  payment_slip: 0,
+  cash_drawer: 0,
+  invoice: 0,
+  card_terminal: 0,
+});
+
+/** `errors` with `message` under `role`, or with `role`'s message removed when it is null. */
+export function withRoleError(
+  errors: Partial<Record<EquipmentRole, string>>,
+  role: EquipmentRole,
+  message: string | null,
+): Partial<Record<EquipmentRole, string>> {
+  const next = { ...errors };
+  if (message === null) delete next[role];
+  else next[role] = message;
+  return next;
+}
+
 /** The reader a payment from this device would be charged on. */
 export type PayReader =
   | { kind: "ready"; id: string; name: string; provider: TillReaderProvider }

@@ -142,6 +142,18 @@ describe("till-device-sheet", () => {
     expect(rows(noReceipt.el)).toEqual(["cardReaderId", "cashDrawerPrinterId"]);
   });
 
+  it("draws a chevron on every dropdown, even with one choice, and the device icon on its button", async () => {
+    const { el } = await mountSheet();
+    const drawn = (icon: Element | null | undefined) =>
+      icon?.shadowRoot?.querySelector("path")?.getAttribute("d") ?? "";
+    for (const name of rows(el)) {
+      await box(el, name).updateComplete;
+      expect(drawn(box(el, name).shadowRoot!.querySelector(".chevron")), name).not.toBe("");
+    }
+    const trigger = sheet(el).shadowRoot!.querySelector('[part="trigger"] wt-icon');
+    expect(drawn(trigger)).not.toBe("");
+  });
+
   it("highlights every role a scan changed: a printer sticker picks up receipt and slip together", async () => {
     film();
     const { el, picks } = await mountSheet();

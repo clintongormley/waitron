@@ -10,11 +10,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { BILL_PAY_WAYS, type PayChoice } from "../state/bill-payment.js";
 import { helpBadge } from "./help-badge.js";
 
-registerIcons({
-  "pay-card": "M2 3h12v10H2V3zm1.5 1.5v2h9v-2h-9zm0 3.5v3.5h9V8h-9z",
-  "pay-contactless":
-    "M3.5 5a5.5 5.5 0 0 1 0 6l-1.2-.8a4 4 0 0 0 0-4.4l1.2-.8zm3-1.5a8.3 8.3 0 0 1 0 9l-1.2-.8a6.9 6.9 0 0 0 0-7.4l1.2-.8zM9.5 2a11 11 0 0 1 0 12l-1.2-.8a9.6 9.6 0 0 0 0-10.4L9.5 2z",
-});
+registerIcons({ "pay-card": "M2 3h12v10H2V3zm1.5 1.5v2h9v-2h-9zm0 3.5v3.5h9V8h-9z" });
 
 const [contribution, share, items, whole] = BILL_PAY_WAYS;
 const payWays = [whole, share, items, contribution];

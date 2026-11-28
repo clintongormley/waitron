@@ -1086,9 +1086,10 @@ shows how much pays off the bill and the **Change to give**. If the venue takes 
 whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
-**Card and reader.** On a handheld, use the contactless icon to open **Reader and printer**.
-Use **Change** or scan the reader's Waitron label if you have another one. If the contactless icon on a till
-opens a list of readers, choose the one you need. Check the amount on **Charge** before pressing it.
+**Card and reader.** On a handheld, the contactless icon at the top of Pay opens the camera. Scan
+the Waitron labels of the reader and printers in your hand, one after another, or choose them from
+the lists, then press **Done**. If the contactless icon on a till opens a list of readers, choose
+the one you need. Check the amount on **Charge** before pressing it.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the Pay screen.

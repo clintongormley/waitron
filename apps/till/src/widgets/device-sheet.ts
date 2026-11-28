@@ -1,13 +1,18 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles, type ComboboxOption, type WtRowActions } from "@waitron/ui";
+import {
+  baseStyles,
+  DROPDOWN_ICONS,
+  registerIcons,
+  type ComboboxOption,
+  type WtRowActions,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "./equipment-scanner.js";
-import "./quiet-pay.js";
 import { equipmentTakeover, listedRole } from "./equipment-dialog.js";
 import { optionLabel } from "./equipment-labels.js";
 import { type PayNotice, printerWarning } from "./pay-equipment.js";
@@ -21,6 +26,12 @@ import type {
 import type { CapabilityFlag } from "../layout.js";
 import type { EquipmentCode } from "../state/equipment-nfc.js";
 import { type FixedReader, payPrinterOf, payReaderOf } from "../state/pay-equipment.js";
+
+registerIcons({
+  ...DROPDOWN_ICONS,
+  "pay-contactless":
+    "M3.5 5a5.5 5.5 0 0 1 0 6l-1.2-.8a4 4 0 0 0 0-4.4l1.2-.8zm3-1.5a8.3 8.3 0 0 1 0 9l-1.2-.8a6.9 6.9 0 0 0 0-7.4l1.2-.8zM9.5 2a11 11 0 0 1 0 12l-1.2-.8a9.6 9.6 0 0 0 0-10.4L9.5 2z",
+});
 
 /** A choice made in the sheet. A scanned sticker names its kind; the server picks its roles, and
  * `role` is the one the app counts it against. */
@@ -62,6 +73,7 @@ export class TillDeviceSheet extends LitElement {
         height: var(--wt-tap-min);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
+        --wt-font-size-md: calc(var(--wt-space-4) + var(--wt-space-1));
       }
 
       wt-row-actions[data-open]::part(trigger) {

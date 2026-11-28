@@ -938,6 +938,14 @@ and handle `wt-back` to navigate. Set `back-disabled` while the editor is saving
 slot holds a named icon button. Put the formatted amount in the default slot of `wt-amount-block`.
 Give it a `label` and, when needed, a `breakdown` with the amount and any tip or adjustment.
 
+On a phone's Pay, put `till-device-sheet` (`apps/till/src/widgets/device-sheet.ts`) in the top
+bar's `action` slot to choose the reader and printers. Its button opens a bottom sheet with the
+camera on, which keeps scanning device stickers, and one boxed dropdown per device the payment uses:
+the drawer only with `open-cash-drawer`, the receipt and slip printers only with `print-receipt`.
+It only shows and asks; the app sends every pick. Set `disabled` while money is moving, which also
+closes an open sheet, and `badge` when the receipt cannot print now. Other screens that choose a
+device still use the folded row, `till-pay-equipment`.
+
 Place your `wt-button` actions in `wt-foot-button-bar`. It stacks them by default. Use `layout="row"`
 for the order buttons. A ghost button in the `link` slot goes below the main actions. Set
 `--wt-foot-padding-bottom` when the surrounding screen supplies its own bottom inset.

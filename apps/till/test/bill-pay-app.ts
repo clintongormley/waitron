@@ -16,6 +16,7 @@ import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "../src/screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "../src/widgets/bill-pay-dialog.js";
+import type { TillDeviceSheet } from "../src/widgets/device-sheet.js";
 import type { TillSplitEqually } from "../src/widgets/split-equally.js";
 import type { FormFactor, CapabilityFlag } from "../src/layout.js";
 import type { TillApi } from "../src/api/client.js";
@@ -629,6 +630,35 @@ export async function press(el: TillApp, selector: string): Promise<void> {
     (selector === "[data-pay-continue]" ? inDialog(el, "[data-quiet-pay-card]") : null);
   control!.click();
   await flush(el);
+}
+
+/** Pay's device button and sheet on a phone. */
+export const deviceSheet = (el: TillApp) =>
+  inDialog(el, "till-device-sheet") as unknown as TillDeviceSheet | null;
+
+/** Whether Pay's device sheet is open, as its button tells a screen reader. */
+export function deviceSheetOpen(el: TillApp): boolean {
+  const trigger = deviceSheet(el)
+    ?.shadowRoot?.querySelector("wt-row-actions")
+    ?.shadowRoot?.querySelector('[part="trigger"]');
+  return trigger?.getAttribute("aria-expanded") === "true";
+}
+
+/** Opens Pay's device sheet on a phone with its button, as a waiter does, and returns it. */
+export async function openDeviceSheet(el: TillApp): Promise<TillDeviceSheet> {
+  await dialog(el)!.updateComplete;
+  const sheet = deviceSheet(el);
+  expect(sheet, "Pay draws the device button").not.toBeNull();
+  await sheet!.updateComplete;
+  if (!deviceSheetOpen(el)) {
+    const trigger = sheet!
+      .shadowRoot!.querySelector("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLElement>('[part="trigger"]')!;
+    await userEvent.click(trigger);
+    await flush(el);
+  }
+  await sheet!.updateComplete;
+  return sheet!;
 }
 
 /** Answers the Pay window's own-receipt question. */
