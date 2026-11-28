@@ -300,14 +300,16 @@ describe("moving dishes to another table", () => {
     const allergy = await inTx(venue, (tx) => readPartyAllergy(tx, target.partyId));
     expect(allergy.guests.map(({ who }) => who)).toEqual(["Guest"]);
     expect(allergy.ticks.map(({ workingLineId }) => workingLineId)).toEqual([beer]);
-    const slips = printed()
-      .slice(count)
-      .filter((paper) => paper.includes(words.moved));
+    const newSlips = printed().slice(count);
+    expect(newSlips.some((paper) => paper.includes(words.noteChanged))).toBe(false);
+    const slips = newSlips.filter((paper) => paper.includes(words.moved));
     expect(slips).toEqual([
       expect.stringContaining(`${numberOf(source.tabId)} -> ${numberOf(moved)}`),
     ]);
     expect(slips[0]).toContain(`${words.fromPlace}${source.label}`);
     expect(slips[0]).toContain(`${words.toPlace}${target.label}`);
+    expect(slips[0]).toContain("Change the cutlery");
+    expect(slips[0]).not.toContain("Bring cake at the end");
     expect(slips[0]).toContain("BEER SMALL");
     expect(slips[0]).toContain(words.hold);
     expect(slips[0]).toContain("RICE PAN");

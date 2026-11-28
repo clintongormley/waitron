@@ -109,6 +109,8 @@ export interface MoveBillResult {
 /** Issues a bill whose set menus the move regrouped, if that left it fully paid. */
 export type IssueMovedBill = (billId: string) => Promise<TillSaleResult | null>;
 
+/** The intermediate bill carries the source's sent work for the MOVED slip. Both table notes stay
+ * at their tables. */
 interface BillFromDishSplit {
   kitchenBefore: SentWork | null;
 }
