@@ -303,6 +303,54 @@ it.each([
   expect(events.map((event) => event.detail)).toEqual([{ groupId: "g3" }]);
 });
 
+it("neither lists nor offers to Fire another bill's dish in a held group that is already made and ready", async () => {
+  const held = {
+    ...groups[2]!,
+    lineIds: ["own-croq", "other-hake"],
+    summary: "2 × Croquettes, 1 × Hake",
+  };
+  const { el } = await sent({
+    groups: [held],
+    currentOrders: current({
+      groups: [
+        currentGroup("g3", 3, "held", [
+          row("own-croq", "Croquettes", "2.000", { released: false }),
+          row("other-hake", "Hake", "1.000", {
+            workingOrderId: "other-bill",
+            readyAt: "2026-09-28T20:10:00.000Z",
+          }),
+        ]),
+      ],
+      ungrouped: [],
+    }),
+  });
+  expect(panel(el).shadowRoot!.querySelectorAll("[data-companion]")).toHaveLength(0);
+  await click(el, '[data-group-fire="g3"]');
+  expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "It goes to the station now: 2 × Croquettes",
+  );
+});
+
+it("keeps Fire's server summary when its dishes go to the kitchen while it is open", async () => {
+  const orders = (released: boolean) =>
+    current({
+      groups: [
+        currentGroup("g3", 3, "held", [row("own-croq", "Croquettes", "2.000", { released })]),
+      ],
+      ungrouped: [],
+    });
+  const { el } = await sent({
+    groups: [{ ...groups[2]!, lineIds: ["own-croq"], summary: "2 × Croquettes" }],
+    currentOrders: orders(false),
+  });
+  await click(el, '[data-group-fire="g3"]');
+  el.currentOrders = orders(true);
+  await el.updateComplete;
+  expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "It goes to the station now: 2 × Croquettes",
+  );
+});
+
 it("retains every dish in Fire's server summary when the structured read lacks a group line", async () => {
   const { el } = await sent({
     groups: [

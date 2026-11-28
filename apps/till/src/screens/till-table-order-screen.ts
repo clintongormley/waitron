@@ -62,7 +62,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
-import { byFiringOrder, sentPanel, type SentSlice } from "../state/sent-panel.js";
+import { byFiringOrder, sentPanel, type SentSlice, waitsForFire } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -5850,21 +5850,29 @@ export class TillTableOrderScreen extends LitElement {
     const byId = new Map(rows?.map((row) => [row.lineId, row]));
     if (group.lineIds.length === 0 || !group.lineIds.every((id) => byId.has(id)))
       return group.summary;
-    const counts = new Map<string, Decimal>();
-    for (const id of group.lineIds) {
-      const row = byId.get(id)!;
-      const quantity = subtractDecimal(
-        decimal(row.quantity),
-        decimal(row.cancelledQuantity ?? "0"),
-      );
-      counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
-    }
-    const quantities = [...counts].map(
-      ([name, quantity]) => [name, trimQuantity(quantity)] as const,
-    );
+    const tally = (rows: readonly CurrentOrderRow[]) => {
+      const counts = new Map<string, Decimal>();
+      for (const row of rows) {
+        const quantity = subtractDecimal(
+          decimal(row.quantity),
+          decimal(row.cancelledQuantity ?? "0"),
+        );
+        counts.set(row.name, addDecimal(counts.get(row.name) ?? decimal("0"), quantity));
+      }
+      return [...counts].map(([name, quantity]) => [name, trimQuantity(quantity)] as const);
+    };
+    const rowsOf = group.lineIds.map((id) => byId.get(id)!);
     // The two reads can arrive separately; a stale row must not change what Fire confirms.
-    if (quantities.map(([name, quantity]) => `${quantity} × ${name}`).join(", ") !== group.summary)
+    if (
+      tally(rowsOf)
+        .map(([name, quantity]) => `${quantity} × ${name}`)
+        .join(", ") !== group.summary
+    )
       return group.summary;
+    // The server's summary also names the group's dishes another bill already sent, which Fire
+    // does not send again.
+    const quantities = tally(rowsOf.filter(waitsForFire));
+    if (quantities.length === 0) return group.summary;
     return quantities
       .map(([name, quantity]) => `${formatDecimalInput(quantity, currentLocale())} × ${name}`)
       .join(", ");
