@@ -76,7 +76,7 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     fragment: "left join sales r on r.corrects_sale_id = t.root_id and r.replaces_original = 1",
     lines: 1,
     reason:
-      "finds a sale's replacement, whose issue date moves each corrective of the sale to its supply day, where a later void takes VAT off",
+      "finds a sale's replacement, whose supply day places the sale's correctives and their voids, and whose issue date dates the move of each corrective made before it",
   },
   {
     file: "packages/reporting/src/vat-movements.ts",

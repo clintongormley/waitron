@@ -4182,9 +4182,9 @@ corrective by difference, and the date fix (Q64) is then refused (`sale.replacem
 the guide tells an administrator to send the date fix first. Part 2 allows the date fix after a
 refund.
 
-_2026-11-28, A1619 part 2: the date fix now goes through after a refund, and the guide no longer says to send it first; (b) no longer applies._
-
 _2026-11-28: under the owner's decisions of that day ([design](../superpowers/specs/2026-11-28-corrections-by-substitution-design.md), D1 and D3), still to be built, a refund that leaves the receipt above zero, like Q64's 5.00, is a corrective by substitution, not by difference; one that gives everything back stays by difference. (b)'s interim state is otherwise unchanged, and Q64's reworded form is in question 15 of the [meeting sheet](2026-11-19-adviser-meeting.md)._
+
+_2026-11-28, A1619 part 2: the date fix now goes through after a refund, and the guide no longer says to send it first, so (b)'s interim state has ended._
 
 > Desde el 27 de noviembre de 2026, el sistema emite una rectificativa (una corrección, una
 > devolución o un abono) en cuanto el personal la hace, sea cual sea la respuesta de la AEAT sobre la

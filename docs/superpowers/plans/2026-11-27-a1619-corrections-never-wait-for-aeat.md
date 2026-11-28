@@ -327,15 +327,15 @@ already name it (`correction-target.ts:12-17`).
   (`:8-36, 70-72`), as run 37286368370 (`rejected-invoice-credit`, `live-aeat.mjs:3324-3355`) and
   run 39560851006 (findings §18) were; a new mode needs the owner's approval (`backlog.md:364-365`).
   Mode `replacement-after-credit`: an F2 50.00 dated tomorrow, an R5 "I" −5.00 dated today naming
-  it, an R5 "S" 50.00 (0.00/0.00, real day as `FechaOperacion`) naming it, chained in that order;
+  it, an R5 "S" 50.00 (0.00/0.00; as built at b979412f9f, no `FechaOperacion`) naming it, chained in that order;
   once in one request, once in three; controls: the R5 "S" with no credit (the open probe) and a
   today-dated F2 with its credit; then a consulta of each number. Expected: F2 `Incorrecto` `1112`,
   both R5s `Correcto`. The failing case prints `Incorrecto` with a code on either R5.
 
 ### Decisions
 
-- **D8 — the amount.** (a) Replace at 50.00 and keep the 5.00 counting: AEAT holds −5.00 + 50.00 =
-  45.00, what was kept, and `correctivesOf` already agrees. (b) Replace at 45.00: AEAT nets 40.00
+- **D8 — the amount.** (a) Replace at 50.00 and keep the 5.00 counting: AEAT is sent −5.00 and
+  50.00, together 45.00, what was kept, and `correctivesOf` already agrees. (b) Replace at 45.00: AEAT nets 40.00
   unless the first refund is withdrawn, and the writer copies the whole receipt (`:160-164`).
   (c) Re-issue the 5.00 against the replacement: the first refund cannot be withdrawn (a
   cancellation says an invoice should never have existed, FAQ §17 2.d), so 40.00 again.
@@ -366,5 +366,5 @@ counting against the original. D9 reworded "already replaced". D10: the same-clo
 refund stays out of PR 2, named in the PR body as a known limit, plus one line on the adviser's confirmation
 list. D11 and D12 as written. **AEAT test service:** run 46070947073 (verifactu b979412f9f, mode
 `replacement-after-credit`) accepted it: each receipt dated tomorrow refused `1112`; the 5.00 refund (R5 I) and
-the date fix (R5 S, 0.00/0.00) both `Correcto`, in one request and in three; the date fix alone `Correcto`; the
+the date fix (R5 S, 0.00/0.00, no `FechaOperacion`) both `Correcto`, in one request and in three; the date fix alone `Correcto`; the
 owner's order (date fix, then a refund naming it) `Correcto`; the today control `Correcto`. Test service only.
