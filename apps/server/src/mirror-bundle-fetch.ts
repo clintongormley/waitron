@@ -4,7 +4,7 @@ import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
 import { dirname, join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, firstCodeInCauseChain } from "@waitron/shared";
 import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
 import { checkBackupSettings } from "./backup-env-writer.js";
 import { writeFileDurable } from "./fs-atomic.js";
@@ -266,6 +266,11 @@ interface BoxRequest {
   onConnected?: () => void;
   /** A handshake finished at `address`, under the pinned authority when there is one. */
   onHandshake?: (address: string) => void;
+  /**
+   * This box refused an address's certificate before its handshake finished; `failure` is that
+   * refusal.
+   */
+  onCertificateRefused?: (failure: unknown) => void;
 }
 
 export class AnswerTooLarge extends Error {}
@@ -356,6 +361,24 @@ async function untilStopped<T>(work: () => Promise<T>, signal: AbortSignal): Pro
   }
 }
 
+const CERTIFICATE_REFUSALS = new Set([
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_SIGNATURE_FAILURE",
+  "CERT_UNTRUSTED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "INVALID_PURPOSE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+
+export function hasCertificateRefusalCode(error: unknown): boolean {
+  return firstCodeInCauseChain(error, (code) => CERTIFICATE_REFUSALS.has(code)) !== null;
+}
+
 /**
  * Tries each address in turn; `NotConnected` carries the last failure when none connected, or
  * `earlier` when there was no address to try.
@@ -376,6 +399,7 @@ async function firstToConnect(
     } catch (error) {
       if (!(error instanceof NotConnected)) throw error;
       failure = error.failure;
+      if (hasCertificateRefusalCode(failure)) options.onCertificateRefused?.(failure);
     }
   }
   throw new NotConnected(failure);
@@ -395,7 +419,8 @@ export class PlainHttpBoxAddress extends Error {
  * Sends the request on the first connection to finish its handshake. Under a pinned authority only
  * a server holding a certificate that authority issued for the name finishes one, and the address
  * last checked that way is tried before any the network answers with; a call that checks no
- * certificate goes to whichever server finishes first.
+ * certificate goes to whichever server finishes first. A call that ends with no handshake finished
+ * throws the first refusal of an address's certificate, whatever ended it.
  */
 async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMessage> {
   if (!isEncryptedOrLoopback(url)) throw new PlainHttpBoxAddress(url);
@@ -405,13 +430,21 @@ async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMe
   const key = checkedKey(url, host, options.trust);
   const known = key === undefined ? undefined : checked.recall(key);
   let reachedTcp = false;
+  let handshook = false;
+  let refusal: unknown;
   const tracked: BoxRequest = {
     ...options,
     onConnected: () => {
       reachedTcp = true;
       options.onConnected?.();
     },
-    ...(key === undefined ? {} : { onHandshake: (address) => checked.keep(key, address) }),
+    onHandshake: (address) => {
+      handshook = true;
+      if (key !== undefined) checked.keep(key, address);
+    },
+    onCertificateRefused: (failure) => {
+      refusal ??= failure;
+    },
   };
   let knownTried = false;
   try {
@@ -427,6 +460,7 @@ async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMe
     }
     return await openHeard(url, host, tracked, known, failure);
   } catch (error) {
+    if (!handshook && refusal !== undefined) throw refusal;
     if (knownTried && !reachedTcp) throw new CheckedAddressUnreached(error);
     throw error;
   }
@@ -470,7 +504,8 @@ async function openHeard(
 /**
  * One request to a box; `trust` applies to an https address, and a plain http one, which must be
  * loopback, ignores it. A `.local` host that no other box answers for is `mirror.peer_unresolved`,
- * which names no host: the caller names the box it was asking.
+ * which names no host (the caller names the box it was asking), unless this box refused the
+ * certificate of an address it tried first.
  */
 export async function boxExchange(
   url: URL,
