@@ -224,7 +224,10 @@ Recommendations, each with why. None changes what the owner decided, except wher
   each is written with exactly those figures, line by line and part by part: one record per
   discount over every line or part it covers, through today's `reprice` and `recordAdjustment`
   (`adjustments-apply.ts:1029-1105`, `:1185-1227` (†)), so the records keep today's shape and the
-  amount charged is the amount shown. The `asked` check reads the same working-out, and the bill's
+  amount charged is the amount shown. A record's reduction is what the invoice takes off, and its
+  before and after are what its lines cost around the write; where measured extras file as one row,
+  the receipt, which prints against its own rows, can show a cent less off than the record (seen
+  only with inserted rows; whether ordering can reach it is not checked). The `asked` check reads the same working-out, and the bill's
   pending rows are deleted before any price changes, after that check. The record's `created_at`
   is the moment of the invoice; the people, reason and note are the pending row's. Rows sharing
   `given_together` are one discount and one record (rows of one group worked out with another
@@ -363,8 +366,8 @@ Recommendations, each with why. None changes what the owner decided, except wher
   revision, built in 7a; it removes the discount's `given_together` group, needs `adjustment.apply`,
   no PIN, never the simplified-invoice refusal (spec 6.5, 10), and is refused while a payment is in
   flight (`refusePaymentInFlight`, `working-order-edit-state.ts:233`). **Give a different discount**
-  is one request: the comp window's apply takes `replacesDiscountId` and deletes that discount in the
-  same transaction as it writes the new one, so a refusal leaves the old one standing.
+  is one request: the comp window's apply takes `replacesDiscountId` and deletes that discount (every
+  row sharing its `given_together`) in the same transaction as it writes the new one, so a refusal leaves the old one standing.
 - **D23. Orders placed before they are paid: the owner chose (b), removable until payment** (owner,
   2026-11-27 13:00, through the watcher: "changing a discount changes what is payed, which means we
   need to open/correct the original and issue a new one. so yes, we should be able to reopen it").
@@ -765,20 +768,21 @@ payment covers the bill (`bill-payments.ts:1831-1836` (†)), and in Pay for ite
 
 **The change.**
 1. `apps/server/src/bill-discounts-crystallise.ts` (new): `crystalliseBillDiscounts(tx, cfg, billId,
-   { asked })`. With `asked`, a discount that does not hold refuses `adjustment.no_longer_applies`
-   (D7; the code and its details land here, its till wording in 6b). It runs PR 1 once; with
-   `asked`, a discount that does not hold refuses before anything is written; otherwise it deletes
-   the bill's pending rows and writes each discount in order with exactly its figures, with
+   { asked, discounts? })`. It runs PR 1 once, or takes the working-out its caller already read
+   (`discounts`); with `asked`, a discount that does not hold refuses `adjustment.no_longer_applies`
+   before anything is written (D7; the code and its details land here, its till wording in 6b);
+   otherwise it deletes the bill's pending rows and writes each discount in order with exactly its figures, with
    `reprice` (moved from `adjustments-apply.ts:1003-1105` to `apps/server/src/adjustment-reprice.ts`,
    unchanged) and `recordAdjustment` (D5); a discount that did not hold gets a
    `discount.written_as_it_stood` activity entry (D20).
 2. Call it first in `priceForIssuance` (an `asked` parameter, its doc changed to say it writes the
    bill's discounts) and before `bill-payments.ts:1165` (`asked` unless D6's not-asked paths;
-   `IssueOptions` gains `unattended`, set wherever money has already moved or gone back:
-   `completeBillPayment` (reader, job, manager) and `issueHeldBill` through `moneyMoved`, and
-   `issueAfterBillRefund` and `bill-refunds.ts` (D6)).
+   `IssueOptions` gains `unattended`, set by `issueAfterBillRefund` and `bill-refunds.ts`;
+   `completeBillPayment` (reader, job, manager) and `issueHeldBill` are not asked because they pass
+   `moneyMoved` (D6)).
    Close of day passes `asked: false`.
-3. `storedOrderTotal` subtracts `readBillDiscounts`' total off for a bill with no sale, open or
+3. `storedOrderTotal` subtracts the bill's worked-out held discounts (`readHeldBillDiscounts`, the
+   working-out `readBillDiscounts` gives) for a bill with no sale, open or
    placed (D23: a placed order keeps its discounts pending until it is paid; watcher's change 3); its
    doc says so. One place covers every payment-path reader above, for a placed Counter order as for
    an open bill.
