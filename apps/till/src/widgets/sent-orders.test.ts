@@ -105,6 +105,24 @@ async function click(el: Panel, selector: string) {
   await userEvent.click(page.elementLocator(find(el, selector)));
   await el.updateComplete;
 }
+/** Opens the row `li` names, unless it is open already. */
+async function openRow(el: Panel, li: string) {
+  const button = find(el, `${li} [data-sent-row]`);
+  if (button.getAttribute("aria-expanded") !== "true") await click(el, `${li} [data-sent-row]`);
+}
+/** Opens the row and presses its last Serve, which serves everything left of it. */
+async function serveLeft(el: Panel, li: string) {
+  await openRow(el, li);
+  const serves = every(el, `${li} [data-sent-serve]`);
+  expect(serves.length).toBeGreaterThan(0);
+  await userEvent.click(page.elementLocator(serves.at(-1)!));
+  await el.updateComplete;
+}
+/** Opens the row and presses its Dish details. */
+async function openDetails(el: Panel, li: string) {
+  await openRow(el, li);
+  await click(el, `${li} [data-sent-details]`);
+}
 function collect(el: Panel, name: string) {
   const calls: unknown[] = [];
   el.addEventListener(name, (event) => calls.push((event as CustomEvent).detail));
@@ -162,10 +180,18 @@ it("draws every row with a hidden level-2 Sent heading and level-3 section headi
   expect(find(el, "[data-served-line=served]").checkVisibility()).toBe(true);
   expect(find(el, "[data-held-line=held]").checkVisibility()).toBe(true);
   expect(find(el, "[data-sent-panel]").getAnimations()).toEqual([]);
-  for (const info of every(el, "[data-sent-info]")) {
-    const line = info.closest("li")!.getBoundingClientRect();
-    expect(info.getBoundingClientRect().right).toBeLessThanOrEqual(line.right);
-    expect(info.getBoundingClientRect().left).toBeGreaterThanOrEqual(line.left);
+  const rows = every(el, "li:not([data-companion])");
+  expect(rows.length).toBe(3);
+  for (const li of rows) {
+    await userEvent.click(page.elementLocator(li.querySelector("[data-sent-row]")!));
+    await el.updateComplete;
+    const line = li.getBoundingClientRect();
+    const actions = [...li.querySelectorAll("[data-sent-open] button")];
+    expect(actions.length).toBeGreaterThan(0);
+    for (const info of actions) {
+      expect(info.getBoundingClientRect().right).toBeLessThanOrEqual(line.right);
+      expect(info.getBoundingClientRect().left).toBeGreaterThanOrEqual(line.left);
+    }
   }
 });
 
@@ -225,7 +251,7 @@ it("says Fired on a released dish under a Held heading, which the heading does n
   expect(second(el, "[data-fired-line=unknown]")).toBe("Fired");
   expect(second(el, "[data-held-line=held]")).toBe("");
   const calls = collect(el, "serve-lines");
-  await click(el, "[data-serve-line=early]");
+  await serveLeft(el, "[data-fired-line=early]");
   expect(calls).toEqual([{ items: [{ lineId: "early", quantity: "1" }] }]);
 });
 
@@ -364,7 +390,7 @@ it("keeps a focused Serve all on its own group when an earlier group leaves the 
   ).toBe("next");
 });
 
-it("serves the active remainder on a native row tap, one row per dish, with the charged cancellation apart", async () => {
+it("serves the active remainder from the opened row, one row per dish, with the charged cancellation apart", async () => {
   const el = await mount(
     current([
       row("Bravas", {
@@ -381,7 +407,7 @@ it("serves the active remainder on a native row tap, one row per dish, with the 
   expect(shownLines(el, "data-served-line")).toEqual([["Bravas", "1", "Bravas", "€3.00"]]);
   expect(second(el, "[data-served-line=Bravas]")).toBe("Cancelled, charged");
   const calls = collect(el, "serve-lines");
-  await click(el, "[data-serve-line=Bravas]");
+  await serveLeft(el, "[data-fired-line=Bravas]");
   expect(calls).toEqual([{ items: [{ lineId: "Bravas", quantity: "2" }] }]);
   expect(root(el).querySelector("[data-serve-dialog]")).toBeNull();
   expect(root(el).querySelector("input[type=checkbox]")).toBeNull();
@@ -435,10 +461,10 @@ it("opens line information without serving and refuses detached, busy or superse
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
   const serves = collect(el, "serve-lines");
   const details = collect(el, "sent-line-info");
-  await click(el, "[data-sent-info=Bravas]");
+  await openDetails(el, "[data-fired-line=Bravas]");
   expect(serves).toEqual([]);
   expect(details).toEqual([{ lineId: "Bravas", workingOrderId: "b1", kind: "fired" }]);
-  const old = find(el, "[data-serve-line=Bravas]");
+  const old = find(el, "[data-fired-line=Bravas] [data-sent-serve]");
   el.busy = true;
   old.click();
   expect(serves).toEqual([]);
@@ -456,7 +482,7 @@ it("a part-served dish's information names its served part as well as what is le
     current([row("Bravas", { quantity: "3.000", servedQuantity: "1.000", readyAt: at(59) })]),
   );
   const details = collect(el, "sent-line-info");
-  await click(el, "[data-sent-info=Bravas]");
+  await openDetails(el, "[data-fired-line=Bravas]");
   expect(details).toEqual([
     { lineId: "Bravas", workingOrderId: "b1", kind: "fired", servedLineIds: ["Bravas"] },
   ]);
@@ -743,7 +769,7 @@ it("uses only the supplied reminder to show due/snooze/fire above the sections",
 
 it("keeps ready updates from moving a pressed row and then restores ready-first ordering", async () => {
   const el = await mount(current([row("first", { readyAt: at(59) }), row("second")]));
-  const pressed = find(el, "[data-serve-line=first]");
+  const pressed = find(el, "[data-sent-row=first]");
   pressed.dispatchEvent(
     new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 1 }),
   );
@@ -757,7 +783,7 @@ it("keeps ready updates from moving a pressed row and then restores ready-first 
     "first",
     "second",
   ]);
-  expect(find(el, "[data-serve-line=first]")).toBe(pressed);
+  expect(find(el, "[data-sent-row=first]")).toBe(pressed);
   pressed.dispatchEvent(
     new PointerEvent("pointercancel", { bubbles: true, composed: true, pointerId: 1 }),
   );
@@ -769,7 +795,7 @@ it("keeps ready updates from moving a pressed row and then restores ready-first 
 });
 
 it.each(["busy", "unreleased"] as const)(
-  "a native press on a %s disabled row does not freeze the next accepted snapshot",
+  "a native press on a %s row offers no Serve and does not freeze the next accepted snapshot",
   async (reason) => {
     const el = await mount(
       current([
@@ -779,9 +805,13 @@ it.each(["busy", "unreleased"] as const)(
       { busy: reason === "busy" },
     );
     const calls = collect(el, "serve-lines");
-    const button = find(el, '[data-serve-line="first"]') as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-    await userEvent.click(button, { force: true });
+    const button = find(el, '[data-sent-row="first"]');
+    await userEvent.click(button);
+    await el.updateComplete;
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    const serves = every(el, '[data-fired-line="first"] [data-sent-serve]') as HTMLButtonElement[];
+    expect(serves.map((serve) => serve.disabled)).toEqual(reason === "busy" ? [true] : []);
+    for (const serve of serves) await userEvent.click(serve, { force: true });
     expect(calls).toEqual([]);
     el.busy = false;
     el.snapshot = {
@@ -794,14 +824,15 @@ it.each(["busy", "unreleased"] as const)(
       "first",
     ]);
     expect(shownLines(el, "data-fired-line")[1]).toEqual(["first", "2", "first", "€3.00"]);
-    await click(el, '[data-serve-line="first"]');
+    await serveLeft(el, '[data-fired-line="first"]');
     expect(calls).toEqual([{ items: [{ lineId: "first", quantity: "2" }] }]);
   },
 );
 
 it("refuses an old row or All served control after the displayed quantities change", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
-  const oldRow = find(el, "[data-serve-line=Bravas]");
+  await openRow(el, "[data-fired-line=Bravas]");
+  const oldRow = find(el, "[data-fired-line=Bravas] [data-sent-serve]");
   const oldAll = find(el, "[data-serve-all]");
   const calls = collect(el, "serve-lines");
   el.snapshot = {
@@ -847,9 +878,8 @@ it("shows Spanish ready age, information and charged cancellations without a mis
   );
   expect(find(el, "h2").textContent).toBe("Enviado");
   expect(second(el, "[data-fired-line=Bravas]")).toBe("Listo 1 min");
-  expect(find(el, "[data-sent-info=Bravas]").getAttribute("aria-label")).toBe(
-    "Detalles del plato · Bravas",
-  );
+  await openRow(el, "[data-fired-line=Bravas]");
+  expect(text(find(el, "[data-fired-line=Bravas] [data-sent-details]"))).toBe("Detalles del plato");
   expect(second(el, "[data-served-line=Cancelado]")).toBe("Cancelado, cobrado");
   expect(text(find(el, "[data-serve-all]"))).toBe(es["table.serve_group"]);
 });
@@ -907,7 +937,7 @@ it.each([
     expect(qty("[data-held-line=held]")).toBe(held);
     expect(qty("[data-companion=companion]")).toBe(companion);
     const calls = collect(el, "serve-lines");
-    await click(el, "[data-serve-line=ready]");
+    await serveLeft(el, "[data-fired-line=ready]");
     expect(calls).toEqual([{ items: [{ lineId: "ready", quantity: "0.125" }] }]);
   },
 );
@@ -942,14 +972,14 @@ it("refreshes translated labels in place", async () => {
 
 it("keeps the browser menu off a fired dish during a touch hold", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
-  expect(touchContextMenu(find(el, "[data-serve-line=Bravas]"))).toBe(true);
+  expect(touchContextMenu(find(el, "[data-sent-row=Bravas]"))).toBe(true);
 });
 
 it("opens a held mouse press as information without serving on the following click", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
   const serves = collect(el, "serve-lines");
   const details = collect(el, "sent-line-info");
-  const dish = find(el, "[data-serve-line=Bravas]");
+  const dish = find(el, "[data-sent-row=Bravas]");
   let activity = 0;
   el.parentElement!.addEventListener("pointerdown", () => activity++);
   dish.dispatchEvent(
@@ -976,14 +1006,15 @@ it("opens a held mouse press as information without serving on the following cli
   await el.updateComplete;
   expect(details).toEqual([{ lineId: "Bravas", workingOrderId: "b1", kind: "fired" }]);
   expect(serves).toEqual([]);
+  expect(dish.getAttribute("aria-expanded")).toBe("false");
   expect(activity).toBe(1);
 });
 
-it("does not serve after pointer cancellation or a scrolling movement", async () => {
+it("does not open or serve after pointer cancellation or a scrolling movement", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
   const serves = collect(el, "serve-lines");
   const details = collect(el, "sent-line-info");
-  const dish = find(el, "[data-serve-line=Bravas]");
+  const dish = find(el, "[data-sent-row=Bravas]");
   for (const end of ["pointercancel", "pointermove"] as const) {
     dish.dispatchEvent(
       new PointerEvent("pointerdown", {
@@ -1003,7 +1034,11 @@ it("does not serve after pointer cancellation or a scrolling movement", async ()
   }
   expect(serves).toEqual([]);
   expect(details).toEqual([]);
+  expect(dish.getAttribute("aria-expanded")).toBe("false");
   dish.click();
+  await el.updateComplete;
+  expect(dish.getAttribute("aria-expanded")).toBe("true");
+  find(el, "[data-fired-line=Bravas] [data-sent-serve]").click();
   expect(serves).toEqual([{ items: [{ lineId: "Bravas", quantity: "1" }] }]);
 });
 
@@ -1033,13 +1068,13 @@ it("opens served and held details, preserving notes, extras and no-kitchen statu
   const details = collect(el, "sent-line-info");
   expect(second(el, "[data-served-line=served]")).toBe("Station note: No salt · Served");
   expect(second(el, "[data-fired-line=water]")).toBe("Ice · Ready 1 min");
-  await click(el, "[data-sent-info=held]");
-  await click(el, "[data-sent-info=served]");
+  await openDetails(el, "[data-held-line=held]");
+  await openDetails(el, "[data-served-line=served]");
   expect(details).toEqual([
     { lineId: "held", workingOrderId: "b1", kind: "held" },
     { lineId: "served", workingOrderId: "b1", kind: "served" },
   ]);
-  const old = find(el, "[data-sent-info=served]");
+  const old = find(el, "[data-served-line=served] [data-sent-details]");
   el.busy = true;
   old.click();
   el.busy = false;
@@ -1077,7 +1112,8 @@ it("rejects stale group/reminder commands and suppresses disabled service action
 it("does not revive stale information controls for food that changed its service state", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
   const details = collect(el, "sent-line-info");
-  const old = find(el, "[data-sent-info=Bravas]");
+  await openRow(el, "[data-fired-line=Bravas]");
+  const old = find(el, "[data-fired-line=Bravas] [data-sent-details]");
   el.snapshot = {
     scope: "visit-1",
     billId: "b1",
@@ -1120,11 +1156,11 @@ it("reads the live clock when none is injected and releases a pointer order afte
   const el = await mount(data, { now: undefined });
   expect(second(el, "[data-fired-line=ready]")).toBe("Ready 1 min");
   expect(text(find(el, "[data-section-title]"))).toContain("Fired");
-  const list = find(el, "[data-serve-line=ready]").parentElement!.parentElement!;
+  const list = find(el, "[data-sent-row=ready]").parentElement!.parentElement!;
   list.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
   list.dispatchEvent(new PointerEvent("pointerleave"));
   await el.updateComplete;
-  expect(find(el, "[data-serve-line=ready]")).toBeTruthy();
+  expect(find(el, "[data-sent-row=ready]")).toBeTruthy();
 });
 
 it("labels an unknown companion as another bill without exposing its internal id", async () => {
@@ -1175,7 +1211,7 @@ it("defers a newly due banner until the pressed row is released", async () => {
     [group("g", [row("held", { released: false })])],
   );
   const el = await mount(data);
-  const dish = find(el, "[data-serve-line=Bravas]");
+  const dish = find(el, "[data-sent-row=Bravas]");
   const before = dish.getBoundingClientRect().toJSON();
   dish.dispatchEvent(
     new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 1 }),
@@ -1323,12 +1359,11 @@ it("keeps unreleased fired food visible but serves only released remainders", as
   const all = find(el, "[data-serve-all]") as HTMLElement & { disabled: boolean };
   expect(all.disabled).toBe(true);
   expect(all.getAttribute("variant")).toBe("ghost");
-  const dish = find(el, '[data-serve-line="held-extra"]') as HTMLButtonElement;
-  expect(dish.disabled).toBe(true);
+  await openRow(el, '[data-fired-line="held-extra"]');
+  expect(every(el, '[data-fired-line="held-extra"] [data-sent-serve]')).toEqual([]);
   expect(find(el, '[data-fired-line="held-extra"]').textContent).toContain("3.00");
   const calls = collect(el, "serve-lines");
   all.click();
-  dish.click();
   expect(calls).toEqual([]);
   el.snapshot = { ...el.snapshot!, current: current([row("held-extra")]) };
   await el.updateComplete;
@@ -1340,7 +1375,8 @@ it("keeps unreleased fired food visible but serves only released remainders", as
 
 it("refuses a retained serve control when the latest row has an unreleased component", async () => {
   const el = await mount(current([row("Bravas")]));
-  const dish = find(el, '[data-serve-line="Bravas"]');
+  await openRow(el, '[data-fired-line="Bravas"]');
+  const dish = find(el, '[data-fired-line="Bravas"] [data-sent-serve]');
   const all = find(el, "[data-serve-all]");
   const calls = collect(el, "serve-lines");
   el.snapshot = { ...el.snapshot!, current: current([row("Bravas", { released: false })]) };
@@ -1348,7 +1384,10 @@ it("refuses a retained serve control when the latest row has an unreleased compo
   all.click();
   expect(calls).toEqual([]);
   await el.updateComplete;
-  expect((find(el, '[data-serve-line="Bravas"]') as HTMLButtonElement).disabled).toBe(true);
+  expect(find(el, '[data-fired-line="Bravas"] [data-sent-row]').getAttribute("aria-expanded")).toBe(
+    "true",
+  );
+  expect(every(el, '[data-fired-line="Bravas"] [data-sent-serve]')).toEqual([]);
 });
 
 const billLine = (id: string, lineNo: number): TabLine => ({
@@ -1380,7 +1419,7 @@ const burgers = [billLine("burger-1", 1), billLine("burger-2", 2), billLine("bur
 const burger = (id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}) =>
   row(id, { name: "Burger", lineNo, netAmount: "9.50", ...over });
 
-it("A803 portion grouping: two identical sent portions show one row of 2, and a tap serves both", async () => {
+it("A803 portion grouping: two identical sent portions show one row of 2, and its Serve 2 serves both", async () => {
   const el = await mount(
     current([
       burger("burger-2", 2),
@@ -1394,7 +1433,7 @@ it("A803 portion grouping: two identical sent portions show one row of 2, and a 
     ["burger-1", "2", "Burger", "€19.00"],
   ]);
   const calls = collect(el, "serve-lines");
-  await click(el, "[data-serve-line=burger-1]");
+  await serveLeft(el, "[data-fired-line=burger-1]");
   expect(calls).toEqual([
     {
       items: [
@@ -1405,7 +1444,7 @@ it("A803 portion grouping: two identical sent portions show one row of 2, and a 
   ]);
 });
 
-it("one row per dish: identical portions with some served read as one row, and a tap serves what is left", async () => {
+it("one row per dish: identical portions with some served read as one row, and its last Serve serves what is left", async () => {
   const el = await mount(
     current([
       burger("burger-1", 1, { servedQuantity: "1.000", servedAt: at(55) }),
@@ -1418,7 +1457,7 @@ it("one row per dish: identical portions with some served read as one row, and a
   expect(shownLines(el, "data-fired-line")).toEqual([["burger-2", "3", "Burger", "€28.50"]]);
   expect(second(el, "[data-fired-line=burger-2]")).toBe("1 of 3 served");
   const calls = collect(el, "serve-lines");
-  await click(el, "[data-serve-line=burger-2]");
+  await serveLeft(el, "[data-fired-line=burger-2]");
   expect(calls).toEqual([
     {
       items: [
@@ -1469,7 +1508,7 @@ it("A803 portion grouping: a grouped row's information names every member by lin
     { lines: burgers.map((line) => ({ ...line, firedAt: null, groupId: "g" })) },
   );
   const details = collect(el, "sent-line-info");
-  await click(el, "[data-sent-info=burger-1]");
+  await openDetails(el, "[data-held-line=burger-1]");
   expect(details).toEqual([
     { lineId: "burger-1", workingOrderId: "b1", kind: "held", lineIds: ["burger-1", "burger-2"] },
   ]);
@@ -1481,7 +1520,7 @@ it("A803 portion grouping: a long press on a grouped row names every member", as
   });
   const serves = collect(el, "serve-lines");
   const details = collect(el, "sent-line-info");
-  const dish = find(el, "[data-serve-line=burger-1]");
+  const dish = find(el, "[data-sent-row=burger-1]");
   dish.dispatchEvent(
     new PointerEvent("pointerdown", {
       bubbles: true,
@@ -1515,7 +1554,7 @@ it("A803 portion grouping: a long press on a part-served row names what is left 
     { lines: burgers },
   );
   const details = collect(el, "sent-line-info");
-  const dish = find(el, "[data-serve-line=burger-2]");
+  const dish = find(el, "[data-sent-row=burger-2]");
   dish.dispatchEvent(
     new PointerEvent("pointerdown", {
       bubbles: true,

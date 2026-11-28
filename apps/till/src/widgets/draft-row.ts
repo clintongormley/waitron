@@ -16,7 +16,7 @@ import { extraNutrition } from "./diet-badges.js";
 import { quantityText } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
-import { rowMore, rowTextStyles } from "./row-text.js";
+import { OPEN_BORDER, openRowBox, rowMore, rowTextStyles } from "./row-text.js";
 import { setMenuTag } from "./set-menu-presentation.js";
 
 registerIcons(DROPDOWN_ICONS);
@@ -191,7 +191,6 @@ export function draftRow(view: DraftRowView): TemplateResult {
 }
 
 const LEAD_WIDTH = css`var(--wt-tap-min)`;
-const OPEN_BORDER = css`2px`;
 /** How far an opened row's box sits in from a closed row's end: its side margin and border. */
 const OPEN_INSET = css`calc(var(--wt-space-2) + ${OPEN_BORDER})`;
 
@@ -222,11 +221,7 @@ export const draftRowStyles = css`
   :host .order-lines > .entry.draft-row[data-open] {
     grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
     grid-template-rows: minmax(calc(var(--wt-tap-min) + var(--wt-space-2)), auto) auto;
-    margin: var(--wt-space-1) var(--wt-space-2);
-    border: ${OPEN_BORDER} solid var(--wt-color-primary);
-    border-radius: var(--wt-radius-md);
-    background: var(--wt-color-surface);
-    box-shadow: none;
+    ${openRowBox}
   }
   /* The box's border replaces a period-ended row's amber edge and its padding; the stripe is drawn
      inside the box instead, so the tick keeps every opened row's inset. */

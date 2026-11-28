@@ -25,6 +25,13 @@ import { groupName } from "./group-name.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import { nutritionDietLabels } from "../diet-labels.js";
 import { sentCompanion, sentRow, sentRowStyles, sentStateWords } from "./sent-row.js";
+import {
+  OpenSentRow,
+  type SentServe,
+  sentOpenControls,
+  sentOpenStyles,
+  sentRowDrawn,
+} from "./sent-row-open.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -88,6 +95,7 @@ export class TillSentOrders extends LitElement {
     setMenuTagStyles,
     allergyMarkStyles,
     sentRowStyles,
+    sentOpenStyles,
     css`
       :host {
         display: block;
@@ -150,6 +158,7 @@ export class TillSentOrders extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) now?: number;
   #opening = "";
+  readonly #open = new OpenSentRow();
   #pressedModel: SentModel | null = null;
   #pressedNow?: number;
   #gestures?: Gestures;
@@ -233,6 +242,10 @@ export class TillSentOrders extends LitElement {
       this.#pressed = undefined;
       this.#releaseHeading();
     }
+    this.#open.keep(
+      opening,
+      (this.#model()?.sections ?? []).flatMap((section) => section.rows),
+    );
   }
   protected override updated(): void {
     clearTimeout(this.#reminderTimer);
@@ -384,6 +397,17 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
+  /** Sends `serve` only while every portion of `row` stands in the live list as it was drawn. */
+  #serveRow(row: SentRow, serve: SentServe, opening: string): void {
+    if (!this.isConnected || this.busy || opening !== this.#opening) return;
+    const drawn = sentRowDrawn(row);
+    const live = this.#model()
+      ?.sections.flatMap((section) => section.rows)
+      .find((each) => each.id === row.id);
+    if (live === undefined || sentRowDrawn(live) !== drawn) return;
+    this.#dispatch("serve-lines", { items: serve.items.map((item) => ({ ...item })) });
+    this.#releasePointer();
+  }
   #info(row: SentRow): void {
     if (!this.isConnected || this.busy) return;
     const members = infoMembers(row);
@@ -418,6 +442,7 @@ export class TillSentOrders extends LitElement {
   #pressLine(row: SentRow, event: PointerEvent): void {
     const slice = row.lead;
     this.#releaseHeading();
+    this.#suppressClick = false;
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
@@ -426,13 +451,9 @@ export class TillSentOrders extends LitElement {
       this.#pressedModel = this.#model();
       this.#pressedNow = this.now ?? Date.now();
     }
-    this.#suppressClick = false;
   }
-  #clickServe(row: SentRow, event: MouseEvent): void {
-    if (event.detail === 0 || !this.#suppressClick)
-      this.#serve(
-        firedLeft([row]).map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })),
-      );
+  #clickRow(row: SentRow, event: MouseEvent): void {
+    if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row.id);
     this.#releasePointer();
   }
   #displayNow(): number {
@@ -528,6 +549,7 @@ export class TillSentOrders extends LitElement {
     const held = isHeld(section);
     const released = servable(section.rows);
     const now = this.#displayNow();
+    const opening = this.#opening;
     return html`<section
       class="group"
       data-sent-section=${id}
@@ -565,10 +587,16 @@ export class TillSentOrders extends LitElement {
               heldNow: this.#heldNow(),
               price: this.#money(row.amount),
               marks: this.#marks(row.lead.row),
-              busy: this.busy,
               press: (event) => this.#pressLine(row, event),
-              serve: (event) => this.#clickServe(row, event),
-              info: () => this.#info(row),
+              open: (event) => this.#clickRow(row, event),
+              opened: this.#open.is(this.#opening, row.id)
+                ? sentOpenControls({
+                    row,
+                    busy: this.busy,
+                    serve: (serve) => this.#serveRow(row, serve, opening),
+                    details: () => this.#info(row),
+                  })
+                : nothing,
             }),
         )}
         ${section.companions.map((row) =>

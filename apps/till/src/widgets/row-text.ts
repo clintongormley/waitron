@@ -39,3 +39,30 @@ export const rowTextStyles = css`
     white-space: nowrap;
   }
 `;
+
+export const OPEN_BORDER = css`2px`;
+
+/** An opened order row's box, new or sent: the declarations for the rule that opens it. */
+export const openRowBox = css`
+  margin: var(--wt-space-1) var(--wt-space-2);
+  border: ${OPEN_BORDER} solid var(--wt-color-primary);
+  border-radius: var(--wt-radius-md);
+  background: var(--wt-color-surface);
+  box-shadow: none;
+`;
+
+/** An opened row's outlined buttons, new or sent: the declarations for their rule. */
+export const openRowAction = css`
+  box-sizing: border-box;
+  height: var(--wt-tap-min);
+  margin: 0;
+  padding: 0 var(--wt-space-3);
+  border: 1px solid var(--wt-color-border);
+  border-radius: var(--wt-radius-md);
+  background: var(--wt-color-surface);
+  color: var(--wt-color-text);
+  font: inherit;
+  font-size: var(--wt-font-size-md);
+  font-weight: var(--wt-font-weight-bold);
+  cursor: pointer;
+`;

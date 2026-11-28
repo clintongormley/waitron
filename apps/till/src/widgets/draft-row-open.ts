@@ -14,6 +14,7 @@ import type { TillBasket } from "./basket.js";
 import { dishFacts } from "./dish-facts.js";
 import { type DraftRowTap, draftRowSlotStyles } from "./draft-row.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
+import { openRowAction } from "./row-text.js";
 
 /**
  * Which new dish's row is open in place, one at a time. A tap on a row opens it and a second tap
@@ -244,18 +245,7 @@ const openedRowStyles = css`
     padding: var(--wt-space-1) var(--wt-space-2) var(--wt-space-2);
   }
   .draft-open-act {
-    box-sizing: border-box;
-    height: var(--wt-tap-min);
-    margin: 0;
-    padding: 0 var(--wt-space-3);
-    border: 1px solid var(--wt-color-border);
-    border-radius: var(--wt-radius-md);
-    background: var(--wt-color-surface);
-    color: var(--wt-color-text);
-    font: inherit;
-    font-size: var(--wt-font-size-md);
-    font-weight: var(--wt-font-weight-bold);
-    cursor: pointer;
+    ${openRowAction}
   }
   .draft-open-act:focus-visible {
     outline: var(--wt-focus-ring);
