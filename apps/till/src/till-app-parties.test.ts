@@ -70,6 +70,7 @@ import {
   held,
   setApi,
 } from "../test/party-app-fixture.js";
+import { openSentDetails, openSentRow, sentServeButton, serveSentRow } from "../test/open-sent-row.js";
 
 const NO_BILLS = { wholeBillIds: [], loose: [] };
 const oneBill = (billId: string) => ({ wholeBillIds: [billId], loose: [] });
@@ -7697,6 +7698,10 @@ describe("till-app: the order's groups", () => {
         });
         const { el } = await mountApp({ ...server, ...over });
         const order = await open(el);
+        await openSentRow(
+          order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!,
+          "line-flan",
+        );
         await groupMenu(el, "g4");
         const disabled = () => {
           const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
@@ -7708,7 +7713,7 @@ describe("till-app: the order's groups", () => {
               '[data-group-fire="g4"]',
             )!.disabled,
             panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-              '[data-sent-info="line-flan"]',
+              'li:has([data-sent-row="line-flan"]) [data-sent-details]',
             )!.disabled,
           ];
         };
@@ -9492,6 +9497,12 @@ describe("till-app: Current orders", () => {
             element instanceof HTMLButtonElement
               ? element
               : element.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+          // Line 1 has one portion left, so its open row offers Serve 1 alone.
+          await openSentRow(panel, "line-1");
+          const lineOneServe = '[data-sent-row="line-1"] + [data-sent-open] [data-sent-serve="one"]';
+          expect(
+            panel.shadowRoot!.querySelectorAll('li:has([data-sent-row="line-1"]) [data-sent-serve]'),
+          ).toHaveLength(1);
           try {
             let target: HTMLButtonElement;
             if (action === "fire") {
@@ -9502,9 +9513,7 @@ describe("till-app: Current orders", () => {
             } else {
               target = native(
                 control(
-                  action === "row"
-                    ? '[data-serve-line="line-1"]'
-                    : '[data-sent-section="g1"] [data-serve-all]',
+                  action === "row" ? lineOneServe : '[data-sent-section="g1"] [data-serve-all]',
                 ),
               );
             }
@@ -9531,11 +9540,11 @@ describe("till-app: Current orders", () => {
               el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")?.open ?? false,
             ).toBe(false);
             for (const button of panel.shadowRoot!.querySelectorAll<HTMLElement>(
-              "[data-serve-line],[data-serve-all],[data-group-fire]",
+              "[data-sent-serve],[data-sent-details],[data-serve-all],[data-group-fire]",
             )) {
               expect(native(button).disabled).toBe(true);
             }
-            await userEvent.click(native(control('[data-serve-line="line-1"]')), { force: true });
+            await userEvent.click(native(control(lineOneServe)), { force: true });
             await flush(el);
             expect(send).toHaveBeenCalledOnce();
             expect(api.fireGroup).toHaveBeenCalledTimes(action === "fire" ? 1 : 0);
@@ -9558,15 +9567,10 @@ describe("till-app: Current orders", () => {
             }
             const mark = vi.mocked(api.markServed);
             mark.mockResolvedValue({ revision: 5 });
-            await userEvent.click(
-              native(
-                control(
-                  action === "all"
-                    ? '[data-sent-section="g2"] [data-serve-all]'
-                    : '[data-serve-line="line-2"]',
-                ),
-              ),
-            );
+            // Line 2 has two portions left: Serve 2 sends both, as a tap on its row used to.
+            if (action === "all")
+              await userEvent.click(native(control('[data-sent-section="g2"] [data-serve-all]')));
+            else await serveSentRow(panel, "line-2", "rest");
             await flush(el);
             expect(mark).toHaveBeenCalledTimes(action === "fire" ? 1 : 2);
             expect(mark).toHaveBeenLastCalledWith("v1", [{ lineId: "line-2", quantity: "2" }], {
@@ -9641,9 +9645,7 @@ describe("till-app: Current orders", () => {
               )
               .toBe(width === 390);
             const panel = await visiblePanel(order);
-            await userEvent.click(
-              panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
-            );
+            await openSentDetails(panel, "line-1");
             await flush(el);
             await userEvent.click(
               order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-serve]")!,
@@ -9814,7 +9816,7 @@ describe("till-app: Current orders", () => {
       },
     );
     it.each(["till", "phone-portrait"] as const)(
-      "a native %s row tap serves once and Undo sends that accepted quantity",
+      "a native %s opened row's Serve 1 serves once and Undo sends that accepted quantity",
       async (formFactor) => {
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -9822,7 +9824,7 @@ describe("till-app: Current orders", () => {
         });
         const order = await openPartyTable(el);
         const panel = await visiblePanel(order);
-        const target = panel.shadowRoot!.querySelector<HTMLElement>('[data-serve-line="line-1"]')!;
+        const target = await sentServeButton(panel, "line-1", "one");
         expect(target.checkVisibility()).toBe(true);
         await userEvent.click(target);
         await flush(el);
@@ -9899,7 +9901,8 @@ describe("till-app: Current orders", () => {
         sent.shadowRoot!.querySelector<HTMLElement>('[data-fired-line="line-1"] .row-ready');
       expect(readyOn(panel)!.checkVisibility()).toBe(true);
       expect(readyOn(panel)!.textContent!.trim()).toMatch(/^Ready /);
-      expect(panel.shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
+      expect(panel.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+      expect(panel.shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
       emit(first, "back-to-floor");
       await flush(el);
       emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
@@ -9910,7 +9913,8 @@ describe("till-app: Current orders", () => {
       await next.updateComplete;
       expect(readyOn(next)!.checkVisibility()).toBe(true);
       expect(readyOn(next)!.textContent!.trim()).toMatch(/^Ready /);
-      expect(next.shadowRoot!.querySelector("[aria-expanded]")).toBeNull();
+      expect(next.shadowRoot!.querySelectorAll('[aria-expanded="false"]').length).toBeGreaterThan(0);
+      expect(next.shadowRoot!.querySelector('[aria-expanded="true"], [data-open]')).toBeNull();
       expect(api.markServed).not.toHaveBeenCalled();
     });
   });

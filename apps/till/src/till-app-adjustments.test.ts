@@ -59,6 +59,7 @@ import type {
 import type { TabLine } from "./api/kitchen-api.js";
 import type { ZoneOffers } from "./api/menu-api.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
+import { openSentDetails } from "../test/open-sent-row.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -2394,9 +2395,7 @@ describe("till-app: service cancellation consent", () => {
       await showView(order, "order", { ifShown: true });
       const sent = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await sent.updateComplete;
-      await userEvent.click(
-        sent.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
-      );
+      await openSentDetails(sent, "line-1");
       await order.updateComplete;
       const more = order.shadowRoot!.querySelector<WtRowActions>(
         "[data-sent-line-dialog] wt-row-actions",
@@ -5316,9 +5315,7 @@ it.each([
       Math.max(...tops) - Math.min(...tops),
       "the sent heading stays on one line",
     ).toBeLessThan(Math.min(...boxes.map((box) => box.height)));
-    await userEvent.click(
-      panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
-    );
+    await openSentDetails(panel, "line-1");
     await order.updateComplete;
     await openSentMore(order);
     await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);
