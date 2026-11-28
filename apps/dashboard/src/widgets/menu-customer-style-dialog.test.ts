@@ -2,6 +2,7 @@ import { registerIcons } from "@waitron/ui";
 import type { CustomerMenuAppearance, CustomerMenuStyle } from "@waitron/shared";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import type { MenuApi } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { codeMessage } from "../i18n/codes.js";
 import { useLocale } from "../testing/locale-setup.js";
@@ -23,35 +24,43 @@ function gate<T>() {
   return { promise, resolve, reject };
 }
 
+const defaultStyleId = "default-style";
 const stored = (
   appearance: CustomerMenuAppearance = { pageColor: "#fbf7ef", textColor: "#222222" },
   affectedMenus = [{ id: "dinner", name: "Dinner" }],
-): CustomerMenuStyle => ({ name: "Default", appearance, affectedMenus });
+): CustomerMenuStyle => ({
+  id: defaultStyleId,
+  isDefault: true,
+  name: "Default",
+  appearance,
+  affectedMenus,
+});
 
 async function mount(
   options: {
     getCustomerStyle?: (id: string) => Promise<CustomerMenuStyle>;
-    saveCustomerStyle?: (id: string, value: CustomerMenuAppearance) => Promise<CustomerMenuStyle>;
+    saveCustomerStyle?: MenuApi["saveCustomerStyle"];
   } = {},
 ) {
   const getCustomerStyle = vi.fn(options.getCustomerStyle ?? (async () => stored()));
   const saveCustomerStyle = vi.fn(
     options.saveCustomerStyle ??
-      (async (_id: string, appearance: CustomerMenuAppearance) => stored(appearance)),
+      (async (_id: string, _styleId: string, appearance: CustomerMenuAppearance) =>
+        stored(appearance)),
   );
   const { el } = await mountWidget<MenuCustomerStyleDialog>(
     "dashboard-menu-customer-style-dialog",
     {
       api: { saveCustomerStyle },
       readApi: {
-        getCustomerStyle,
+        getCustomerStyles: async (id) => [await getCustomerStyle(id)],
         getCustomerPreview: async () => ({ state: "unpublished" }),
       },
       menuId: "menu",
     },
   );
   const saved = vi.fn();
-  el.addEventListener("customer-style-saved", saved);
+  el.addEventListener("customer-style-change", saved);
   return { el, getCustomerStyle, saveCustomerStyle, saved };
 }
 
@@ -138,10 +147,15 @@ it("refuses a colour code that is not #rrggbb beside its field, and saves once i
   await expect.element(saveButton()).toBeEnabled();
   await saveButton().click();
   await expect.element(dialog()).not.toBeInTheDocument();
-  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith("menu", {
-    pageColor: "#ffffff",
-    textColor: "#222222",
-  });
+  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith(
+    "menu",
+    defaultStyleId,
+    {
+      pageColor: "#ffffff",
+      textColor: "#222222",
+    },
+    undefined,
+  );
   expect(saved).toHaveBeenCalledOnce();
 });
 
@@ -153,7 +167,7 @@ it("saves a cleared colour as no colour, so the default applies", async () => {
   await saveButton().click();
   await expect.element(dialog()).not.toBeInTheDocument();
   expect(saveCustomerStyle).toHaveBeenCalledOnce();
-  const sent = saveCustomerStyle.mock.calls[0]![1];
+  const sent = saveCustomerStyle.mock.calls[0]![2];
   expect(sent).toEqual({ pageColor: "#fbf7ef" });
   expect(sent.textColor).toBeUndefined();
 });
@@ -209,11 +223,16 @@ it("saves a chosen heading font and keeps the editor open while choosing it", as
   await expect.element(saveButton()).toBeEnabled();
   await saveButton().click();
   await expect.element(dialog()).not.toBeInTheDocument();
-  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith("menu", {
-    pageColor: "#fbf7ef",
-    textColor: "#222222",
-    headingFont: "serif",
-  });
+  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith(
+    "menu",
+    defaultStyleId,
+    {
+      pageColor: "#fbf7ef",
+      textColor: "#222222",
+      headingFont: "serif",
+    },
+    undefined,
+  );
 });
 
 it("ignores a wt-close that bubbles up from inside the editor", async () => {
@@ -250,10 +269,15 @@ it("saves on Enter in a colour field", async () => {
   await colourField("Page colour").fill("#ffffff");
   await userEvent.keyboard("{Enter}");
   await expect.element(dialog()).not.toBeInTheDocument();
-  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith("menu", {
-    pageColor: "#ffffff",
-    textColor: "#222222",
-  });
+  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith(
+    "menu",
+    defaultStyleId,
+    {
+      pageColor: "#ffffff",
+      textColor: "#222222",
+    },
+    undefined,
+  );
   expect(saved).toHaveBeenCalledOnce();
 });
 
@@ -316,8 +340,13 @@ it("fills the colour code from the colour picker and saves the picked colour", a
   await expect.element(colourField("Text colour")).toHaveValue("#00aa55");
   await saveButton().click();
   await expect.element(dialog()).not.toBeInTheDocument();
-  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith("menu", {
-    pageColor: "#fbf7ef",
-    textColor: "#00aa55",
-  });
+  expect(saveCustomerStyle).toHaveBeenCalledExactlyOnceWith(
+    "menu",
+    defaultStyleId,
+    {
+      pageColor: "#fbf7ef",
+      textColor: "#00aa55",
+    },
+    undefined,
+  );
 });

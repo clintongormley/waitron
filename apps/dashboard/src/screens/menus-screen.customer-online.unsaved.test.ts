@@ -486,7 +486,6 @@ it("takes no change into the draft while a save is being sent", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-
 async function discardTabChanges(app: OnlineSettingsLeaveApp): Promise<void> {
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
