@@ -1,6 +1,6 @@
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   adjustmentLines,
   approves,
@@ -33,11 +33,10 @@ import {
   type Ending,
   type Approval,
   type CompAction,
-  type PricedRow,
   type SpreadSubject,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/menu";
-import { insertInChunks, workingOrderLines } from "@waitron/db";
+import { insertInChunks } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -54,9 +53,7 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
-  divideDecimal,
   MONEY_SCALE,
-  multiplyDecimal,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -81,7 +78,7 @@ import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { TradingContext } from "./trading-context.js";
-import { splitLinesWithinOrder, type SplitRow } from "./working-order-transfer.js";
+import { reprice, type Carve, type Change, type LineReduction } from "./adjustment-reprice.js";
 import {
   partyAfterEdit,
   quantityOfLine,
@@ -175,22 +172,6 @@ export interface AdjustmentPreview {
   }[];
   /** The set menu's comp or discount the action replaces (D52); absent when there is none. */
   replaces?: Replaced;
-}
-
-/** New prices for one row, or for the part of it split off with the part of its dish covered when
- * `carved`; a second row in `rows` is split off that one in turn. */
-interface Change {
-  row: Row;
-  carved: boolean;
-  rows: PricedRow[];
-  reduction: Decimal;
-}
-
-/** The part of a dish a comp or a discount covers, split off with its extras before the prices
- * change. */
-interface Carve {
-  lineNo: number;
-  quantity: number;
 }
 
 export interface Plan {
@@ -877,108 +858,6 @@ async function approvedBy(
   const { authority } = await verifyThrottledCredential(tx, personId, pin, attempts, checked);
   if (!approves(approval, authority.permissions)) throw refused();
   return approver.personId;
-}
-
-async function setPrice(
-  tx: Transaction,
-  lineId: string,
-  row: PricedRow,
-  priceQuantity: number,
-): Promise<void> {
-  await tx
-    .update(workingOrderLines)
-    .set({
-      unitPriceGross: decimalToCents(row.unitGross),
-      lineTotal: decimalToCents(
-        divideDecimal(
-          multiplyDecimal(row.unitGross, row.quantity),
-          thousandthsToDecimal(priceQuantity),
-          MONEY_SCALE,
-        ),
-      ),
-    })
-    .where(eq(workingOrderLines.id, lineId));
-}
-
-/**
- * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
- * extras, when a change is to that part; answers each row it split off, with the row it came from,
- * a carved dish before its extras, and what each change took off each line it lowered.
- */
-async function reprice(
-  tx: Transaction,
-  cfg: TradingContext,
-  orderId: string,
-  carve: Carve | null,
-  changes: readonly Change[],
-  stamped: readonly string[],
-): Promise<{ splits: AdjustmentSplit[]; taken: LineReduction[] }> {
-  const touched = [...new Set([...changes.map(({ row }) => row.id), ...stamped])];
-  // Before any split, so a split row copies the price its line had (plan D21).
-  await tx
-    .update(workingOrderLines)
-    .set({
-      listUnitPriceGross: sql`coalesce(${workingOrderLines.listUnitPriceGross}, ${workingOrderLines.unitPriceGross})`,
-    })
-    .where(inArray(workingOrderLines.id, touched));
-  const carved = changes.some((change) => change.carved)
-    ? await splitLinesWithinOrder(
-        tx,
-        cfg,
-        orderId,
-        [{ lineNo: carve!.lineNo, quantity: thousandthsToDecimal(carve!.quantity) }],
-        { splitExtras: true },
-      )
-    : new Map<string, SplitRow>();
-  const splits: AdjustmentSplit[] = [...carved].map(([from, to]) => ({ from, to: to.id }));
-  const subjects = changes.map((change) => {
-    const { id, lineNo } = change.carved ? carved.get(change.row.id)! : change.row;
-    return { id, lineNo, change };
-  });
-  const twoRows = subjects.filter(({ change }) => change.rows.length === 2);
-  const seconds =
-    twoRows.length === 0
-      ? new Map<string, SplitRow>()
-      : await splitLinesWithinOrder(
-          tx,
-          cfg,
-          orderId,
-          twoRows.map(({ lineNo, change }) => ({ lineNo, quantity: change.rows[1]!.quantity })),
-        );
-  const taken: LineReduction[] = [];
-  for (const { id, change } of subjects) {
-    const [first, lower] = change.rows;
-    await setPrice(tx, id, first!, change.row.priceQuantity);
-    const second = seconds.get(id);
-    let firstReduction = change.reduction;
-    if (second !== undefined) {
-      splits.push({ from: id, to: second.id });
-      await setPrice(tx, second.id, lower!, change.row.priceQuantity);
-      const quantity = decimalToThousandths(lower!.quantity);
-      const reduction = subtractDecimal(
-        lineGross(change.row, quantity),
-        lineGross(change.row, quantity, decimalToCents(lower!.unitGross)),
-      );
-      firstReduction = subtractDecimal(change.reduction, reduction);
-      taken.push({ lineId: second.id, reduction, quantity });
-    }
-    taken.push({
-      lineId: id,
-      reduction: firstReduction,
-      quantity: decimalToThousandths(first!.quantity),
-    });
-  }
-  return {
-    splits,
-    taken: taken.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
-  };
-}
-
-/** What a comp or a discount took off one line, `quantity` of it then (plan D37). */
-interface LineReduction {
-  lineId: string;
-  reduction: Decimal;
-  quantity: number;
 }
 
 /**
