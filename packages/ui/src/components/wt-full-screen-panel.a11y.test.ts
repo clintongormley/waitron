@@ -10,9 +10,15 @@ afterEach(async () => {
 });
 
 describe.each(["light", "dark"] as const)("wt-full-screen-panel (%s)", (theme) => {
-  test.each([false, true])("plain panel with a scrolling body=%s", async (tall) => {
+  test.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])("panel with a scrolling body=%s, rising=%s", async (tall, rising) => {
     await mountThemed(
-      `<wt-full-screen-panel body-label="Details">
+      `<wt-full-screen-panel body-label="Details" ${rising ? "rising" : ""}>
+        <h2 slot="header">Menu</h2>
         <p style="height:${tall ? 400 : 30}px">Details</p>
       </wt-full-screen-panel>`,
       theme,

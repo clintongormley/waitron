@@ -727,8 +727,9 @@ by `apps/dashboard/src/widgets/theme-preview.test.ts`, and a component inside bo
 bold by `packages/ui-core/src/base-styles.test.ts`.
 
 `--wt-duration-fade` is how long `wt-notice` takes to fade out once its time is up.
-`--wt-duration-move` is how long a row takes to slide into its place while a list is reordered by
-dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`).
+`--wt-duration-move` is how long something takes to slide into its place: a row while a list is
+reordered by dragging in `ReorderController` (`packages/ui/src/reorder-table.ts`), or a bottom
+sheet rising into view.
 `--wt-duration-disclosure` is how long a disclosure body takes to open or close (900 ms).
 `--wt-duration-pulse-slow` (2 s) and `--wt-duration-pulse-fast` (1 s) are one cycle of a floor
 ring's pulse, which dims it to `--wt-color-danger-pulse-dim` or `--wt-color-warning-pulse-dim`
@@ -898,6 +899,12 @@ dialog's outer body clips its content, so the panel supplies the scrolling. Set 
 immediately above your foot actions. In a wide till order, set `--wt-dialog-inset-inline-start`
 on the full-screen dialog to the measured edge of the order column. The dialog covers the order
 and its backdrop dims the display. Leave the inset at zero on a narrow screen.
+
+Set `rising` to make the panel a sheet risen from the bottom of the screen: rounded top corners
+edged with a border-coloured line, a border-coloured handle above the header, so both show in
+either theme, and an upward shadow. It slides up into place each time it appears,
+whether newly added to the page or shown again after `hidden` or `display: none`, unless the
+device asks for reduced motion.
 
 `wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
 `heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
