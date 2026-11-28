@@ -630,6 +630,38 @@ describe("refuseDiscountsNotHolding", () => {
 });
 
 describe("a split line's pending discounts", () => {
+  it("are asked about when a weighed line's parts together take less of an amount than was given", async () => {
+    // 4 kg at 1.00 with 0.04 off takes 0.04 at 0.99; split into 2.5 and 1.5 kg, the shares 0.03
+    // and 0.01 can only take 0.02 and 0.01 at whole-cent prices.
+    const billId = await groupedBill([{ name: "Fish", quantity: "4" }], 100);
+    const fish = await lineIdOf(venue, billId, 1);
+    const id = await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: fish, ...amountOf(4) }));
+    expect((await inTx(venue, (tx) => workedNow(tx, billId))).takes).toBe(4);
+    await inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId));
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1.5" }]),
+    );
+    const shares = await inTx(venue, (tx) => pendingOn(tx, billId));
+    expect(shares.map(({ amount }) => amount).sort()).toEqual([1, 3]);
+    expect((await inTx(venue, (tx) => workedNow(tx, billId))).takes).toBe(3);
+    await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
+      code: "adjustment.no_longer_applies",
+      params: {
+        workingOrderId: billId,
+        discounts: expect.arrayContaining(
+          shares.map(({ id: discountId }) =>
+            expect.objectContaining({ discountId, why: "cut_down" }),
+          ),
+        ) as unknown,
+      },
+    });
+    expect(shares.map(({ id: discountId }) => discountId)).toContain(id);
+    await expect(
+      inTx(venue, (tx) => crystalliseBillDiscounts(tx, venue.cfg, billId, { asked: true })),
+    ).rejects.toMatchObject({ code: "adjustment.no_longer_applies" });
+    expect(await inTx(venue, (tx) => pendingOn(tx, billId))).toHaveLength(2);
+  });
+
   it("are written as one discount, counted once, with what it takes off each line", async () => {
     const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
     const beers = await lineIdOf(venue, billId, 1);

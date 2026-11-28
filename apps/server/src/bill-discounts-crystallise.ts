@@ -29,7 +29,7 @@ import {
 } from "@waitron/shared";
 import { listValue, readRows, stageOf, type Row } from "./adjustment-rows.js";
 import { reprice, type Change } from "./adjustment-reprice.js";
-import { gatherBillDiscountInputs } from "./bill-discounts-read.js";
+import { gatherBillDiscountInputs, type BillDiscountInput } from "./bill-discounts-read.js";
 import type { TradingContext } from "./trading-context.js";
 import { bumpRevision } from "./working-order-edit-state.js";
 import "./errors.js";
@@ -100,8 +100,44 @@ async function refuseIfAny(
  */
 export async function refuseDiscountsNotHolding(tx: Transaction, billId: string): Promise<void> {
   const input = (await gatherBillDiscountInputs(tx, [billId])).get(billId);
-  if (input !== undefined)
-    await refuseIfAny(tx, billId, workOutBillDiscounts(input.lines, input.discounts).discounts);
+  if (input !== undefined) await refuseIfAny(tx, billId, (await workedOut(tx, input)).worked);
+}
+
+/**
+ * `input`'s discounts worked out, with their held rows by id. A discount given as one row of the
+ * till that a split left on several lines, in rows sharing `given_together`, holds only if its
+ * rows together take what they were given: each row's share takes only what its own part's
+ * prices allow (plan D10), so a split weighed line can lose a cent it took whole, and then every
+ * row of it is `cut_down`.
+ */
+async function workedOut(
+  tx: Transaction,
+  input: BillDiscountInput,
+): Promise<{ worked: WorkedBillDiscount[]; heldOf: Map<string, HeldDiscount> }> {
+  const ids = input.discounts.map(({ id }) => id);
+  const heldOf = new Map(
+    (await tx.select().from(billDiscounts).where(inArray(billDiscounts.id, ids))).map((row) => [
+      row.id,
+      row,
+    ]),
+  );
+  const worked = workOutBillDiscounts(input.lines, input.discounts).discounts;
+  const groups = new Map<string, WorkedBillDiscount[]>();
+  for (const one of worked) {
+    const key = heldOf.get(one.id)!.givenTogether;
+    groups.set(key, [...(groups.get(key) ?? []), one]);
+  }
+  for (const group of groups.values()) {
+    const amounts = group.map(({ id }) => heldOf.get(id)!);
+    const short =
+      group.length > 1 &&
+      amounts.every(({ action }) => action === "discount_amount") &&
+      group.every(({ holds }) => holds === "yes") &&
+      group.reduce((sum, { takes }) => sum + takes, 0) <
+        amounts.reduce((sum, { amount }) => sum + amount!, 0);
+    if (short) for (const one of group) one.holds = "cut_down";
+  }
+  return { worked, heldOf };
 }
 
 /** The bill's rows as crystallising leaves them, each under the id the working-out gives its
@@ -345,7 +381,7 @@ export async function crystalliseBillDiscounts(
 ): Promise<void> {
   const input = (await gatherBillDiscountInputs(tx, [billId])).get(billId);
   if (input === undefined) return;
-  const { discounts: worked } = workOutBillDiscounts(input.lines, input.discounts);
+  const { worked, heldOf } = await workedOut(tx, input);
   const standing = await notHolding(tx, worked);
   if (options.asked && standing.length > 0) {
     throw new AppError("adjustment.no_longer_applies", {
@@ -354,12 +390,6 @@ export async function crystalliseBillDiscounts(
     });
   }
   const ids = input.discounts.map(({ id }) => id);
-  const heldOf = new Map(
-    (await tx.select().from(billDiscounts).where(inArray(billDiscounts.id, ids))).map((row) => [
-      row.id,
-      row,
-    ]),
-  );
   // Before any price changes, so a split made while writing copies no pending row to its part.
   await deletePendingDiscounts(tx, ids);
   const rows = await readRows(tx, billId);
