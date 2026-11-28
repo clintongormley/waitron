@@ -6623,12 +6623,16 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
   },
 );
 
-it("says the till is loading while the first read after a sign-in waits", async () => {
-  let answer!: (value: unknown) => void;
+it("opens the till frame after the PIN is accepted while the menu read waits", async () => {
+  const session = { personId: "p1", permissions: [], locale: null };
+  let acceptPin!: (value: typeof session) => void;
+  let answerOffers!: (value: ZoneOffers) => void;
   const { el } = await mountApp({
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
-    login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null }),
-    listDefaultZoneOffers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    login: vi.fn(() => new Promise<typeof session>((resolve) => (acceptPin = resolve))),
+    listDefaultZoneOffers: vi.fn(
+      () => new Promise<ZoneOffers>((resolve) => (answerOffers = resolve)),
+    ),
   });
   await flush(el);
   const screen = lock(el)!;
@@ -6646,9 +6650,18 @@ it("says the till is loading while the first read after a sign-in waits", async 
   expect(screen.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()).toBe(
     t("login.signing_in"),
   );
-  answer(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"));
+
+  acceptPin(session);
+  await flush(el);
+  expect(api.listDefaultZoneOffers).toHaveBeenCalledOnce();
+  expect(lock(el)).toBeNull();
+  expect(shell(el)).not.toBeNull();
+  expect(counter(el)).toBeNull();
+
+  answerOffers(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"));
   await flush(el);
   expect(lock(el)).toBeNull();
+  expect(counter(el)).not.toBeNull();
 });
 
 it.each([
