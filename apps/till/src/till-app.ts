@@ -33,6 +33,13 @@ import type { BillEditExpected, BillEditState } from "./api/order-types.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import type { CounterError, ExcessCause } from "./state/counter-error.js";
 import {
+  TABLE_REFUSALS,
+  STORED_WAY_CHANGED,
+  BILL_LEFT_REFUSALS,
+  DESTINATION_REFUSALS,
+  SPLIT_BILL_REFUSALS,
+} from "./state/table-refusals.js";
+import {
   APPROVER_REFUSALS,
   closedZoneQuestionOf,
   isLateSendManagerRefusal,
@@ -902,83 +909,6 @@ function confirmsTicket(answer: unknown, billId: string): boolean {
   };
   return workingOrderId === billId && typeof invoiceNumber === "string" && invoiceNumber !== "";
 }
-
-/** Table refusals shown in their code's own words. */
-const TABLE_REFUSALS = new Set([
-  "device.unauthorized",
-  "tab.portions_too_many",
-  "fiscal.fingerprint_mismatch",
-  "fiscal.chain_handed_over",
-  "service_zone.closed",
-  "order.payment_in_flight",
-  "sale.total_exceeds_simplified_limit",
-  "table.not_shared",
-  "table.not_joined",
-  "table.already_in_party",
-  "table.inactive",
-  "service_zone.join_mismatch",
-  "service_zone.mode_incompatible",
-  "group.held_leaves_party",
-  "table.needs_clearing",
-  "table.needs_moving",
-  "table.not_found",
-  "table.not_on_today_plan",
-  "table.taken_off",
-  "table.fixed",
-  "table.merged",
-  "table.delivery_pending",
-  "table.open_delivery_order",
-  "tab.already_open",
-  "party.not_open",
-  "party.bill_outstanding",
-  "bill.presented",
-  "bill.paid",
-  "bill.other_party",
-  "bill.received_exceeds_total",
-  "bill.refund_in_progress",
-  "bill.not_overpaid",
-  "bill.overpaid_changed",
-  "bill.tip_not_allowed_on_excess",
-  "bill.tip_needs_a_sale",
-  "working_order.not_open",
-  "storage.disk_full",
-  "clock.unconfirmed",
-  "menu_period.ended",
-  "station.no_default",
-  "department.operation_description_required",
-  "sale.department_missing",
-  "order.dining_fixed",
-  "order.dining_locked",
-  "order.dining_differs",
-]);
-
-/** A switch of the way an order sells refused because the stored order has moved on: it is read
- * again, so the screen shows the way it now has. */
-const STORED_WAY_CHANGED: ReadonlySet<string> = new Set([
-  "order.dining_locked",
-  "order.dining_fixed",
-]);
-
-/** A draft save naming a bill that has left its party's open bills: merged away (`tab.not_open`) or
- * moved to another table (`bill.other_party`). */
-const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.other_party"]);
-
-const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
-  "order.payment_in_flight",
-  "bill.refund_in_progress",
-  "bill.presented",
-  "bill.paid",
-]);
-
-/** A split refused for the state of one of its bills, each named when it is not on screen. */
-const SPLIT_BILL_REFUSALS: ReadonlySet<string> = new Set([
-  "bill.received_exceeds_total",
-  "bill.refund_in_progress",
-  "order.payment_in_flight",
-  "working_order.not_open",
-  "bill.presented",
-  "bill.paid",
-]);
 
 function selectedBills(selection: SplitSelection): string[] {
   return [...selection.wholeBillIds, ...selection.loose.map((source) => source.billId)];
@@ -2083,6 +2013,7 @@ export class TillApp extends LitElement {
   #live?: TillLiveConnection;
   #liveApi?: TillApi;
   #billDraftLive?: { stop(): void };
+  #tableOrderLive?: { stop(): void };
   #deliveryLive?: { stop(): void };
   readonly #routerLive = () => this.router?.setLive(this.#live?.up ?? false);
   readonly #pauseLive = () => {
@@ -2441,12 +2372,14 @@ export class TillApp extends LitElement {
   readonly #onDraftFocus = (): void => {
     void this.#refreshBillDraft();
     void this.#rereadBillsOnTimer();
+    void this.#rereadOpenTableOrder();
     void this.#refreshTableAllergy();
   };
 
   readonly #onVisibility = (): void => {
     void this.#refreshBillDraft();
     void this.#rereadBillsOnTimer();
+    void this.#rereadOpenTableOrder();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
@@ -2570,6 +2503,7 @@ export class TillApp extends LitElement {
     this.#pauseLive();
     this.#live = undefined;
     this.#billDraftLive?.stop();
+    this.#tableOrderLive?.stop();
     this.#deliveryLive?.stop();
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
@@ -3178,9 +3112,11 @@ export class TillApp extends LitElement {
   #tableOpensPending = 0;
   /** The tab a card-mount open switched away from, to go back to if the open fails. */
   #openedFrom?: BuiltInScreen;
-  /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
-  /** The same for the party's bills. */
+  #tabLinesLoad = 0;
+  /** A foreground read supersedes earlier reads on start. A background read does so on success. */
+  #tabLinesCurrent = 0;
+  /** Only the latest requested list of bills may replace the one shown. */
   #partyBillsRead = 0;
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
@@ -5003,6 +4939,7 @@ export class TillApp extends LitElement {
           this.#live.addEventListener("down", this.#routerLive);
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
           this.#billDraftLive?.stop();
+          this.#tableOrderLive?.stop();
           this.#deliveryLive?.stop();
           const live = this.#live;
           this.#billDraftLive = queuedLiveRefresh(live, {
@@ -5011,6 +4948,12 @@ export class TillApp extends LitElement {
             run: async () => {
               if (this.isConnected && this.#live === live)
                 await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+            },
+          });
+          this.#tableOrderLive = queuedLiveRefresh(live, {
+            types: TILL_LIVE_TYPES.tableOrder!,
+            run: async () => {
+              if (this.#live === live) await this.#rereadOpenTableOrder();
             },
           });
           this.#deliveryLive = queuedLiveRefresh(live, {
@@ -12661,6 +12604,7 @@ export class TillApp extends LitElement {
     )
       this.orderParty = {
         ...party,
+        outstanding: latest.outstanding,
         kitchenNote: latest.kitchenNote,
         unsentDrafts: latest.unsentDrafts,
       };
@@ -13063,18 +13007,20 @@ export class TillApp extends LitElement {
     return placed;
   }
 
-  async #refreshTableLines(): Promise<void> {
+  async #refreshTableLines(isCurrent?: () => boolean): Promise<void> {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const read = ++this.#tabLinesRead;
     try {
       const tab = await this.api.getTabLines(billId);
-      if (read !== this.#tabLinesRead || billId !== this.activeTabId) return;
+      if (read < this.#tabLinesCurrent || billId !== this.activeTabId || isCurrent?.() === false)
+        return;
+      this.#tabLinesCurrent = read;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
       this.#refreshOpenPayLines(billId);
     } catch {
-      if (read === this.#tabLinesRead && billId === this.activeTabId)
+      if (isCurrent === undefined && read === this.#tabLinesRead && billId === this.activeTabId)
         this.#tableOffers.liveFields = undefined;
     }
   }
@@ -13083,6 +13029,8 @@ export class TillApp extends LitElement {
   async #loadTabLines(splitRead = false): Promise<void> {
     await this.#followPartyDraft(splitRead);
     const read = ++this.#tabLinesRead;
+    this.#tabLinesLoad = read;
+    this.#tabLinesCurrent = read;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
     const groupsRead = ++this.#groupsRead;
@@ -13104,23 +13052,32 @@ export class TillApp extends LitElement {
         undefined,
         splitRead,
       );
-      if (read !== this.#tabLinesRead) return;
-      this.tabLines = tab.lines;
-      this.tabRevision = tab.revision;
-      this.#refreshOpenPayLines(billId);
+      if (read === this.#tabLinesCurrent) {
+        this.tabLines = tab.lines;
+        this.tabRevision = tab.revision;
+        this.#refreshOpenPayLines(billId);
+      }
     } catch {
-      if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
-      this.tabLines = [];
+      if (read === this.#tabLinesCurrent && !refusal?.ended.signal.aborted) this.tabLines = [];
     }
-    const { groups: partyGroups, printProblems: partyProblems } = await groups;
+    const groupAnswer = await groups;
     const partyOrders = await orders;
-    if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
+    if (read !== this.#tabLinesLoad || refusal?.ended.signal.aborted) return;
     this.requestUpdate();
-    this.#showPrintProblems(groupsRead, partyProblems);
-    if (!this.#showGroups(groupsRead, partyGroups ?? [], partyOrders)) return;
-    this.#groupsUnread = partyGroups === null;
+    this.#applyTabGroups(groupsRead, partyId, groupAnswer, partyOrders);
+  }
+
+  #applyTabGroups(
+    read: number,
+    partyId: string | null,
+    { groups, printProblems }: { groups: OrderGroup[] | null; printProblems: PrintProblem[] },
+    orders: CurrentOrders | null,
+  ): void {
+    this.#showPrintProblems(read, printProblems);
+    if (!this.#showGroups(read, groups ?? [], orders)) return;
+    this.#groupsUnread = groups === null;
     this.#groupsReadFor = partyId;
-    this.currentOrdersUnread = partyId !== null && partyOrders === null;
+    this.currentOrdersUnread = partyId !== null && orders === null;
   }
 
   #showPrintProblems(read: number, problems: PrintProblem[]): void {
@@ -13601,7 +13558,11 @@ export class TillApp extends LitElement {
     this.#billDraftTimer = setTimeout(() => {
       const refresh = this.#live?.up
         ? Promise.resolve()
-        : Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+        : Promise.all([
+            this.#refreshBillDraft(),
+            this.#rereadBillsOnTimer(),
+            this.#rereadOpenTableOrder(),
+          ]);
       void refresh.finally(() => {
         if (
           this.isConnected &&
@@ -13612,6 +13573,32 @@ export class TillApp extends LitElement {
           this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
+  }
+
+  async #rereadOpenTableOrder(): Promise<void> {
+    const partyId = this.orderParty?.id;
+    const billId = this.activeTabId;
+    if (
+      partyId === undefined ||
+      billId === undefined ||
+      !this.isConnected ||
+      !this.#tableMenuActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    const visit = this.#orderVisit;
+    const sent = this.#sentNow();
+    const current = () =>
+      this.isConnected && !this.#hasLeftOrder(billId, visit) && !this.#hasLeftParty(partyId, sent);
+    const read = ++this.#groupsRead;
+    const floor = this.#pollFloor();
+    const paying = this.billPaying?.surface === "table" && this.billPaying.billId === billId;
+    const lines = paying ? undefined : this.#refreshTableLines(current);
+    const [groups, orders] = await Promise.all([this.#readGroups(), this.#readCurrentOrders()]);
+    if (current() && groups.groups !== null && orders !== null)
+      this.#applyTabGroups(read, partyId, groups, orders);
+    await Promise.all([floor, lines]);
   }
 
   async #rereadBillsOnTimer(): Promise<void> {
@@ -20758,7 +20745,8 @@ export class TillApp extends LitElement {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
-    this.#tabLinesRead++;
+    this.#tabLinesLoad = ++this.#tabLinesRead;
+    this.#tabLinesCurrent = this.#tabLinesLoad;
     this.#partyBillsRead++;
     this.#printProblemsShown = ++this.#groupsRead;
     this.#groupsShown = this.#printProblemsShown;

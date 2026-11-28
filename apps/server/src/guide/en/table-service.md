@@ -703,7 +703,8 @@ your screen switches to another of the table's bills and says so,
 such as **Bill 2 is no longer at this table. Now showing Bill 1.** Dishes you had added to the bill
 that went and not sent are not moved onto the bill now shown: they are listed under **Your changes
 have not been saved.**, with **Discard changes** and **Update the order**. A bill paid on another
-till stays on your screen, marked **Paid**.
+till stays on your screen, marked **Paid**. Keep the bill open to see dishes another till sends
+to it.
 
 Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
 the table's bills, and **Pay**. The bill's **Full invoice** choice and receipt language sit beside
