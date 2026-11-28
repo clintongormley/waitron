@@ -572,6 +572,51 @@ it("draws Serve all as a teal word on the heading's line, with a full tap area i
   expect(pill.right).toBeLessThanOrEqual(button.left);
 });
 
+/** The vertical middle of the text inside `node`, wherever it is drawn. */
+function textMiddle(node: Node): number {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (at.textContent!.trim() === "") continue;
+    range.selectNodeContents(at);
+    const box = range.getBoundingClientRect();
+    return (box.top + box.bottom) / 2;
+  }
+  throw new Error("no text");
+}
+
+it.each([
+  [600, false, 44],
+  [200, true, 75],
+] as const)(
+  "centres Serve all's word on the Sent mark's line at %ipx (stacked: %s), %ipx tall",
+  async (width, stacked, height) => {
+    const el = await twoHeadings(width);
+    const heading = find(el, "[data-sent-section=fired] wt-course-heading");
+    expect(heading.hasAttribute("stacked")).toBe(stacked);
+    const serve = find(el, "[data-sent-section=fired] [data-serve-all]");
+    const mark = heading.shadowRoot!.querySelector('[part="mark"]')!;
+    expect(Math.abs(textMiddle(serve) - textMiddle(mark))).toBeLessThanOrEqual(1);
+    expect(heading.getBoundingClientRect().height).toBeCloseTo(height, 0);
+    expect(serve.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(serve.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  },
+);
+
+it("centres Serve all's word on Fire's line on a held heading with a released dish", async () => {
+  const el = await mount(
+    current([], [group("g", [row("own", { released: false }), row("drink", { lineNo: 2 })])]),
+  );
+  el.style.width = "600px";
+  for (let frame = 0; frame < 2; frame++)
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+  const heading = find(el, "[data-sent-section=g] wt-course-heading");
+  expect(heading.hasAttribute("stacked")).toBe(false);
+  const fire = find(el, "[data-group-fire=g]");
+  const serve = find(el, "[data-sent-section=g] [data-serve-all]");
+  expect(Math.abs(textMiddle(serve) - textMiddle(fire))).toBeLessThanOrEqual(1);
+});
+
 it.each(["en", "es"] as const)(
   "names each %s group's Serve all after its group, as Fire is named",
   async (locale) => {

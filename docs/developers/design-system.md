@@ -6622,7 +6622,8 @@ the ✓ Sent mark and **Serve all**, which serves the section's released dishes 
 heading carries no mark and **Fire**, with **Serve all** beside it when some of this bill's dishes under it are released and still to serve, and its other bills' held dishes stand under it as ordinary
 rows with no price, their second line the bill's name ("Bill 2"). **Serve all**, named after its group for a screen reader as **Fire** is, is a word, not a
 block: a `ghost` `wt-button`, `md` and bold, in `--wt-color-primary-text` when it can be pressed, whose 44 px tap area
-spills into the heading's padding so the heading stays about 44 px tall. **Fire** is outlined
+spills into the heading's padding so the heading stays about 44 px tall, its word level with the
+mark's and **Fire**'s, on one line or stacked. **Fire** is outlined
 (`secondary`). The time in a title ("Fired 12 min ago") never breaks across lines. The sent rows
 and their headings sit on the page colour, with `--wt-space-3` below the last row; beside the menu,
 the order layout (`apps/till/src/screens/table-order-layout.ts`) paints `till-sent-orders`
