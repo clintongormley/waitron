@@ -41,6 +41,17 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "[data-print-problem]")).toBeNull();
   });
 
+  it("keeps the order notice when the menu answers but the order is still loading", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { el } = await mount({ loading: true, menuFirstRead: "waiting" });
+    await vi.advanceTimersByTimeAsync(6_000);
+    el.menuFirstRead = undefined;
+    await el.updateComplete;
+    expect(shown(el, "[data-first-read-status]")?.textContent?.trim()).toBe(
+      "Still waiting for the box…",
+    );
+  });
+
   it("a table menu step left open is not shown while loading", async () => {
     const { el } = await mount();
     await openPartyMenu(el);

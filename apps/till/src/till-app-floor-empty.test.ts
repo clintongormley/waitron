@@ -420,7 +420,9 @@ it("shows the Floor after sign-in while its first tables read is still out", asy
 
 it("opens the Floor frame as soon as the PIN is accepted while device zones wait", async () => {
   const getDeviceZones = vi.fn(() => new Promise(() => {}));
-  const el = await signIn(stubApi({ getDeviceZones }));
+  const api = stubApi({ getDeviceZones });
+  api.getTill.mockResolvedValue({ ...(await api.getTill()), formFactor: "phone-portrait" });
+  const el = await signIn(api);
 
   expect(floorOf(el)).toBeTruthy();
   expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeNull();
@@ -428,6 +430,17 @@ it("opens the Floor frame as soon as the PIN is accepted while device zones wait
     expect(floorOf(el)?.shadowRoot?.querySelector("wt-placeholder")).toBeTruthy(),
   );
   expect(drawn(el, "t1")).toBeNull();
+});
+
+it("keeps a fixed till's frame neutral until its starting zone answers", async () => {
+  let answer!: (zones: ReturnType<typeof deviceZonesFixture>) => void;
+  const getDeviceZones = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+  const el = await signIn(stubApi({ getDeviceZones }, true));
+  const shell = () => el.shadowRoot!.querySelector("till-shell");
+  expect(shell()?.activeScreen).toBeUndefined();
+  expect(floorOf(el)).toBeNull();
+  answer(deviceZonesFixture(undefined, ["z1"]));
+  await vi.waitFor(() => expect(shell()?.activeScreen).toBe("counter"));
 });
 
 it("shows Counter menu placeholders while the first offers read waits", async () => {

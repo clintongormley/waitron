@@ -286,7 +286,7 @@ it("retries a silent first drawer read before opening the drawer", async ({ onTe
 
   answer({ ...drawer, state: "new", startSequence: 6 });
   await firstRead;
-  await el.updateComplete;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(requests.openDrawer).toHaveBeenCalledOnce();
   expect(retry()).toBeNull();
 });

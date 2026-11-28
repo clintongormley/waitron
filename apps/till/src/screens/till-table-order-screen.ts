@@ -1414,10 +1414,9 @@ export class TillTableOrderScreen extends LitElement {
   #watchOrderRead(): void {
     this.#stopOrderRead?.();
     this.orderRead = "quiet";
-    this.#stopOrderRead =
-      this.loading && this.menuFirstRead === undefined
-        ? watchFirstRead((stage) => (this.orderRead = stage))
-        : undefined;
+    this.#stopOrderRead = this.loading
+      ? watchFirstRead((stage) => (this.orderRead = stage))
+      : undefined;
   }
   @property({ attribute: false }) paymentConfirmation?: RetainedTender;
   /** A bill payment on the bill on screen is being sent or got no answer: a tap on a bill-payment
@@ -2447,7 +2446,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("loading") || changed.has("menuFirstRead")) this.#watchOrderRead();
+    if (changed.has("loading") || changed.has("serviceVisit")) this.#watchOrderRead();
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
     if (changed.has("changeRefusal")) this.#reopenRefusedChange();
     if (this.sentLinePending !== null && this.#sentLine() === undefined)

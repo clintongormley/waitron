@@ -1818,6 +1818,27 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)!.loading).toBe(false);
   });
 
+  it("returns to the same table after retrying the sign-in read", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    emit(shell(el), "logout");
+    await flush(el);
+    api.getDeviceZones.mockImplementationOnce(() => new Promise(() => {}));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await vi.advanceTimersByTimeAsync(15_000);
+      const retry =
+        el.shadowRoot!.querySelector<HTMLElement>("[data-first-read-retry]") ??
+        floor(el)?.shadowRoot?.querySelector<HTMLElement>("[data-first-read-retry]");
+      expect(retry).toBeTruthy();
+      retry!.click();
+    } finally {
+      vi.useRealTimers();
+    }
+    await vi.waitFor(() => expect(tableOrder(el)?.party?.id).toBe("v1"));
+  });
+
   it("an order tab left for the floor while loading is never written to history", async () => {
     const lines = deferred<{ lines: never[]; revision: number }>();
     const { el } = await mountApp({

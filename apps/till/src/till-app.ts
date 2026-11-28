@@ -47,6 +47,7 @@ import { menusMoved, ZoneOfferIndex } from "./state/zone-offer-index.js";
 import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
 import { rememberedFloorPlan, rememberFloorPlan } from "./state/floor-plan-memory.js";
 import { startFirstRead, type FirstReadView } from "./state/first-read.js";
+import { firstFloorRead, firstReadNoticeStyles } from "./widgets/first-read-notice.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
@@ -1825,6 +1826,7 @@ function zoneKeepOpenMoved(
 export class TillApp extends LitElement {
   static override styles = [
     serverConnectionNoticeStyles,
+    firstReadNoticeStyles,
     floorToastStyles,
     baseStyles,
     css`
@@ -5856,20 +5858,28 @@ export class TillApp extends LitElement {
         if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       }
     };
-    const attempt = startFirstRead(readStartingOffers, (stage) => {
-      if (opening && !replaced()) this.signInReadView = stage;
-    });
-    this.#signInRead = {
-      cancel: attempt.cancel,
-      displayName,
-      retry: () => {
-        if (!replaced() && this.signInReadView === "unreachable")
-          void this.#enterSignedIn({ personId, displayName, permissions }, switched);
-      },
+    const readWithRetry = (): Promise<void> => {
+      let retry = false;
+      const attempt = startFirstRead(readStartingOffers, (stage) => {
+        if (opening && !replaced()) this.signInReadView = stage;
+      });
+      this.#signInRead = {
+        cancel: attempt.cancel,
+        displayName,
+        retry: () => {
+          if (replaced() || this.signInReadView !== "unreachable") return;
+          retry = true;
+          attempt.cancel();
+        },
+      };
+      if (opening) this.signInReadView = "quiet";
+      return attempt.result.catch((error: unknown) => {
+        if (retry && !replaced()) return readWithRetry();
+        throw error;
+      });
     };
-    if (opening) this.signInReadView = "quiet";
     try {
-      await attempt.result;
+      await readWithRetry();
       if (replaced()) return;
     } catch (error) {
       if (replaced()) return;
@@ -23851,11 +23861,13 @@ export class TillApp extends LitElement {
         ></till-station-screen>`;
   }
 
-  #activeTabBody(): TemplateResult | typeof nothing {
+  #activeTabBody(openingScreen?: BuiltInScreen): TemplateResult | typeof nothing {
     const tab = this.#activeTab();
     const handheld = kindOfFormFactor(this.formFactor ?? "") === "handheld";
     if (this.signInReadView !== undefined) {
-      return this.#requestedTab() === "counter"
+      if (openingScreen === undefined)
+        return firstFloorRead(this.signInReadView, handheld, () => this.#signInRead?.retry());
+      return openingScreen === "counter"
         ? html`<till-menu-browser
             .firstRead=${this.signInReadView}
             .retryFirstRead=${this.#signInRead?.retry}
@@ -24262,7 +24274,7 @@ export class TillApp extends LitElement {
 
   override render() {
     const signingIn = this.signInReadView !== undefined;
-    const openingScreen = signingIn ? (this.#requestedTab() ?? "floor") : undefined;
+    const openingScreen = signingIn ? this.#requestedTab() : undefined;
     const shellFormFactor = this.#inShell() || signingIn ? this.formFactor : undefined;
     const noBoxAnswering = this.router?.noBoxAnswering ?? false;
     const attendanceMessage = this.attendancePage ? this.#attendanceMessage(true) : "";
@@ -25062,7 +25074,7 @@ export class TillApp extends LitElement {
                         currentLocale(),
                         html`<till-shell
                           .formFactor=${shellFormFactor}
-                          .activeScreen=${openingScreen ?? this.activeTabKey}
+                          .activeScreen=${signingIn ? openingScreen : this.activeTabKey}
                           @floor-controls-resized=${(event: CustomEvent<number>) => {
                             this.style.setProperty(
                               "--wt-floor-controls-height",
@@ -25158,7 +25170,7 @@ export class TillApp extends LitElement {
                                   }}
                                 ></till-department-transfers>`
                           }
-                          ${this.#renderDrawerDialog()} ${this.#activeTabBody()}
+                          ${this.#renderDrawerDialog()} ${this.#activeTabBody(openingScreen)}
                           ${this.#findBillBody()}${this.#drillBody()}${this.#hoursApprovalBody()}
                         </till-shell>`,
                       )
