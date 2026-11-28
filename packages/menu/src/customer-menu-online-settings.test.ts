@@ -1,5 +1,6 @@
-import { withTransaction } from "@waitron/db";
+import { customerMenuStyles, menus, withTransaction } from "@waitron/db";
 import { seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useMenuDb } from "../test/fixtures.js";
 import {
@@ -31,10 +32,11 @@ it("starts a new menu offline, without an address and with large photos", async 
     return readCustomerMenuOnlineSettings(tx, menu.id);
   });
 
-  expect(value).toEqual({ enabled: false, address: null, photos: "large" });
+  expect(value).toEqual({ enabled: false, address: null, photos: "large", styleId: null });
 });
 
-it("duplicates the photo size without copying the source address or switching the copy on", async () => {
+it("duplicates the photo size and style without copying the address or switching the copy on", async () => {
+  const styleId = "0193b4cc-984a-7f73-8cab-b5373af6720f";
   const value = await withTransaction(fx.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Lunch" });
     const { hash } = await previewMenu(tx, menu.id);
@@ -44,12 +46,22 @@ it("duplicates the photo size without copying the source address or switching th
       enabled: true,
       address: "lunch",
       photos: "small",
+      styleId: null,
     });
+    await tx
+      .insert(customerMenuStyles)
+      .values({ id: styleId, name: "Terrace", nameKey: "terrace", appearance: {} });
+    await tx.update(menus).set({ customerMenuStyleId: styleId }).where(eq(menus.id, menu.id));
     const copy = await duplicateMenu(tx, menu.id, "Lunch copy");
+    const [copied] = await tx
+      .select({ styleId: menus.customerMenuStyleId })
+      .from(menus)
+      .where(eq(menus.id, copy.id));
+    expect(copied?.styleId).toBe(styleId);
     return readCustomerMenuOnlineSettings(tx, copy.id);
   });
 
-  expect(value).toEqual({ enabled: false, address: null, photos: "small" });
+  expect(value).toEqual({ enabled: false, address: null, photos: "small", styleId });
 });
 
 it("reserves an offline menu's address and leaves a refused save unchanged", async () => {
@@ -60,6 +72,7 @@ it("reserves an offline menu's address and leaves a refused save unchanged", asy
       enabled: false,
       address: "lunch",
       photos: "small",
+      styleId: null,
     });
     return other.id;
   });
@@ -70,6 +83,7 @@ it("reserves an offline menu's address and leaves a refused save unchanged", asy
         enabled: false,
         address: "lunch",
         photos: "none",
+        styleId: null,
       }),
     ),
   ).rejects.toMatchObject({
@@ -77,7 +91,7 @@ it("reserves an offline menu's address and leaves a refused save unchanged", asy
     params: { field: "address" },
   });
   expect(await withTransaction(fx.db, (tx) => readCustomerMenuOnlineSettings(tx, otherId))).toEqual(
-    { enabled: false, address: null, photos: "large" },
+    { enabled: false, address: null, photos: "large", styleId: null },
   );
 });
 
@@ -91,6 +105,7 @@ it.each(["Lunch", "lunch/menu", "lunch\n", "-lunch", "x".repeat(64)])(
           enabled: false,
           address,
           photos: "large",
+          styleId: null,
         });
       }),
     ).rejects.toMatchObject({
@@ -108,6 +123,7 @@ it("requires an address to go online", async () => {
         enabled: true,
         address: null,
         photos: "large",
+        styleId: null,
       });
     }),
   ).rejects.toMatchObject({
@@ -123,7 +139,12 @@ it("allows enabling a due edition without publishing another edition", async () 
     const edition = await queueMenuPublication(tx, menu.id, hash, nextDay, personId);
     return { menuId: menu.id, edition };
   });
-  const settings = { enabled: true, address: "3-course-lunch", photos: "none" } as const;
+  const settings = {
+    enabled: true,
+    address: "3-course-lunch",
+    photos: "none",
+    styleId: null,
+  } as const;
   const save = () =>
     withTransaction(fx.db, (tx) => saveCustomerMenuOnlineSettings(tx, menuId, settings));
 

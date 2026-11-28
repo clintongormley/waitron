@@ -40,6 +40,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu.deleted": 409,
   "customer_menu.address_invalid": 400,
   "customer_menu.address_taken": 409,
+  "customer_menu.style_name_taken": 409,
   "customer_menu.not_published": 409,
   "menu.delete_default": 409,
   "menu_period.delete_replacement": 409,

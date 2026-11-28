@@ -17,19 +17,23 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { cardFrameStyles } from "@waitron/ui-core/components/wt-card";
 import { contrastRatio } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import type { MenuApi } from "../api/menu-api.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { colourValueField, colourValueStyles } from "./color-field.js";
 import { fixLineStyles } from "./fix-line-styles.js";
+import type { CustomerStyleChange } from "./menu-online-save.js";
 import "./menu-online-preview.js";
 
+const defaultChoice = "venue-default";
 const colors = ["pageColor", "textColor", "headingColor"] as const;
 const fonts = ["headingFont", "textFont"] as const;
 type Color = (typeof colors)[number];
@@ -109,33 +113,41 @@ export class MenuCustomerStyleDialog extends LitElement {
   @property({ attribute: false }) api!: Pick<MenuApi, "saveCustomerStyle">;
   @property({ attribute: false }) readApi!: Pick<
     MenuApi,
-    "getCustomerPreview" | "getCustomerStyle"
+    "getCustomerPreview" | "getCustomerStyles"
   >;
   @property({ attribute: false }) menuId = "";
+  @property({ attribute: false }) styleId: string | null = null;
+  @property({ attribute: false }) disabled = false;
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: false }) photos: CustomerMenuPhotoSize = "large";
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
 
   @query("wt-modal") private modal!: HTMLElementTagNameMap["wt-modal"];
-  @state() private storedStyle?: CustomerMenuStyle | null;
+  @state() private styles?: CustomerMenuStyle[] | null;
+  @state() private choice: string | null = null;
+  @state() private copyName: string | null = null;
   @state() private open = false;
   @state() private draft: Draft = {};
   @state() private busy = false;
   @state() private refusal?: unknown;
   readonly #feedback = new FormFeedback(this);
-  #scope?: DraftScope<Draft>;
+  #scope?: DraftScope<{ appearance: Draft; name: string }>;
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#scope = draftScopeFor(this, {
       id: this,
-      current: () => this.draft,
+      current: () => this.#snapshot(),
       snapshot: (draft) => draft,
       equal: (a, b) =>
-        colors.every((key) => a[key] === b[key]) &&
-        fonts.every((key) => (a[key] ?? "system") === (b[key] ?? "system")),
-      restore: (draft) => (this.draft = draft),
+        a.name === b.name &&
+        colors.every((key) => a.appearance[key] === b.appearance[key]) &&
+        fonts.every((key) => (a.appearance[key] ?? "system") === (b.appearance[key] ?? "system")),
+      restore: ({ appearance, name }) => {
+        this.draft = appearance;
+        if (this.copyName !== null) this.copyName = name;
+      },
     }).scope;
     void this.#load();
   }
@@ -145,17 +157,47 @@ export class MenuCustomerStyleDialog extends LitElement {
     super.disconnectedCallback();
   }
 
+  #styleFor(id: string | null): CustomerMenuStyle | undefined {
+    return this.styles?.find((style) => (id === null ? style.isDefault : style.id === id));
+  }
+
+  get #selected(): CustomerMenuStyle | undefined {
+    return this.#styleFor(this.choice);
+  }
+
+  #snapshot() {
+    return { appearance: this.draft, name: this.copyName ?? "" };
+  }
+
+  #reset(choice: string | null): void {
+    this.choice = choice;
+    this.draft = this.#selected?.appearance ?? {};
+    this.copyName = null;
+    this.refusal = undefined;
+    this.#feedback.reset();
+    this.#scope?.commit(this.#snapshot());
+  }
+
   async #load(): Promise<void> {
-    this.storedStyle = undefined;
+    this.styles = undefined;
     try {
-      const style = await this.readApi.getCustomerStyle(this.menuId);
+      const styles = await this.readApi.getCustomerStyles(this.menuId);
       if (!this.isConnected) return;
-      this.storedStyle = style;
-      this.draft = style.appearance;
-      this.#scope?.commit(this.draft);
+      this.styles = styles;
+      if (this.open) this.#reset(this.styleId);
     } catch {
-      if (this.isConnected) this.storedStyle = null;
+      if (this.isConnected) this.styles = null;
     }
+  }
+
+  async #choose(value: string): Promise<void> {
+    const choice = value === defaultChoice ? null : value;
+    if (this.busy || this.choice === choice) return;
+    const proceed = () => this.#reset(choice);
+    const leave = leaveCoordinatorFor(this);
+    if (leave) await leave.request({ scopes: [this], reason: "navigation", proceed });
+    else proceed();
+    this.requestUpdate();
   }
 
   #edit<K extends keyof Draft>(key: K, value: Draft[K]): void {
@@ -178,32 +220,71 @@ export class MenuCustomerStyleDialog extends LitElement {
     );
   };
 
-  async #save(): Promise<void> {
-    if (this.busy || !this.storedStyle || saveActionState(this.#scope).unchanged) return;
+  async #checkColours(): Promise<boolean> {
     this.#feedback.press(...colors, "_form");
-    if (colors.some((key) => this.#invalid(key))) {
-      await this.#feedback.focus(this.renderRoot);
-      return;
-    }
+    if (!colors.some((key) => this.#invalid(key))) return true;
+    await this.#feedback.focus(this.renderRoot);
+    return false;
+  }
+
+  #use(): void {
+    const style = this.#selected;
+    if (!style || this.busy || this.choice === this.styleId) return;
+    this.#finish({ action: "pick", styleId: this.choice, style });
+  }
+
+  async #startCopy(): Promise<void> {
+    if (this.busy || !(await this.#checkColours())) return;
+    this.refusal = undefined;
+    this.copyName = "";
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[name="name"]')?.focus();
+  }
+
+  async #save(): Promise<void> {
+    const style = this.#selected;
+    if (this.busy || !style) return;
+    const name = this.copyName?.trim();
+    if (name === undefined) {
+      if (saveActionState(this.#scope).unchanged || !(await this.#checkColours())) return;
+    } else if (!name) return;
     this.busy = true;
     this.refusal = undefined;
-    const submitted = this.draft;
     let saved: CustomerMenuStyle;
     try {
-      saved = await this.api.saveCustomerStyle(this.menuId, submitted);
+      saved = await this.api.saveCustomerStyle(this.menuId, style.id, this.draft, name);
     } catch (error) {
       if (this.isConnected) {
         this.refusal = error;
         this.#feedback.newRefusal();
+        if (fieldOf(error) === "name") await this.#feedback.focus(this.renderRoot);
       }
       return;
     } finally {
       this.busy = false;
     }
     if (!this.isConnected) return;
-    this.storedStyle = saved;
-    this.#scope?.commit(submitted);
-    this.dispatchEvent(new CustomEvent("customer-style-saved", { bubbles: true, composed: true }));
+    const styles = this.styles ?? [];
+    this.styles =
+      name === undefined
+        ? styles.map((row) => (row.id === saved.id ? saved : row))
+        : [...styles, saved];
+    this.#finish({
+      action: name === undefined ? "edit" : "copy",
+      styleId: name === undefined ? this.choice : saved.id,
+      style: saved,
+    });
+  }
+
+  #finish(change: CustomerStyleChange): void {
+    this.#scope?.commit(this.#snapshot());
+    this.dispatchEvent(
+      new CustomEvent("customer-style-change", {
+        detail: change,
+        bubbles: true,
+        composed: true,
+      }),
+    );
     this.modal.closeAfter("saved");
   }
 
@@ -248,8 +329,9 @@ export class MenuCustomerStyleDialog extends LitElement {
   }
 
   #content(errors: Partial<Record<Color, string>>) {
-    if (!this.storedStyle) {
-      return this.storedStyle === null
+    const selected = this.#selected;
+    if (!selected) {
+      return this.styles !== undefined
         ? html`<p role="alert">${t("customer_menu.style.load_error")}</p>
             <wt-button variant="secondary" @click=${() => void this.#load()}
               >${t("menus.retry")}</wt-button
@@ -263,12 +345,27 @@ export class MenuCustomerStyleDialog extends LitElement {
     const page = tokens["--wt-color-bg"]!;
     const text = tokens["--wt-color-text"]!;
     const heading = tokens["--wt-menu-heading-color"] ?? tokens["--wt-color-primary-text"]!;
-    const affected = this.storedStyle.affectedMenus.map(({ name }) => name);
+    const affected = selected.affectedMenus.map(({ name }) => name);
     const names = new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(affected);
     return html`<div class="layout">
       <div class="fields">
         <div>
-          <span class="style-label">${t("customer_menu.style.open")}</span>${this.storedStyle.name}
+          <wt-combobox
+            name="customer-menu-style"
+            label=${t("customer_menu.style.open")}
+            search="never"
+            .value=${live(this.choice ?? defaultChoice)}
+            .options=${[
+              { value: defaultChoice, label: t("customer_menu.style.venue_default"), fixed: true },
+              ...(this.styles ?? []).map((style) => ({ value: style.id, label: style.name })),
+            ]}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              void this.#choose(event.detail.value);
+            }}
+          ></wt-combobox>
+          ${this.#swatches(tokens)}
           ${names ? html`<span class="style-label">${fill("customer_menu.style.affected", { menus: names })}</span>` : nothing}
         </div>
         <div class="fonts">${this.#font("headingFont")} ${this.#font("textFont")}</div>
@@ -290,25 +387,28 @@ export class MenuCustomerStyleDialog extends LitElement {
     </div>`;
   }
 
-  #card() {
-    const style = this.storedStyle;
-    const tokens =
-      prepareMenuAppearance(WAITRON_DEFAULTS, style?.appearance)?.tokens ?? WAITRON_DEFAULTS.light;
+  #swatches(tokens: Readonly<Record<string, string>>) {
     const swatches = [
       tokens["--wt-color-bg"],
       tokens["--wt-menu-heading-color"] ?? tokens["--wt-color-primary-text"],
       tokens["--wt-color-text"],
     ];
+    return html`<span class="swatches" aria-hidden="true">
+      ${swatches.map((color) => html`<span style=${`background-color: ${color}`}></span>`)}
+    </span>`;
+  }
+
+  #card() {
+    const style = this.#styleFor(this.styleId);
+    const tokens =
+      prepareMenuAppearance(WAITRON_DEFAULTS, style?.appearance)?.tokens ?? WAITRON_DEFAULTS.light;
     return html`<div class="style-card">
       <div>
         <span class="style-label">${t("customer_menu.style.open")}</span>
         ${
           style
             ? html`<div class="style-name">
-                <strong>${style.name}</strong
-                ><span class="swatches" aria-hidden="true">
-                  ${swatches.map((color) => html`<span style=${`background-color: ${color}`}></span>`)}
-                </span>
+                <strong>${style.name}</strong>${this.#swatches(tokens)}
               </div>`
             : nothing
         }
@@ -316,11 +416,9 @@ export class MenuCustomerStyleDialog extends LitElement {
       <wt-button
         variant="secondary"
         size="sm"
-        ?disabled=${style === undefined}
+        ?disabled=${this.disabled || this.styles === undefined}
         @click=${() => {
-          this.draft = style?.appearance ?? {};
-          this.#feedback.reset();
-          this.refusal = undefined;
+          this.#reset(this.styleId);
           this.open = true;
         }}
         >${t("customer_menu.style.change")}</wt-button
@@ -345,15 +443,22 @@ export class MenuCustomerStyleDialog extends LitElement {
             : [],
       ),
     );
+    const nameError =
+      refusalField === "name" && this.#feedback.shows("name")
+        ? codeMessage(codeOf(this.refusal))
+        : "";
     const formError =
-      this.refusal && !colorRefusal && this.#feedback.shows("_form")
+      this.refusal && !colorRefusal && refusalField !== "name" && this.#feedback.shows("_form")
         ? codeMessage(codeOf(this.refusal))
         : undefined;
     const error = this.#feedback.message(
-      { ...errors, _form: formError },
-      new Set(Object.keys(errors)),
+      { ...errors, name: nameError, _form: formError },
+      new Set([...Object.keys(errors), ...(nameError ? ["name"] : [])]),
       t("form.fix_fields"),
     );
+    const copying = this.copyName !== null;
+    const use = !copying && action.unchanged && this.choice !== this.styleId;
+    const invalid = this.#feedback.attempted && colors.some((key) => this.#invalid(key));
     return html`<wt-modal
       open
       heading=${t("customer_menu.style.heading")}
@@ -366,22 +471,57 @@ export class MenuCustomerStyleDialog extends LitElement {
         this.open = false;
       }}
     >
-      ${this.#content(errors)}
+      ${
+        copying
+          ? html`<wt-input
+              name="name"
+              label=${t("customer_menu.style.name")}
+              required
+              .value=${this.copyName ?? ""}
+              .error=${nameError}
+              ?disabled=${this.busy}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.copyName = event.detail.value;
+                this.#feedback.dismiss("name", "_form");
+                this.#scope?.changed();
+              }}
+            ></wt-input>`
+          : this.#content(errors)
+      }
       <wt-form-actions slot="footer" .error=${error}>
         <wt-button
           slot="cancel"
           variant="secondary"
           ?disabled=${this.busy}
-          @click=${() => void this.modal.requestClose("cancel")}
+          @click=${() => {
+            if (!copying) void this.modal.requestClose("cancel");
+            else {
+              this.copyName = null;
+              this.refusal = undefined;
+              this.#feedback.reset();
+              this.#scope?.changed();
+            }
+          }}
           >${t("action.cancel")}</wt-button
         >
+        ${
+          !copying
+            ? html`<wt-button
+                variant=${!action.unchanged && this.#selected?.affectedMenus.length ? "primary" : "secondary"}
+                ?disabled=${!this.#selected || this.busy || invalid}
+                @click=${() => void this.#startCopy()}
+                >${t("customer_menu.style.new")}</wt-button
+              >`
+            : nothing
+        }
         <wt-button
           data-save-style
-          variant=${action.variant}
+          variant=${use || this.copyName?.trim() ? "primary" : action.variant}
           ?loading=${this.busy}
-          ?disabled=${!this.storedStyle || action.unchanged || this.busy || (this.#feedback.attempted && colors.some((key) => this.#invalid(key)))}
-          @click=${() => void this.#save()}
-          >${t("customer_menu.style.save")}</wt-button
+          ?disabled=${!this.#selected || this.busy || (copying ? !this.copyName?.trim() : !use && (action.unchanged || invalid))}
+          @click=${() => (use ? this.#use() : void this.#save())}
+          >${t(copying ? "customer_menu.style.create" : use ? "customer_menu.style.use" : "customer_menu.style.save")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;

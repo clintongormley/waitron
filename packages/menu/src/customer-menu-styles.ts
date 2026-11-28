@@ -5,7 +5,8 @@ import {
   type CustomerMenuAppearance,
   type CustomerMenuStyle,
 } from "@waitron/shared";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, ne, isNull, or } from "drizzle-orm";
+import { foldName } from "./name-uniqueness.js";
 import { assertMenuWritable } from "./delete.js";
 import { refuseSetMenu } from "./set-menus.js";
 import "./errors.js";
@@ -32,39 +33,82 @@ export function checkedCustomerMenuAppearance(
   return value as CustomerMenuAppearance;
 }
 
-export async function defaultCustomerMenuStyle(
-  tx: Transaction,
-  menuId: string,
-  edited?: CustomerMenuAppearance,
-): Promise<CustomerMenuStyle> {
+const styleColumns = {
+  id: customerMenuStyles.id,
+  name: customerMenuStyles.name,
+  isDefault: customerMenuStyles.isDefault,
+  appearance: customerMenuStyles.appearance,
+};
+
+export async function requireCustomerMenuStyle(tx: Transaction, styleId: string) {
+  const [style] = await tx
+    .select()
+    .from(customerMenuStyles)
+    .where(eq(customerMenuStyles.id, styleId));
+  if (!style) throw new AppError("management.request_invalid", { field: "styleId" });
+  return style;
+}
+
+async function assertStyleEditable(tx: Transaction, menuId: string): Promise<void> {
   await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
-  const [style] = await tx
-    .select({
-      id: customerMenuStyles.id,
-      name: customerMenuStyles.name,
-      appearance: customerMenuStyles.appearance,
-    })
+}
+
+export async function readCustomerMenuStyles(
+  tx: Transaction,
+  menuId: string,
+): Promise<CustomerMenuStyle[]> {
+  await assertStyleEditable(tx, menuId);
+  const styles = await tx
+    .select(styleColumns)
     .from(customerMenuStyles)
-    .where(eq(customerMenuStyles.isDefault, true));
-  if (!style) throw new AppError("menu.reset_required", { menuId });
-  if (edited !== undefined)
+    .orderBy(customerMenuStyles.nameKey);
+  const defaultStyle = styles.find(({ isDefault }) => isDefault);
+  if (!defaultStyle) throw new AppError("menu.reset_required", { menuId });
+  const users = await tx
+    .select({ id: menus.id, name: menus.name, styleId: menus.customerMenuStyleId })
+    .from(menus)
+    .where(and(eq(menus.active, true), ne(menus.id, menuId)))
+    .orderBy(menus.name);
+  const affected = new Map<string, CustomerMenuStyle["affectedMenus"]>();
+  for (const { id, name, styleId } of users) {
+    const effective = styleId ?? defaultStyle.id;
+    const inUse = affected.get(effective) ?? [];
+    inUse.push({ id, name });
+    affected.set(effective, inUse);
+  }
+  return styles.map((style) => ({ ...style, affectedMenus: affected.get(style.id) ?? [] }));
+}
+
+export async function writeCustomerMenuStyle(
+  tx: Transaction,
+  menuId: string,
+  styleId: string,
+  appearance: CustomerMenuAppearance,
+  copyName?: string,
+): Promise<CustomerMenuStyle> {
+  if (copyName === undefined) {
+    const style = (await readCustomerMenuStyles(tx, menuId)).find(({ id }) => id === styleId);
+    if (!style) throw new AppError("management.request_invalid", { field: "styleId" });
     await tx
       .update(customerMenuStyles)
-      .set({ appearance: edited, updatedAt: new Date() })
-      .where(eq(customerMenuStyles.id, style.id));
-  const affectedMenus = await tx
-    .select({ id: menus.id, name: menus.name })
-    .from(menus)
-    .where(
-      and(
-        eq(menus.active, true),
-        ne(menus.id, menuId),
-        or(isNull(menus.customerMenuStyleId), eq(menus.customerMenuStyleId, style.id)),
-      ),
-    )
-    .orderBy(menus.name);
-  return { name: style.name, appearance: edited ?? style.appearance, affectedMenus };
+      .set({ appearance, updatedAt: new Date() })
+      .where(eq(customerMenuStyles.id, styleId));
+    return { ...style, appearance };
+  }
+  await assertStyleEditable(tx, menuId);
+  const source = await requireCustomerMenuStyle(tx, styleId);
+  const name = copyName.trim();
+  if (!name) throw new AppError("management.request_invalid", { field: "name" });
+  const nameKey = foldName(name);
+  const [created] = await tx
+    .insert(customerMenuStyles)
+    .values({ name, nameKey, appearance, logoImage: source.logoImage })
+    .onConflictDoNothing({ target: customerMenuStyles.nameKey })
+    .returning(styleColumns);
+  if (!created) throw new AppError("customer_menu.style_name_taken", { field: "name" });
+  await tx.update(menus).set({ customerMenuStyleId: created.id }).where(eq(menus.id, menuId));
+  return { ...created, affectedMenus: [] };
 }
 
 export async function customerMenuAppearanceFor(

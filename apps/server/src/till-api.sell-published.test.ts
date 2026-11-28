@@ -386,6 +386,7 @@ it("files a till sale and serves its photo while public photo requests wait for 
       enabled: true,
       address: "lunch",
       photos: "small",
+      styleId: null,
     }),
   );
   media.MEDIA_MODULE.routes!.mount(

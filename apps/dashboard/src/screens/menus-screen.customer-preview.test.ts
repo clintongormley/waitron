@@ -62,7 +62,7 @@ async function open(
   theme: Theme = "light",
   readStatus: () => MenuStatus = () => status,
   readOnlineSettings: () => Response | Promise<Response> = () =>
-    Response.json({ enabled: false, address: null, photos: "large" }),
+    Response.json({ enabled: false, address: null, photos: "large", styleId: null }),
 ) {
   const fetcher = new DashboardApi("", async (input) => {
     const url = new URL(input, location.origin);
@@ -201,7 +201,7 @@ describe("the customer menu Online preview", () => {
         .fn()
         .mockReturnValueOnce(new Response(null, { status: 503 }))
         .mockImplementation(() =>
-          Response.json({ enabled: false, address: null, photos: "large" }),
+          Response.json({ enabled: false, address: null, photos: "large", styleId: null }),
         );
       const { el } = await open(
         () => Response.json(published()),

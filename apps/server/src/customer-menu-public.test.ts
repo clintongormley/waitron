@@ -18,7 +18,8 @@ import {
   addProductToMenu,
   createMenu,
   createProduct,
-  defaultCustomerMenuStyle,
+  readCustomerMenuStyles,
+  writeCustomerMenuStyle,
   MENU_CHANGE_SOURCES,
   previewMenu,
   publishMenu,
@@ -33,7 +34,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { createPublicMenuView } from "./customer-menu-public-view.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-const online = { enabled: true, address: "lunch", photos: "small" } as const;
+const online = { enabled: true, address: "lunch", photos: "small", styleId: null } as const;
 
 async function fixture(withPhoto = false) {
   await installChangeFeed(suite.db, [
@@ -123,13 +124,31 @@ it("refreshes enabled languages and the prepared style without republishing", as
   expect((await view.read()).menus.get("lunch")?.get("es")?.menu.name).toBe("Menu");
   await withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] });
-    await defaultCustomerMenuStyle(tx, menu.id, { pageColor: "#101216" });
+    const [style] = await readCustomerMenuStyles(tx, menu.id);
+    await writeCustomerMenuStyle(tx, menu.id, style!.id, { pageColor: "#101216" });
   });
   const snapshots = (await view.read()).menus.get("lunch");
   expect([...snapshots!.keys()]).toEqual(["en"]);
   expect(snapshots?.get("en")?.appearance).toMatchObject({
     scheme: "dark",
     tokens: { "--wt-color-bg": "#101216" },
+  });
+});
+
+it("serves the saved named style without publishing another menu edition", async () => {
+  const { menu, view } = await fixture();
+  const appearance = async () => (await view.read()).menus.get("lunch")?.get("en")?.appearance;
+  expect((await appearance())?.tokens["--wt-color-bg"]).not.toBe("#1f2928");
+  await withTransaction(suite.db, async (tx) => {
+    const [style] = await tx
+      .insert(customerMenuStyles)
+      .values({ name: "Terrace", nameKey: "terrace", appearance: { pageColor: "#1f2928" } })
+      .returning();
+    await saveCustomerMenuOnlineSettings(tx, menu.id, { ...online, styleId: style!.id });
+  });
+  expect(await appearance()).toMatchObject({
+    scheme: "dark",
+    tokens: { "--wt-color-bg": "#1f2928" },
   });
 });
 

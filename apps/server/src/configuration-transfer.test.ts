@@ -1979,6 +1979,7 @@ it("round-trips current menus and their Home positions while leaving deleted men
       enabled: true,
       address: "current",
       photos: "small",
+      styleId: null,
     });
     return omitted.id;
   });
@@ -2010,6 +2011,7 @@ it("round-trips current menus and their Home positions while leaving deleted men
       enabled: false,
       address: null,
       photos: "small",
+      styleId: null,
     });
     const { shortcuts } = await readMenuHome(tx, live!.id);
     expect(shortcuts.map(({ position, missingName }) => [position, missingName])).toEqual([

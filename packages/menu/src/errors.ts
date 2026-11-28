@@ -83,6 +83,7 @@ declare module "@waitron/shared" {
     "menu.deleted": { menuId: string };
     "customer_menu.address_invalid": { field: "address" };
     "customer_menu.address_taken": { field: "address" };
+    "customer_menu.style_name_taken": { field: "name" };
     "customer_menu.not_published": { menuId: string };
     "menu.delete_default": { menuId: string };
     "set_menu.invalid": {

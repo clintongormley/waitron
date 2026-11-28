@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, customerMenuStyles, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
@@ -11,7 +11,8 @@ import { mountMenuApi } from "./menu-api.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
-const settings = { enabled: true, address: "lunch", photos: "small" };
+const styleId = "0193b4cc-984a-7f73-8cab-b5373af6720f";
+const settings = { enabled: true, address: "lunch", photos: "small", styleId };
 
 async function fixture() {
   await seedVenue(suite.db, { name: "Main" });
@@ -28,6 +29,9 @@ async function fixture() {
       method: "password",
       personId: staff!.id,
     });
+    await tx
+      .insert(customerMenuStyles)
+      .values({ id: styleId, name: "Terrace", nameKey: "terrace", appearance: {} });
     const menu = await createMenu(tx, { name: "Lunch" });
     const { hash } = await previewMenu(tx, menu.id);
     await publishMenu(tx, menu.id, hash, manager!.id);
@@ -37,8 +41,13 @@ async function fixture() {
   mountMenuApi(app, { db: suite.db, venueLocale: "en" }, () => {});
   return {
     staffToken: rows.staffSession.token,
-    send(method: "GET" | "PUT", body?: unknown, token = rows.managerSession.token) {
-      return app.request("/management-api/menus/" + rows.menu.id + "/customer-online-settings", {
+    send(
+      method: "GET" | "PUT" | "POST",
+      body?: unknown,
+      token = rows.managerSession.token,
+      resource = "customer-online-settings",
+    ) {
+      return app.request(`/management-api/menus/${rows.menu.id}/${resource}`, {
         method,
         headers: { cookie: MANAGEMENT_COOKIE + "=" + token, "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -74,6 +83,8 @@ it.each([
   [{ ...settings, enabled: "true" }, "enabled"],
   [{ ...settings, address: ["lunch"] }, "address"],
   [{ ...settings, photos: ["small"] }, "photos"],
+  [{ ...settings, styleId: "missing" }, "styleId"],
+  [{ ...settings, styleId: "0193b4cc-984a-7f73-8cab-b5373af6721f" }, "styleId"],
   [{ enabled: false, photos: "small" }, "address"],
   [null, "body"],
 ])("refuses an invalid request body %j", async (body, field) => {
@@ -83,4 +94,29 @@ it.each([
   expect(await response.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field } },
   });
+});
+
+it("saves a new style for this menu without changing its other settings", async () => {
+  const f = await fixture();
+  expect((await f.send("PUT", settings)).status).toBe(200);
+  const appearance = { pageColor: "#1f2928", textColor: "#f5f1e7" };
+  const copy = { styleId, name: "Late service", appearance };
+  const denied = await f.send("POST", copy, f.staffToken, "customer-style");
+  expect(denied.status).toBe(403);
+  expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  const response = await f.send("POST", copy, undefined, "customer-style");
+  expect(response.status).toBe(201);
+  const created = await response.json();
+  expect(created).toMatchObject({ name: "Late service", appearance, isDefault: false });
+  expect(created.id).not.toBe(styleId);
+  const duplicate = await f.send(
+    "POST",
+    { ...copy, name: "  LATE SERVICE " },
+    undefined,
+    "customer-style",
+  );
+  expect(await duplicate.json()).toMatchObject({
+    error: { code: "customer_menu.style_name_taken", params: { field: "name" } },
+  });
+  expect(await (await f.send("GET")).json()).toEqual({ ...settings, styleId: created.id });
 });
