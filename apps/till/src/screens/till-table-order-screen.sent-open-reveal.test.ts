@@ -32,12 +32,12 @@ const barTop = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect().top;
 
 /** A handheld at `width` × `height` on Order, its scroll area the window. */
-async function onOrder(width: number, height: number) {
+async function onOrder(width: number, height: number, ungrouped = dishes) {
   await page.viewport(width, height);
   const draft = new DraftStore();
   draft.loadFrom("draft", [{ product: beer, quantity: "1", place: { kind: "fire" } }]);
   const { el, host } = await mount({
-    currentOrders: current({ groups: [], hasGroups: false, reminder: null, ungrouped: dishes }),
+    currentOrders: current({ groups: [], hasGroups: false, reminder: null, ungrouped }),
     groups: [],
     now,
     draftStore: draft,
@@ -72,17 +72,26 @@ async function open(el: TillTableOrderScreen, host: HTMLElement, n: number) {
   await scrollSettled(host);
 }
 
-/** The box's foot stops --wt-space-2 above the bar's top, and so do its Serve buttons. */
-function expectAboveBar(el: TillTableOrderScreen, box: HTMLElement) {
-  const top = barTop(el);
+const gapOf = (el: TillTableOrderScreen) => {
   const gap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
   expect(gap).toBeGreaterThan(0);
-  const foot = box.getBoundingClientRect().bottom;
-  expect(top - foot).toBeGreaterThanOrEqual(gap - 0.5);
-  expect(top - foot).toBeLessThanOrEqual(gap + 1.5);
+  return gap;
+};
+
+/** The last Serve button's foot stops --wt-space-2 above the bar's top, the dish's own line
+ * showing whole below the top of the scroll area; Dish details may sit under the bar. */
+function expectAboveBar(el: TillTableOrderScreen, host: HTMLElement, box: HTMLElement) {
+  const top = barTop(el);
+  const gap = gapOf(el);
   const serves = [...box.querySelectorAll("[data-sent-serve]")];
   expect(serves.length).toBeGreaterThan(0);
+  const foot = serves.at(-1)!.getBoundingClientRect().bottom;
+  expect(top - foot).toBeGreaterThanOrEqual(gap - 0.5);
+  expect(top - foot).toBeLessThanOrEqual(gap + 1.5);
   for (const serve of serves) expect(serve.getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+  const name = box.querySelector(".row-name")!.getBoundingClientRect();
+  expect(name.top).toBeGreaterThanOrEqual(host.getBoundingClientRect().top);
+  expect(name.bottom).toBeLessThanOrEqual(top);
 }
 
 it("on a handheld turned sideways, a sent row opened low in the list brings its Serve buttons above the bar", async () => {
@@ -93,7 +102,7 @@ it("on a handheld turned sideways, a sent row opened low in the list brings its 
   await open(el, host, n);
   expect(sentRow(el, n).hasAttribute("data-open")).toBe(true);
   expect(host.scrollTop).toBeGreaterThan(before);
-  expectAboveBar(el, sentRow(el, n));
+  expectAboveBar(el, host, sentRow(el, n));
 });
 
 it("a sent row opened upright is brought back above the bar when the handheld turns sideways", async () => {
@@ -101,11 +110,28 @@ it("a sent row opened upright is brought back above the bar when the handheld tu
   const n = 8;
   await lastShowing(el, host, n);
   await open(el, host, n);
-  expectAboveBar(el, sentRow(el, n));
+  expectAboveBar(el, host, sentRow(el, n));
   await page.viewport(844, 390);
   await resized(el);
   await resized(el);
   await scrollSettled(host);
   expect(sentRow(el, n).hasAttribute("data-open")).toBe(true);
-  expectAboveBar(el, sentRow(el, n));
+  expectAboveBar(el, host, sentRow(el, n));
+});
+
+it("a sent row with nothing to serve, opened low, brings its box's foot above the bar", async () => {
+  const { el, host } = await onOrder(
+    844,
+    390,
+    dishes.map((dish) => ({ ...dish, released: false })),
+  );
+  const n = 4;
+  await lastShowing(el, host, n);
+  await open(el, host, n);
+  const box = sentRow(el, n);
+  expect(box.hasAttribute("data-open")).toBe(true);
+  expect(box.querySelector("[data-sent-serve]")).toBeNull();
+  const gap = (top: number) => top - box.getBoundingClientRect().bottom;
+  expect(gap(barTop(el))).toBeGreaterThanOrEqual(gapOf(el) - 0.5);
+  expect(gap(barTop(el))).toBeLessThanOrEqual(gapOf(el) + 1.5);
 });

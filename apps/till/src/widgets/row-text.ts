@@ -80,18 +80,18 @@ export function scrollAreaOf(element: Element): Element {
   return scroller ?? document.scrollingElement ?? document.documentElement;
 }
 
-/** Brings an opened row's box's foot above the bar at the foot of `scroller`, the area the order
- * scrolls in, by the clearance the box's `scroll-margin-block-end` holds. Where the box is taller
- * than the area, its foot wins. */
-export function revealOpenBox(box: Element, scroller: Element): void {
+/** Brings the foot of `aim`, an opened row's box or a part of it, above the bar at the foot of
+ * `scroller`, the area the order scrolls in, by the clearance the box's `scroll-margin-block-end`
+ * holds. Where the box is taller than the area, the aim's foot wins. */
+export function revealOpenBox(box: Element, scroller: Element, aim: Element = box): void {
   const foot =
     scroller === document.scrollingElement
       ? innerHeight
       : scroller.getBoundingClientRect().top + scroller.clientTop + scroller.clientHeight;
   const margin = Number.parseFloat(getComputedStyle(box).scrollMarginBlockEnd);
-  if (box.getBoundingClientRect().bottom > foot - margin)
-    box.scrollIntoView({
-      block: "end",
-      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
-    });
+  const over = aim.getBoundingClientRect().bottom - (foot - margin);
+  if (over <= 0) return;
+  const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+  if (aim === box) box.scrollIntoView({ block: "end", behavior });
+  else scroller.scrollBy({ top: over, behavior });
 }
