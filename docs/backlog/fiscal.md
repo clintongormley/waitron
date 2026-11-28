@@ -337,7 +337,9 @@ filing till: by email to the address the invoice went to, when the box can send 
 on that till's own A4 invoice printer when the invoice went on A4 and the printer is switched on;
 otherwise on that till's receipt printer when its profile may print receipts, and otherwise not at
 all. Since PR 4a-choice, staff can choose another printer or email address on the give-back form,
-and the choice holds only when the corrective is filed during the Give back press; one filed later
+and the choice holds only when the corrective is filed during the Give back press, and only while
+the till is still offered that way (otherwise nothing is sent and the end screen says to print it from
+Find a bill); one filed later
 (a late card answer, the background check, a refund finished from Find a bill's Refunds under way,
 File now) still goes the original's way, because the
 choice is not stored. PR 4b (staff's choice stored and tried again) and the rest of PR 5 are still
