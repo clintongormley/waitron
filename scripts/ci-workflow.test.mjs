@@ -31,10 +31,10 @@ import {
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except the cases
+// The workflow side is extracted from ci.yml, except the cases
 // reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit case,
 // two apt cases, a `--with-deps` case, the push-concurrency, pnpm-setup, checkout and artifact-transfer cases reading every
-// .yml file in .github/workflows/. The runner-admission expectations come from its Cloud counterpart.
+// .yml file in .github/workflows/. The admission table is maintained against the Cloud runner release.
 // Each extraction carries a guard that it found something, because a silently-empty
 // extraction makes every assertion below pass against nothing. Nor are the SELECTIONS modelled:
 // each shard's filters are handed to the real `pnpm ls` and the answer is read back.
@@ -424,8 +424,7 @@ describe("remaining disposable jobs", () => {
 
 describe("disposable server routing", () => {
   it("gives every server job the name and label its runner accepts", () => {
-    // Waitron Cloud checks both the GitHub job name and its requested label before starting a guest.
-    // See scripts/disposable-tests/ci-canary.mjs, ci-identity.mjs and deploy/disposable-tests/session.py in that repository.
+    // Keep these pairs in step with Waitron Cloud's ci-canary.mjs, ci-identity.mjs and session.py.
     const singleJobs = (
       "changes server-probe lint root-guards bundle-smoke typecheck " +
       "test-server-stream test-ui test-setup test-adjustments test-staffing test-bookings " +
@@ -466,9 +465,17 @@ describe("disposable server routing", () => {
     context.needs.changes.outputs.server_jobs = JSON.stringify(
       Object.fromEntries(routes.map(([id]) => [id, 256])),
     );
+    const checked = new Set();
     const violations = new Set();
-    for (const event of ["pull_request", "push", "schedule", "workflow_dispatch"]) {
+    for (const [event, full] of [
+      ["pull_request", "false"],
+      ["push", "false"],
+      ["push", "true"],
+      ["schedule", "true"],
+      ["workflow_dispatch", "true"],
+    ]) {
       context.github.event_name = event;
+      context.needs.changes.outputs.full = full;
       for (const attempt of [1, 2]) {
         context.github.run_attempt = attempt;
         context.needs.changes.outputs.server_route_attempt = String(attempt);
@@ -484,14 +491,21 @@ describe("disposable server routing", () => {
                 ? expressionValue(route, context)
                 : route;
             const labels = Array.isArray(selection) ? selection : [selection];
-            if (!labels.includes("self-hosted")) continue;
+            const selfHosted = labels.includes("self-hosted");
+            if (!selfHosted && !labels.some((label) => String(label).startsWith("dt-"))) continue;
             if (matrix) expect(Object.keys(matrix), id).toEqual(["shard"]);
             const template = workflowJobs[id]?.name ?? (matrix ? `${id} (${shard})` : id);
             const name = template.replace(/\$\{\{ .*? \}\}/g, (value) =>
               expressionValue(value, context),
             );
+            checked.add(name);
             const expected = `dt-42-1234-${attempt}-${admitted.get(name)}`;
-            if (!admitted.has(name) || labels.length !== 2 || !labels.includes(expected)) {
+            if (
+              !selfHosted ||
+              !admitted.has(name) ||
+              labels.length !== 2 ||
+              !labels.includes(expected)
+            ) {
               violations.add(`${name}: ${JSON.stringify(labels)}`);
             }
           }
@@ -499,6 +513,7 @@ describe("disposable server routing", () => {
       }
     }
     expect([...violations]).toEqual([]);
+    expect([...checked]).toEqual(expect.arrayContaining(["changes", "server-probe"]));
   });
 
   it.each([

@@ -224,7 +224,7 @@ The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controlle
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
 memory or runner slots. Publish matching controller and host job-key support before
 adding a server-routed job or shard. Update the admitted names and labels in
-`scripts/ci-workflow.test.mjs` when the matching support is ready.
+`scripts/ci-workflow.test.mjs` with the route, and run it and `scripts/ci-server-first.test.mjs`.
 
 Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
 for ordinary traffic. The watchdog uses the same selection. The selection reads the PR
