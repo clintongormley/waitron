@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
+  loadPhoneFont,
   mountWidget,
   panelBackButton,
+  PHONE_FONT,
   quantityButton,
 } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -924,9 +926,10 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
 describe("on a phone with the order's foot held at the bottom", () => {
   it("draws the dish rows edge to edge and keeps the action above the foot", async () => {
     const { width, height } = { width: innerWidth, height: innerHeight };
-    await page.viewport(390, 600);
+    const phoneFont = await loadPhoneFont();
     try {
-      const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+      await page.viewport(390, 600);
+      const { el, host } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
         products: [],
         lines: [...BEERS, HAM],
         orderId: "wo-2",
@@ -936,6 +939,7 @@ describe("on a phone with the order's foot held at the bottom", () => {
         tables: [table("t4"), table("t7")],
         handheld: true,
       });
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
       await resized(el);
       await openMoveDishes(el);
       await resized(el);
@@ -955,7 +959,7 @@ describe("on a phone with the order's foot held at the bottom", () => {
         "16px",
       );
       const pill = destinations(el)[0]!.shadowRoot!.querySelector("button")!;
-      expect(getComputedStyle(pill).fontSize).toBe("15px");
+      expect(getComputedStyle(pill)).toMatchObject({ fontFamily: PHONE_FONT, fontSize: "15px" });
       const [bill, newBill, anotherTable] = destinations(el).map((choice) =>
         choice.getBoundingClientRect(),
       );
@@ -963,6 +967,7 @@ describe("on a phone with the order's foot held at the bottom", () => {
       expect(newBill!.top).toBe(bill!.top);
       expect(anotherTable!.top).toBe(bill!.top);
     } finally {
+      document.fonts.delete(phoneFont);
       await page.viewport(width, height);
     }
   });
