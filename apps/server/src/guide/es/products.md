@@ -611,7 +611,7 @@ elegir los extras de un plato, cada extra muestra sus propios alérgenos antes d
 añadirlo. Un extra sin revisar no muestra ninguno, lo que no establece que sea apto. La caja no
 tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
-Abre los detalles de un plato enviado para consultar **Registrado al enviar**. Esas declaraciones
+Toca un plato enviado y elige **Detalles del plato** para consultar **Registrado al enviar**. Esas declaraciones
 describen el plato cuando lo enviaste, aunque después se publique una corrección. Los platos en espera
 muestran lo que está publicado ahora hasta que los liberas. Usa la información actual de
 la estación para preparar la comida.

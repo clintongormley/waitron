@@ -6620,7 +6620,8 @@ screen shows for the line, such as an allergy. Only a whole portion groups, a li
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.
 
-On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
+On the till, a sent row opened in place serves with Serve 1 (its first member left) and Serve {N}
+(every member left); Mark served and Undo served in its details window ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it. On a sent row that joins served portion lines to lines with dishes left, Void and
@@ -6691,7 +6692,7 @@ and their headings sit on the page colour, with `--wt-space-3` below the last ro
 the order layout (`apps/till/src/screens/table-order-layout.ts`) paints `till-sent-orders`
 `--wt-color-bg` out to the order column's edge, and the draft bar reaches the same edge, while the
 new dishes keep the column's `--wt-color-surface`. A row is quiet (`apps/till/src/widgets/sent-row.ts`): normal-weight muted text, the quantity
-in its own column, the name, and the price at the right, then ⓘ. Its muted second line holds the
+in its own column, the name, and the price at the right. Its muted second line holds the
 dish's extras and note, and the row's state only when that differs from its heading's ("Held",
 "At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
 portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
@@ -6702,6 +6703,14 @@ they were made ready; then the other released rows with something left, by when 
 those not yet fired after them; then rows still held, in the order the bill's read lists them,
 whether the section is held or fired; and last the rows with nothing left, served or cancelled but
 charged, in line order. Rows with the same time go by line id.
+
+A tap opens a sent row in place in the opened new row's box, and a second tap closes it; one row is
+open at a time, and it stays open after a serve (`OpenSentRow`, `apps/till/src/widgets/sent-row-open.ts`).
+Under its line sit the count ("1 of 3 served") in muted `md` text at the left and the outlined Serve
+buttons at the right: Serve 1, and Serve {N} when more than one is left, or one Serve for a weighed
+dish; none while any dish left is held or not released, nor on a cancelled but charged row, which
+also has no count. Under them, Dish details, outlined like
+them, opens the dish's details window, which a held press on the row also opens.
 
 ### The dish picker
 

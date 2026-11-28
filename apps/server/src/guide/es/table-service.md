@@ -369,8 +369,8 @@ nombre cuando lo abras en su nueva mesa o mostrador.
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
 Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la estación deje de
-prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, elige
-**Cancelar…** en el menú **Más** del plato. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
+prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, toca el plato,
+elige **Detalles del plato** y elige **Cancelar…** en su menú **Más**. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
 
 La ventana **Cancelar plato** indica **Esta cuenta ya está cerrada**. Elige **Cuántos**, hasta los que
 aún no se han servido. Si el plato ha pasado a la estación pero nadie lo ha marcado como empezado,
@@ -554,16 +554,16 @@ va con ella, y la cuenta y la estación saben siempre qué hamburguesa es cuál.
 Mientras los platos son iguales sigues viendo una sola fila en la cuenta y
 entre los platos enviados, arriba del pedido. La fila se separa en cuanto un plato cambia, por
 ejemplo cuando a una hamburguesa se le aplica un descuento. Entre los platos enviados, una
-hamburguesa servida sigue en su fila, que entonces dice **1 de 2 servidos**. Al tocar una fila
-enviada se marca entera como servida; **Marcar
-servido** en los detalles de la fila pregunta cuántos. Para cancelar o hacer un descuento a la
-hamburguesa ya servida, elige **Cancelar servido…** o **Descuento servido…** en el menú **Más** de
-la fila; **Cancelar…** y **Descuento…** solo toman las hamburguesas aún no servidas. [**Mover platos**](table-service.md#move-dishes) te deja
+hamburguesa servida sigue en su fila, que entonces dice **1 de 2 servidos**. Toca una fila enviada
+para abrirla: **Servir 1** sirve un plato y, cuando quedan más, un segundo botón como **Servir 3**
+los sirve todos. **Detalles del plato** tiene las demás acciones de la fila, y su **Marcar servido** pregunta cuántos. Para cancelar o hacer un
+descuento a la hamburguesa ya servida, elige **Cancelar servido…** o **Descuento servido…** en el
+menú **Más** de **Detalles del plato**; **Cancelar…** y **Descuento…** solo toman las hamburguesas aún no servidas. [**Mover platos**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
-**Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
-detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
-Para reducirla, usa **Cancelar…**. Elige **Marchar ya** en los detalles de una fila en espera
-para enviar todos sus platos con sus extras.
+**Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en
+**Detalles del plato**, cambia todos los platos de la fila y permite aumentar la cantidad.
+Para reducirla, usa **Cancelar…**. Elige **Marchar ya** en **Detalles del plato** de una fila en
+espera para enviar todos sus platos con sus extras.
 
 Los alérgenos y las etiquetas dietéticas vienen de la carta publicada. Los detalles de un plato
 enviado conservan, en la caja, los que tenía al enviarlo; las pantallas de cocina y la comprobación
@@ -572,15 +572,15 @@ publicada** también imprime un aviso de corrección cuando la corrección añad
 en un plato enviado y aún no servido, marcado para un comensal con esa alergia; una publicación
 normal no imprime ninguno.
 
-Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
-lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo
+Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, toca su fila, elige
+**Detalles del plato** y lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo
 liberas.
 
 Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
 zumo vendido por ml, toca el plato, escribe la cantidad en su campo o usa el teclado de la caja
 y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Antes de enviar, toca la cantidad
-en el mostrador para editarla, o en una mesa toca su fila y elige **Opciones**. **Marcar servido**
-marca toda la cantidad como servida.
+en el mostrador para editarla, o en una mesa toca su fila y elige **Opciones**. Una vez enviado,
+**Servir** en su fila abierta sirve toda la cantidad.
 
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 
@@ -836,9 +836,9 @@ Lo ya pagado cuenta para ella.
 Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** para los que
 llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
 reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que
-la cocina había empezado o terminado, que se queda en ella y se cobra. Para quitar ese cobro, abre
-los detalles del plato desde los platos enviados, arriba del pedido, y elige **Descuento…** en el
-menú **Más**.
+la cocina había empezado o terminado, que se queda en ella y se cobra. Para quitar ese cobro, toca
+el plato entre los platos enviados, arriba del pedido, elige **Detalles del plato** y elige
+**Descuento…** en su menú **Más**.
 
 Si los clientes se van antes de que se sirva nada, abre **⋮** y elige **No se sirvió nada**. Se
 ofrece en una cuenta impresa que no ha recibido ningún pago y no lleva el nombre de un cliente.

@@ -349,7 +349,7 @@ name when you reopen it at its new table or counter.
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
 When a table has paid for a dish that is not coming, cancel it so the station stops making it and
-the guest can have a refund. Among the table's sent dishes, choose **Void…** from the dish's **More** menu.
+the guest can have a refund. Among the table's sent dishes, tap the dish, choose **Dish details** and choose **Void…** from its **More** menu.
 On a paid bill, it is offered only for what has not been served yet.
 
 The **Cancel item** window says **This bill is closed**. Choose **How many**, up to the number not
@@ -522,14 +522,15 @@ with it, and the bill and the station agree on which burger is which.
 While the dishes are the same you still see one row on the bill and among the sent
 dishes at the top of the order. A row parts as soon as one dish differs, for example once one burger
 is comped. Among the sent dishes a served burger stays in its row, which then reads **1 of 2
-served**. Tapping a sent row marks all of it served; **Mark served** in the row's details asks how many.
+served**. Tap a sent row to open it: **Serve 1** serves one dish and, when more are left, a second button
+such as **Serve 3** serves them all. **Dish details** holds the row's other actions, and its **Mark served** asks how many.
 To void or comp the burger already served, choose **Void served…** or **Comp served…** from the
-row's **More** menu; **Void…** and **Comp…** there take only the burgers not yet served.
+**More** menu in **Dish details**; **Void…** and **Comp…** there take only the burgers not yet served.
 [**Move dishes**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
-**Change dish**, in the row's details, changes every dish of the row and lets you increase its
+**Change dish**, in **Dish details**, changes every dish of the row and lets you increase its
 count. To reduce the count, use **Void…**, which opens **Cancel item**. Choose **Fire now** in
-a held row's details to send every dish in that row, with its extras.
+a held row's **Dish details** to send every dish in that row, with its extras.
 
 Allergens and diet labels come from the published menu. A sent dish's details on the till keep what
 it was sent with; the kitchen screens and the table's allergy check show any correction published
@@ -537,14 +538,14 @@ since. **Patch live menu** also prints a correction slip when the correction add
 allergen on a dish sent and not yet served, ticked for a guest with that allergy; an ordinary
 publish prints none.
 
-To check a sent dish's allergens and diet labels, open its details and read **Recorded when
-sent**. A dish on hold shows what is published now until you release it.
+To check a sent dish's allergens and diet labels, tap its row, choose **Dish details** and read
+**Recorded when sent**. A dish on hold shows what is published now until you release it.
 
 Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
 juice sold by the ml, tap the dish, type the amount into its field or use the till keypad,
 then choose **Add**. For example, 250 ml goes on one line. Before sending, tap its amount at the
-counter to edit it, or at a table tap its row and choose **Options**. **Mark served** marks the
-whole amount as served.
+counter to edit it, or at a table tap its row and choose **Options**. Once it is sent, **Serve** in
+its open row serves the whole amount.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
 
@@ -785,8 +786,8 @@ Money already paid counts towards it.
 If **Reopen bill** lists dishes not yet served, choose **Mark served** for any that came. Once
 something on the bill has been served and nothing has been paid, **Stop these dishes and reopen**
 stops every dish still listed and leaves it off the reopened bill, except one the kitchen had
-started or finished, which stays on it, charged. To take that charge off, open the dish's details
-from the sent dishes at the top of the order and choose **Comp…** from its **More** menu.
+started or finished, which stays on it, charged. To take that charge off, tap the dish
+among the sent dishes at the top of the order, choose **Dish details** and choose **Comp…** from its **More** menu.
 
 If the guests leave before anything is served, open **⋮** and choose **Nothing was served**. It is
 offered on a printed bill that has taken no payment and names no customer. Get the paper receipt
