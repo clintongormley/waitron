@@ -417,9 +417,10 @@ describe("zones closed at an instant", () => {
   });
   it("reads several zones' floor closing summaries in the statements one zone takes, answering as one zone at a time does", async () => {
     const v = await servingVenue();
-    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week(mondayNight), 1));
+    const ended = { startsAt: "21:30", endsAt: "22:00" };
+    await tx((db) => replaceZoneClosedWeek(db, v.terrace, week([ended, ...mondayNight]), 1));
     await tx((db) =>
-      replaceZoneClosedWeek(db, v.bar, week([{ startsAt: "23:45", endsAt: "02:00" }]), 1),
+      replaceZoneClosedWeek(db, v.bar, week([ended, { startsAt: "23:45", endsAt: "02:00" }]), 1),
     );
     const instant = new Date("2030-10-07T21:40:00Z");
     const ids = [v.terrace, v.bar, v.disabled];

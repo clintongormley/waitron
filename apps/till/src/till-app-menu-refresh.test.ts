@@ -2605,6 +2605,32 @@ describe("period end changes refresh the order screen", () => {
 });
 
 describe("zone-only menu-state changes", () => {
+  it.each(["counter", "table"] as const)(
+    "updates a closed zone's name on %s while its menu stays the same",
+    async (kind) => {
+      let service = { ...V1.service, zoneOpen: false, closedZoneName: "Terrace" };
+      const readOffers = (zone: string) =>
+        Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service });
+      const stubs = {
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service }),
+        listZoneOffers: vi.fn(readOffers),
+        menuState: vi.fn(() => Promise.resolve({ ...menuState("v1"), service })),
+      };
+      const { el } = await mountApp(kind === "counter" ? stubs : tableStubs(DINING, stubs));
+      if (kind === "counter") await toCounter(el);
+      else {
+        await toTable(el);
+        api.listZoneOffers.mockImplementation(readOffers);
+      }
+      const screen = () => (kind === "counter" ? counter(el) : tableScreen(el));
+      const notice = () =>
+        screen().shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim();
+      expect(notice()).toBe("Terrace is closed.");
+      service = { ...service, closedZoneName: "Garden" };
+      await poll(el);
+      await expect.poll(notice).toBe("Garden is closed.");
+    },
+  );
   it("redraws the counter when only its zone closes and reopens", async () => {
     const open = {
       ...V1,

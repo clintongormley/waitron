@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { oneBill, observedRelocationSender } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -8,6 +8,8 @@ import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activityLog,
+  departments,
+  deviceProfiles,
   parties,
   partyTables,
   workingOrders,
@@ -487,9 +489,30 @@ describe("closed zones take no new service", () => {
       const answer = await request(v, "GET", "/api/zones");
       expect(answer.status).toBe(200);
       expect(answer.json).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: v.zoneId, closed })]),
+        expect.arrayContaining([
+          expect.objectContaining({ id: v.zoneId, closed, closesAt: "23:30" }),
+        ]),
       );
     }
+  });
+
+  it("lists a floor zone of an inactive department with a null closing time", async () => {
+    const v = await venue();
+    const zone = await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(deviceProfiles)
+        .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null });
+      const [department] = await tx
+        .insert(departments)
+        .values({ name: "Unavailable", tradingName: "Unavailable", active: false })
+        .returning({ id: departments.id });
+      return seedZone(tx, { name: "Unavailable department", departmentId: department!.id });
+    });
+    const answer = await request(v, "GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    expect(answer.json).toContainEqual(
+      expect.objectContaining({ id: zone.id, closed: false, closesAt: null, serviceMode: null }),
+    );
   });
 });
 
