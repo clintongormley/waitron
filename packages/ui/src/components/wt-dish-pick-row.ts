@@ -33,6 +33,7 @@ export class WtDishPickRow extends LitElement {
       }
 
       label.row {
+        min-inline-size: var(--wt-tap-min);
         cursor: pointer;
       }
 

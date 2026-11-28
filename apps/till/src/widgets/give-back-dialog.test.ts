@@ -3118,4 +3118,22 @@ describe("layout and focus", () => {
       await page.viewport(previous.width, previous.height);
     }
   });
+
+  it("keeps the Refund window the same width when a dish is ticked on a phone", async () => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mount();
+      await choose(el, "dishes");
+      const window = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+      const widthBefore = window.getBoundingClientRect().width;
+
+      await tick(el, "croquetas");
+      await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+
+      expect(window.getBoundingClientRect().width).toBe(widthBefore);
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  });
 });

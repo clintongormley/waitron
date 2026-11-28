@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
@@ -99,7 +99,18 @@ export type { GiveBackAsk, GiveBackFill };
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
-  static override styles = [baseStyles, giveBackStyles, helpAnchorStyles];
+  static override styles = [
+    baseStyles,
+    giveBackStyles,
+    helpAnchorStyles,
+    css`
+      @media (width <= 480px) {
+        .body {
+          inline-size: calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5));
+        }
+      }
+    `,
+  ];
   @property({ attribute: false }) api!: GiveBackApi;
   /** Saves each press before sending it. */
   @property({ attribute: false }) session!: GiveBackSession;
