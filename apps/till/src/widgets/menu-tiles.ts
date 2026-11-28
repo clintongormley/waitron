@@ -17,8 +17,8 @@ export interface DishTileHandlers {
 }
 
 /** A dish's tile. A tap on a sellable dish runs `onTap` with the tile; on a sold-out one it opens
- * the dish's information, as holding it or Shift+F10 does. `count` is the dish's items in the New
- * order; undefined, or 0, draws none. */
+ * the dish's information, as holding it or Shift+F10 does. `count` is the dish's items in the order being
+ * taken (a table's New order or the Counter's basket); undefined, or 0, draws none. */
 export function dishTile(
   product: TillProduct,
   count: number | undefined,

@@ -737,7 +737,7 @@ variant never has a button: it is listed only nested under its parent's offer
 Under search, every device follows the menu's **Shown first** choice for the shortcuts and the
 full menu. A divider identifies the second block when both have tiles. The grid chooses the
 number of columns from the available width and preserves the order inside each block.
-Each tile uses its colour (_Colour_, above) or the plain fill. A shortcut whose target the till
+Each product tile uses its colour (_Colour_, above) or the plain fill; a section tile is always plain. A shortcut whose target the till
 does not show keeps its place as an empty slot, so the shortcuts after it do not move. A
 shortcut to a section a diet filter emptied shows that section's faded tile in the slot instead. The
 display and the shortcuts come from the menu's published version, so a change reaches the till

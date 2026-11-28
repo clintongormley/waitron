@@ -662,7 +662,8 @@ en las demás cartas disponibles ahora. Borra la búsqueda para volver a donde e
 Toca una sección para abrirla. Encima de sus platos, la ruta muestra dónde estás: toca la casa para
 volver al principio de la carta, o el nombre de una sección para volver a ella.
 
-En una mesa, un número en la esquina de un plato indica cuántos hay de él en tu **Nuevo pedido**.
+Un número en la esquina de un plato indica cuántos hay de él en tu **Nuevo pedido** en una mesa, o
+en la cesta en el **Mostrador**.
 
 ## Menús {#set-menus}
 

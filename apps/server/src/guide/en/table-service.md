@@ -619,7 +619,8 @@ on now. Clear the search to go back to where you were.
 Tap a section to open it. Above its dishes, the path shows where you are: tap the house to go back
 to the start of the menu, or a section's name to go back to that section.
 
-On a table, a number on a dish's corner says how many of it are in your **New order**.
+A number on a dish's corner says how many of it are in your **New order** at a table, or in the
+basket at the **Counter**.
 
 ## Set menus {#set-menus}
 

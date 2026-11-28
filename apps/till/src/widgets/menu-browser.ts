@@ -292,7 +292,8 @@ export class TillMenuBrowser extends LitElement {
 
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
+  /** Product id → items of that dish in the order being taken (a table's New order or the
+   * Counter's basket); a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
 
   /** Uses the shared amount keypad when this screen takes payment elsewhere. */

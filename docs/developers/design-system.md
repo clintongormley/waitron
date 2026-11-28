@@ -2571,7 +2571,7 @@ Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`
 
 The `inherit` arrow is built in. Importing `@waitron/ui` also registers the shared icons in
 `packages/ui/src/components/wt-icon.ts`: `MENU_ICONS`, `check`, `home`, `chevron-left`,
-`chevron-right`, `search`, `card`, `cash` and `undo`. Register other icons in the consuming app using
+`chevron-right`, `search`, `card`, `cash`, `undo`, `choice-check`, `menu-section` and `menu-filter`. Register other icons in the consuming app using
 `registerIcons`; a name an app registers again replaces the shared drawing there, as the
 dashboard's `search` and `undo` do.
 
