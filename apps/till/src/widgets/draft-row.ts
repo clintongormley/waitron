@@ -275,9 +275,11 @@ export const draftRowStyles = css`
     cursor: default;
   }
   ${rowTextStyles}
-  /* The selection box reaches out over the box's margin, so it keeps a full tap's width. */
+  /* The selection box reaches out over the box's margin, so it keeps a full tap's width; its
+     square, drawn in the screen's tree, is nudged clear of the box's border. */
   :host .draft-row[data-open] > .draft-row-lead {
     margin-inline-start: calc(-1 * ${OPEN_MARGIN});
+    --draft-select-nudge: var(--wt-space-1);
   }
   :host .draft-row > .draft-row-end {
     display: grid;
@@ -348,6 +350,7 @@ export const draftRowSlotStyles = css`
     border: 2px solid var(--wt-color-text-muted);
     border-radius: calc(var(--wt-radius-sm) * 1.5);
     background: transparent;
+    translate: var(--draft-select-nudge, 0) 0;
   }
   .draft-select-box[data-ticked] {
     border-color: var(--wt-color-primary);

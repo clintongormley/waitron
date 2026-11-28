@@ -718,3 +718,53 @@ it("an opened new row's quantity and name stay where a closed row's are, moved b
     row(el, 0).getBoundingClientRect().left + 0.5,
   );
 });
+
+it("on a phone, an opened new row draws its tick box inside the box's edge, its tap area, quantity and name staying put, and a closed row's tick box does not move", async () => {
+  await page.viewport(390, 844);
+  const draft = new DraftStore();
+  draft.loadFrom("draft", [
+    { product: beer, quantity: "2", place: { kind: "fire" } },
+    { product: flan, quantity: "1", place: { kind: "fire" } },
+  ]);
+  const { el, host } = await mount({ draftStore: draft });
+  host.style.width = "390px";
+  await resized(el);
+  await showView(el, "order", { ifShown: true, scripted: true });
+  await settled(el);
+  await resized(el);
+  const select = (index: number) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-select="${index}"]`)!;
+  const square = (index: number) =>
+    select(index).querySelector(".draft-select-box")!.getBoundingClientRect();
+  const closedSquare = square(1).left;
+  const token = (name: string) => {
+    const value = Number.parseFloat(getComputedStyle(el).getPropertyValue(name));
+    expect(value, name).toBeGreaterThan(0);
+    return value;
+  };
+  const tap = token("--wt-tap-min");
+  const nudge = token("--wt-space-1");
+  const margin = token("--wt-space-2");
+  // A closed row centres its tick box in the tap area.
+  const centred = (tap - square(1).width) / 2;
+  expect(closedSquare - select(1).getBoundingClientRect().left).toBeCloseTo(centred, 0);
+
+  await tapRow(el, 0);
+  const entry = row(el, 0).closest(".entry")!;
+  expect(entry.hasAttribute("data-open")).toBe(true);
+  const inner = entry.getBoundingClientRect().left + entry.clientLeft;
+  expect(square(0).left - inner).toBeGreaterThanOrEqual(nudge);
+  const area = select(0).getBoundingClientRect();
+  expect(area.width).toBeGreaterThanOrEqual(tap - 0.5);
+  expect(area.width).toBeLessThanOrEqual(tap + 0.5);
+  expect(area.left).toBeCloseTo(inner - margin, 1);
+  expect(square(0).left - area.left).toBeCloseTo(centred + nudge, 0);
+  for (const cell of [".row-qty", ".row-name"]) {
+    const moved =
+      row(el, 0).querySelector(cell)!.getBoundingClientRect().left -
+      row(el, 1).querySelector(cell)!.getBoundingClientRect().left;
+    expect(moved, cell).toBeGreaterThanOrEqual(entry.clientLeft - 0.5);
+    expect(moved, cell).toBeLessThanOrEqual(entry.clientLeft + 0.5);
+  }
+  expect(square(1).left).toBe(closedSquare);
+});
