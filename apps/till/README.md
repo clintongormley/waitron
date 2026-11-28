@@ -29,8 +29,8 @@ payment redesign remains open.
 ## Table ordering
 
 **2026-10-19, A773-1:** the counter flow and slice boundaries below describe the early counter
-implementation. At a table, work on the bill you want to charge. Its **Sent** box shows the dishes
-already sent, above **New order**, where you arrange dishes before sending them.
+implementation. At a table, work on the bill you want to charge. Its sent dishes sit
+above **New order**, where you arrange dishes before sending them.
 
 New order separates **Fire now**, new held groups and dishes that will join an existing held group.
 **Send all** sends the eligible dishes in that arrangement immediately, without a preview or a

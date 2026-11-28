@@ -1246,7 +1246,7 @@ A group's display number is separate from its firing position. Reordering held g
 their display numbers; removing or moving groups does not make their original numbers available
 again. `apps/server/src/order-group-numbers.test.ts` checks these operations and both group reads.
 `apps/till/src/widgets/sent-orders.test.ts` checks that a group at position 5 with display number 7
-is shown as Group 7. This replaces Task 4's position-derived-number observation; gaps in the
+is named Group 7 in its Fire button's accessible name. This replaces Task 4's position-derived-number observation; gaps in the
 visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
@@ -1785,7 +1785,9 @@ Counter order, when that changes its set menus (A1572). Stated at its site in
   2026-10-17)**, matching A738's approved order layout. (2026-11-01: the Tab drawer is gone since
   A803 slice 3; a child extras row is now drawn on its own muted, smaller line in `till-sent-orders`
   (`apps/till/src/widgets/sent-orders.ts`), and indented as well in the table screen's fallback list
-  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).)
+  while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).
+  2026-11-28: till redesign PR 8a draws a sent dish's extras on the row's quiet second line, as
+  the redesign spec draws them, [§4](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen).)
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
   that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice

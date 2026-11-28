@@ -6648,7 +6648,7 @@ is picked.
 
 - **A tick** is a native checkbox labelled with the dish's name, then each of its extras on a line
   of its own beneath, in the names the screen gives the bill's lines. A dish or extra adds its
-  quantity, written as the order's sent rows write it ("Iberian ham ×0.32", "Onion ×2"), unless it is a
+  quantity ("Iberian ham ×0.32", "Onion ×2"), unless it is a
   single item of something counted in whole units. The − and + of a row are named by the same
   words. Ticking a row takes every member
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +

@@ -1,5 +1,7 @@
 # A773. Courses, groups and the pass — design
 
+> **2026-11-28, till redesign PR 8a:** the order screen's Sent box in §3.1–3.4 is retired; sent dishes are rows under a heading per fire group. See [the PR 8 plan](../plans/2026-11-27-till-redesign-order-8-sent-rows.md).
+
 > **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership and its version now use working_orders.editor_id and editor_version. See [the os2 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os2-bill-identity.md).
 
 **2026-11-11:** Recall and its saved source rows are retired by

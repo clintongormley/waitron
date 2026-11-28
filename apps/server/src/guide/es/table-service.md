@@ -542,7 +542,7 @@ Cuando tomas un pedido de 2 × Hamburguesa con queso, en una mesa o en el mostra
 dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes cancelar una hamburguesa, o en una mesa servirla o moverla, y su queso
 va con ella, y la cuenta y la estación saben siempre qué hamburguesa es cuál.
 
-Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y
+Mientras los platos son iguales sigues viendo una sola fila en la cuenta y
 entre los platos enviados, arriba del pedido. La fila se separa en cuanto un plato cambia, por
 ejemplo cuando a una hamburguesa se le aplica un descuento. Entre los platos enviados, una
 hamburguesa servida sigue en su fila, que entonces dice **1 de 2 servidos**. Al tocar una fila
