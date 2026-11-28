@@ -267,7 +267,7 @@ import {
   billControlStyles,
   billSwitcher,
 } from "./table-bill-controls.js";
-import { barSize, dockSize } from "./table-order-footer-size.js";
+import { barHolder, barSize, dockSize } from "./table-order-footer-size.js";
 import { tablePartyMenu, tablePartyMenuStyles, type TablePartyAction } from "./table-party-menu.js";
 import {
   beingPaidNotice,
@@ -1314,6 +1314,12 @@ export class TillTableOrderScreen extends LitElement {
       }
       /* An opened row's box keeps a space clear above the bar. */
       .round-bar till-basket::part(opened-entry) {
+        scroll-margin-block-end: calc(
+          var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
+        );
+      }
+
+      till-sent-orders::part(opened-row) {
         scroll-margin-block-end: calc(
           var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
         );
@@ -2647,8 +2653,8 @@ export class TillTableOrderScreen extends LitElement {
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
 
-  /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
-   * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
+  /** Copies the draft bar's height to `--draft-bar-size` on the bar's `barHolder`, from which the
+   * basket's lines and the sent rows inherit it. Measured at once when the bar is drawn or shown, because
    * the basket reveals a line in the next frame, before a ResizeObserver would report; the observer
    * follows later changes. */
   #sizeDraftBar(): void {
@@ -2664,7 +2670,7 @@ export class TillTableOrderScreen extends LitElement {
       if (this.#sizedBar !== undefined) this.#barSizing.unobserve(this.#sizedBar);
       this.#sizedBarHolder?.style.removeProperty("--draft-bar-size");
       this.#sizedBar = bar;
-      this.#sizedBarHolder = bar?.parentElement ?? undefined;
+      this.#sizedBarHolder = bar === undefined ? undefined : barHolder(bar);
       if (bar !== undefined) this.#barSizing.observe(bar);
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);

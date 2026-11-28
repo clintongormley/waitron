@@ -26,10 +26,12 @@ type Panel = LitElement & {
 };
 const burgers = [burgerLine("burger-1", 1), burgerLine("burger-2", 2), burgerLine("burger-3", 3)];
 
+const viewport = [innerWidth, innerHeight] as const;
 beforeEach(() => setLocale("en"));
-afterEach(() => {
+afterEach(async () => {
   cleanupWidgets();
   setLocale("en");
+  await page.viewport(...viewport);
 });
 async function mount(data: CurrentOrders, over: Partial<Panel> = {}) {
   return (
@@ -185,8 +187,13 @@ it("a wholly served row, a held row and a row not yet released open with no Serv
       [sentGroup("g", [sentDish("held", { released: false, firedAt: null, lineNo: 3 })])],
     ),
   );
+  await tap(el, toggle("done"));
+  // Its second line already reads Served, so no count repeats it.
+  expect(text(find(el, "li[data-open] .row-more")!)).toBe("Served");
+  expect(find(el, "li[data-open] [data-sent-open-count]")).toBeNull();
+  expect(find(el, "li[data-open] [data-sent-serve]")).toBeNull();
+  expect(find(el, "li[data-open] [data-sent-details]")).not.toBeNull();
   for (const [line, count] of [
-    ["done", "2 of 2 served"],
     ["waiting", "0 of 1 served"],
     ["held", "0 of 1 served"],
   ] as const) {
@@ -390,3 +397,47 @@ it("reads the count and Serve words in Spanish", async () => {
   expect(opened(el)).toEqual([["bravas", "1 de 3 servidos", ["Servir 1", "Servir 2"]]]);
   expect(text(find(el, "[data-sent-details]")!)).toBe(es["table.sent_info"]);
 });
+
+it("an opened part-served row shows its count once, on the count line, not under its name", async () => {
+  const el = await mount(
+    sentCurrent([
+      sentDish("bravas", {
+        quantity: "3.000",
+        servedQuantity: "1.000",
+        note: "no salt",
+      }),
+    ]),
+  );
+  const more = () => text(find(el, "[data-fired-line=bravas] .row-more")!);
+  expect(more()).toBe("Station note: no salt · 1 of 3 served");
+  await tap(el, toggle("bravas"));
+  expect(more()).toBe("Station note: no salt");
+  expect(opened(el)).toEqual([["bravas", "1 of 3 served", ["Serve 1", "Serve 2"]]]);
+  await tap(el, toggle("bravas"));
+  expect(more()).toBe("Station note: no salt · 1 of 3 served");
+});
+
+it.each([390, 844, 1280])(
+  "at %i wide the last Serve stops a space in from the box's border, and the count starts under the name",
+  async (width) => {
+    await page.viewport(width, 800);
+    const el = await mount(
+      sentCurrent([sentDish("bravas", { quantity: "3.000", servedQuantity: "1.000" })]),
+    );
+    await tap(el, toggle("bravas"));
+    const li = find(el, "li[data-open]")!;
+    const gap = Number.parseFloat(getComputedStyle(li).getPropertyValue("--wt-space-2"));
+    expect(gap).toBeGreaterThan(0);
+    const box = li.getBoundingClientRect();
+    const inner = box.right - Number.parseFloat(getComputedStyle(li).borderRightWidth);
+    const serves = [...li.querySelectorAll("[data-sent-serve]")];
+    const last = serves.at(-1)!.getBoundingClientRect();
+    expect(inner - last.right).toBeGreaterThanOrEqual(gap - 0.5);
+    expect(inner - last.right).toBeLessThanOrEqual(gap + 0.5);
+    const price = li.querySelector(".row-price")!.getBoundingClientRect();
+    expect(Math.abs(price.right - last.right)).toBeLessThanOrEqual(0.5);
+    const name = li.querySelector(".row-name")!.getBoundingClientRect();
+    const count = li.querySelector("[data-sent-open-count]")!.getBoundingClientRect();
+    expect(Math.abs(count.left - name.left)).toBeLessThanOrEqual(0.5);
+  },
+);

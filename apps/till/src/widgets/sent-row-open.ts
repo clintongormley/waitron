@@ -94,7 +94,7 @@ const serveWords = (serve: SentServe) =>
 export function sentOpenControls(view: SentOpenView): TemplateResult {
   const { row } = view;
   const count =
-    row.state === "cancelled_charged"
+    row.state === "cancelled_charged" || row.left.length === 0
       ? nothing
       : html`<span class="sent-open-count" data-sent-open-count
           >${t("table.row_served_of")
@@ -144,7 +144,7 @@ export const sentOpenStyles = css`
     font-weight: var(--wt-font-weight-medium);
   }
   .sent-open {
-    grid-column: 2 / -1;
+    grid-column: 2;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -160,6 +160,8 @@ export const sentOpenStyles = css`
     width: 100%;
   }
   .sent-open-count {
+    /* Under the name: the quantity column's least width, which .sent-row-open sets. */
+    margin-inline-start: calc(var(--wt-space-5) + var(--wt-space-1));
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-md);
   }

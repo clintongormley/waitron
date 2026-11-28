@@ -32,6 +32,7 @@ import {
   sentOpenStyles,
   sentRowDrawn,
 } from "./sent-row-open.js";
+import { revealOpenBox } from "./row-text.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -455,6 +456,21 @@ export class TillSentOrders extends LitElement {
   #clickRow(row: SentRow, event: MouseEvent): void {
     if (event.detail === 0 || !this.#suppressClick) this.#open.toggle(this.#opening, row.id);
     this.#releasePointer();
+    if (this.#open.is(this.#opening, row.id)) void this.#reveal();
+  }
+  /** The opened row's box, once drawn, above the bar at the foot of the area the list scrolls in;
+   * the screen sets the clearance on its `opened-row` part. */
+  async #reveal(): Promise<void> {
+    await this.updateComplete;
+    const box = this.renderRoot.querySelector("li[data-open]");
+    if (box === null) return;
+    const scroller = scrollAncestors(this).find(
+      (node): node is Element =>
+        node instanceof Element &&
+        /auto|scroll/.test(getComputedStyle(node).overflowY) &&
+        node.scrollHeight > node.clientHeight,
+    );
+    revealOpenBox(box, scroller ?? document.scrollingElement ?? document.documentElement);
   }
   #displayNow(): number {
     return this.#heldNow() ?? Date.now();

@@ -91,8 +91,9 @@ export function sentRow(view: SentRowView): TemplateResult {
   const dish = first.row;
   const fired = first.kind === "fired";
   const state = stateText(view);
+  const open = view.opened !== nothing;
   const served =
-    row.left.length > 0 && row.served !== "0"
+    !open && row.left.length > 0 && row.served !== "0"
       ? t("table.row_served_of")
           .replace("{served}", quantityText(row.served))
           .replace("{quantity}", quantityText(row.quantity))
@@ -102,13 +103,13 @@ export function sentRow(view: SentRowView): TemplateResult {
       ...(state === undefined ? [] : [state]),
       ...(served === undefined ? [] : [served]),
     ])}<span class="row-price">${view.price}</span>`;
-  const open = view.opened !== nothing;
   return html`<li
     class="sent-row"
     data-fired-line=${fired ? dish.lineId : nothing}
     data-held-line=${first.kind === "held" ? dish.lineId : nothing}
     data-served-line=${row.left.length === 0 ? dish.lineId : nothing}
     ?data-open=${open}
+    part=${open ? "opened-row" : nothing}
   >
     <button
       type="button"

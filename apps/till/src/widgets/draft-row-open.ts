@@ -14,7 +14,7 @@ import type { TillBasket } from "./basket.js";
 import { dishFacts } from "./dish-facts.js";
 import { type DraftRowTap, draftRowSlotStyles } from "./draft-row.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
-import { openRowAction } from "./row-text.js";
+import { openRowAction, revealOpenBox } from "./row-text.js";
 
 /**
  * Which new dish's row is open in place, one at a time. A tap on a row opens it and a second tap
@@ -79,18 +79,7 @@ export class OpenDraftRow implements ReactiveController {
     const box = basket.renderRoot
       .querySelector(`[data-draft-row="${store.lines.indexOf(line)}"]`)
       ?.closest<HTMLElement>(".entry");
-    if (box == null) return;
-    const scroller = this.#scroller();
-    const foot =
-      scroller === document.scrollingElement
-        ? innerHeight
-        : scroller.getBoundingClientRect().top + scroller.clientTop + scroller.clientHeight;
-    const margin = Number.parseFloat(getComputedStyle(box).scrollMarginBlockEnd);
-    if (box.getBoundingClientRect().bottom > foot - margin)
-      box.scrollIntoView({
-        block: "end",
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
-      });
+    if (box != null) revealOpenBox(box, this.#scroller());
   }
 
   close(): void {
