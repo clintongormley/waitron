@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import {
   baseStyles,
@@ -108,6 +108,7 @@ export type { GiveBackAsk, GiveBackFill };
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
   static override styles = [baseStyles, giveBackDialogStyles, helpAnchorStyles];
+  @query("wt-dialog") private refundDialog?: WtDialog;
   @property({ attribute: false }) api!: GiveBackApi;
   /** Saves each press before sending it. */
   @property({ attribute: false }) session!: GiveBackSession;
@@ -667,12 +668,7 @@ export class TillGiveBackDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("give-back-close", { bubbles: true, composed: true }));
   }
   #cancelButton() {
-    return html`<wt-button
-      slot="cancel"
-      variant="secondary"
-      data-close
-      @click=${() =>
-        void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+    return html`<wt-button slot="cancel" variant="secondary" data-close @click=${this.#close}
       >${t("action.cancel")}</wt-button
     >`;
   }
@@ -856,11 +852,9 @@ export class TillGiveBackDialog extends LitElement {
       </wt-form-actions>`;
   }
   #stepBody(step: Step) {
-    const close = () =>
-      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
     if (step.kind === "lost")
       return lostStep(step, this.sending, {
-        close,
+        close: this.#close,
         resend: () =>
           void this.#send(
             this.#pressing(
@@ -891,18 +885,20 @@ export class TillGiveBackDialog extends LitElement {
       step,
       way,
       this.sending,
-      { close, checkAgain: () => void this.#checkAgain(step) },
+      { close: this.#close, checkAgain: () => void this.#checkAgain(step) },
       underWay === null ? undefined : this.#underWay(underWay),
       this.fullInvoice,
     );
   }
+  /** The correction a give-back left open, unless a card refund it waits for comes first. */
   #underWayOf(step: Step | null): InvoiceCorrectionView | null {
     if (step === null) return this.view?.underWay ?? null;
     return step.kind === "done" && !waitsForCard(step.outcome) ? step.outcome.underWay : null;
   }
   readonly #waitText = (reason: GiveBackWaitReason) => waitReasonText(reason, this.fullInvoice);
+  readonly #close = () => void this.refundDialog?.requestClose("cancel");
   readonly #coverRefund = (covered: boolean) =>
-    this.renderRoot.querySelector("wt-dialog")?.toggleAttribute("data-approval-covered", covered);
+    this.refundDialog?.toggleAttribute("data-approval-covered", covered);
   #underWay(correction: InvoiceCorrectionView) {
     return html`<till-give-back-under-way
       .api=${this.api}
@@ -913,7 +909,7 @@ export class TillGiveBackDialog extends LitElement {
       .refunds=${this.refunds}
       .coverUnderlay=${this.#coverRefund}
       .capabilities=${this.capabilities}
-      .close=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+      .close=${this.#close}
       @give-back-busy=${(event: CustomEvent<{ busy: boolean; held: boolean }>) => {
         event.stopPropagation();
         this.underWayBusy = event.detail.busy;
@@ -922,6 +918,7 @@ export class TillGiveBackDialog extends LitElement {
     ></till-give-back-under-way>`;
   }
   #body() {
+    // A saved step needs no read: the read only names the card it went back to.
     if (this.step !== null) return this.#stepBody(this.step);
     const underWay = this.#underWayOf(null);
     if (underWay !== null) return this.#underWay(underWay);
@@ -974,10 +971,11 @@ export class TillGiveBackDialog extends LitElement {
                 if (this.sending) return;
                 this.approvers = null;
                 this.approval = undefined;
+                // A first send refused for its PIN wrote nothing, so cancelling forgets it.
                 try {
                   this.session.abandon(this.saleId);
                 } catch {
-                  // The refused send wrote nothing. The next press reports a storage error.
+                  // The next press reads the storage again and says if it cannot.
                 }
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {

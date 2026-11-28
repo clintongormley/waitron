@@ -38,6 +38,7 @@ export class WtDialog extends LitElement {
         --wt-dialog-inset-inline-start: 0px;
         /* A screen sets this on its dialog to paint the whole window, footer included. */
         --wt-dialog-surface: var(--wt-color-surface-raised);
+        /* A nested dialog has its own scrim even when the dialog beneath it clears its scrim. */
         --wt-dialog-scrim: var(--wt-color-scrim);
         --wt-tabs-sticky-surface: var(--wt-dialog-surface);
         --wt-form-actions-surface: var(--wt-dialog-surface);

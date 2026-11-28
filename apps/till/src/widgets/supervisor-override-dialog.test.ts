@@ -60,6 +60,21 @@ async function typePin(el: TillSupervisorOverrideDialog, digits: string): Promis
 }
 
 describe("till-supervisor-override-dialog", () => {
+  it("stops covering the underlying dialog when the closed sheet stays mounted", async () => {
+    const coverUnderlay = vi.fn();
+    const { el } = await mount({
+      sheet: { heading: "Refund approval", prompt: "Approval is required." },
+      coverUnderlay,
+    });
+    const dialog = root(el).querySelector("wt-dialog")!;
+    await dialog.updateComplete;
+    expect(coverUnderlay).toHaveBeenLastCalledWith(true);
+
+    await dialog.requestClose("cancel");
+    await vi.waitFor(() => expect(coverUnderlay).toHaveBeenLastCalledWith(false));
+    expect(el.isConnected).toBe(true);
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-supervisor-override-dialog")).toBe(
       TillSupervisorOverrideDialog,
