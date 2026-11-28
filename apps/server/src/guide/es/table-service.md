@@ -753,8 +753,7 @@ ejemplo **Cuenta 2 ya no está en esta mesa. Ahora se muestra Cuenta 1.** Los pl
 añadido a la cuenta que se fue y no habías enviado no pasan a la cuenta que ahora se muestra:
 aparecen bajo **Tus cambios no se han guardado.**, con **Descartar cambios** y **Actualizar el
 pedido**. Una cuenta cobrada en otra caja sigue en tu pantalla, marcada como **Pagada**. Deja la
-cuenta abierta para ver los platos que envía otra caja. **Pendiente de pago en la mesa** se
-actualiza cuando cambia cualquier cuenta de la mesa.
+cuenta abierta para ver los platos que envía otra caja.
 
 Debajo del pedido, el pie muestra el **Total** de esta cuenta, después **Pendiente de pago en la
 mesa** para todas las cuentas, y **Cobrar**. La elección de **Factura completa** y el idioma del

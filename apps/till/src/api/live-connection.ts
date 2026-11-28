@@ -7,10 +7,9 @@ interface Options {
 }
 
 const DEVICE_TYPES = ["devices", "device_profiles", "device_profile_admission_roles"];
+const ORDER_AMOUNT_TYPES = ["bill_set_menu_copies", "working_orders", "working_order_lines"];
 const ORDER_TYPES = [
-  "bill_set_menu_copies",
-  "working_orders",
-  "working_order_lines",
+  ...ORDER_AMOUNT_TYPES,
   "order_groups",
   "ticket_items",
   "line_service_cancellations",
@@ -80,15 +79,7 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "printers",
     "settings.venue",
   ],
-  tableOrder: [
-    "working_orders",
-    "working_order_lines",
-    "bill_set_menu_copies",
-    "bill_payments",
-    "refunds",
-    "tenders",
-    "sales",
-  ],
+  tableOrder: [...ORDER_AMOUNT_TYPES, "bill_payments", "refunds", "tenders", "sales"],
   billDraft: [
     ...DEVICE_TYPES,
     ...ORDER_TYPES,

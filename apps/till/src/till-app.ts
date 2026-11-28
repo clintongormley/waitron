@@ -3112,9 +3112,10 @@ export class TillApp extends LitElement {
   #tableOpensPending = 0;
   /** The tab a card-mount open switched away from, to go back to if the open fails. */
   #openedFrom?: BuiltInScreen;
-  /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
-  /** The same for the party's bills. */
+  /** A foreground read supersedes earlier reads on start. A background read does so on success. */
+  #tabLinesCurrent = 0;
+  /** Only the latest requested list of bills may replace the one shown. */
   #partyBillsRead = 0;
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
@@ -12602,6 +12603,7 @@ export class TillApp extends LitElement {
     )
       this.orderParty = {
         ...party,
+        outstanding: latest.outstanding,
         kitchenNote: latest.kitchenNote,
         unsentDrafts: latest.unsentDrafts,
       };
@@ -13004,19 +13006,22 @@ export class TillApp extends LitElement {
     return placed;
   }
 
-  async #refreshTableLines(isCurrent = () => true): Promise<void> {
+  async #refreshTableLines(isCurrent?: () => boolean): Promise<void> {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const read = ++this.#tabLinesRead;
-    const applies = () => read === this.#tabLinesRead && billId === this.activeTabId && isCurrent();
+    if (isCurrent === undefined) this.#tabLinesCurrent = read;
     try {
       const tab = await this.api.getTabLines(billId);
-      if (!applies()) return;
+      if (read < this.#tabLinesCurrent || billId !== this.activeTabId || isCurrent?.() === false)
+        return;
+      this.#tabLinesCurrent = read;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
       this.#refreshOpenPayLines(billId);
     } catch {
-      if (applies()) this.#tableOffers.liveFields = undefined;
+      if (isCurrent === undefined && read === this.#tabLinesCurrent && billId === this.activeTabId)
+        this.#tableOffers.liveFields = undefined;
     }
   }
 
@@ -13024,6 +13029,7 @@ export class TillApp extends LitElement {
   async #loadTabLines(splitRead = false): Promise<void> {
     await this.#followPartyDraft(splitRead);
     const read = ++this.#tabLinesRead;
+    this.#tabLinesCurrent = read;
     const refusal = this.#splitRefusalReading;
     const partyId = this.orderParty?.id ?? null;
     const groupsRead = ++this.#groupsRead;
@@ -13045,17 +13051,17 @@ export class TillApp extends LitElement {
         undefined,
         splitRead,
       );
-      if (read !== this.#tabLinesRead) return;
+      if (read !== this.#tabLinesCurrent) return;
       this.tabLines = tab.lines;
       this.tabRevision = tab.revision;
       this.#refreshOpenPayLines(billId);
     } catch {
-      if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
+      if (read !== this.#tabLinesCurrent || refusal?.ended.signal.aborted) return;
       this.tabLines = [];
     }
     const groupAnswer = await groups;
     const partyOrders = await orders;
-    if (read !== this.#tabLinesRead || refusal?.ended.signal.aborted) return;
+    if (read !== this.#tabLinesCurrent || refusal?.ended.signal.aborted) return;
     this.#applyTabGroups(groupsRead, partyId, groupAnswer, partyOrders);
   }
 
@@ -13065,12 +13071,12 @@ export class TillApp extends LitElement {
     { groups, printProblems }: { groups: OrderGroup[] | null; printProblems: PrintProblem[] },
     orders: CurrentOrders | null,
   ): void {
+    this.requestUpdate();
     this.#showPrintProblems(read, printProblems);
     if (!this.#showGroups(read, groups ?? [], orders)) return;
     this.#groupsUnread = groups === null;
     this.#groupsReadFor = partyId;
     this.currentOrdersUnread = partyId !== null && orders === null;
-    this.requestUpdate();
   }
 
   #showPrintProblems(read: number, problems: PrintProblem[]): void {
@@ -13165,13 +13171,12 @@ export class TillApp extends LitElement {
   /** After a command that moved the party on, or may have: the floor is read again, and its party
    * taken while the open table still holds that party and the floor's revision is not lower than
    * the one held. A failed read leaves the last floor, which can be older. */
-  async #retakePartyFromFloor(isCurrent = () => true): Promise<boolean> {
+  async #retakePartyFromFloor(): Promise<boolean> {
     const partyId = this.orderParty?.id;
     const read = await this.#refreshFloor();
     const row = this.tables.find((table) => table.id === this.activeTableId);
     const held = this.orderParty;
     if (
-      isCurrent() &&
       partyId !== undefined &&
       row?.party?.id === partyId &&
       held?.id === partyId &&
@@ -13583,9 +13588,10 @@ export class TillApp extends LitElement {
       return;
     const visit = this.#orderVisit;
     const sent = this.#sentNow();
-    const current = () => !this.#hasLeftOrder(billId, visit) && !this.#hasLeftParty(partyId, sent);
+    const current = () =>
+      this.isConnected && !this.#hasLeftOrder(billId, visit) && !this.#hasLeftParty(partyId, sent);
     const read = ++this.#groupsRead;
-    const floor = this.#retakePartyFromFloor(current);
+    const floor = this.#pollFloor();
     const paying = this.billPaying?.surface === "table" && this.billPaying.billId === billId;
     const lines = paying ? undefined : this.#refreshTableLines(current);
     const [groups, orders] = await Promise.all([this.#readGroups(), this.#readCurrentOrders()]);
@@ -20738,7 +20744,7 @@ export class TillApp extends LitElement {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
-    this.#tabLinesRead++;
+    this.#tabLinesCurrent = ++this.#tabLinesRead;
     this.#partyBillsRead++;
     this.#printProblemsShown = ++this.#groupsRead;
     this.#groupsShown = this.#printProblemsShown;

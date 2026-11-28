@@ -19,7 +19,7 @@ import {
 import { liveReadFixture } from "../test/live-connection.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { CurrentOrders } from "./api/kitchen-api.js";
-import { checkBill, tabBill } from "../test/party-app-fixture.js";
+import { checkBill, tabBill, tabLine } from "../test/party-app-fixture.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 
@@ -342,6 +342,35 @@ it.each(["till", "phone-portrait"] as const)(
   },
 );
 
+it("keeps a bill switch's successful read when a newer background read fails", async () => {
+  const stream = liveReadFixture();
+  const before = { lines: [tabLine], revision: 3 };
+  const { el } = await mountApp({
+    readLiveEvents: stream.read,
+    getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+    getTabLines: vi.fn().mockResolvedValue(before),
+  });
+  const order = await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  expect(order.lines).toEqual([tabLine]);
+
+  const switched = Promise.withResolvers<typeof before>();
+  api.getTabLines!.mockReturnValueOnce(switched.promise);
+  emit(order, "switch-bill", { workingOrderId: "wo-check" });
+  await flush(el);
+  expect(order.orderId).toBe("wo-check");
+  expect(api.getTabLines!.mock.results.at(-1)?.value).toBe(switched.promise);
+
+  api.getTabLines!.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el);
+  switched.resolve({ lines: [], revision: 0 });
+  await flush(el);
+
+  expect(order.lines).toEqual([]);
+});
+
 it("updates the table's outstanding amount when a sibling bill changes", async () => {
   const stream = liveReadFixture();
   const floorWith = (revision: number, outstanding: string) => [
@@ -367,10 +396,12 @@ it("updates the table's outstanding amount when a sibling bill changes", async (
     { ...sibling, total: "36.50", outstanding: "36.50" },
   ]);
   api.getTablesState!.mockResolvedValue(floorWith(4, "126.40"));
+  const floorReads = api.getTablesState!.mock.calls.length;
   stream.event("change", '[{"type":"working_orders"}]');
   await flush(el);
 
   expect(outstanding()).toBe(formatMoney("126.40", "en"));
+  expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
   expect(order.orderId).toBe("wo-4");
 });
 
