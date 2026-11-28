@@ -423,8 +423,9 @@ says what happens: in cash the cash drawer opens and you give the money to the c
 is refunded through the card reader. If the chosen payment cannot take it all, the window says how
 much stays under way for the other payments.
 
-Choose **Refund** with the amount. If you cannot give refunds yourself, a supervisor or
-manager approves it with one PIN.
+Choose **Refund** with the amount. If **Supervisor approval required** appears, hand the phone
+to a supervisor or manager. They choose their name under **Who approves**, enter their PIN and
+choose **Authorize**.
 
 For a card keyed on a separate card terminal, the window asks you to refund it on that terminal
 first. Do so, tick **I have refunded … on the separate card terminal**, then choose **Record the

@@ -163,6 +163,8 @@ export const en = {
   "tender_refund.failed": "The refund failed. No money was returned by this attempt.",
   "refund.provider_balance_unavailable":
     "The card provider cannot refund this yet. You can start a new refund later.",
+  "give_back.approval_title": "Supervisor approval required",
+  "give_back.approval_prompt": "Refunds need a supervisor or manager. Hand them the phone.",
   "give_back.title": "Refund",
   "give_back.loading": "Reading the receipt…",
   "give_back.read_failed": "The receipt could not be read. Nothing has changed.",
@@ -824,6 +826,7 @@ export const en = {
     "You have been logged out because somebody else has logged in on this device.",
   // Supervisor-override dialog
   "override.title": "Approval needed",
+  "override.who_approves": "Who approves",
   "override.pick_supervisor": "Choose who approves",
   "override.enter_pin": "Enter their PIN",
   "override.no_supervisors": "Nobody here can approve this",
@@ -2704,6 +2707,9 @@ export const es: Record<StringKey, string> = {
   "tender_refund.failed": "La devolución ha fallado. Este intento no ha devuelto dinero.",
   "refund.provider_balance_unavailable":
     "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde.",
+  "give_back.approval_title": "Hace falta la aprobación de un responsable",
+  "give_back.approval_prompt":
+    "Un responsable o encargado debe aprobar la devolución. Pásale el teléfono.",
   "give_back.title": "Devolución",
   "give_back.loading": "Leyendo el ticket…",
   "give_back.read_failed": "No se pudo cargar el ticket. No ha cambiado nada.",
@@ -3376,6 +3382,7 @@ export const es: Record<StringKey, string> = {
   "login.logged_out_by_other":
     "Se ha cerrado tu sesión porque otra persona ha iniciado sesión en este dispositivo.",
   "override.title": "Hace falta aprobación",
+  "override.who_approves": "Quién aprueba",
   "override.pick_supervisor": "Elige quién aprueba",
   "override.enter_pin": "Introduce su PIN",
   "override.no_supervisors": "Aquí nadie puede aprobarlo",

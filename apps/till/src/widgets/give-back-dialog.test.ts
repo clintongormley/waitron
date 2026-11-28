@@ -1567,6 +1567,34 @@ describe("sending", () => {
     },
   );
 
+  it("lets the supervisor approve the refund from the PIN sheet", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    const el = await press(api);
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    const sheet = page.getByRole("dialog", { name: "Supervisor approval required" });
+    await expect.element(sheet).toBeVisible();
+    await expect
+      .element(page.getByRole("heading", { name: "Supervisor approval required" }))
+      .toHaveTextContent("Supervisor approval required");
+    await expect
+      .element(page.getByText("Refunds need a supervisor or manager. Hand them the phone."))
+      .toBeVisible();
+    await userEvent.click(page.getByRole("combobox", { name: /Who approves/ }));
+    await userEvent.click(page.getByRole("option", { name: "Boss" }));
+    const panel = approval(el)!.shadowRoot!.querySelector("wt-full-screen-panel[rising]")!;
+    expect(panel.querySelectorAll("[data-pin-dot]")).toHaveLength(4);
+    expect(panel.querySelectorAll("[data-pin-dot][data-filled]")).toHaveLength(0);
+
+    for (const digit of ["0", "1", "2", "3", "4", "5"]) {
+      await userEvent.click(page.getByRole("button", { name: digit, exact: true }));
+    }
+    expect(panel.querySelectorAll("[data-pin-dot][data-filled]")).toHaveLength(6);
+    await userEvent.click(page.getByRole("button", { name: "Authorize", exact: true }));
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 refunded in cash."));
+    expect(sent(api).override).toEqual({ personId: "boss", pin: "012345" });
+  });
+
   it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();
     answering(api, { needs: ["sale.refund", "sale.rectify"] });

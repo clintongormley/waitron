@@ -668,6 +668,7 @@ export class TillGiveBackUnderWay extends LitElement {
         this.approvers === null
           ? nothing
           : html`<till-supervisor-override-dialog
+              .sheet=${{ heading: t("give_back.approval_title"), prompt: t("give_back.approval_prompt") }}
               .authorizers=${this.approvers}
               .error=${this.pinError}
               @override-cancel=${(event: Event) => {

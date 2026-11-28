@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   loadPhoneFont,
@@ -64,6 +64,30 @@ describe("till-supervisor-override-dialog", () => {
     expect(customElements.get("till-supervisor-override-dialog")).toBe(
       TillSupervisorOverrideDialog,
     );
+  });
+
+  it("clears the PIN and the wait when switching to another approver in a sheet", async () => {
+    const { el } = await mount({
+      sheet: { heading: "Refund approval", prompt: "Approval is required." },
+    });
+    const authorize = page.getByRole("button", { name: "Authorize" });
+    const picker = page.getByRole("combobox", { name: /Who approves/ });
+    async function choose(name: string) {
+      await userEvent.click(picker);
+      await userEvent.click(page.getByRole("option", { name, exact: true }));
+    }
+    await choose("Responsable");
+    el.error = { code: "pin.throttled", personId: "sup-1", retryAfterSeconds: 30 };
+    await el.updateComplete;
+    await expect.element(page.getByRole("alert")).toBeVisible();
+    await expect.element(authorize).toBeDisabled();
+
+    await choose("Administradora");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(page.getByRole("button", { name: "1", exact: true }));
+    await choose("Responsable");
+    expect(pad(el)!.value).toBe("");
+    await expect.element(authorize).toBeDisabled();
   });
 
   it("renders one picker button per authorizer, no PIN pad until one is chosen", async () => {
