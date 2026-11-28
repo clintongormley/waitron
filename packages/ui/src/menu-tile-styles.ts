@@ -3,8 +3,7 @@ import { HOME_GRID_COLUMNS } from "@waitron/shared";
 import { visuallyHiddenStyles } from "./base-styles.js";
 
 /**
- * The menu's tiles as the till draws them, shared with the dashboard's Device home preview so the
- * preview shows what a device will. A tile is a `.tile` (a `wt-button`, or a `div` where it is not a
+ * The menu's tiles as the till draws them, shared with the dashboard's Device home preview. A tile is a `.tile` (a `wt-button`, or a `div` where it is not a
  * control) holding a `.label`; `[data-painted]` fills it from `--tile-fill` and `--tile-ink`.
  */
 export const menuTileStyles: CSSResult = css`

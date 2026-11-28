@@ -547,8 +547,8 @@ category swatches in the Products tree, the product and section swatches in a me
 the brand colour, fix shade and hand-set button colour chips on System → Appearance's Look
 card (`apps/dashboard/src/screens/look-card.ts`), the colour pickers in that card's Advanced
 section (`apps/dashboard/src/widgets/theme-advanced.ts`), the colour chips in the Themes card's rows
-(`apps/dashboard/src/screens/themes-card.ts`), and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
-tile takes black or white for its labels and its icon, whichever `readableTextColor`
+(`apps/dashboard/src/screens/themes-card.ts`), and the till's product tiles (`apps/till/src/widgets/menu-tiles.ts`). A painted till
+tile takes black or white for its labels, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
@@ -1324,8 +1324,10 @@ and disabled together. The Menu button keeps its width, so the words beside it a
 from product id to items, every variant and choice of a product counted together, and draw the
 number with the words for screen readers. The screen passes the map at every width, side by side
 too. The number is a `wt-count-badge tone="notice"` set 6 px outside the tile's top and end corner,
-ringed 2 px in `--wt-color-bg`; no space is kept above the name for it. Adding a dish keeps the
-tile's size and the name's centred wrapping.
+ringed 2 px in `--wt-color-bg`; no space is kept above the name for it. A tile's name shows at
+most two lines, cut with "…". On a counted tile the name is narrowed on both sides by the number's
+reach into the tile, so it can wrap differently once the first one is added; the tile keeps its
+size.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, grouped by name for counted dishes, with one entry per
 measured line, in first-appearance order) and `newOrderByProduct` (the tiles). A counted line
@@ -2554,8 +2556,8 @@ Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`
 `:host([variant="..."])`-style styling possible — see "Adding a primitive" below.
 
 The `inherit` arrow is built in. Importing `@waitron/ui` also registers the shared icons in
-`packages/ui/src/components/wt-icon.ts`: `MENU_ICONS`, `check`, `chevron-left`, `chevron-right`,
-`search`, `card`, `cash` and `undo`. Register other icons in the consuming app using
+`packages/ui/src/components/wt-icon.ts`: `MENU_ICONS`, `check`, `home`, `chevron-left`,
+`chevron-right`, `search`, `card`, `cash` and `undo`. Register other icons in the consuming app using
 `registerIcons`; a name an app registers again replaces the shared drawing there, as the
 dashboard's `search` and `undo` do.
 

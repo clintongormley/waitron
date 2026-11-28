@@ -648,7 +648,7 @@ En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pul
 hasta que aparezca el contorno. Sin levantar el dedo, arrástralo al título del grupo que quieras y
 suéltalo.
 
-Usa el campo **Carta** encima de **Buscar** para cambiar entre las cartas disponibles. Desplázate
+Usa el campo **Carta** encima de **Buscar en la carta** para cambiar entre las cartas disponibles. Desplázate
 más allá del primer bloque para encontrar **Accesos directos** o **Carta completa**, según cuál
 venga después. La misma carta empieza en el mismo orden en la caja y el dispositivo de mano.
 Toca un botón con una carpeta para abrir esa sección. Un intervalo de precios indica cuánto

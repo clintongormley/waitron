@@ -6,7 +6,6 @@ export interface MenuPathStep {
   open: () => void;
 }
 
-/** Drawn in the browser's own shadow root, beside the search it sits under. */
 export const menuPathStyles = css`
   .breadcrumb {
     /* 15 px, then 16 px from 720 px: no font-size token holds either. */

@@ -605,7 +605,7 @@ menu and the order sit side by side.
 On a phone or tablet, to move a dish in **New order**, press its row until the outline appears.
 Keep your finger down, drag to the heading of the group you want, then lift your finger.
 
-Use the **Menu** field above **Search** to switch between the menus available now. Scroll past
+Use the **Menu** field above **Search the menu** to switch between the menus available now. Scroll past
 the first block to find **Shortcuts** or **Full menu**, whichever follows. The same menu starts in
 the same order on the counter till and handheld.
 Tap a tile with a folder to open that section. A price range shows what the different variants

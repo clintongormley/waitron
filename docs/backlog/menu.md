@@ -33,8 +33,9 @@ the full scans and translation-gap read remain.
 Left open:
 
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
-  copies the till's tile and breadcrumb markup, paint helper and breadcrumb CSS
-  (`apps/till/src/widgets/menu-tiles.ts`, `menu-path.ts`). The tiles' CSS is shared:
+  copies the till's tile markup and paint helper (`apps/till/src/widgets/menu-tiles.ts`) and keeps
+  its own older path above the tiles, a word "Home" and plain steps, which no longer matches the
+  till's (`menu-path.ts`); its search is not the till's outlined one either. The tiles' CSS is shared:
   both read `menuTileStyles` (`packages/ui/src/menu-tile-styles.ts`; till redesign PR 10a, watcher
   2026-11-28 00:13, question 5). Grid sizing, arrangement, trails and indexing already use shared
   rules. A shared presentation boundary would need adapters for the till's ordering state and the
@@ -268,7 +269,8 @@ The remaining storage, input-validation and shared-form limits.
 ## Menu home preview rendering
 
 - **The dashboard's Home page preview still copies the till's presentation.** Tile and breadcrumb
-  markup, paint helpers, breadcrumb CSS and the table layout values remain separate; tile CSS,
+  markup, paint helpers and the table layout values remain separate, and the preview's path and
+  search no longer look like the till's; tile CSS,
   grid sizing, arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
   ordering and dashboard shortcut editing.
   [Detail](menu.md#each-menu-has-one-device-home-page-w93-1287-left-open)
