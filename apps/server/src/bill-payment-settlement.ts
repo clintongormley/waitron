@@ -156,12 +156,12 @@ export async function issueAdvanceIfOwed(
 type IssueOptions = {
   moneyMoved?: boolean;
   /** Nobody is there to answer for a discount that no longer holds, or the money has already gone
-   * back in a refund, so it is written as it stands (plan A1621 D6). Not `moneyMoved`, which also
-   * files a product taken off sale. */
+   * back in a refund, so it is written as it stands (plan A1621 D6). `moneyMoved` implies it, and
+   * also files a product taken off sale. */
   unattended?: true;
   closeZero?: boolean;
   /** The bill's figures from earlier in this transaction, with no sale or advance issued or
-   * corrected since. */
+   * corrected, and none of its lines or held discounts written, since. */
   figures?: BillFigures;
   /** The bill's priced total, when the caller has priced its current lines in this transaction
    * already and has no `figures`. */
@@ -287,7 +287,10 @@ async function issueOrSettleWhenFullyPaid(
     return { invoice: ticket, figures };
   }
 
-  await crystalliseBillDiscounts(tx, cfg, workingOrderId, { asked: options.unattended !== true });
+  await crystalliseBillDiscounts(tx, cfg, workingOrderId, {
+    asked: options.moneyMoved !== true && options.unattended !== true,
+    discounts: figures.discounts,
+  });
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
@@ -441,7 +444,7 @@ export async function issueHeldBill(
     completing === undefined ? cfg : { ...cfg, origin: storedDeviceOrigin(completing) },
     workingOrderId,
     completing?.requestedBy ?? operatorId,
-    { moneyMoved: true, unattended: true, datedByLatestAcceptance: true },
+    { moneyMoved: true, datedByLatestAcceptance: true },
   );
 }
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -571,7 +574,7 @@ export async function completeBillPayment(
     takenAt,
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true, unattended: true, guestCount, datedByLatestAcceptance, printers },
+    { moneyMoved: true, guestCount, datedByLatestAcceptance, printers },
   );
   // An invoice issued or settled is answered, so with none `figures` still stand.
   if (issued.invoice === null)

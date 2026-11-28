@@ -1,4 +1,3 @@
-import { inArray } from "drizzle-orm";
 import {
   adjustmentLines,
   coveredBySetMenu,
@@ -13,7 +12,6 @@ import {
 import {
   insertInChunks,
   recordActivity,
-  workingOrderLines,
   type AdjustmentSplit,
   type Transaction,
 } from "@waitron/db";
@@ -29,9 +27,9 @@ import {
 import { listValue, readRows, stageOf, type Row } from "./adjustment-rows.js";
 import { reprice, type Change } from "./adjustment-reprice.js";
 import {
-  gatherHeldBills,
   givenTogether,
-  workOutHeldBill,
+  readHeldBillDiscounts,
+  type BillDiscounts,
   type HeldBill,
 } from "./bill-discounts-read.js";
 import type { TradingContext } from "./trading-context.js";
@@ -89,17 +87,27 @@ function notHolding(bill: HeldBill, worked: readonly WorkedBillDiscount[]): Stan
   });
 }
 
+function refuseStanding(billId: string, standing: readonly Standing[]): void {
+  if (standing.length > 0) {
+    throw new AppError("adjustment.no_longer_applies", {
+      workingOrderId: billId,
+      discounts: standing.map(({ entry }) => entry),
+    });
+  }
+}
+
 /**
  * Refuses `adjustment.no_longer_applies` when any discount held on `billId` would be written
- * other than as given (spec 6.6), naming each; writes nothing.
+ * other than as given (spec 6.6), naming each; writes nothing. `discounts` are the bill's when
+ * read earlier in this transaction, with nothing since writing its lines or held discounts.
  */
-export async function refuseDiscountsNotHolding(tx: Transaction, billId: string): Promise<void> {
-  const bill = (await gatherHeldBills(tx, [billId])).get(billId);
-  if (bill === undefined) return;
-  const discounts = notHolding(bill, workOutHeldBill(bill).discounts).map(({ entry }) => entry);
-  if (discounts.length > 0) {
-    throw new AppError("adjustment.no_longer_applies", { workingOrderId: billId, discounts });
-  }
+export async function refuseDiscountsNotHolding(
+  tx: Transaction,
+  billId: string,
+  discounts?: BillDiscounts,
+): Promise<void> {
+  const { bill, worked } = discounts ?? (await readHeldBillDiscounts(tx, billId));
+  if (bill !== undefined) refuseStanding(billId, notHolding(bill, worked.discounts));
 }
 
 /** The bill's rows as crystallising leaves them, each under the id the working-out gives its
@@ -199,9 +207,9 @@ async function writeWorked(
   const changed = partChanges(worked, parts);
   // Split parts numbered in the order the working-out numbered them.
   changed.sort((a, b) => (a.split?.lineNo ?? 0) - (b.split?.lineNo ?? 0));
-  const { splits, taken } =
+  const { splits, taken, lineNoOf } =
     changed.length === 0
-      ? { splits: [], taken: [] }
+      ? { splits: [], taken: [], lineNoOf: new Map<string, number>() }
       : await reprice(
           tx,
           cfg,
@@ -210,26 +218,16 @@ async function writeWorked(
           changed.map(({ change }) => change),
           [],
         );
-  const splitIds = splits.map(({ to }) => to);
-  const numbered = new Map(
-    splitIds.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-            .from(workingOrderLines)
-            .where(inArray(workingOrderLines.id, splitIds))
-        ).map(({ id, lineNo }) => [id, lineNo]),
-  );
+  const splitOf = new Map(splits.map(({ from, to }) => [from, to]));
   for (const { lineId, priced, split } of changed) {
     const row = parts.rowOf.get(priced.id)!;
     row.list ??= row.unit;
     if (split !== null) {
-      const id = splits.find(({ from }) => from === row.id)!.to;
+      const id = splitOf.get(row.id)!;
       parts.rowOf.set(split.id, {
         ...row,
         id,
-        lineNo: numbered.get(id)!,
+        lineNo: lineNoOf.get(id)!,
         quantity: split.quantity,
         unit: split.unit,
         lineTotal: split.total,
@@ -341,28 +339,23 @@ function fitted(
  * covers. `asked`: a discount that no longer holds refuses `adjustment.no_longer_applies` before
  * anything is written. Otherwise it is written as it stands, with a `discount.written_as_it_stood`
  * activity entry (D20). A discount whose set menu is gone is not recorded; it gets only its
- * activity entry.
+ * activity entry. `discounts` are the bill's when read earlier in this transaction, with nothing
+ * since writing its lines or held discounts.
  */
 export async function crystalliseBillDiscounts(
   tx: Transaction,
   cfg: TradingContext,
   billId: string,
-  options: { asked: boolean },
+  options: { asked: boolean; discounts?: BillDiscounts },
 ): Promise<void> {
-  const bill = (await gatherHeldBills(tx, [billId])).get(billId);
+  const { bill, worked } = options.discounts ?? (await readHeldBillDiscounts(tx, billId));
   if (bill === undefined) return;
   const { input } = bill;
-  const worked = workOutHeldBill(bill).discounts;
-  const standing = notHolding(bill, worked);
-  if (options.asked && standing.length > 0) {
-    throw new AppError("adjustment.no_longer_applies", {
-      workingOrderId: billId,
-      discounts: standing.map(({ entry }) => entry),
-    });
-  }
-  const ids = input.discounts.map(({ id }) => id);
+  const standing = notHolding(bill, worked.discounts);
+  if (options.asked) refuseStanding(billId, standing);
+  const discountOf = new Map(input.discounts.map((discount) => [discount.id, discount]));
   // Before any price changes, so a split made while writing copies no pending row to its part.
-  await deletePendingDiscounts(tx, ids);
+  await deletePendingDiscounts(tx, [...discountOf.keys()]);
   const rows = await readRows(tx, billId);
   const lineOf = new Map(rows.map((row) => [row.id, row]));
   const parts: Parts = {
@@ -371,8 +364,8 @@ export async function crystalliseBillDiscounts(
   };
   // Recorded before the next discount writes, so a split it makes carries the record's lines.
   let open: Given | null = null;
-  for (const one of worked) {
-    const discount = input.discounts.find(({ id }) => id === one.id)!;
+  for (const one of worked.discounts) {
+    const discount = discountOf.get(one.id)!;
     const held = bill.held.get(one.id)!;
     if (one.holds !== "set_menu_gone") {
       const line = discount.target.kind === "bill" ? null : lineOf.get(discount.target.lineId!)!;

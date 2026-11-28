@@ -59,7 +59,8 @@ async function setPrice(
 /**
  * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
  * extras, when a change is to that part; answers each row it split off, with the row it came from,
- * a carved dish before its extras, and what each change took off each line it lowered.
+ * a carved dish before its extras, and the line number of each by its id, and what each change
+ * took off each line it lowered.
  */
 export async function reprice(
   tx: Transaction,
@@ -68,7 +69,7 @@ export async function reprice(
   carve: Carve | null,
   changes: readonly Change[],
   stamped: readonly string[],
-): Promise<{ splits: AdjustmentSplit[]; taken: LineReduction[] }> {
+): Promise<{ splits: AdjustmentSplit[]; lineNoOf: Map<string, number>; taken: LineReduction[] }> {
   const touched = [...new Set([...changes.map(({ row }) => row.id), ...stamped])];
   // Before any split, so a split row copies the price its line had (plan D21).
   await tx
@@ -87,6 +88,7 @@ export async function reprice(
       )
     : new Map<string, SplitRow>();
   const splits: AdjustmentSplit[] = [...carved].map(([from, to]) => ({ from, to: to.id }));
+  const lineNoOf = new Map([...carved.values()].map(({ id, lineNo }) => [id, lineNo]));
   const subjects = changes.map((change) => {
     const { id, lineNo } = change.carved ? carved.get(change.row.id)! : change.row;
     return { id, lineNo, change };
@@ -109,6 +111,7 @@ export async function reprice(
     let firstReduction = change.reduction;
     if (second !== undefined) {
       splits.push({ from: id, to: second.id });
+      lineNoOf.set(second.id, second.lineNo);
       await setPrice(tx, second.id, lower!, change.row.priceQuantity);
       const quantity = decimalToThousandths(lower!.quantity);
       const reduction = subtractDecimal(
@@ -126,6 +129,7 @@ export async function reprice(
   }
   return {
     splits,
+    lineNoOf,
     taken: taken.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
   };
 }

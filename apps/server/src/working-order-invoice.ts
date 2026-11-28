@@ -19,8 +19,10 @@ import {
   advancesToTakeOff,
   readBillAdvances,
   refuseWhileAdvanceCorrectionOpen,
+  type BillAdvances,
 } from "./bill-advances.js";
 import { crystalliseBillDiscounts } from "./bill-discounts-crystallise.js";
+import type { BillDiscounts } from "./bill-discounts-read.js";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
 import { linkBillCardPaymentsToSale } from "./bill-payment-rows.js";
 import {
@@ -291,20 +293,23 @@ export function filedLines(
 }
 /** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment}:
  * refused while one of its advances has a correction open, and otherwise priced once it has written
- * the discounts the order holds into its lines ({@link crystalliseBillDiscounts}, `asked` as
- * there). Writes nothing else but `log`'s lines. */
+ * the discounts the order holds into its lines ({@link crystalliseBillDiscounts}, `asked` and
+ * `discounts` as there). `advances` are the order's when the caller read them, and refused on an
+ * open correction, earlier in this transaction. Writes nothing else but `log`'s lines. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
   backend: FiscalBackend,
   cfg: TradingContext,
   id: string,
-  options: { asked: boolean },
+  options: { asked: boolean; advances?: BillAdvances; discounts?: BillDiscounts },
   log?: Logger,
 ): Promise<PricedInvoice> {
-  const { credits } = await readBillAdvances(tx, [id]);
-  // The close of day commits after this refusal, so the discounts are written only past it.
-  if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
+  let credits = options.advances?.credits;
+  if (credits === undefined) {
+    credits = (await readBillAdvances(tx, [id])).credits;
+    if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
+  }
   await crystalliseBillDiscounts(tx, cfg, id, options);
   const order = await priceStoredOrderForIssuance(tx, id);
   const choice = await readOrderInvoiceChoice(tx, id);

@@ -172,6 +172,10 @@ export function givenTogether(
   return [...groups.values()];
 }
 
+function workedOf(bill: HeldBill | undefined): WorkedBill {
+  return bill === undefined ? { discounts: [], takes: 0 } : workOutHeldBill(bill);
+}
+
 /**
  * What each of `billIds`' held discounts takes off now and whether it still holds, and what they
  * take together, as {@link workOutHeldBill} works them out; a bill holding none takes nothing.
@@ -181,10 +185,22 @@ export async function readBillDiscounts(
   billIds: readonly string[],
 ): Promise<Map<string, WorkedBill>> {
   const bills = await gatherHeldBills(tx, billIds);
-  return new Map(
-    [...new Set(billIds)].map((billId) => {
-      const bill = bills.get(billId);
-      return [billId, bill === undefined ? { discounts: [], takes: 0 } : workOutHeldBill(bill)];
-    }),
-  );
+  return new Map([...new Set(billIds)].map((billId) => [billId, workedOf(bills.get(billId))]));
+}
+
+/** One bill's held discounts, gathered and worked out once, for the shown total, the check before
+ * payment and the invoice write to share while nothing writes the bill's lines or held discounts
+ * between them. `bill` is absent when it holds none. */
+export interface BillDiscounts {
+  bill: HeldBill | undefined;
+  worked: WorkedBill;
+}
+
+/** `billId`'s {@link BillDiscounts}. */
+export async function readHeldBillDiscounts(
+  tx: Transaction,
+  billId: string,
+): Promise<BillDiscounts> {
+  const bill = (await gatherHeldBills(tx, [billId])).get(billId);
+  return { bill, worked: workedOf(bill) };
 }

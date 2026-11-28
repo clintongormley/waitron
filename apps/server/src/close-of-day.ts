@@ -23,12 +23,8 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockUnconfirmedRefusal } from "./bill-payment-failures.js";
-import {
-  readBillAdvances,
-  refuseWhileAdvanceCorrectionOpen,
-  type BillAdvances,
-} from "./bill-advances.js";
-import { readBillFigures, stillOwedOnIssuedBill } from "./bill-payment-rows.js";
+import { readBillAdvances, refuseWhileAdvanceCorrectionOpen } from "./bill-advances.js";
+import { readBillFigures, stillOwedOnIssuedBill, type BillFigures } from "./bill-payment-rows.js";
 import { issuedBillStanding } from "./bill-payment-money.js";
 import { queueDailyReportMail } from "./daily-report-mail.js";
 import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
@@ -108,10 +104,12 @@ export async function issueBillAtClose(
     if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
       return { kind: "left_open", reason: "dish_not_made" };
     const advances = await readBillAdvances(tx, [billId]);
+    // The close commits after this refusal, so it comes before `priceForIssuance` writes anything.
     if (advances.credits.has(billId)) await refuseWhileAdvanceCorrectionOpen(tx, billId);
+    const figures = await readBillFigures(tx, billId, advances);
     // Decided before `priceForIssuance` writes the discounts the bill holds into its lines: a bill
     // left open keeps them held, to cover what is added to it later.
-    if (!(await owesAtClose(tx, billId, advances)))
+    if (!(await owesAtClose(tx, billId, figures)))
       return { kind: "left_open", reason: "owes_nothing" };
 
     // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
@@ -121,7 +119,7 @@ export async function issueBillAtClose(
       deps.backend,
       cfg,
       billId,
-      { asked: false },
+      { asked: false, advances, discounts: figures.discounts },
       deps.log,
     );
   } catch (error) {
@@ -152,9 +150,8 @@ export async function issueBillAtClose(
 async function owesAtClose(
   tx: Transaction,
   billId: string,
-  advances: BillAdvances,
+  { due }: BillFigures,
 ): Promise<boolean> {
-  const { due } = await readBillFigures(tx, billId, advances);
   if (compareDecimal(due, ZERO) < 0) return true;
   return issuedBillStanding(due, await stillOwedOnIssuedBill(tx, billId, due)) === "owes";
 }

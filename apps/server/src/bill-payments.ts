@@ -58,7 +58,6 @@ import {
   type HeldMoney,
   readHeld,
   fundsOf,
-  billPaymentTotal,
   type PaymentRow,
   type RefundRow,
   type BillFigures,
@@ -171,11 +170,8 @@ export async function previewBillPayment(
     });
     await assertBillHasNoUnsent(tx, workingOrderId);
     const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));
-    const funds = fundsOf(
-      workingOrderId,
-      await billPaymentTotal(tx, workingOrderId, advances),
-      held,
-    );
+    const figures = await readBillFigures(tx, workingOrderId, advances);
+    const funds = fundsOf(workingOrderId, figures.meal, held);
     const { doc } = await readPaymentsSettings(tx);
     const preview = previewAllocation(funds, allocationRequestFor(ask), {
       tipsEnabled: doc.tipsEnabled,
@@ -188,7 +184,7 @@ export async function previewBillPayment(
         funds.total,
       ) === 0
     )
-      await refuseDiscountsNotHolding(tx, workingOrderId);
+      await refuseDiscountsNotHolding(tx, workingOrderId, figures.discounts);
     return preview;
   });
 }
@@ -570,7 +566,7 @@ export async function beginBillPayment(
   // Refused before any card is charged: the payment would issue the bill's invoice.
   if (coversBill && advances.credits.has(workingOrderId))
     await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
-  if (coversBill) await refuseDiscountsNotHolding(tx, workingOrderId);
+  if (coversBill) await refuseDiscountsNotHolding(tx, workingOrderId, figures.discounts);
   // A reserved card may finish on recovery, so save the language once the bill is covered.
   if (req.receiptLanguage !== undefined && coversBill)
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);

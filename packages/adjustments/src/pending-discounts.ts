@@ -137,13 +137,14 @@ const asPending = (row: Held, lineId: string, amount: number | null, id = row.id
  * Each part's share of each amount held on a split line, shared as `workOutBillDiscounts` shares
  * an amount over a line's parts: by quantity, no share above what its part costs once the
  * discounts worked out before it are taken off, and what is above the parts' whole cost by
- * quantity on top, so a discount cut down before the split is cut down after it.
+ * quantity on top, so a discount cut down before the split is cut down after it. Answers too the
+ * lines it read, by id: the split lines, their parts and their extras.
  */
 async function amountShares(
   tx: Transaction,
   partsOf: ReadonlyMap<string, readonly string[]>,
   held: readonly Held[],
-): Promise<Map<string, number[]>> {
+): Promise<{ shares: Map<string, number[]>; lineOf: Map<string, BillDiscountLine> }> {
   const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
   const read = await tx
     .select({
@@ -208,7 +209,20 @@ async function amountShares(
       if (amounts[at] !== 0) decided.push(asPending(row, part.id, amounts[at]!, `${row.id}@${at}`));
     });
   }
-  return shares;
+  return { shares, lineOf };
+}
+
+/** The split lines and their parts, by id, with their line numbers. */
+async function lineNumbers(
+  tx: Transaction,
+  partsOf: ReadonlyMap<string, readonly string[]>,
+): Promise<Map<string, { id: string; lineNo: number }>> {
+  const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
+  const lines = await tx
+    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, ids));
+  return new Map(lines.map((line) => [line.id, line]));
 }
 
 /**
@@ -223,22 +237,20 @@ export async function copyPendingDiscountsToParts(
   splits: readonly { from: string; to: string }[],
 ): Promise<void> {
   const partsOf = new Map<string, string[]>();
-  for (const { from, to } of splits) partsOf.set(from, [...(partsOf.get(from) ?? []), to]);
+  for (const { from, to } of splits) {
+    const parts = partsOf.get(from);
+    if (parts === undefined) partsOf.set(from, [to]);
+    else parts.push(to);
+  }
   if (partsOf.size === 0) return;
   const held = await tx
     .select()
     .from(billDiscounts)
     .where(inArray(billDiscounts.lineId, [...partsOf.keys()]));
   if (held.length === 0) return;
-  const amounts = held.some(({ action }) => action === "discount_amount")
+  const { shares: amounts, lineOf } = held.some(({ action }) => action === "discount_amount")
     ? await amountShares(tx, partsOf, held)
-    : new Map<string, number[]>();
-  const ids = [...partsOf].flatMap(([from, parts]) => [from, ...parts]);
-  const lines = await tx
-    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .where(inArray(workingOrderLines.id, ids));
-  const lineOf = new Map(lines.map((line) => [line.id, line]));
+    : { shares: new Map<string, number[]>(), lineOf: await lineNumbers(tx, partsOf) };
   for (const { id, ...row } of held) {
     const parts = [row.lineId!, ...partsOf.get(row.lineId!)!]
       .map((lineId) => lineOf.get(lineId)!)
