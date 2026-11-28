@@ -26,6 +26,7 @@ const hostedOnly = [
   "image-smoke",
   "test-webkit-startup",
   "root-process-guards",
+  "test-customer-menu",
 ];
 
 function route(
