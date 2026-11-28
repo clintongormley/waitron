@@ -40,6 +40,7 @@ const clockState = {
   lastEntryId: "entry",
   firstClockIn: false,
   shiftStart: null,
+  breakStart: null,
 };
 
 const handheld: Partial<TillShell> = {

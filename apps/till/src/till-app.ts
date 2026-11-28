@@ -181,6 +181,16 @@ import {
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
+import {
+  breakPromptCanClose,
+  clockActionAfterDeferringQuestions,
+  clockActionUnavailable,
+  clockMessage,
+  matchesClockIntent,
+  signInClockAction,
+  type ClockIntent,
+  type SignInClockAction,
+} from "./state/clock-sign-in.js";
 import type { AttendanceChange, HoursSelection } from "./api/client.js";
 import type { TillClockState } from "./api/attendance-api.js";
 import "./widgets/attendance-correction-dialog.js";
@@ -1982,6 +1992,12 @@ export class TillApp extends LitElement {
         height: 100%;
       }
 
+      .app:has(> :is(till-clock-in-screen, till-attendance-questions)) {
+        --wt-foot-padding-bottom: calc(var(--wt-space-1) + env(safe-area-inset-bottom, 0px));
+        height: calc(100% + 2 * var(--wt-page-padding, 0px));
+        margin: calc(-1 * var(--wt-page-padding, 0px));
+      }
+
       .app > wt-banner {
         flex: none;
       }
@@ -3088,16 +3104,10 @@ export class TillApp extends LitElement {
   @state() private attendanceSnapshot: AttendanceSnapshot | null = null;
   #clockNeedsInitialRead = false;
   #clockAccessLost = false;
-  @state() private clockPage = false;
+  @state() private clockPage: SignInClockAction | false = false;
   @state() private clockedOut = false;
   @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
-  #clockIntent?: {
-    action: TillClockAction;
-    signIn: number;
-    session: number;
-    api: TillApi;
-    continueFromPage: boolean;
-  };
+  #clockIntent?: ClockIntent;
   /** The draft of an order with no party, which is never saved. */
   #partylessDraft = new WorkingOrderStore();
   /** The way staff chose for {@link #partylessDraft}; null while none was chosen. */
@@ -5235,7 +5245,7 @@ export class TillApp extends LitElement {
   #startClocking(personId: string, signIn: number, session: number, prompt: boolean): void {
     const api = this.api;
     this.#clockNeedsInitialRead = prompt;
-    this.clockPage = prompt;
+    this.clockPage = prompt ? "in" : false;
     const current = () =>
       this.isConnected &&
       api === this.api &&
@@ -5272,7 +5282,9 @@ export class TillApp extends LitElement {
         }
         if (this.#clockNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
           this.#clockNeedsInitialRead = false;
-          this.clockPage = snapshot.state.state === "out" && snapshot.state.firstClockIn;
+          this.clockPage = signInClockAction(snapshot.state);
+        } else if (breakPromptCanClose(this.clockPage, snapshot)) {
+          void this.#resumeAfterClockPrompt();
         }
         if (this.drill?.kind === "hours" && !snapshot.reading && snapshot.state !== null)
           this.#startHours();
@@ -5436,7 +5448,7 @@ export class TillApp extends LitElement {
     const error = snapshot?.actionError ?? snapshot?.readError ?? snapshot?.dayError;
     if (inQuestions && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
       return attendanceConnectionRefusal(this.router, snapshot?.actionError != null);
-    return error ? codeMessage(error.code) : this.#clockMessage();
+    return error ? codeMessage(error.code) : clockMessage(this.clockSnapshot);
   }
   async #retryAttendance(): Promise<void> {
     if (this.#attendanceNeedsInitialRead) await this.#clocking?.refresh();
@@ -5690,9 +5702,9 @@ export class TillApp extends LitElement {
       this.attendancePage = false;
       this.#attendanceRefreshClock = false;
       this.#clockNeedsInitialRead = false;
-      this.clockPage = gate === "signin" && state.state === "out" && state.firstClockIn;
+      this.clockPage = gate === "signin" && signInClockAction(state);
       if (gate === "in" && state.state === "out") await this.#performClockAction("in");
-      else if (!this.clockPage) await this.#continueAfterClockIn();
+      else if (!this.clockPage) await this.#resumeAfterClockPrompt();
     } finally {
       if (version === this.#attendanceGateVersion) this.#attendanceSettling = false;
     }
@@ -5700,36 +5712,24 @@ export class TillApp extends LitElement {
 
   async #cancelAttendance(): Promise<void> {
     if (this.attendanceSnapshot?.busy) return;
+    const action =
+      this.#attendanceGate === "signin" &&
+      clockActionAfterDeferringQuestions(this.clockSnapshot, this.attendanceSnapshot);
     this.#attendanceGate = null;
     ++this.#attendanceGateVersion;
     ++this.#attendancePanelVersion;
     this.#attendanceSettling = false;
     this.attendancePage = false;
-    await this.#continueAfterClockIn();
-  }
-
-  #clockMessage(): string {
-    if (this.clockSnapshot.refusal !== null) return codeMessage(this.clockSnapshot.refusal.code);
-    const error = this.clockSnapshot.error;
-    return error === null
-      ? ""
-      : t(
-          error === "read"
-            ? "clock.read_error"
-            : error === "write"
-              ? "clock.write_error"
-              : "clock.uncertain",
-        );
+    if (action) {
+      this.#clockNeedsInitialRead = false;
+      this.clockPage = action;
+    } else await this.#resumeAfterClockPrompt();
   }
 
   async #onClockAction(event: CustomEvent<{ action: TillClockAction }>): Promise<void> {
-    const controller = this.#clocking;
     if (
-      controller === undefined ||
-      this.clockSnapshot.busy ||
-      this.clockSnapshot.state === null ||
-      this.attendanceSnapshot?.busy ||
-      this.attendanceSnapshot?.uncertainCommandId
+      this.#clocking === undefined ||
+      clockActionUnavailable(this.clockSnapshot, this.attendanceSnapshot)
     )
       return;
     const action = event.detail.action;
@@ -5748,10 +5748,7 @@ export class TillApp extends LitElement {
     const controller = this.#clocking;
     if (
       controller === undefined ||
-      this.clockSnapshot.busy ||
-      this.clockSnapshot.state === null ||
-      this.attendanceSnapshot?.busy ||
-      this.attendanceSnapshot?.uncertainCommandId
+      clockActionUnavailable(this.clockSnapshot, this.attendanceSnapshot)
     )
       return;
     this.#clockIntent = {
@@ -5759,31 +5756,24 @@ export class TillApp extends LitElement {
       signIn: this.#signIns,
       session: this.#operatorSession,
       api: this.api,
-      continueFromPage: this.clockPage,
+      continueFromPage: this.clockPage !== false,
     };
     await controller.act(action);
   }
 
   #settleClockAction(action: TillClockAction, state: TillClockState | null): void {
     const intent = this.#clockIntent;
-    if (
-      intent === undefined ||
-      intent.action !== action ||
-      intent.signIn !== this.#signIns ||
-      intent.session !== this.#operatorSession ||
-      intent.api !== this.api
-    )
-      return;
+    if (!matchesClockIntent(intent, action, this.#signIns, this.#operatorSession, this.api)) return;
     this.#clockIntent = undefined;
     if (state === null) return;
-    if (action === "in" && intent.continueFromPage) void this.#continueAfterClockIn();
+    if (action === "in" && intent.continueFromPage) void this.#resumeAfterClockPrompt();
     if (action === "out") {
       this.clockedOut = true;
       void this.#onLogout();
     }
   }
 
-  async #continueAfterClockIn(): Promise<void> {
+  async #resumeAfterClockPrompt(): Promise<void> {
     this.#clockNeedsInitialRead = false;
     this.clockPage = false;
     const tab = this.#activeTab();
@@ -5804,7 +5794,7 @@ export class TillApp extends LitElement {
   async #cancelClockIn(): Promise<void> {
     if (this.clockSnapshot.busy) return;
     this.#clockIntent = undefined;
-    await this.#continueAfterClockIn();
+    await this.#resumeAfterClockPrompt();
   }
 
   @state() private kitchenOperator = "";
@@ -24656,7 +24646,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
-        ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
+        ${this.#clockAccessLost && clockMessage(this.clockSnapshot) ? html`<p class="refresh-message" role="status" data-clock-refusal>${clockMessage(this.clockSnapshot)}</p>` : nothing}
         <wt-toast
           class="submitted-toast"
           data-capture-warning
@@ -25088,12 +25078,19 @@ export class TillApp extends LitElement {
                     }}
                   ></till-attendance-questions>`
                 : this.clockPage
-                  ? html`<till-clock-in-screen
-                      .busy=${this.clockSnapshot.busy}
-                      .reading=${this.clockSnapshot.reading}
-                      .canClockIn=${this.clockSnapshot.state?.state === "out"}
-                      .error=${this.#clockMessage()}
-                    ></till-clock-in-screen>`
+                  ? keyed(
+                      this.#signIns,
+                      html`<till-clock-in-screen
+                        .api=${this.api}
+                        .displayName=${this.operatorName}
+                        .busy=${this.clockSnapshot.busy}
+                        .reading=${this.clockSnapshot.reading}
+                        .action=${this.clockPage}
+                        .breakStart=${this.clockSnapshot.state?.breakStart ?? null}
+                        .canAct=${this.clockSnapshot.state?.state === (this.clockPage === "in" ? "out" : "on_break")}
+                        .error=${clockMessage(this.clockSnapshot)}
+                      ></till-clock-in-screen>`,
+                    )
                   : shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),

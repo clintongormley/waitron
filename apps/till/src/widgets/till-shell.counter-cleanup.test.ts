@@ -207,6 +207,7 @@ it.each([390, 1280])(
           lastEntryId: "entry",
           firstClockIn: false,
           shiftStart: null,
+          breakStart: null,
         },
       });
       const operator = el.shadowRoot!.querySelector<HTMLElement>(".operator")!;

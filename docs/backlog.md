@@ -608,9 +608,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   review, and settle a dispute in favour of the worker's time or send another edit. On the till,
   workers send their requests to managers. Managers can open **To approve** from **More** on
   their own till to review requests and disputes or approve the displayed finished days. Still
-  open: editing a whole day on the till, clocking in and out with breaks, My hours, export markers
-  for approval and disputes (the labour adviser is asked L8), the drawer close screens, and waiter
-  floats (A240).
+  open: editing a whole day on the till, the You section’s clock actions, the break strip, the
+  clock-out summary, My hours, export markers for approval and disputes (the labour adviser is asked
+  L8), the drawer close screens, and waiter floats (A240).
   Pass 3's last part (27 November; §7.16–§7.17) still needs the first read treatment during sign-in,
   when opening an order or menu, and when closing the drawer. Reuse the Floor's placeholder, timer
   and §7.18's loading words. Show rectangles where the device last drew its tables, with a plain grey

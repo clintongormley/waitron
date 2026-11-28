@@ -22,6 +22,7 @@ export function clockState(
     lastEntryId: id,
     firstClockIn,
     shiftStart: null,
+    breakStart: null,
   };
 }
 export function deferred<T>() {
@@ -49,6 +50,7 @@ type ClockTestApi = {
       | "getDeviceIdentity"
       | "listDefaultZoneOffers"
       | "getHours"
+      | "listMyShifts"
       | "getAttendanceInbox"
       | "getAttendanceDay"
       | "getAttendanceCommand"
@@ -167,6 +169,7 @@ export async function clockApp(
     listZones: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
+    listMyShifts: vi.fn().mockResolvedValue([]),
     getHours: vi
       .fn()
       .mockImplementation(async (selection) => hoursView({ personId: state.personId, selection })),

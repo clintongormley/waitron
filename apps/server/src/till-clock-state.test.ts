@@ -160,7 +160,11 @@ describe("till own clock state", () => {
       await withTransaction(suite.db, (tx) =>
         backend.breakStart(tx, event("2026-01-05T11:00:00Z", personId, newNode)),
       );
-      expect(await read()).toMatchObject({ state: "on_break", shiftStart: null });
+      expect(await read()).toMatchObject({
+        state: "on_break",
+        shiftStart: null,
+        breakStart: { eventAt: "2026-01-05T11:00:00.000Z", offsetMinutes: 60 },
+      });
     }
 
     await suite.db.delete(attendanceDays);
@@ -241,6 +245,7 @@ describe("till own clock state", () => {
       lastEntryId: null,
       firstClockIn: true,
       shiftStart: null,
+      breakStart: null,
     });
     for (const [method, at, state] of [
       ["clockIn", "2026-01-05T09:00:00Z", "working"],
@@ -257,6 +262,8 @@ describe("till own clock state", () => {
         firstClockIn: false,
         shiftStart:
           state === "out" ? null : { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
+        breakStart:
+          state === "on_break" ? { eventAt: "2026-01-05T10:00:00.000Z", offsetMinutes: 60 } : null,
       });
     }
     expect((await read("2026-01-06T03:59:59Z")).firstClockIn).toBe(false);
@@ -274,6 +281,7 @@ describe("till own clock state", () => {
       lastEntryId: null,
       firstClockIn: true,
       shiftStart: null,
+      breakStart: null,
     });
   });
 

@@ -333,6 +333,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
         state: "working",
         firstClockIn: false,
         shiftStart: null,
+        breakStart: null,
         lastEntryId: "clock-in",
       },
       activeScreen: "floor",
@@ -484,6 +485,7 @@ it.each([
         firstClockIn: false,
         lastEntryId: "entry",
         shiftStart: { eventAt: `2026-11-26T${utcTime}:00.000Z`, offsetMinutes: 60 },
+        breakStart: null,
       };
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "phone-portrait",

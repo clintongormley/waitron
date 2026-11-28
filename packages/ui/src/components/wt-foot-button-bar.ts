@@ -16,7 +16,8 @@ export class WtFootButtonBar extends LitElement {
       footer {
         display: grid;
         gap: var(--wt-space-2);
-        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-space-4) var(--wt-space-5);
+        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-space-4);
+        padding-block-end: var(--wt-foot-padding-bottom, var(--wt-space-5));
         border-block-start: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
       }

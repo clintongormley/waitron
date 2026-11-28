@@ -12,6 +12,7 @@ export interface TillClockState {
   lastEntryId: string | null;
   firstClockIn: boolean;
   shiftStart: { eventAt: string; offsetMinutes: number } | null;
+  breakStart: { eventAt: string; offsetMinutes: number } | null;
 }
 
 type LiveKind = "in" | "out" | "break_start" | "break_end";
@@ -72,6 +73,10 @@ export async function readTillClockState(
       lastEntryId: latest?.entryId ?? null,
       firstClockIn: clockedIn === undefined,
       shiftStart: start ? { eventAt: start.eventAt, offsetMinutes: start.offsetMinutes } : null,
+      breakStart:
+        latest?.entryKind === "break_start"
+          ? { eventAt: latest.eventAt, offsetMinutes: latest.offsetMinutes }
+          : null,
     },
     clockInAt: clockIn?.eventAt,
   };

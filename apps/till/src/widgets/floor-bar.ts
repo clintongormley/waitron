@@ -15,6 +15,7 @@ import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state
 import { storedAttendanceTime, withHourArticle } from "./attendance-history.js";
 import { PHONE_WIDTH } from "./chooser-styles.js";
 
+import "@waitron/ui/src/components/wt-initials.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 
 type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
@@ -248,16 +249,6 @@ export const floorBarStyles = css`
     gap: var(--wt-space-2);
     padding: var(--wt-space-2) var(--wt-menu-row-padding-start);
   }
-  .floor-operator-initials {
-    display: grid;
-    place-items: center;
-    min-inline-size: var(--wt-tap-min);
-    min-block-size: var(--wt-tap-min);
-    border-radius: var(--wt-radius-full);
-    background: var(--wt-color-primary);
-    color: var(--wt-color-on-primary);
-    font-weight: var(--wt-font-weight-bold);
-  }
   .floor-operator-person {
     flex: 1;
     min-inline-size: 0;
@@ -412,12 +403,6 @@ export function floorOperatorLine(
   clockOut: TemplateResult | typeof nothing,
   shiftStart: TillClockState["shiftStart"],
 ) {
-  const initials = name
-    .trim()
-    .split(/\s+/u, 2)
-    .map((word) => Array.from(word)[0])
-    .join("")
-    .toLocaleUpperCase(currentLocale());
   const start =
     shiftStart === null
       ? nothing
@@ -433,7 +418,7 @@ export function floorOperatorLine(
           )}</time
         >`;
   return html`<div class="floor-operator">
-    <span class="floor-operator-initials" aria-hidden="true">${initials}</span>
+    <wt-initials .name=${name} .locale=${currentLocale()}></wt-initials>
     <span class="floor-operator-person">${operator}${start}</span>${clockOut}
   </div>`;
 }

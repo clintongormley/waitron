@@ -32,7 +32,7 @@ it.each([
   ["lock", {}],
   ["enrolment", { frontDoor: "enrol" }],
   ["chooser", { frontDoor: "chooser", devDevices: { devices: [], devMode: true } }],
-  ["clock", { clockPage: true }],
+  ["clock", { clockPage: "in" }],
   ["attendance", { attendancePage: true }],
 ] as const)("opens from the persistent strip beside %s", async (_name, state) => {
   const { el } = await clockApp();

@@ -35,12 +35,26 @@ describe("attendance questions before work", () => {
     expect(time).not.toBeNull();
     expect(time.getAttribute("datetime")).toBe("2026-10-13T23:30:00.000Z");
     expect(words(time.closest("li")!)).toBe(
-      "Clocked out 01:30, Wednesday 14 October · added automatically",
+      "Waitron clocked you out at 01:30, Wednesday 14 October, the time of your last recorded activity.",
     );
-    expect(el.shadowRoot!.textContent).toContain(
-      "This automatic finish already counts towards your hours.",
+    expect(words(button(el, "header p"))).toBe("Before you start, check these times.");
+    expect(Number(getComputedStyle(time).fontWeight)).toBeGreaterThan(
+      Number(getComputedStyle(time.closest("li")!).fontWeight),
     );
     expect(el.shadowRoot!.textContent).not.toMatch(/unconfirmed/i);
+  });
+
+  it("uses the singular Spanish hour article for a recorded automatic clock-out at one", async () => {
+    const locale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount();
+      const time = el.shadowRoot!.querySelector("time")!;
+      expect(time.textContent).toBe("01:30");
+      expect(words(time.closest("li")!).split("01:30", 1)[0]).toMatch(/\bla\s*$/u);
+    } finally {
+      setLocale(locale);
+    }
   });
 
   it("heads a question card by its work day and a proposal card by nothing", async () => {
@@ -55,9 +69,22 @@ describe("attendance questions before work", () => {
     expect([...card("question").querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
       "Tuesday 13 October",
     ]);
-    expect(card("question").querySelectorAll("p")[0]!.textContent).not.toContain("2026-10-13");
+    expect(card("question").textContent).not.toContain("2026-10-13");
     expect(card("proposal").querySelector("h2")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain("The deli");
+  });
+
+  it("stacks full-width answers and offers Answer later in the foot bar", async () => {
+    const { el } = await mount();
+    el.style.inlineSize = "390px";
+    const confirm = button(el, "[data-confirm]").getBoundingClientRect();
+    const edit = button(el, "[data-edit]").getBoundingClientRect();
+    expect(edit.top).toBeGreaterThanOrEqual(confirm.bottom);
+    expect(edit.width).toBe(confirm.width);
+    const nativeConfirm = button(el, "[data-confirm]").shadowRoot!.querySelector("button")!;
+    expect(nativeConfirm.getBoundingClientRect().height).toBe(52);
+    expect(getComputedStyle(nativeConfirm).fontSize).toBe("16px");
+    expect(words(button(el, "wt-foot-button-bar [data-cancel]"))).toBe("Answer later");
   });
 
   it("sends the exact confirmation or edit intent once through real controls", async () => {
@@ -441,7 +468,7 @@ describe("attendance questions before work", () => {
     expect(el.shadowRoot!.querySelector("[data-confirm]")).toBeNull();
   });
 
-  it("a held or failed read keeps Cancel and Retry read usable without writing an answer", async () => {
+  it("a held or failed read keeps Answer later and Retry read usable without writing an answer", async () => {
     const { el } = await mount({ inbox: null, reading: true });
     const canceled = watch(el, "cancel-attendance");
     const retried = watch(el, "retry-attendance");
@@ -500,7 +527,7 @@ describe("attendance questions before work", () => {
       await el.updateComplete;
       expect(button(el, "[data-confirm]").textContent!.trim()).toBe("Es correcto");
       expect(button(el, "[data-edit]").textContent!.trim()).toBe("No, salí a las…");
-      expect(button(el, "[data-cancel]").textContent!.trim()).toBe("Cancelar");
+      expect(button(el, "[data-cancel]").textContent!.trim()).toBe("Responder más tarde");
       expect(el.shadowRoot!.textContent).not.toMatch(/My hours|Mis horas|Clock in/);
     } finally {
       setLocale(locale);

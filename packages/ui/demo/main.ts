@@ -39,6 +39,7 @@ import "../src/components/wt-combobox.js";
 import "../src/components/wt-address-lookup.js";
 import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
+import "../src/components/wt-initials.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
 import "../src/components/wt-floor-map.js";
@@ -104,6 +105,8 @@ const panel = (theme: "light" | "dark") => `
       <wt-count-badge count="12" tone="warning"></wt-count-badge>
       <wt-count-badge count="120" tone="error"></wt-count-badge>
       <wt-count-badge count="5" tone="notice"></wt-count-badge>
+      <wt-initials name="Javier Torres"></wt-initials>
+      <wt-initials name="Javier Torres" size="lg"></wt-initials>
     </div>
     <div>
       <wt-choice-row heading="Demo">A practice server. Nothing is filed to AEAT.</wt-choice-row>

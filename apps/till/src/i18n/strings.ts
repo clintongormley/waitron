@@ -372,6 +372,8 @@ export const en = {
   "attendance.reason_long": "Use no more than 500 characters for the reason.",
 
   "attendance.questions": "Check your times",
+  "attendance.answer_later": "Answer later",
+  "attendance.questions_intro": "Before you start, check these times.",
   "attendance.add_missing_times": "Add missing times",
   "attendance.some_times_missing": "Some times are missing.",
   "attendance.no_times_recorded": "No times recorded.",
@@ -409,6 +411,8 @@ export const en = {
   "attendance.sequence_blocked":
     "These times cannot be applied to your current record. You can disagree with the proposal.",
 
+  "attendance.automatic_out_question":
+    "Waitron clocked you out at {time}, the time of your last recorded activity.",
   "attendance.automatic_counted": "This automatic finish already counts towards your hours.",
   "attendance.confirmed_by_worker": "Confirmed by the worker",
   "attendance.waiting_manager": "Waiting for a manager",
@@ -431,9 +435,16 @@ export const en = {
   "clock.on_break": "On a break",
   "clock.clocked_out": "Clocked out",
   "clock.unknown": "Clock state unknown",
-  "clock.cancel": "Cancel",
+  "clock.not_now": "Not now",
+  "clock.hello": "Hello, {name}",
+  "clock.welcome_back": "Welcome back, {name}",
+  "clock.not_clocked_in": "You are not clocked in.",
+  "clock.on_break_intro": "You are on a break.",
+  "clock.break_since": "On a break since",
+  "clock.shift_today": "Your shift today",
+  "clock.elapsed_minutes": "{n} min",
   "clock.reading": "Reading your clock…",
-  "clock.read_error": "Your clock could not be read. Try again, or cancel to work.",
+  "clock.read_error": "Your clock could not be read.",
   "clock.write_error": "Your time could not be recorded. Try again.",
   "clock.uncertain": "The answer was lost. Check your clock before trying again.",
   "clock.retry": "Retry read",
@@ -2876,6 +2887,8 @@ export const es: Record<StringKey, string> = {
   "attendance.reason_long": "El motivo no puede superar los 500 caracteres.",
 
   "attendance.questions": "Comprueba tus horas",
+  "attendance.answer_later": "Responder más tarde",
+  "attendance.questions_intro": "Antes de empezar, revisa estos fichajes.",
   "attendance.add_missing_times": "Añadir fichajes que faltan",
   "attendance.some_times_missing": "Faltan algunos fichajes.",
   "attendance.no_times_recorded": "No hay fichajes.",
@@ -2913,6 +2926,8 @@ export const es: Record<StringKey, string> = {
   "attendance.sequence_blocked":
     "Estas horas no se pueden aplicar a tu registro actual. Puedes indicar que no estás de acuerdo.",
 
+  "attendance.automatic_out_question":
+    "Waitron registró tu salida a la{plural} {time}, la hora de tu última actividad registrada.",
   "attendance.automatic_counted": "Esta salida automática ya cuenta para tus horas.",
   "attendance.confirmed_by_worker": "Confirmado por el trabajador",
   "attendance.waiting_manager": "Pendiente de un responsable",
@@ -2936,9 +2951,16 @@ export const es: Record<StringKey, string> = {
   "clock.on_break": "En descanso",
   "clock.clocked_out": "Fuera de turno",
   "clock.unknown": "Estado de fichaje desconocido",
-  "clock.cancel": "Cancelar",
+  "clock.not_now": "Ahora no",
+  "clock.hello": "Hola, {name}",
+  "clock.welcome_back": "Hola de nuevo, {name}",
+  "clock.not_clocked_in": "Aún no has fichado la entrada.",
+  "clock.on_break_intro": "Estás de descanso.",
+  "clock.break_since": "De descanso desde la{plural}",
+  "clock.shift_today": "Tu turno de hoy",
+  "clock.elapsed_minutes": "{n} min",
   "clock.reading": "Consultando tu fichaje…",
-  "clock.read_error": "No se pudo cargar tu fichaje. Inténtalo de nuevo o cancela para trabajar.",
+  "clock.read_error": "No se pudo cargar tu fichaje.",
   "clock.write_error": "No se ha podido registrar la hora. Inténtalo de nuevo.",
   "clock.uncertain": "Se ha perdido la respuesta. Consulta tu fichaje antes de reintentarlo.",
   "clock.retry": "Reintentar",
