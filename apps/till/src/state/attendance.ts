@@ -1,12 +1,11 @@
 import {
   isNetworkFailure,
-  type AttendanceCommand,
   type AttendanceCommandResult,
   type AttendanceInbox,
   type AttendanceDayView,
   type TillApi,
 } from "../api/client.js";
-import type { StaffMember } from "../api/device-session-api.js";
+import type { OwnAttendanceCommand } from "@waitron/workforce/attendance-contract";
 
 export interface AttendanceError {
   code: string;
@@ -20,22 +19,14 @@ export interface AttendanceSnapshot {
   readError: AttendanceError | null;
   actionError: AttendanceError | null;
   result: AttendanceCommandResult | null;
-  retryCommand: AttendanceCommand | null;
+  retryCommand: OwnAttendanceCommand | null;
   day: AttendanceDayView | null;
   dayReading: boolean;
   dayError: AttendanceError | null;
-  approvers: StaffMember[] | null;
-  approversReading: boolean;
-  approversError: AttendanceError | null;
 }
-type EditorValues = { day: AttendanceDayView; approvers: StaffMember[] };
 type AttendanceApi = Pick<
   TillApi,
-  | "getAttendanceInbox"
-  | "getAttendanceDay"
-  | "getAttendanceCommand"
-  | "listAttendanceApprovers"
-  | "sendAttendanceCommand"
+  "getAttendanceInbox" | "getAttendanceDay" | "getAttendanceCommand" | "sendAttendanceCommand"
 >;
 const empty = (): AttendanceSnapshot => ({
   inbox: null,
@@ -49,9 +40,6 @@ const empty = (): AttendanceSnapshot => ({
   day: null,
   dayReading: false,
   dayError: null,
-  approvers: null,
-  approversReading: false,
-  approversError: null,
 });
 function failure(error: unknown, fallback: string): AttendanceError {
   if (error === null || typeof error !== "object") return { code: fallback };
@@ -69,9 +57,9 @@ export class AttendanceController {
   #generation = 0;
   #readVersion = 0;
   #readRequest?: AbortController;
-  #pending: AttendanceCommand | null = null;
+  #pending: OwnAttendanceCommand | null = null;
   readonly #requests = new Set<AbortController>();
-  readonly #editorRequests = new Map<keyof EditorValues, AbortController>();
+  #dayRequest?: AbortController;
 
   constructor(api: AttendanceApi, changed: (snapshot: AttendanceSnapshot) => void) {
     this.#api = api;
@@ -91,7 +79,7 @@ export class AttendanceController {
     this.#pending = null;
     for (const request of this.#requests) request.abort();
     this.#readRequest = undefined;
-    this.#editorRequests.clear();
+    this.#dayRequest = undefined;
     this.#snapshot = empty();
     this.#publish();
   }
@@ -139,64 +127,36 @@ export class AttendanceController {
 
   async readDay(date: string): Promise<AttendanceDayView | null> {
     const personId = this.#personId;
-    return this.#readEditor("day", async (signal) => {
-      const day = await this.#api.getAttendanceDay(date, { signal });
-      if (day.personId !== personId || day.date !== date)
-        throw new TypeError("Attendance day belongs to another selection");
-      return day;
-    });
-  }
-
-  async readApprovers(
-    itemId: string,
-    action: "approve" | "decline",
-  ): Promise<StaffMember[] | null> {
-    return this.#readEditor("approvers", (signal) =>
-      this.#api.listAttendanceApprovers(itemId, action, { signal }),
-    );
-  }
-
-  async #readEditor<K extends keyof EditorValues>(
-    key: K,
-    operation: (signal: AbortSignal) => Promise<EditorValues[K]>,
-  ): Promise<EditorValues[K] | null> {
-    if (this.#personId === null || this.#snapshot.busy || this.#pending !== null) return null;
+    if (personId === null || this.#snapshot.busy || this.#pending !== null) return null;
     const generation = this.#generation;
-    this.#editorRequests.get(key)?.abort();
+    this.#dayRequest?.abort();
     const request = new AbortController();
-    this.#editorRequests.set(key, request);
-    const current = () =>
-      generation === this.#generation && this.#editorRequests.get(key) === request;
-    this.#snapshot = {
-      ...this.#snapshot,
-      [key]: null,
-      [`${key}Reading`]: true,
-      [`${key}Error`]: null,
-    };
+    this.#dayRequest = request;
+    const current = () => generation === this.#generation && this.#dayRequest === request;
+    this.#snapshot = { ...this.#snapshot, day: null, dayReading: true, dayError: null };
     this.#publish();
     if (!current()) return null;
     try {
-      const answer = await this.#call(request, operation);
+      const day = await this.#call(request, (signal) =>
+        this.#api.getAttendanceDay(date, { signal }),
+      );
       if (!current()) return null;
-      this.#snapshot = {
-        ...this.#snapshot,
-        [key]: answer,
-        [`${key}Reading`]: false,
-        [`${key}Error`]: null,
-      };
+      if (day.personId !== personId || day.date !== date)
+        throw new TypeError("Attendance day belongs to another selection");
+      this.#snapshot = { ...this.#snapshot, day, dayReading: false, dayError: null };
       this.#publish();
-      return current() ? answer : null;
+      return current() ? day : null;
     } catch (error) {
       if (!current()) return null;
       this.#snapshot = {
         ...this.#snapshot,
-        [`${key}Reading`]: false,
-        [`${key}Error`]: failure(error, "attendance.read_failed"),
+        dayReading: false,
+        dayError: failure(error, "attendance.read_failed"),
       };
       this.#publish();
       return null;
     } finally {
-      if (current()) this.#editorRequests.delete(key);
+      if (current()) this.#dayRequest = undefined;
     }
   }
 
@@ -275,10 +235,7 @@ export class AttendanceController {
     }
   }
 
-  async act(
-    command: AttendanceCommand,
-    override?: { personId: string; pin: string },
-  ): Promise<AttendanceCommandResult | null> {
+  async act(command: OwnAttendanceCommand): Promise<AttendanceCommandResult | null> {
     if (
       this.#personId === null ||
       this.#snapshot.inbox === null ||
@@ -289,8 +246,8 @@ export class AttendanceController {
     const generation = this.#generation;
     const sent = structuredClone(command);
     this.#invalidateRead();
-    for (const request of this.#editorRequests.values()) request.abort();
-    this.#editorRequests.clear();
+    this.#dayRequest?.abort();
+    this.#dayRequest = undefined;
     this.#snapshot = {
       ...this.#snapshot,
       busy: true,
@@ -300,21 +257,13 @@ export class AttendanceController {
       day: null,
       dayReading: false,
       dayError: null,
-      approvers: null,
-      approversReading: false,
-      approversError: null,
     };
     this.#publish();
     if (generation !== this.#generation) return null;
     try {
-      let result: AttendanceCommandResult;
-      try {
-        result = await this.#call(new AbortController(), (signal) =>
-          this.#api.sendAttendanceCommand(sent, override, { signal }),
-        );
-      } finally {
-        override = undefined;
-      }
+      const result = await this.#call(new AbortController(), (signal) =>
+        this.#api.sendAttendanceCommand(sent, { signal }),
+      );
       if (generation !== this.#generation) return null;
       if (result.commandId !== sent.commandId)
         throw new TypeError("Attendance result belongs to another command");

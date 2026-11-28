@@ -115,22 +115,11 @@ describe("chosen-day attendance detail", () => {
     ]);
   });
 
-  it("pending worker requests can be approved or declined by an explicitly selected PIN approver", async () => {
+  it("shows the worker a pending request without any manager decision buttons", async () => {
     const { el } = await mount();
-    const decisions = watch(el, "decide-item");
     expect(el.shadowRoot!.textContent).toContain("Waiting for a manager");
-    await userEvent.click(button(el, "[data-approve]"));
-    await userEvent.click(button(el, "[data-decline]"));
-    expect(decisions.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
-      [{ itemId: "proposal", action: "approve" }, true, true],
-      [{ itemId: "proposal", action: "decline" }, true, true],
-    ]);
-    const next = view();
-    next.items[0]!.readyToApply = false;
-    el.view = next;
-    await el.updateComplete;
-    expect(button(el, "[data-approve]").hasAttribute("disabled")).toBe(true);
-    expect(button(el, "[data-decline]").hasAttribute("disabled")).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-approve]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-decline]")).toBeNull();
   });
 
   it("terminal/disputed/proposed history stays visible without manager settlement buttons", async () => {
@@ -181,17 +170,17 @@ describe("chosen-day attendance detail", () => {
   it("loading/unknown day prevents writes, while a request refusal alone does not", async () => {
     const { el } = await mount({ reading: true });
     expect(el.shadowRoot!.querySelector("[data-fix-entry]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-approve]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-fix-entry]")).toBeNull();
     el.reading = false;
-    el.error = "A manager could not approve the request";
+    el.error = "Could not send the request";
     await el.updateComplete;
-    expect(button(el, "[data-approve]").hasAttribute("disabled")).toBe(false);
+    expect(button(el, "[data-fix-entry]").hasAttribute("disabled")).toBe(false);
     expect(el.shadowRoot!.querySelector("[role=status]")!.textContent).toBe(
-      "A manager could not approve the request",
+      "Could not send the request",
     );
     el.busy = true;
     await el.updateComplete;
-    expect(button(el, "[data-approve]").hasAttribute("disabled")).toBe(true);
+    expect(button(el, "[data-fix-entry]").hasAttribute("disabled")).toBe(true);
   });
 
   it("a close announced by a field inside the dialog leaves it open", async () => {
@@ -204,7 +193,7 @@ describe("chosen-day attendance detail", () => {
     expect(closes).toEqual([]);
     expect(el.open).toBe(true);
   });
-  it("Cancel closes without a save and detached controls cannot fix or decide", async () => {
+  it("Cancel closes without a save and a detached control cannot send a fix", async () => {
     const { el } = await mount();
     const closes = watch(el, "attendance-day-close");
     const fixes = watch(el, "fix-entry");

@@ -116,8 +116,13 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET /api/attendance/hours | none: own record | till-hours-api.test.ts "clock-only staff read their own completed hours passively without recording activity" |
  * | GET /api/attendance/day | none: own record | till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive" |
  * | GET /api/attendance/commands/:commandId | none: requester-owned receipt | till-attendance-api.test.ts "hides foreign receipts and refuses another worker's question, item and target even for an admin operator" |
- * | GET /api/attendance/items/:itemId/approvers | none: own worker request | same foreign-item case in till-attendance-api.test.ts |
  * | POST /api/attendance/commands | none: own question/item/target scope | same foreign-item case in till-attendance-api.test.ts |
+ * | GET /api/attendance/manager/lookups | none: venue-wide manager record | till-attendance-api.test.ts "reads and approves another person's finished day from a manager's clock-only till" |
+ * | GET /api/attendance/manager/queue | none: venue-wide manager record | same clock-only manager case |
+ * | GET /api/attendance/manager/day | none: venue-wide manager record | same clock-only manager case |
+ * | GET /api/attendance/manager/commands/:commandId | none: requester-owned receipt | till-attendance-api.test.ts "settles a worker's request as the signed-in manager and scopes receipt recovery to that manager" |
+ * | POST /api/attendance/manager/commands | none: venue-wide manager record | same manager settlement case |
+ * | POST /api/attendance/manager/approve-days | none: venue-wide manager record | same clock-only manager case |
  * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
  * | GET/PUT /api/device/zones | current admitted session; PUT checks live profile/selection snapshot and subset | device-zones-api.test.ts: "refuses a foreign zone or profile...", "rechecks %s %s..."; allowed: "serves admitted staff..." |
  * | GET  /api/default-service-zone/offers                   | Till selection / handheld profile start | "starts Counter in a selected counter...", "keeps its profile..." |

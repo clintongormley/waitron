@@ -4,7 +4,6 @@ import { deviceProfiles, devices, withTransaction, withFoldedPersonChanges } fro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
-  createPinThrottle,
   deviceProfileAdmissionRoles,
   persons,
   registerModulePermissions,
@@ -30,7 +29,6 @@ beforeEach(async () => {
       db: suite.db,
       cfg: venue.cfg,
       now: () => now,
-      attemptsFor: (id) => ({ throttle: createPinThrottle(), slot: id }),
     },
     () => {},
   );

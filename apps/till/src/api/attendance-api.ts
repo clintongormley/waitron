@@ -4,10 +4,9 @@ import type {
   PersonHours,
   AttendanceDayView,
   AttendanceCommandResult,
-  AttendanceCommand,
+  OwnAttendanceCommand,
 } from "@waitron/workforce/attendance-contract";
 import { DepartmentTransfersApi } from "./department-transfers-api.js";
-import type { StaffMember } from "./device-session-api.js";
 import type { TillRequest, ReadOptions } from "./till-request.js";
 
 export type TillClockStatus = "out" | "working" | "on_break";
@@ -92,29 +91,11 @@ export class AttendanceApi extends DepartmentTransfersApi {
       options.signal,
     );
   }
-  listAttendanceApprovers(
-    itemId: string,
-    action: "approve" | "decline",
-    options: ReadOptions = {},
-  ): Promise<StaffMember[]> {
-    return this.#request(
-      `/api/attendance/items/${encodeURIComponent(itemId)}/approvers?action=${action}`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
   sendAttendanceCommand(
-    command: AttendanceCommand,
-    override?: { personId: string; pin: string },
+    command: OwnAttendanceCommand,
     options: ReadOptions = {},
   ): Promise<AttendanceCommandResult> {
-    return this.#request(
-      "/api/attendance/commands",
-      "POST",
-      override === undefined ? command : { ...command, override },
-      options.signal,
-    );
+    return this.#request("/api/attendance/commands", "POST", command, options.signal);
   }
   clockIn(expectedEntryId: string | null, options: ReadOptions = {}): Promise<TillClockState> {
     return this.#request("/api/clock/in", "POST", { expectedEntryId }, options.signal);

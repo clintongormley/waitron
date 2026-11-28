@@ -49,7 +49,7 @@ export const helpEn = {
   "help.more.pass":
     "Opens the pass: a card for each order from a table or the counter, in columns from To fire to Ready.",
   "help.person.fix_hours":
-    "Opens your clock record for today, or for another day you choose, to fix a time or add a missing clock-in and clock-out or break. A supervisor, manager or admin other than you approves the change with their PIN; an admin may approve their own.",
+    "Opens your clock record for today, or for another day you choose, to fix a time or add a missing clock-in and clock-out or break. Your request goes to the managers for review.",
   "help.kitchen.card":
     "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. Tap a Ready dish to put it back to Preparing. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
   "help.kitchen.cards_part": "Cards",
@@ -114,7 +114,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.more.pass":
     "Abre el pase: una tarjeta por cada pedido de una mesa o del mostrador, en columnas de Por marchar a Listo.",
   "help.person.fix_hours":
-    "Abre tu registro de fichajes de hoy, o de otro día que elijas, para corregir una hora o añadir una entrada y salida o un descanso que faltan. Un supervisor, encargado o administrador que no seas tú aprueba el cambio con su PIN; un administrador puede aprobar el suyo.",
+    "Abre tu registro de fichajes de hoy, o de otro día que elijas, para corregir una hora o añadir una entrada y salida o un descanso que faltan. Tu solicitud se envía a los encargados para que la revisen.",
   "help.kitchen.card":
     "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. Toca un plato Listo para devolverlo a Preparando. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
   "help.kitchen.cards_part": "Tarjetas",
