@@ -296,19 +296,36 @@ it("labels each side of a dispute with the person who gave that time", async () 
 
 it("keeps the finished day’s times together and keeps both notes visible at phone width", async () => {
   const size = { width: window.innerWidth, height: window.innerHeight };
-  await page.viewport(390, 844);
+  await page.viewport(320, 844);
   try {
     const f = await manager({
       items: [],
-      finishedDays: [{ ...other, times: [...times], workedMinutes: 405, breakMinutes: 15 }],
+      finishedDays: [
+        {
+          ...other,
+          times: [
+            times[0],
+            { ...times[1], at: "2026-10-13T12:00:00Z", automatic: false },
+            { ...times[0], at: "2026-10-13T16:00:00Z" },
+            { ...times[1], at: "2026-10-13T21:45:00Z" },
+          ],
+          workedMinutes: 570,
+          breakMinutes: 15,
+        },
+      ],
     });
     await open(f.el);
     const root = screen(f.el)!.shadowRoot!;
     const row = root.querySelector(".day-facts")!;
     expect(row.querySelector("time")?.textContent).toBe("Tue 13");
-    const range = page.getByText("10:00 – 17:00", { exact: true });
-    await expect.element(range).toBeVisible();
-    expect(new Set([...range.element().getClientRects()].map((rect) => rect.top)).size).toBe(1);
+    for (const times of ["10:00 – 14:00", "18:00 – 23:45"]) {
+      const range = page.getByText(times, { exact: true });
+      await expect.element(range).toBeVisible();
+      expect(new Set([...range.element().getClientRects()].map((rect) => rect.top)).size).toBe(1);
+    }
+    const list = row.closest("ul")!.getBoundingClientRect();
+    expect(list.left).toBe(0);
+    expect(list.right).toBe(window.innerWidth);
     expect(row.closest("li")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
     expect(row.querySelector("small")?.textContent).toMatch(
       /Break 15 min\s*·\s*Clocked out automatically/,

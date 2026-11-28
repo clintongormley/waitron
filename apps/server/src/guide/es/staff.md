@@ -250,7 +250,7 @@ solicitud. Se envía a los encargados. Consulta su estado en **Mis horas**.
 ## Aprobar los días terminados {#approve-hours}
 
 En tu caja, abre **Más** y elige **Por aprobar**. El número indica las solicitudes, los
-desacuerdos y los días terminados que puedes atender desde la caja. En **En desacuerdo**,
+desacuerdos y los días terminados que puedes atender desde la caja. En la sección **En desacuerdo**,
 compara el cambio del responsable con la respuesta de la persona. Para editar toda una jornada,
 ábrela en el panel de gestión.
 
