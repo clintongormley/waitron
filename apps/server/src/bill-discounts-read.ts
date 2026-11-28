@@ -133,11 +133,13 @@ export async function gatherBillDiscountInputs(
 
 /**
  * `bill`'s discounts worked out once, as the shown total, the check before payment and the
- * invoice all read them. A fixed amount given as one row of the till, in rows sharing
- * `given_together` once a split left it on several lines, holds only if its rows together take
- * what they were given: each row's share takes only what its own part's prices allow (plan D10),
- * so a split weighed line can lose a cent it took whole, and then every row of it is `cut_down`.
- * What each takes is `workOutBillDiscounts`' figure, unchanged.
+ * invoice all read them. A fixed amount holds only if its rows, those sharing its
+ * `given_together` (one till row, and the parts a split left it on), together take what they
+ * were given; otherwise every row of it is `cut_down`. Each share takes only what its own part's
+ * whole-cent prices allow (plan D10), and a split copies no share of nothing, so a split can
+ * leave a weighed line taking less than it took whole, with the part that holds its share alone
+ * unable to take it. An amount on a weighed line that takes less unsplit is `cut_down` too. What
+ * each takes is `workOutBillDiscounts`' figure, unchanged.
  */
 export function workOutHeldBill({ input, held }: HeldBill): WorkedBill {
   const worked = workOutBillDiscounts(input.lines, input.discounts);
@@ -149,7 +151,6 @@ export function workOutHeldBill({ input, held }: HeldBill): WorkedBill {
   for (const group of groups.values()) {
     const rows = group.map(({ id }) => held.get(id)!);
     const short =
-      group.length > 1 &&
       rows.every(({ action }) => action === "discount_amount") &&
       group.every(({ holds }) => holds === "yes") &&
       group.reduce((sum, { takes }) => sum + takes, 0) <

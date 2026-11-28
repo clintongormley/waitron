@@ -776,6 +776,62 @@ describe("a split line's pending discounts", () => {
     expect(await inTx(venue, (tx) => pendingOn(tx, billId))).toHaveLength(2);
   });
 
+  it("are asked about when a split leaves the whole of an amount on a weighed part that cannot take it", async () => {
+    // 1.5 kg at 1.02 with 0.01 off shows 1.52. Split 0.2 kg off, the cent stays on the 1.3 kg,
+    // which whole-cent prices cannot take one cent off, and the 0.2 kg holds no share.
+    const billId = await groupedBill([{ name: "Fish", quantity: "1.5" }], 102);
+    const fish = await lineIdOf(venue, billId, 1);
+    const id = await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: fish, ...amountOf(1) }));
+    await inTx(venue, async (tx) => {
+      expect(decimalToCents(await storedOrderTotal(tx, billId))).toBe(152);
+      await refuseDiscountsNotHolding(tx, billId);
+      await splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "0.2" }]);
+    });
+    await inTx(venue, async (tx) => {
+      expect(await pendingOn(tx, billId)).toEqual([{ id, lineId: fish, amount: 1 }]);
+      expect((await readBillDiscounts(tx, [billId])).get(billId)).toEqual({
+        discounts: [expect.objectContaining({ id, holds: "cut_down", takes: 0 })],
+        takes: 0,
+      });
+    });
+    await expect(inTx(venue, (tx) => refuseDiscountsNotHolding(tx, billId))).rejects.toMatchObject({
+      code: "adjustment.no_longer_applies",
+      params: {
+        workingOrderId: billId,
+        discounts: [
+          {
+            discountId: id,
+            why: "cut_down",
+            on: { kind: "dish", targetName: "Fish" },
+            action: "discount_amount",
+            percentBp: null,
+            amount: "0.01",
+          },
+        ],
+      },
+    });
+  });
+
+  it("pass when a split leaves the whole of an amount on a part that still takes it", async () => {
+    // 0.01 off two beers at 3.35: split one off, the cent stays on the first, which takes it.
+    const billId = await groupedBill([{ name: "Draught beer", quantity: "2" }], 335);
+    const beers = await lineIdOf(venue, billId, 1);
+    const id = await inTx(venue, (tx) =>
+      holdDiscount(tx, venue, { lineId: beers, ...amountOf(1) }),
+    );
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    await inTx(venue, async (tx) => {
+      expect(await pendingOn(tx, billId)).toEqual([{ id, lineId: beers, amount: 1 }]);
+      expect((await readBillDiscounts(tx, [billId])).get(billId)!.discounts).toMatchObject([
+        { id, holds: "yes", takes: 1 },
+      ]);
+      await refuseDiscountsNotHolding(tx, billId);
+    });
+    expect(await crystallisesAsShown(billId)).toBe(1);
+  });
+
   it("are read as not holding by the shown total's read, which Pay refuses, its total unchanged", async () => {
     const billId = await groupedBill([{ name: "Fish", quantity: "4" }], 100);
     const fish = await lineIdOf(venue, billId, 1);
