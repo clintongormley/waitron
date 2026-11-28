@@ -178,18 +178,22 @@ async function httpsFixture() {
     ca = cert.caCertPem;
   }
   await install();
+  let remoteAccess = true;
   let serving = true;
   const listener = startCustomerMenuListener(
     { root, socketPath, stateDir },
     f.view,
     () => {},
-    async () => true,
+    async () => remoteAccess,
     () => serving,
   );
   onTestFinished(() => listener?.close());
   expect(listener?.isListening()).toBe(true);
   return {
     ...f,
+    setRemoteAccess(enabled: boolean) {
+      remoteAccess = enabled;
+    },
     stepDown: () => {
       serving = false;
     },
@@ -283,9 +287,13 @@ it("keeps the customer socket on the staff certificate renewal path", async () =
 });
 
 it("refuses even installed assets after the serving gate closes", async () => {
-  const { ask, stepDown } = await httpsFixture();
+  const { ask, setRemoteAccess, stepDown } = await httpsFixture();
   expect((await ask("/_customer-menu/assets/menu-123.js")).status).toBe(200);
+  setRemoteAccess(false);
+  expect((await ask("/lunch/en")).status).toBe(404);
   stepDown();
+  expect((await ask("/lunch/en")).status).toBe(404);
+  setRemoteAccess(true);
   for (const path of ["/_customer-menu/assets/menu-123.js", "/lunch/en"])
     expect(await ask(path)).toMatchObject({
       status: 503,

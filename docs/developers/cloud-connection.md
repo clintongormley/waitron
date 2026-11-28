@@ -397,7 +397,7 @@ The page can be embedded on another site. Pages, redirects and brand icons keep 
 60 seconds. Content-named assets and listed photo recipes keep for one year. Asset and photo
 requests require a query-free URL. The box caps customer work at eight concurrent requests
 and 120 admissions per one-second window. It returns 429 when full and 503 when a read
-times out or the box is stepping down. Work still running after a timeout counts against
+times out or an admitted request reaches a box that cannot serve. Work still running after a timeout counts against
 the limit until it finishes. [Box handler](../../apps/server/src/customer-menu-public.ts)
 
 ### Staff-certificate status discovery, 6 November 2026

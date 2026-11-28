@@ -59,7 +59,6 @@ export function createCustomerMenuApp(
     if (!page && asset === undefined && !photo) return c.notFound();
     const query = url.includes("?");
     if (query && !page) return c.notFound();
-    if (!serving()) return c.body(null, 503);
 
     const now = performance.now();
     if (now >= windowUntil) {
