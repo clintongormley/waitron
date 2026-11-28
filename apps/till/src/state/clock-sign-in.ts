@@ -11,6 +11,30 @@ export function signInClockAction(state: TillClockState): SignInClockAction | fa
   return state.state === "out" && state.firstClockIn ? "in" : false;
 }
 
+export function breakPromptCanClose(
+  action: SignInClockAction | false,
+  clock: ClockingSnapshot,
+): boolean {
+  return (
+    action === "break-end" &&
+    !clock.reading &&
+    !clock.busy &&
+    clock.state !== null &&
+    clock.state.state !== "on_break"
+  );
+}
+
+export function clockActionUnavailable(
+  clock: ClockingSnapshot,
+  attendance: AttendanceSnapshot | null,
+): boolean {
+  return (
+    clock.busy ||
+    clock.state === null ||
+    Boolean(attendance?.busy || attendance?.uncertainCommandId)
+  );
+}
+
 export function clockMessage({ refusal, error }: ClockingSnapshot): string {
   if (refusal !== null) return codeMessage(refusal.code);
   return error === null

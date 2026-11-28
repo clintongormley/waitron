@@ -182,7 +182,9 @@ import {
   type TillClockAction,
 } from "./state/clocking.js";
 import {
+  breakPromptCanClose,
   clockActionAfterDeferringQuestions,
+  clockActionUnavailable,
   clockMessage,
   signInClockAction,
   type SignInClockAction,
@@ -5324,13 +5326,7 @@ export class TillApp extends LitElement {
         if (this.#clockNeedsInitialRead && !snapshot.reading && snapshot.state !== null) {
           this.#clockNeedsInitialRead = false;
           this.clockPage = signInClockAction(snapshot.state);
-        } else if (
-          this.clockPage === "break-end" &&
-          !snapshot.reading &&
-          !snapshot.busy &&
-          snapshot.state !== null &&
-          snapshot.state.state !== "on_break"
-        ) {
+        } else if (breakPromptCanClose(this.clockPage, snapshot)) {
           void this.#resumeAfterClockPrompt();
         }
         if (this.drill?.kind === "hours" && !snapshot.reading && snapshot.state !== null)
@@ -5774,13 +5770,9 @@ export class TillApp extends LitElement {
   }
 
   async #onClockAction(event: CustomEvent<{ action: TillClockAction }>): Promise<void> {
-    const controller = this.#clocking;
     if (
-      controller === undefined ||
-      this.clockSnapshot.busy ||
-      this.clockSnapshot.state === null ||
-      this.attendanceSnapshot?.busy ||
-      this.attendanceSnapshot?.uncertainCommandId
+      this.#clocking === undefined ||
+      clockActionUnavailable(this.clockSnapshot, this.attendanceSnapshot)
     )
       return;
     const action = event.detail.action;
@@ -5799,10 +5791,7 @@ export class TillApp extends LitElement {
     const controller = this.#clocking;
     if (
       controller === undefined ||
-      this.clockSnapshot.busy ||
-      this.clockSnapshot.state === null ||
-      this.attendanceSnapshot?.busy ||
-      this.attendanceSnapshot?.uncertainCommandId
+      clockActionUnavailable(this.clockSnapshot, this.attendanceSnapshot)
     )
       return;
     this.#clockIntent = {
