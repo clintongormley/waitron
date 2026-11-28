@@ -95,13 +95,17 @@ export const giveBackStyles = css`
 export const giveBackDialogStyles = css`
   ${giveBackStyles}
 
+  .portion-note:not(:empty) {
+    margin-block-start: var(--wt-space-2);
+  }
+
   @media (width <= 480px) {
     .body {
       inline-size: calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5));
     }
 
     wt-dish-pick-row::part(portion) {
-      padding-inline-start: var(--wt-space-5);
+      padding-inline-start: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
     }
   }
 `;

@@ -180,7 +180,7 @@ export const en = {
   "give_back.which": "Which dishes?",
   "give_back.refunding_portions": "Refunding",
   "give_back.portion_count": "{count} of {total}",
-  "give_back.portions_lock": "Choose all portions or clear this dish to select other dishes.",
+  "give_back.portions_lock": "Select all portions or clear this dish to pick others.",
   "give_back.cancelled_owed": "Cancelled, not served",
   "give_back.cancelled_back": "Cancelled, refunded",
   "give_back.cancelled_waiting": "Cancelled, refund waiting for the card company",

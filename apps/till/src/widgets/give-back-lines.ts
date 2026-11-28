@@ -109,7 +109,7 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
           </wt-dish-pick-row>`;
         })}
     </div>
-    <p class="reason" role="status">
+    <p class="reason portion-note" role="status">
       ${options.portionCount === null ? nothing : t("give_back.portions_lock")}
     </p>
   </fieldset>`;
