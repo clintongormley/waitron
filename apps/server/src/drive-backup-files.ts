@@ -385,9 +385,10 @@ export async function releaseDrives(deps: {
     );
     deps.log("info", "drives.released", { released });
   } catch (error) {
-    deps.log("warn", "drives.release_failed", {
-      errorCode: codeOf(error),
-      ...(isAppError(error) ? error.params : {}),
-    });
+    deps.log(
+      "warn",
+      "drives.release_failed",
+      isAppError(error) ? { errorCode: error.code, ...error.params } : { errorCode: codeOf(error) },
+    );
   }
 }
