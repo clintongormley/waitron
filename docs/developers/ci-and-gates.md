@@ -225,7 +225,9 @@ measured global pool limits simultaneous guests. Removing a workflow cap does no
 memory or runner slots. Publish matching controller and host job-key support before
 adding a server-routed job or shard. Update the admitted names and labels in
 `scripts/ci-workflow.test.mjs` with the route, and run it and `scripts/ci-server-first.test.mjs`.
-Compare the table with the Cloud release deployed on the CI controller and both hosts.
+Compare the admitted list in the `singleJobs` table and shard counts with the Cloud release
+deployed on the CI controller and both hosts. The links below refer to Cloud `a8ca7fed` (#1473),
+the release used for the customer-menu rollout.
 [Controller job names](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/scripts/disposable-tests/ci-canary.mjs),
 [controller keys](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/scripts/disposable-tests/ci-identity.mjs),
 [host keys](https://github.com/waitron-io/waitron-cloud/blob/a8ca7feddd9a1338eac9fc18f311662db52a1b60/deploy/disposable-tests/session.py).
