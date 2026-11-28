@@ -458,10 +458,14 @@ describe("crystalliseBillDiscounts", () => {
     const counted = await report();
     await crystallisesAsShown(billId);
     const written = await inTx(venue, (tx) => adjustmentsOn(tx, billId));
-    expect(written.map(({ action, reduction }) => ({ action, reduction }))).toEqual([
-      { action: "discount_percent", reduction: 101 },
-      { action: "discount_amount", reduction: 100 },
-    ]);
+    // Records written in one millisecond share a time, so their order is not compared.
+    expect(written.map(({ action, reduction }) => ({ action, reduction }))).toEqual(
+      expect.arrayContaining([
+        { action: "discount_percent", reduction: 101 },
+        { action: "discount_amount", reduction: 100 },
+      ]),
+    );
+    expect(written).toHaveLength(2);
     expect(written.map(({ lineId }) => lineId)).toEqual([beers, beers]);
     expect((await report()) - counted).toBe(2);
   });
