@@ -108,6 +108,7 @@ export function tableTarget(
   useTile = false,
   zoneClosed = false,
   label?: string,
+  occupiedHint?: string,
 ): TemplateResult {
   const blocked =
     table.condition === "needs_clearing"
@@ -123,7 +124,7 @@ export function tableTarget(
         ? t("floor.free")
         : held.id === ownPartyId
           ? t("table.this_party")
-          : t("table.held_by").replace("{party}", () => held.displayName);
+          : (occupiedHint ?? fill(t("table.held_by"), { party: held.displayName }));
   const state = zoneClosed ? `${condition} · ${t("floor.closed")}` : condition;
   return html`<div class="table-target">
     ${

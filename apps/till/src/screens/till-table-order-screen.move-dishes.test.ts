@@ -375,7 +375,10 @@ describe("A803 move dishes panel", () => {
 
   it("keeps the quantity when Back returns from the table picker", async () => {
     const el = await mountScreen({
-      tables: [table("t4"), { ...table("t7"), label: "7", shortName: "7" }],
+      tables: [
+        table("t4"),
+        { ...table("t7"), party: { ...party, id: "other-party", displayName: "7", guestCount: 3 } },
+      ],
     });
     await openMoveDishes(el);
     await changeCount(el, "c1", 1);
@@ -383,6 +386,12 @@ describe("A803 move dishes panel", () => {
     const another = () => root.querySelector<HTMLElement>('[data-move-dishes-to="table"]')!;
     expect(another()).not.toBeNull();
     await userEvent.click(another());
+    const target = root.querySelector("[data-target-picker]")!;
+    expect(textOf(target.querySelector("[data-action-heading]")!)).toBe("Move dishes");
+    expect(target.querySelector("wt-top-bar")!.subtitle).toBe("from Bill 2");
+    expect(
+      target.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>('[data-target="t7"]')!.hint,
+    ).toBe("3 guests");
     await userEvent.click(panelBackButton(root.querySelector<HTMLElement>("[data-action-back]")!));
 
     expect(quantity(el, "c1").value).toBe(1);

@@ -7120,16 +7120,22 @@ export class TillTableOrderScreen extends LitElement {
                   ></wt-choice-tile>`
                 : nothing
             }
-            ${targets.map((table) =>
-              tableTarget(
+            ${targets.map((table) => {
+              const guests = table.party?.guestCount;
+              const occupiedHint =
+                guests == null
+                  ? t("floor.status_seated")
+                  : countText(guests, "table.menu_guests", "table.menu_guest");
+              return tableTarget(
                 table,
                 this.party?.id,
                 (picked) => this.#pickTable(picked),
                 true,
                 closed(table.zoneId),
                 moveBill || moveDishes ? this.#targetTableName(table) : undefined,
-              ),
-            )}
+                moveDishes ? occupiedHint : undefined,
+              );
+            })}
           </div>`
     }`;
     return tableActionStep(
@@ -7137,15 +7143,16 @@ export class TillTableOrderScreen extends LitElement {
       {
         title: t(
           moveDishes
-            ? "table.move_dishes_another_table"
+            ? "table.action_move_dishes"
             : moveBill
               ? "table.action_move_bill"
               : this.actionVerb === "move"
                 ? "table.action_move_guests"
                 : "table.action_join",
         ),
-        subtitle:
-          moveBill || moveDishes
+        subtitle: moveDishes
+          ? this.#moveDishesSubtitle()
+          : moveBill
             ? (this.#shownBillLabel() ?? "")
             : this.party === null
               ? ""
@@ -7166,6 +7173,15 @@ export class TillTableOrderScreen extends LitElement {
   #targetTableName(table: TableState): string {
     const name = tableShownName(table);
     return /^\d+$/.test(name) ? fill(t("floor.table_title"), { table: name }) : name;
+  }
+
+  #moveDishesSubtitle(): string {
+    const bill = this.#shownBillLabel();
+    return bill === undefined
+      ? ""
+      : fill(t("table.move_dishes_heading"), {
+          bill: currentLocale() === "es-ES" ? billLabelInText(bill) : bill,
+        });
   }
 
   #tablePickerHeading(): string {
@@ -7289,7 +7305,6 @@ export class TillTableOrderScreen extends LitElement {
     const blocker = this.#moveDishesBlocker(chosen, sources.setMenus, lineIds);
     const canMove = lineIds.length > 0 && chosen !== undefined && !blocker.blocked;
     const bills = this.#otherOpenBills();
-    const source = this.#shownBillLabel();
     const inText = (bill: string) => (currentLocale() === "es-ES" ? billLabelInText(bill) : bill);
     const toBill = bills.find((bill) => bill.workingOrderId === chosen);
     const table =
@@ -7310,8 +7325,7 @@ export class TillTableOrderScreen extends LitElement {
       : countText(lineIds.length, "table.move_dishes_count", "table.move_dishes_count_one");
     const heading = {
       title: t("table.action_move_dishes"),
-      subtitle:
-        source === undefined ? "" : fill(t("table.move_dishes_heading"), { bill: inText(source) }),
+      subtitle: this.#moveDishesSubtitle(),
       label: t("table.move_dishes_how_many"),
       showLabel: true,
     };

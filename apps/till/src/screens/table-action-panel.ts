@@ -39,7 +39,12 @@ export const tableActionPanelStyles = css`
   }
 
   .move-dishes-action-label {
+    line-height: 1.25;
     text-wrap: balance;
+  }
+
+  [data-move-dishes-confirm] {
+    --wt-action-padding: var(--wt-space-3) var(--wt-button-padding-inline, var(--wt-space-4));
   }
 
   [data-move-dishes] till-portion-picker {
