@@ -9,6 +9,7 @@ import type { DashboardProblemReport } from "./problem-report.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
+import { chooseTheme } from "@waitron/ui";
 import "./dashboard-app.js";
 
 const initialUrl = location.href;
@@ -390,4 +391,79 @@ it.each([
   await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-send]")!);
   await expect.poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")?.error).toBe(message);
   expect(dialog.shadowRoot!.querySelector<WtButton>("[data-download]")!.disabled).toBe(false);
+});
+
+it.each([
+  ["Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0", "firefox"],
+  [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+    "safari",
+  ],
+  ["Mozilla/5.0 (compatible; Kiosk/1.0)", "other"],
+  [
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
+    "chromium",
+  ],
+] as const)("names the browser in the report from its user agent %#", async (agent, browser) => {
+  vi.spyOn(Navigator.prototype, "userAgent", "get").mockReturnValue(agent);
+  const { dialog } = await fixture();
+  expect(data(preview(dialog)).client.browser).toBe(browser);
+});
+
+it("reports a Spanish dashboard's language as Spanish", async () => {
+  vi.stubGlobal("isSecureContext", true);
+  setLocale("es-ES");
+  const { el } = await mountWidget<DashboardProblemReport>("dashboard-problem-report", {});
+  await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-report-problem]")!);
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector<WtReportDialog>("wt-report-dialog")!;
+  await dialog.updateComplete;
+  expect(data(preview(dialog)).client.locale).toBe("es");
+});
+
+it("reports the chosen theme, and the device's dark preference when the device decides", async () => {
+  try {
+    chooseTheme("dark");
+    const chosen = await fixture();
+    expect(data(preview(chosen.dialog)).client.theme).toBe("dark");
+    cleanupWidgets();
+    chooseTheme("device");
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) => ({ matches: query === "(prefers-color-scheme: dark)" }) as MediaQueryList,
+    );
+    const device = await fixture();
+    expect(data(preview(device.dialog)).client.theme).toBe("dark");
+  } finally {
+    vi.restoreAllMocks();
+    chooseTheme("device");
+  }
+});
+
+it("keeps the open report and its description when a script clicks the entry behind the open dialog", async () => {
+  const { dialog, trigger } = await fixture();
+  await describeProblem(dialog, "The bill is hard to read.");
+  const opened = data(preview(dialog));
+  trigger.click();
+  await dialog.updateComplete;
+  expect(dialog.description).toBe("The bill is hard to read.");
+  expect(data(preview(dialog)).id).toBe(opened.id);
+});
+
+it("downloads nothing for a scripted download request while the description is not valid, which the dialog never sends", async () => {
+  const { dialog } = await fixture();
+  await describeProblem(dialog, "Bell \u0007 rang");
+  expect(dialog.validationError).not.toBe("");
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const createUrl = vi.spyOn(URL, "createObjectURL");
+  dialog.dispatchEvent(
+    new CustomEvent("wt-report-download", {
+      detail: { description: "Bell \u0007 rang", preview: preview(dialog) },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await dialog.updateComplete;
+  expect(createUrl).not.toHaveBeenCalled();
+  expect(click).not.toHaveBeenCalled();
+  expect(dialog.open).toBe(true);
 });

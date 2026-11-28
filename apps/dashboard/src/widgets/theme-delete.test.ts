@@ -43,6 +43,13 @@ describe("a theme's delete dialog copy", () => {
     );
   });
 
+  it("still words the impact when given no targets, which no caller does", () => {
+    setLocale("en-GB");
+    expect(themeDeleteCopy().item({ key: "theme_in_use", count: 1, targets: [] })).toBe(
+      " is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+    );
+  });
+
   it("words a refusal by its code", () => {
     setLocale("en-GB");
     expect(themeDeleteCopy().refusal({ code: "theme.not_found", params: {}, targets: [] })).toBe(
