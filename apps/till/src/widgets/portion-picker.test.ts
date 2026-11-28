@@ -112,7 +112,11 @@ describe("till-portion-picker", () => {
     await stepper.updateComplete;
     expect(stepper.value).toBe(1);
     expect(plus.disabled).toBe(true);
-    expect(plus.getAttribute("aria-description")).toContain("Payments keep");
+    const group = stepper.shadowRoot!.querySelector('[role="group"]')!;
+    expect(stepper.shadowRoot!.activeElement).toBe(group);
+    expect(group.getAttribute("aria-description")).toEqual(
+      expect.stringContaining("Payments keep"),
+    );
   });
   it("registers as a custom element", () => {
     expect(customElements.get("till-portion-picker")).toBe(TillPortionPicker);

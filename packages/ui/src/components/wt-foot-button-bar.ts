@@ -11,12 +11,14 @@ export class WtFootButtonBar extends LitElement {
         display: block;
         --wt-foot-link-height: var(--wt-tap-min);
         --wt-foot-action-height: calc(var(--wt-tap-min) + var(--wt-space-2));
+        --wt-foot-padding-inline: var(--wt-space-4);
+        --wt-foot-action-font-size: var(--wt-font-size-lg);
       }
 
       footer {
         display: grid;
         gap: var(--wt-space-2);
-        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-space-4);
+        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2) var(--wt-foot-padding-inline);
         padding-block-end: var(--wt-foot-padding-bottom, var(--wt-space-5));
         border-block-start: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
@@ -34,7 +36,7 @@ export class WtFootButtonBar extends LitElement {
 
       ::slotted(wt-button) {
         --wt-tap-min: var(--wt-foot-action-height);
-        --wt-action-font-size: var(--wt-font-size-lg);
+        --wt-action-font-size: var(--wt-foot-action-font-size);
       }
 
       ::slotted([slot="link"]) {

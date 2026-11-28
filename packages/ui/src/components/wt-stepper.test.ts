@@ -101,11 +101,11 @@ test("holding Enter reaches a limit and leaves focus where another Enter cannot 
   const { minus, plus, group } = parts(el);
   const seen = changes(el);
   plus.focus();
-  await userEvent.keyboard("{Enter>4}");
+  await userEvent.keyboard("{Enter>4/}");
   expect(seen).toEqual([1, 2]);
   expect(el.shadowRoot!.activeElement).toBe(group);
   minus.focus();
-  await userEvent.keyboard("{Enter>4}");
+  await userEvent.keyboard("{Enter>4/}");
   expect(seen).toEqual([1, 2, 1, 0]);
   expect(el.shadowRoot!.activeElement).toBe(group);
 });
@@ -120,12 +120,14 @@ test("min defaults to 0 and max to none", async () => {
   expect(parts(el).plus.disabled).toBe(false);
 });
 
-test("disabled locks both buttons", async () => {
-  const el = (await mount(
-    '<wt-stepper label="Burger" value="2" disabled></wt-stepper>',
-  )) as Stepper;
+test("disabling the whole control locks both buttons without focusing the group", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="2"></wt-stepper>')) as Stepper;
+  parts(el).plus.focus();
+  el.disabled = true;
+  await el.updateComplete;
   expect(parts(el).minus.disabled).toBe(true);
   expect(parts(el).plus.disabled).toBe(true);
+  expect(el.shadowRoot!.activeElement).not.toBe(parts(el).group);
 });
 
 test("the inner click does not reach the host's listeners", async () => {

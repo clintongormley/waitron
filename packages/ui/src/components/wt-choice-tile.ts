@@ -54,7 +54,7 @@ export class WtChoiceTile extends LitElement {
         min-block-size: var(--wt-tap-min);
         padding-inline: var(--wt-space-4);
         border-radius: var(--wt-radius-full);
-        font-size: var(--wt-font-size-md);
+        font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
       }
 
       :host([variant="pill"]) button[aria-pressed="true"] {

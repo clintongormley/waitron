@@ -167,7 +167,7 @@ export class WtStepper extends LitElement {
     `Decrease ${label}`;
   @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
     `Increase ${label}`;
-  @property({ attribute: false }) increaseDescription = "";
+  @property() description = "";
   /** Names the bin, given `label`; with none, − is disabled at `min` and there is no bin. */
   @property({ attribute: false }) removeLabel: ((label: string) => string) | null = null;
 
@@ -216,7 +216,10 @@ export class WtStepper extends LitElement {
     super.updated(changed);
     const focused = this.#focused;
     this.#focused = null;
-    if (!(focused instanceof HTMLButtonElement) || (focused.isConnected && !focused.disabled))
+    if (
+      !(focused instanceof HTMLButtonElement) ||
+      (focused.isConnected && (!focused.disabled || this.disabled))
+    )
       return;
     const plus = this.renderRoot.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
     if (!focused.isConnected && !plus.disabled) {
@@ -241,6 +244,7 @@ export class WtStepper extends LitElement {
         part="stepper"
         role="group"
         aria-label=${this.label}
+        aria-description=${this.description || nothing}
       >
         ${
           removeLabel !== null && atMin
@@ -270,7 +274,6 @@ export class WtStepper extends LitElement {
           type="button"
           data-step="1"
           aria-label=${this.increaseLabel(this.label)}
-          aria-description=${this.increaseDescription || nothing}
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >

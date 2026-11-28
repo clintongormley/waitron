@@ -888,7 +888,7 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
 });
 
 describe("on a phone with the order's foot held at the bottom", () => {
-  it("holds the panel's Move dishes row above the foot, not under it", async () => {
+  it("draws the dish rows edge to edge and keeps the action above the foot", async () => {
     const { width, height } = { width: innerWidth, height: innerHeight };
     await page.viewport(390, 600);
     try {
@@ -910,6 +910,18 @@ describe("on a phone with the order's foot held at the bottom", () => {
       const viewport = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
       expect(viewport).toMatchObject({ width: 390, height: 600 });
       expect(button.bottom).toBeLessThan(viewport.bottom);
+      expect(button).toMatchObject({ left: 12, width: 366 });
+      const row = picker(el).shadowRoot!.querySelector('[data-pick-row="c1"]')!;
+      expect(row.getBoundingClientRect()).toMatchObject({ left: 0, width: 390 });
+      const name = row.querySelector(".name")!;
+      expect(name.getBoundingClientRect().left).toBe(16);
+      expect(getComputedStyle(name)).toMatchObject({ fontSize: "16px", fontWeight: "500" });
+      expect(getComputedStyle(row.querySelector(".extra")!).fontSize).toBe("13px");
+      expect(getComputedStyle(confirm(el).shadowRoot!.querySelector("button")!).fontSize).toBe(
+        "16px",
+      );
+      const pill = destinations(el)[0]!.shadowRoot!.querySelector("button")!;
+      expect(getComputedStyle(pill).fontSize).toBe("15px");
     } finally {
       await page.viewport(width, height);
     }

@@ -36,6 +36,15 @@ export const tableActionPanelStyles = css`
     flex-wrap: wrap;
     gap: var(--wt-space-2);
   }
+
+  [data-move-dishes] till-portion-picker {
+    margin-inline: calc(-1 * var(--wt-space-4));
+  }
+
+  [data-move-dishes] wt-foot-button-bar {
+    --wt-foot-padding-inline: var(--wt-space-3);
+    --wt-foot-action-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+  }
 `;
 
 export function tableActionPanel(

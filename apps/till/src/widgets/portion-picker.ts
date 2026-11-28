@@ -80,12 +80,20 @@ export class TillPortionPicker extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
-        padding: var(--wt-space-1) var(--wt-space-2);
+        padding-block: calc(var(--wt-space-1) * 1.5);
+        padding-inline: var(--wt-space-4) var(--wt-space-3);
         border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
       }
       .quantity-row.selected {
         background: var(--wt-color-surface-lifted);
+      }
+      .quantity-row .name {
+        font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+        font-weight: var(--wt-font-weight-medium);
+      }
+      .quantity-row .extra {
+        font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
       }
       .quantity-row .reason {
         grid-column: 1 / -1;
@@ -331,7 +339,7 @@ export class TillPortionPicker extends LitElement {
         .max=${row.limit}
         .decreaseLabel=${(dish: string) => `${t("basket.decrease")} ${dish}`}
         .increaseLabel=${(dish: string) => `${t("basket.increase")} ${dish}`}
-        .increaseDescription=${reason}
+        .description=${reason}
         @wt-change=${(event: CustomEvent<{ value: number }>) => {
           event.stopPropagation();
           this.#emit(setCount(row, event.detail.value, this.picks));
