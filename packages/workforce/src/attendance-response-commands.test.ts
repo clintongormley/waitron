@@ -1324,3 +1324,102 @@ it("applying an overnight start-time request does not approve a different work d
   expect(day.record.sessions.map((shift) => shift.workedMinutes)).toEqual([120, 480]);
   expect(day.approval?.status).toBe("pending");
 });
+
+it.each([
+  ["a request whose reason is over 500 characters", "reason"],
+  ["a disagreement with a blank reason", "reason"],
+  ["a day edit for a date that does not exist", "date"],
+  ["a replacement edit that names no date", "date"],
+  ["a confirmation of an unknown question", "question_missing"],
+] as const)("refuses %s as invalid", async (kind, reason) => {
+  const changes = (pair() as Extract<AttendanceCommandPayload, { action: "request" }>).changes;
+  const payload: AttendanceCommandPayload =
+    kind === "a request whose reason is over 500 characters"
+      ? { action: "request", questionId: null, reason: "x".repeat(501), changes }
+      : kind === "a disagreement with a blank reason"
+        ? { action: "disagree", itemId: newId(), reason: "   " }
+        : kind === "a day edit for a date that does not exist"
+          ? { action: "propose", personId, date: "2026-02-30", reason: "Check", changes }
+          : kind === "a replacement edit that names no date"
+            ? { action: "propose", personId, replaces: newId(), reason: "Check", changes }
+            : { action: "confirm", questionId: newId() };
+  const requester = payload.action === "propose" ? manager : personId;
+  const before = await snapshot();
+  await expect(send(await command(payload), requester)).rejects.toMatchObject({
+    code: "correction.invalid",
+    params: { reason },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+it("refuses a decision on an item that does not exist", async () => {
+  await send(await command(pair()));
+  const missing = newId();
+  const before = await snapshot();
+  await expect(
+    send(await command({ action: "approve", itemId: missing }), personId, manager),
+  ).rejects.toMatchObject({ code: "correction.target_not_found", params: { entryId: missing } });
+  expect(await snapshot()).toEqual(before);
+});
+it("refuses a proposal whose requester is not the authorizing manager", async () => {
+  const payload = { ...pair(), action: "propose", personId } as AttendanceCommandPayload;
+  await refused(
+    async () => send(await command(payload), other, manager),
+    "correction.not_permitted",
+  );
+});
+it("refuses a manager proposal approved on the worker's request or without a worker version", async () => {
+  const payload = { ...pair(), action: "propose", personId } as AttendanceCommandPayload;
+  const proposal = await command(payload);
+  await send(proposal, manager);
+  const approve = await command({ action: "approve", itemId: proposal.commandId });
+  await refused(() => send(approve, personId, manager), "correction.not_permitted");
+  await refused(() => send(approve, manager), "correction.not_pending");
+});
+it("refuses a worker accepting their own request before checking the revision", async () => {
+  const value = await command(pair());
+  await send(value);
+  const accept = await command({ action: "accept", itemId: value.commandId });
+  await clock("2026-01-06T09:00:00Z");
+  await refused(() => send(accept), "correction.not_permitted");
+});
+it("refuses an answer to a retired question", async () => {
+  const questionId = await question();
+  await suite.db
+    .update(attendanceQuestions)
+    .set({ active: false, inactiveReason: "rota_superseded" })
+    .where(eq(attendanceQuestions.id, questionId));
+  const payload = { ...pair(), questionId } as AttendanceCommandPayload;
+  const before = await snapshot();
+  await expect(send(await command(payload))).rejects.toMatchObject({
+    code: "attendance.not_pending",
+    params: { entryId: questionId },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+it("refuses to confirm a missing-times question", async () => {
+  const questionId = await question();
+  const before = await snapshot();
+  await expect(send(await command({ action: "confirm", questionId }))).rejects.toMatchObject({
+    code: "correction.invalid",
+    params: { reason: "not_automatic" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+it("refuses an answer to an automatic question that changes a different time", async () => {
+  const { questionId } = await automaticQuestion();
+  const start = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "in",
+  )!;
+  const value = await command({
+    action: "request",
+    questionId,
+    reason: "Started earlier",
+    changes: [retime(start.entryId, "2026-01-05T08:00:00Z")],
+  });
+  const before = await snapshot();
+  await expect(send(value)).rejects.toMatchObject({
+    code: "correction.invalid",
+    params: { reason: "question_target" },
+  });
+  expect(await snapshot()).toEqual(before);
+});

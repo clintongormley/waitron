@@ -773,3 +773,72 @@ it("shows paid time and the actual pause in the attendance day", async () => {
   );
   expect(view.record.sessions[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
 });
+
+function approve(days: { personId: string; date: string; digest: string }[], actor = manager) {
+  return run((tx) =>
+    api.approveAttendanceDays(tx, { days, actorPersonId: actor, nodeId, origin, now }),
+  );
+}
+it("approves a finished day, which then leaves the queue", async () => {
+  await shift();
+  const { date, digest } = (await queue()).finishedDays[0]!;
+  await approve([{ personId, date, digest }]);
+  expect((await day()).approval?.status).toBe("approved");
+  expect((await queue()).finishedDays).toEqual([]);
+});
+it("refuses a day whose times changed since the manager read it", async () => {
+  await shift();
+  const { date, digest } = (await queue()).finishedDays[0]!;
+  const input = { nodeId, personId, offsetMinutes: 0, origin };
+  await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T18:00:00Z" }));
+  await run((tx) => backend.clockOut(tx, { ...input, at: "2026-01-05T19:00:00Z" }));
+  const changed = (await queue()).finishedDays;
+  expect(changed.map((d) => [d.personId, d.date])).toEqual([[personId, date]]);
+  expect(changed[0]!.digest).not.toBe(digest);
+  const before = await readRecordedEntries(suite.db, { personId });
+  await expect(approve([{ personId, date, digest }])).rejects.toMatchObject({
+    code: "attendance.state_changed",
+  });
+  expect(await readRecordedEntries(suite.db, { personId })).toEqual(before);
+  expect((await day()).approval?.status).toBe("pending");
+});
+it.each(["a worker without workforce.correct", "a manager approving their own day"] as const)(
+  "refuses day approval by %s",
+  async (kind) => {
+    const subject = kind === "a manager approving their own day" ? manager : personId;
+    const actor = kind === "a manager approving their own day" ? manager : other;
+    await shift(subject);
+    const { date, digest } = (await queue()).finishedDays[0]!;
+    await expect(approve([{ personId: subject, date, digest }], actor)).rejects.toMatchObject({
+      code: "attendance.not_permitted",
+      params: { personId: actor },
+    });
+    expect((await day(date, subject)).approval?.status).toBe("pending");
+  },
+);
+it("adds each finished day's worked and break minutes when totals are asked for", async () => {
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "17:00"],
+    ["clockIn", "18:00"],
+    ["breakStart", "18:30"],
+    ["breakEnd", "18:45"],
+    ["clockOut", "19:00"],
+  ] as const)
+    await run((tx) =>
+      backend[kind](tx, { nodeId, personId, at: `2026-01-05T${at}:00Z`, offsetMinutes: 0, origin }),
+    );
+  await shift(other);
+  const value = await run((tx) => api.readAttendanceManagerQueue(tx, { paidBreakPolicy: null }));
+  expect(
+    value.finishedDays.map((d) => [d.personId, d.date, d.workedMinutes, d.breakMinutes]),
+  ).toEqual(
+    [
+      [personId, "2026-01-05", 505, 35],
+      [other, "2026-01-05", 480, 0],
+    ].sort((a, b) => (a[0] as string).localeCompare(b[0] as string)),
+  );
+  expect((await queue()).finishedDays[0]).not.toHaveProperty("workedMinutes");
+});
