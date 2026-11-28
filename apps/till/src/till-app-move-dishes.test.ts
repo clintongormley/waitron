@@ -198,6 +198,51 @@ async function openSetMenuMove(overrides: Record<string, unknown> = {}) {
   };
 }
 
+it("moves the selected dish to the shown table once and stays on the source bill", async () => {
+  const move = vi.fn().mockResolvedValue({ billId: "new-at-seven" });
+  const targetEdit = { ...sourceEdit, billId: "wo-7", editorVersion: 4 };
+  const listDrafts = vi.fn(async (id: string) => ({
+    drafts: [],
+    billEdits: (id === "v7" ? [targetEdit] : [sourceEdit]).map((edit) => ({
+      ...edit,
+      editorId: null,
+      editorName: null,
+    })),
+  }));
+  const { order } = await open({ moveDishes: move, listDrafts });
+  const root = order.shadowRoot!;
+  const control = (selector: string) => root.querySelector<HTMLElement>(selector)!;
+  const menu = control("[data-table-menu]");
+  await userEvent.click(menu);
+  await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+  await vi.waitFor(() => expect(control('[data-move-dishes-to="table"]')).not.toBeNull());
+  const picker = root.querySelector<TillPortionPicker>("till-portion-picker")!;
+  await picker.updateComplete;
+  await userEvent.click(quantityButton(picker.shadowRoot!.querySelector("[data-pick]")!));
+  await userEvent.click(control('[data-move-dishes-to="table"]'));
+  await userEvent.click(control('[data-target="t7"]'));
+  await vi.waitFor(() =>
+    expect(control("[data-move-dishes-confirm]")?.textContent ?? "").toContain("Table 7"),
+  );
+  await userEvent.click(control("[data-move-dishes-confirm]"));
+
+  await vi.waitFor(() => expect(move).toHaveBeenCalledTimes(1));
+  expect(move).toHaveBeenCalledWith(
+    "wo-4",
+    [DISH.id],
+    { toTableId: "t7" },
+    {
+      partyId: "v1",
+      expectedPartyRevision: 3,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: [sourceEdit, targetEdit],
+    },
+  );
+  await vi.waitFor(() => expect(root.querySelector("[data-move-dishes]")).toBeNull());
+  expect(order.orderId).toBe("wo-4");
+});
+
 describe("set menus in Move dishes", () => {
   it("names the dishes included in a set-menu move and sends the menu to the new bill", async () => {
     const moved = vi.fn().mockResolvedValue({ billId: "wo-new" });

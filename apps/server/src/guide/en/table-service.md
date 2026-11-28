@@ -830,9 +830,10 @@ when part of it is paid.
 Choose how many to move with **+** and **−**. Each row shows how many are on the bill. Extras go with
 their dish, and weighed dishes move whole. Leave enough on the bill to cover any payments.
 
-Under **Move them to**, choose one of the table's other open bills or **New bill**. The button at
-the bottom tells you how many you are moving and where they will go. Press it to move the dishes.
-After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
+Under **Move them to**, choose one of the table's other open bills, **New bill** or **Another table…**.
+If you choose another table, the dishes go onto a new bill there and you stay at this table. The
+button at the bottom tells you how many dishes will move and where they will go. Press it to confirm.
+**New bill** opens the new bill at this table.
 Each dish keeps its course and stays sent, fired or served as it was. Moving dishes off a
 part-paid bill until its payments cover what is left leaves it paid in full, and its invoice is
 issued.

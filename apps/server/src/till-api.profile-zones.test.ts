@@ -213,7 +213,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
  * | PUT  /api/bills/:id/name | bill's party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill after a party merge" |
- * | POST /api/bills/:id/move-dishes                         | order; body order      | refuses POST /api/bills/:id/move-dishes (from), (to) |
+ * | POST /api/bills/:id/move-dishes                         | order; body order/table | refuses POST /api/bills/:id/move-dishes (from), (to), (table) |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
  * | POST /api/working-orders/:id/payments/preview           | order                  | refuses POST .../payments/preview                    |
@@ -1247,6 +1247,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/bills/${x.restTab}/move-dishes`,
     (x) => ({ toBillId: x.deliTab, lineIds: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/bills/:id/move-dishes (table)",
+    "POST",
+    (x) => `/api/bills/${x.restTab}/move-dishes`,
+    (x) => ({ toTableId: x.deliTable, lineIds: [], expectedEdits: [] }),
     deliTableZone,
   ],
   [

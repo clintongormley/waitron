@@ -35,6 +35,11 @@ export const tableActionPanelStyles = css`
     display: flex;
     flex-wrap: wrap;
     gap: var(--wt-space-2);
+    margin-inline: calc(var(--wt-space-3) - var(--wt-space-4));
+  }
+
+  .move-dishes-action-label {
+    text-wrap: balance;
   }
 
   [data-move-dishes] till-portion-picker {

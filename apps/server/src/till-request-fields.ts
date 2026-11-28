@@ -189,7 +189,7 @@ export function requireMoveTarget(value: unknown): MoveTarget {
   throw invalid("to");
 }
 /** The party the till read at the target table, and its revision, as a body carries them. */
-function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
+export function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
   const read: OtherPartyRead = {};
   if (body.expectedOtherPartyRevision !== undefined) {
     read.expectedOtherPartyRevision = requireRevision(
@@ -237,6 +237,16 @@ export function tableActionCommand(
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
 }
+export function dishMoveTarget(
+  body: Record<string, unknown>,
+): { billId: string | null } | { tableId: string } {
+  if (body.toTableId === undefined) {
+    return { billId: body.toBillId === null ? null : requireOtherBill(body.toBillId, "toBillId") };
+  }
+  if (body.toBillId !== undefined) throw invalid("toTableId");
+  return { tableId: requireBodyUuid(body.toTableId, "toTableId").toLowerCase() };
+}
+
 /**
  * The other bill a bill route names, which the body must carry: a non-UUID names no open bill, as a
  * malformed path id.

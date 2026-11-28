@@ -885,10 +885,11 @@ Elige cuántos platos quieres mover con **+** y **−**. Cada fila muestra cuán
 Los extras van con su plato y los platos al peso pasan enteros. Deja en la cuenta lo necesario
 para cubrir los pagos.
 
-En **Mover a**, elige otra cuenta abierta de la mesa o **Cuenta nueva**. El botón de abajo te
-dice cuántos platos vas a mover y a qué cuenta van. Púlsalo para moverlos.
-Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
-pantalla. Cada plato conserva su orden del plato y sigue enviado, marchado o servido como estaba. Si mueves
+En **Mover a**, elige otra cuenta abierta de la mesa, **Cuenta nueva** u **Otra mesa…**. Si eliges
+otra mesa, los platos van a una cuenta nueva allí y sigues en esta mesa. El botón de abajo te dice
+cuántos platos vas a mover y adónde van. Púlsalo para confirmar. **Cuenta nueva** abre la nueva
+cuenta en esta mesa. Cada plato conserva su orden del plato y sigue enviado, marchado o servido
+como estaba. Si mueves
 platos de una cuenta pagada en parte hasta que sus pagos cubren lo que queda, la cuenta queda
 pagada del todo y se emite su factura.
 

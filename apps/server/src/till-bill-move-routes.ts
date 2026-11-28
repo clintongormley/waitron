@@ -1,17 +1,24 @@
 import { withIssuanceTransaction } from "@waitron/core";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { readRawJsonBody } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import { moveDishes, mergeBills } from "./bill-actions.js";
+import { guardPathParty, moveDishes, mergeBills } from "./bill-actions.js";
 import { invalid } from "./bill-allocation.js";
-import { parseBillEditExpecteds, parseBillEditExpected } from "./bill-editing.js";
+import {
+  parseBillEditExpecteds,
+  parseBillEditExpected,
+  readBillEditState,
+} from "./bill-editing.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { asObject } from "./bill-payments-api.js";
 import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { refuseTakenOff } from "./floor-today-table.js";
 import { sendingCfg } from "./made-here.js";
-import { previewBillMoveAllergy, moveBill } from "./move-bill.js";
+import { readSentWork } from "./kitchen-ticket-paper.js";
+import { partyRevision } from "./parties.js";
+import { previewBillMoveAllergy, moveBill, type OtherPartyRead } from "./move-bill.js";
 import { requestCfg } from "./request-config.js";
 import { recheckFireSession } from "./till-order-commands.js";
 import { named } from "./till-order-zones.js";
@@ -22,6 +29,9 @@ import {
   billCommand,
   requireMoveTarget,
   moveCommand,
+  dishMoveTarget,
+  otherPartyRead,
+  parseClosedZoneConfirmation,
 } from "./till-request-fields.js";
 import { run, runBodyLines } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
@@ -47,8 +57,12 @@ export function mountTillBillMoveRoutes(
       const fromBillId = requireTabParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const lineIds = requireLineIds(body.lineIds);
-      const toBillId = body.toBillId === null ? null : requireOtherBill(body.toBillId, "toBillId");
+      const target = dishMoveTarget(body);
       const command = billCommand(personId, body);
+      const attendance =
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock };
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await withIssuanceTransaction(
         deps.db,
@@ -56,23 +70,42 @@ export function mountTillBillMoveRoutes(
           await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, session, [
             { orderId: fromBillId },
-            ...(toBillId === null ? [] : [{ orderId: toBillId }]),
+            ...named(
+              "billId" in target && target.billId !== null && { orderId: target.billId },
+              "tableId" in target && { tableId: target.tableId },
+            ),
           ]);
-          const moved = await moveDishes(tx, cfg, fromBillId, toBillId, lineIds, {
-            admission: deps.admission,
+          const split = {
             ...command,
+            admission: deps.admission,
             expectedEdits: parseBillEditExpecteds(body.expectedEdits),
             invoiceChoice: body.invoiceChoice,
-          });
+          };
+          const moved =
+            "tableId" in target
+              ? await moveDishesToTable(
+                  tx,
+                  saleCfg,
+                  fromBillId,
+                  target.tableId,
+                  lineIds,
+                  split,
+                  {
+                    ...otherPartyRead(body),
+                    ...(body.closedZoneId === undefined
+                      ? {}
+                      : {
+                          zoneConfirmation: parseClosedZoneConfirmation(
+                            body.closedZoneId,
+                            personId,
+                          ),
+                        }),
+                  },
+                  attendance,
+                )
+              : await moveDishes(tx, cfg, fromBillId, target.billId, lineIds, split);
           const invoice = await issueIfFullyPaid(tx, fiscal, saleCfg, fromBillId, personId);
-          await captureKitchenActivity(
-            tx,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-            personId,
-            [fromBillId, moved.billId],
-          );
+          await captureKitchenActivity(tx, attendance, personId, [fromBillId, moved.billId]);
           return { ...moved, ...(invoice === null ? {} : { invoice }) };
         },
         log,
@@ -203,4 +236,54 @@ export function mountTillBillMoveRoutes(
       return c.json(result);
     }),
   );
+}
+
+async function moveDishesToTable(
+  tx: Transaction,
+  cfg: Parameters<typeof moveBill>[1],
+  fromBillId: string,
+  tableId: string,
+  lineIds: string[],
+  split: Parameters<typeof moveDishes>[5],
+  destination: OtherPartyRead & Pick<Parameters<typeof moveBill>[4], "zoneConfirmation">,
+  attendance: OrderAttendance | undefined,
+): Promise<{ billId: string }> {
+  const { partyId } = await guardPathParty(tx, fromBillId, split, { bump: false });
+  if (partyId === null) throw new AppError("bill.not_at_table", { workingOrderId: fromBillId });
+  const before = await readSentWork(tx, fromBillId);
+  const { billId } = await moveDishes(
+    tx,
+    cfg,
+    fromBillId,
+    null,
+    lineIds,
+    {
+      ...split,
+      expectedEdits: split.expectedEdits.filter((edit) => edit.billId === fromBillId),
+    },
+    { tellKitchen: false },
+  );
+  const movedEdit = await readBillEditState(tx, billId);
+  const expectedEdits = [
+    ...split.expectedEdits.filter((edit) => edit.billId !== fromBillId),
+    movedEdit,
+  ].sort((a, b) => (a.billId < b.billId ? -1 : 1));
+  await moveBill(
+    tx,
+    cfg,
+    billId,
+    { tableId },
+    {
+      ...destination,
+      operatorId: split.operatorId,
+      partyId,
+      expectedPartyRevision: await partyRevision(tx, partyId),
+      expectedEdits,
+    },
+    attendance,
+    undefined,
+    before,
+  );
+  await refuseTakenOff(tx, [tableId]);
+  return { billId };
 }

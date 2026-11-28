@@ -954,8 +954,7 @@ declare module "@waitron/shared" {
     /** An order named a bill that is not the party's: a bill of another party, or of none. */
     "bill.other_party": { workingOrderId: string };
     /**
-     * Reopen bill refuses a counter order: Mark served, which its unserved refusal offers, is
-     * per party.
+     * Reopen bill and Move dishes to another table require a bill in a table party.
      */
     "bill.not_at_table": { workingOrderId: string };
     /** Reopen bill refuses a bill its party left without paying: its guests have gone. */

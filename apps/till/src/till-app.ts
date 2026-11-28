@@ -426,10 +426,12 @@ import {
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import { otherPartyRead, type SeatedRead } from "./widgets/table-targets.js";
+import { movesEveryDish, writeDishMove } from "./widgets/move-dishes-request.js";
 import type {
   BillPayDetail,
   MealEndShown,
   MoveBillDetail,
+  MoveDishesDetail,
   TableRelocationOpenDetail,
   SplitRefusal,
   SplitRefusalDeclinedDetail,
@@ -18837,7 +18839,7 @@ export class TillApp extends LitElement {
     event.preventDefault();
     const { verb, table, prompt, ready, refused } = event.detail;
     const ids =
-      verb === "move-bill"
+      verb === "move-bill" || verb === "move-dishes"
         ? this.activeTabId === undefined
           ? []
           : [this.activeTabId]
@@ -19094,12 +19096,15 @@ export class TillApp extends LitElement {
     confirmed?: BillComposition,
     choice?: MergeInvoiceChoice,
   ): Promise<void> {
-    const { lineIds, toBillId, review } = (
-      event as CustomEvent<{ lineIds: string[]; toBillId: string | null; review?: () => void }>
-    ).detail;
+    const detail = (event as CustomEvent<MoveDishesDetail>).detail;
+    const { lineIds, toBillId, review } = detail;
     if (this.activeTabId === undefined || lineIds.length === 0) return;
+    const relocation =
+      detail.toTableId === undefined ? undefined : await this.#relocationPrompts.get(detail.prompt);
+    if (detail.toTableId !== undefined && relocation == null) return;
     const asked =
       confirmed ??
+      relocation?.source ??
       this.#billComposition(toBillId === null ? [this.activeTabId] : [this.activeTabId, toBillId]);
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     if (
@@ -19118,25 +19123,21 @@ export class TillApp extends LitElement {
     if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      const revisions = { ...asked.revisions, expectedEdits: asked.expectedEdits };
-      const moved =
-        choice === undefined
-          ? await asked.api.moveDishes(asked.billId, lineIds, toBillId, revisions)
-          : await asked.api.moveDishes(asked.billId, lineIds, toBillId, revisions, choice);
-      if (!this.#billCompositionCurrent(asked)) return;
-      if (toBillId === null) this.#chooseBill(moved.billId);
+      const moved = await writeDishMove(asked, detail, relocation, choice, {
+        show: this.#presentLateSend,
+        current: () => this.#billCompositionUnchanged(asked),
+      });
+      if (moved === undefined || !this.#billCompositionCurrent(asked)) return;
+      if (toBillId === null && relocation == null) this.#chooseBill(moved.billId);
       if (moved.invoice !== undefined) {
         this.result = moved.invoice;
         this.#showTicket(asked.billId, true, { surface: "table", cashChange: null });
       }
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
-      if (this.#offerBillEditConflicts(error, asked, undefined, review)) return;
+      if (this.#offerBillEditConflicts(error, asked, relocation ?? undefined, review)) return;
       if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
-        // The server also refuses a choice sent with a move that no longer empties the bill, so after
-        // one the question is asked again only if the fresh lines still empty the bill. A move sent
-        // with none is refused only as emptying it, which this screen cannot always tell: it
-        // does not know which set menus are frozen (D15).
+        // A refusal without a choice can identify an emptied bill the till could not infer from frozen set menus.
         const [, read] = await this.#loadLinesAndBills();
         if (!this.#billCompositionCurrent(asked)) return;
         if (
@@ -19176,7 +19177,8 @@ export class TillApp extends LitElement {
           toBillId === null ? [] : [toBillId],
           DESTINATION_REFUSALS,
         );
-        await this.#onBillPairRefusal(error);
+        if (relocation == null || isBillMoneyRefusal(error)) await this.#onBillPairRefusal(error);
+        else await this.#onTableRefusal(error, () => this.#billCompositionCurrent(asked));
         // Set by the await above; the compiler still holds the undefined assigned before the call.
         const said = this.errorKey as CounterError | undefined;
         if (
@@ -19195,22 +19197,15 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** Whether the move names everything on the bill. A selected set menu carries its dishes as well. */
   #movesEveryDish(lineIds: readonly string[]): boolean {
-    const dishes = this.tabLines.filter((line) => line.parentLineNo == null);
-    const moved = new Set(lineIds);
-    const setMenus = this.partyBills.find(
-      ({ workingOrderId }) => workingOrderId === this.activeTabId,
-    )?.setMenus;
-    for (const { lineId, setMenuLineId } of setMenus?.dishes ?? [])
-      if (moved.has(setMenuLineId)) moved.add(lineId);
-    return dishes.length > 0 && dishes.every((line) => moved.has(line.id));
+    const bill = this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId);
+    return movesEveryDish(lineIds, this.tabLines, bill?.setMenus);
   }
 
   /** Opens the full-invoice question moving every dish of the bill on screen raises in `bills`, if
    * it raises one; an answer moves again, sending the choice built from `bills`. */
   #askMoveInvoice(event: Event, asked: BillComposition, bills: readonly PartyBill[]): boolean {
-    const { toBillId } = (event as CustomEvent<{ toBillId: string | null }>).detail;
+    const { toBillId } = (event as CustomEvent<MoveDishesDetail>).detail;
     const question = mergeInvoiceQuestion(bills, toBillId, asked.billId);
     if (question === null) return false;
     this.mergeInvoiceAsk = {

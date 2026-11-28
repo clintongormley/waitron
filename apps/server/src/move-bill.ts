@@ -164,6 +164,7 @@ export async function moveBill(
   options: MoveBillOptions,
   attendance?: OrderAttendance,
   issue?: IssueMovedBill,
+  kitchenBefore?: SentWork | null,
 ): Promise<MoveBillResult> {
   if ((options.submissionId === undefined) !== (options.allergy === undefined))
     throw new AppError("management.request_invalid", { field: "allergy" });
@@ -185,11 +186,11 @@ export async function moveBill(
       command.submissionId,
       "bill.move.allergy",
       { billId, to, ...command, zoneConfirmation: undefined },
-      () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue),
+      () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue, kitchenBefore),
       cfg.madeHereSink,
     );
   }
-  return moveBillOnce(tx, cfg, billId, to, options, attendance, issue);
+  return moveBillOnce(tx, cfg, billId, to, options, attendance, issue, kitchenBefore);
 }
 
 async function moveBillOnce(
@@ -200,6 +201,7 @@ async function moveBillOnce(
   options: MoveBillOptions,
   attendance?: OrderAttendance,
   issue?: IssueMovedBill,
+  kitchenBefore?: SentWork | null,
 ): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
   if (options.allergy !== undefined && path.partyId !== null)
@@ -244,7 +246,7 @@ async function moveBillOnce(
       destination.kind === "counter" ? "refuse" : "keep",
       { keepWaiting: destination.kind !== "counter" },
     ));
-  const before = await readSentWork(tx, billId);
+  const before = kitchenBefore === undefined ? await readSentWork(tx, billId) : kitchenBefore;
 
   let result: MoveBillResult;
   let held: string[] = [];
