@@ -2923,6 +2923,16 @@ on the branch's current head before you land it.
 
 ### Typecheck memory targets
 
+On macOS, package typechecks and the pre-push hook share one compiler slot per account across
+Waitron checkouts. The slot is held on `~/Library/Caches/waitron-typecheck.lock` until the compiler
+exits. Keep the file in place even when the slot is free. A check prints the file's location if it
+has to wait. A sandbox that blocks access to the file prints a warning and still runs the compiler.
+Update older worktrees to get the same limit in their package scripts.
+
+The Mac compiler uses an 8 GiB Go memory target unless you set `GOMEMLIMIT` for the check. In the
+A1645 Server measurements with TypeScript 7.0.2, peak resident memory went from 11.70–11.74 GiB at
+the compiler default to 7.78–7.79 GiB with that target. The target is soft.
+
 The full CI typecheck gives each Go compiler process a soft memory target (`GOMEMLIMIT`).
 Disposable runners use `6GiB` and GitHub-hosted runners use `8GiB`. Go can exceed the target
 while it manages time spent collecting memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).

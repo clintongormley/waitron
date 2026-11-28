@@ -10,7 +10,7 @@
     "test:coverage": "pnpm test:build-custodian && vitest run --coverage",
     "test:shard": "vitest run --coverage --reporter=default --reporter=blob --coverage.thresholds.statements=0 --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0",
     "test:merge": "vitest --merge-reports .vitest-reports --coverage --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs --noEmit",
     "lint": "eslint .",
     "db:generate": "pnpm --filter @waitron/server migration-baseline rebuild --set fiscal-verifactu",
     "test:build-custodian": "node scripts/build-custodian.mjs",

@@ -7,7 +7,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs --noEmit",
     "lint": "eslint .",
     "mutation": "stryker run",
     "test:package": "node --test --test-timeout=180000 test/package-consumer.test.mjs",

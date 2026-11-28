@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:sandbox": "vitest run --config vitest.sandbox.config.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/typecheck.mjs --noEmit",
     "lint": "eslint ."
   },
   "dependencies": {
