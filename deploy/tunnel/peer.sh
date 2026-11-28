@@ -21,14 +21,19 @@ if [ ! -f "$control/rotate-key" ]; then
   publish_public_key
 fi
 proxy=
+customer_proxy=
 active=
+stop_proxy() {
+  [ -n "$1" ] || return 0
+  kill -TERM "-$1" 2>/dev/null || kill -TERM "$1" 2>/dev/null || :
+  wait "$1" 2>/dev/null || :
+  kill -TERM "-$1" 2>/dev/null || :
+}
 stop() {
-  if [ -n "$proxy" ]; then
-    kill -TERM "-$proxy" 2>/dev/null || kill -TERM "$proxy" 2>/dev/null || :
-    wait "$proxy" 2>/dev/null || :
-    kill -TERM "-$proxy" 2>/dev/null || :
-    proxy=
-  fi
+  stop_proxy "$proxy"
+  stop_proxy "$customer_proxy"
+  proxy=
+  customer_proxy=
   if [ -n "$active" ]; then
     # Deleting the interface first would drop the closing packets the gateway needs to end its streams.
     drain=0
@@ -48,6 +53,7 @@ configure() {
   wg set wg-cloud private-key "$keys/private-key" peer "$gateway_key" \
     endpoint "$endpoint" allowed-ips "$gateway/32" persistent-keepalive 25 || return 1
   iptables -A INPUT -i wg-cloud -s "$gateway/32" -p tcp --dport 443 -j ACCEPT || return 1
+  iptables -A INPUT -i wg-cloud -s "$gateway/32" -p tcp --dport 8443 -j ACCEPT || return 1
   iptables -A INPUT -i wg-cloud -j DROP || return 1
   iptables -P FORWARD DROP || return 1
   ip link set wg-cloud up || return 1
@@ -109,6 +115,15 @@ while :; do
     if [ -z "$proxy" ] && [ -S "$control/staff.sock" ]; then
       setsid socat "TCP4-LISTEN:443,bind=$address,reuseaddr,fork" "UNIX-CONNECT:$control/staff.sock" &
       proxy=$!
+    fi
+    if [ -n "$customer_proxy" ] &&
+        { ! kill -0 "$customer_proxy" 2>/dev/null || [ ! -S "$control/customer-menu.sock" ]; }; then
+      stop_proxy "$customer_proxy"
+      customer_proxy=
+    fi
+    if [ -z "$customer_proxy" ] && [ -S "$control/customer-menu.sock" ]; then
+      setsid socat "TCP4-LISTEN:8443,bind=$address,reuseaddr,fork,max-children=8" "UNIX-CONNECT:$control/customer-menu.sock" &
+      customer_proxy=$!
     fi
     # A data packet starts WireGuard's missing-reply timer when a gateway loses its session.
     if [ "$probe_ticks" -eq 0 ]; then

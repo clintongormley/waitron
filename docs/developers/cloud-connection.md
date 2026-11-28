@@ -314,7 +314,7 @@ returns `{ "available": true }` or a 503 with `false` according to the serving g
 The box answers it on its remote-access staff listener too, because Cloud's
 [public gate](https://github.com/waitron-io/waitron-cloud/blob/b5d4c9a233ce92d7b3b0d196ae13a20e340c76ae/packages/remote-access/src/public-gate.ts#L103)
 sends it to the venue's staff hostname; that listener answers no other `/public/` path.
-Menus, bookings and the customer-facing remote setup screen remain separate work.
+The test customer menu uses the separate listener below.
 
 Your staff certificate private key stays in `WAITRON_STATE_DIR/cloud/staff.key`.
 Generate a certificate signing request, the public request a certificate authority
@@ -375,6 +375,27 @@ Its cached authority lasts at most ten minutes during a Cloud management outage;
 a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
+
+### Pair a test gateway with the customer menu
+
+Route the gateway to the serving box's WireGuard address on port `8443`. Use the staff
+hostname from the signed route for both TLS server name and HTTP Host. The box checks that
+identity, the serving gate and the saved remote-access switch before serving the menu. Compose
+shares `customer-menu.sock` with the tunnel companion, which forwards customer traffic
+independently of staff HTTPS on port `443`. [Box listener](../../apps/server/src/customer-menu-public.ts)
+· [Tunnel companion](../../deploy/tunnel/peer.sh)
+
+Send GET or HEAD. A visit to `/lunch` returns a relative redirect to `/lunch/en` when
+English is the default. A language path serves only a stored enabled language. At `/`, one
+online menu redirects and several produce a list. A query on any of these published page
+paths redirects to that same path with the query removed. Forward relative redirects and
+their cache headers. An absent or switched-off menu returns 404. [Route contract](../superpowers/plans/2026-11-28-h-a1637-public-customer-menu.md#what-cloud-can-request)
+
+The page can be embedded on another site. Pages, redirects and brand icons keep for at most
+60 seconds. Content-named assets and listed photo recipes keep for one year. Asset and photo
+requests require a query-free URL. The box caps customer work at eight concurrent requests
+and 120 admissions per one-second window. It returns 429 when full and 503 for a temporary
+failure. [Box handler](../../apps/server/src/customer-menu-public.ts)
 
 ### Staff-certificate status discovery, 6 November 2026
 
