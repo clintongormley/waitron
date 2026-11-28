@@ -151,7 +151,7 @@ export async function clockApp(
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       context: {
         departmentName: "Restaurant",

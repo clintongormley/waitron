@@ -117,8 +117,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.transfer_pending": 409,
   "department.profile_in_use": 409,
   "service_zone.not_found": 404,
-  "zone_extension.invalid": 400,
-  "zone_extension.not_allowed": 409,
   "menu_period.not_found": 404,
   "menu_period.name_taken": 409,
   "menu_timetable.invalid": 400,

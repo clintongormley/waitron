@@ -23,7 +23,6 @@ const id = randomUUID();
 const CASES = [
   ["POST", `/api/sales/${id}/receipt/handover`, 404, "working_order.not_found"],
   ["POST", `/api/tables/${id}/cleared`, 404, "table.not_found"],
-  ["PUT", `/api/service-zones/${id}/zone-extension`, 400, "management.request_invalid"],
   ["PUT", `/api/stations/${id}/today`, 400, "management.request_invalid"],
   ["PUT", "/api/device/zones", 400, "device_zones.invalid"],
   ["PUT", "/api/device/equipment", 400, "management.request_invalid"],

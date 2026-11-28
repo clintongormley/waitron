@@ -38,7 +38,6 @@ import {
   receiptDepartmentForOrder,
   receiptDefaultDepartment,
 } from "./department-receipts.js";
-import { readKeepOpen, keepZoneOpen } from "./keep-open.js";
 import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
@@ -91,7 +90,6 @@ import {
   readSaleReceiptHeader,
   resolveZoneContext,
   menuState,
-  readZoneKeepOpenState,
   readZoneClosingStates,
   orderInZones,
   orderZoneIdSql,
@@ -189,8 +187,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveDepartmentService,
   readLateSendNeedsManager,
   productsOfferedIn,
-  readKeepOpen,
-  keepZoneOpen,
   resolveSalePolicy,
   resolveOrderDining,
   diningStartOf,
@@ -219,7 +215,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listZoneSetMenus,
   resolveDefaultMenu,
   menuState,
-  readZoneKeepOpenState,
   readZoneClosingStates,
   resolveNewOrderZone,
   readProfileServiceAccess,

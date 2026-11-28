@@ -5750,7 +5750,7 @@ describe("closed department ordering", () => {
           periodName: "Lunch",
           periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
@@ -5804,7 +5804,7 @@ describe("closed department ordering", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       departmentName: "Restaurant",
     });

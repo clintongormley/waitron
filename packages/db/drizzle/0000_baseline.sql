@@ -623,8 +623,6 @@ CREATE TABLE `order_draft_lines` (
 	`after_group_id` text,
 	`no_merge` integer DEFAULT false NOT NULL,
 	`set_menu_id` text,
-	`set_menu_reserved_line_id` text,
-	`set_menu_reserved_place` integer,
 	FOREIGN KEY (`draft_id`) REFERENCES `order_drafts`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
@@ -632,9 +630,6 @@ CREATE TABLE `order_draft_lines` (
 	FOREIGN KEY (`join_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`after_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_draft_lines_set_menu_ck" CHECK(("order_draft_lines"."set_menu_reserved_line_id" is null and "order_draft_lines"."set_menu_reserved_place" is null)
-        or ("order_draft_lines"."set_menu_id" is not null and "order_draft_lines"."set_menu_reserved_line_id" is not null
-          and "order_draft_lines"."set_menu_reserved_place" is not null)),
 	CONSTRAINT "order_draft_lines_quantity_ck" CHECK("order_draft_lines"."quantity" > 0),
 	CONSTRAINT "order_draft_lines_slot_ck" CHECK("order_draft_lines"."slot" >= 0),
 	CONSTRAINT "order_draft_lines_place_ck" CHECK("order_draft_lines"."join_group_id" is null or "order_draft_lines"."slot" = 0),
@@ -687,13 +682,8 @@ CREATE TABLE `floor_zones` (
 	`today_set_id` text,
 	`today_layout_revision` integer DEFAULT 0 NOT NULL,
 	`today_occurrence` text,
-	`kept_open_day` text,
-	`kept_open_from` text,
-	`kept_open_until` text,
 	FOREIGN KEY (`today_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "floor_zones_kept_open_ck" CHECK(("floor_zones"."kept_open_day" is null and "floor_zones"."kept_open_from" is null and "floor_zones"."kept_open_until" is null) or ("floor_zones"."kept_open_day" is not null and "floor_zones"."kept_open_from" is not null and "floor_zones"."kept_open_until" is not null)),
-	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),
 	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
 	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
 	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))

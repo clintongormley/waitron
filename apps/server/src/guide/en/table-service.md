@@ -954,7 +954,8 @@ more tables**, drag the map to bring the rest into view.
 
 ## Serve a closed zone {#closed-zone}
 
-When the till asks about a closed zone, confirm to go ahead with that action or choose
+Check when a zone closes on the floor screen. When the till asks about a closed zone,
+confirm to go ahead with that action or choose
 **Cancel** to leave it. If the question also names a period that has ended, check with the station
 before you confirm. To change a zone's hours for the day, use **Calendar** in the dashboard.
 

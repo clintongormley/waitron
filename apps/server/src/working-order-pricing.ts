@@ -328,7 +328,7 @@ export async function priceOrderLines(
           periodName: null,
           periodOccurrenceKey: null,
           keepOpen: null,
-          zoneKeepOpen: null,
+          closedZoneName: null,
         },
         defaultMenuId: null,
         menus: [],

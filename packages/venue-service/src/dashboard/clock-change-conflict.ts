@@ -5,7 +5,7 @@ import type { Refusal } from "./refusal.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 
-type HoursReason = Exclude<BusinessDayClockConflict["reason"], "kept_open">;
+type HoursReason = BusinessDayClockConflict["reason"];
 
 /** The one line naming the first range that clashes with the waiting business-day start. */
 export function clockChangeConflictText(refusal: Refusal): string | undefined {

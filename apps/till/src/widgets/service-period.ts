@@ -1,8 +1,7 @@
 import { css, html, nothing } from "lit";
-import type { MenuState, TillApi } from "../api/client.js";
+import type { MenuState } from "../api/client.js";
 import type { RoleEquipment } from "../api/device-session-api.js";
 import { t } from "../i18n/t.js";
-import "./keep-open.js";
 
 export const servicePeriodStyles = css`
   .service-period {
@@ -16,8 +15,6 @@ export const servicePeriodStyles = css`
 export function servicePeriod(
   service: MenuState["service"] | null,
   departmentName: string,
-  api: TillApi | undefined,
-  zoneId: string,
   zoneName = "",
   receiptEquipment?: RoleEquipment["resolved"],
 ) {
@@ -30,7 +27,7 @@ export function servicePeriod(
     ${
       !service.zoneOpen
         ? html`<p role="status" data-zone-closed>
-            ${t("menu.zone_closed").replace("{zone}", () => zoneName || service.zoneKeepOpen?.zoneName || "")}
+            ${t("menu.zone_closed").replace("{zone}", () => service.closedZoneName ?? zoneName)}
           </p>`
         : service.open
           ? html`<p
@@ -48,16 +45,5 @@ export function servicePeriod(
     <span data-receipt-status role="status"
       >${receiptEquipment === undefined ? t("service.printer_unknown") : receiptEquipment === null ? t("service.printer_none") : t(receiptEquipment.available ? "service.printer_available" : "service.printer_unavailable").replace("{name}", () => receiptEquipment.name)}</span
     >
-    ${zoneKeepOpen(service.zoneKeepOpen, api, zoneId)}
   </div>`;
-}
-
-export function zoneKeepOpen(
-  subject: MenuState["service"]["zoneKeepOpen"],
-  api: TillApi | undefined,
-  zoneId: string,
-) {
-  return subject
-    ? html`<till-keep-open .api=${api} .zoneId=${zoneId} .zoneKeepOpen=${subject}></till-keep-open>`
-    : nothing;
 }

@@ -317,9 +317,6 @@ export async function clearServiceDeleteSettings(
       orderStart: null,
       paidWhen: null,
       collectionNumber: null,
-      keptOpenDay: null,
-      keptOpenFrom: null,
-      keptOpenUntil: null,
     })
     .where(inArray(floorZones.id, selected.zoneIds));
   if (selected.departmentId !== null) {

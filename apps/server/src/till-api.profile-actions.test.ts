@@ -742,7 +742,6 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/schedule/shifts",
       "GET /api/schedule/swaps",
       "GET /api/service-day/authorizers",
-      "GET /api/service-zones/:zoneId/keep-open",
       "GET /api/service-zones/:zoneId/offers",
       "GET /api/stations",
       "GET /api/stations/:id/queue",
@@ -805,8 +804,8 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (tested)",
     actions: [],
     basis:
-      "Request proof: till-api.request-device.test.ts. Station and zone-extension choices govern the venue day; they require venue.configure or a permitted PIN, not an ordering or preparation action.",
-    routes: ["PUT /api/service-zones/:zoneId/zone-extension", "PUT /api/stations/:stationId/today"],
+      "Request proof: till-api.request-device.test.ts. Closing or reopening a station requires venue.configure or a permitted PIN, not an ordering or preparation action.",
+    routes: ["PUT /api/stations/:stationId/today"],
   },
   {
     proof: "matching request (tested)",

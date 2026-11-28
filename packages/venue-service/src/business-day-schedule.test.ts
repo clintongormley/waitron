@@ -1,5 +1,5 @@
 import { seedVenueSettings, seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
-import { readZoneKeepOpenState } from "./operations.js";
+import { readZoneClosingStates } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
 import { deletePeriod } from "./period-delete.js";
@@ -37,7 +37,6 @@ import {
   businessDayClockConflicts,
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
-  keptOpenConflicts,
   writeHours,
 } from "./business-day-schedule.js";
 import { inForceClock, settledClock } from "./service-day-context.js";
@@ -2009,13 +2008,11 @@ it.each([
     ),
   );
   const read = (time: string) =>
-    withTransaction(suite.db, (tx) => readZoneKeepOpenState(tx, v.zoneId!, new Date(time)));
-  expect(await read(instant)).toMatchObject({
-    running: false,
-    closesAt: "02:30",
-    extendedUntil: null,
-  });
-  expect(await read(boundary)).toBeNull();
+    withTransaction(suite.db, async (tx) =>
+      (await readZoneClosingStates(tx, [v.zoneId!], new Date(time))).get(v.zoneId!),
+    );
+  expect(await read(instant)).toEqual({ closed: true, closesAt: "02:30" });
+  expect(await read(boundary)).toEqual({ closed: false, closesAt: null });
 });
 
 it("rechecks a time writer queued before a clock change commits", async () => {
@@ -2739,117 +2736,4 @@ it("lists the same conflicts for many yearly special days", async () => {
     "Department 0 | Special 27 | 2026-04-14 | Dinner 0 | 20:00-03:30 | 1 | transition_strip",
     "Department 0 | Special 28 | 2026-05-01 | Dinner 0 | 20:00-03:30 | 0 | transition_strip",
   ]);
-});
-
-describe("a keep-open for the night before the change", () => {
-  const keptOpen = async (endsAt: string, businessDay = "2026-11-03") => {
-    const v = await fixture([], { zone: true });
-    await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(floorZones)
-        .set({ keptOpenDay: businessDay, keptOpenFrom: "22:00:00", keptOpenUntil: `${endsAt}:00` })
-        .where(eq(floorZones.id, v.zoneId!));
-    });
-    return v;
-  };
-
-  it("does not clash when it ends before the new changeover", async () => {
-    await keptOpen("02:30");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("does not clash for a zone in a switched-off department", async () => {
-    const v = await keptOpen("04:30");
-    await withTransaction(suite.db, (tx) =>
-      tx.update(departments).set({ active: false }).where(eq(departments.id, v.departmentId)),
-    );
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("names the zone a zone keep-open belongs to", async () => {
-    const v = await keptOpen("04:30");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([
-      {
-        departmentId: v.departmentId,
-        departmentName: "Service",
-        zoneId: v.zoneId,
-        zoneName: "Zone",
-        endsAt: "04:30",
-        rangeIndex: 0,
-        reason: "kept_open",
-      },
-    ]);
-  });
-
-  it("clashes when it runs to the old changeover", async () => {
-    await keptOpen("05:00");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([expect.objectContaining({ endsAt: "05:00", reason: "kept_open" })]);
-  });
-
-  it("does not clash when it ends exactly at the new changeover", async () => {
-    await keptOpen("03:00");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("ignores a keep-open for another night", async () => {
-    await keptOpen("04:30", "2026-11-02");
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts).toEqual([]);
-  });
-
-  it("lists kept-open zones in their display order", async () => {
-    const v = await fixture([]);
-    await withTransaction(suite.db, async (tx) => {
-      // Names and ids sort in the reverse of the display order.
-      const zones = [
-        { id: "e0000000-0000-4000-8000-000000000001", name: "Alpha", displayOrder: 1 },
-        { id: "f0000000-0000-4000-8000-000000000001", name: "Beta", displayOrder: 0 },
-      ];
-      for (const zone of zones)
-        await tx.insert(floorZones).values({
-          ...zone,
-          departmentId: v.departmentId,
-          keptOpenDay: "2026-11-03",
-          keptOpenFrom: "22:00:00",
-          keptOpenUntil: "04:30:00",
-        });
-    });
-    const conflicts = await withTransaction(suite.db, (tx) =>
-      keptOpenConflicts(tx, before, candidate("03:00"), E),
-    );
-    expect(conflicts.map((c) => c.zoneName)).toEqual(["Beta", "Alpha"]);
-  });
-
-  it("refuses the change with the keep-open in the list and the count", async () => {
-    const v = await keptOpen("04:30");
-    const refusal = await withTransaction(suite.db, (tx) =>
-      assertBusinessDayClockChange(tx, before, candidate("03:00"), E),
-    ).catch((error: unknown) => error);
-    expect(refusal).toMatchObject({
-      code: "venue.business_day_hours_conflict",
-      params: {
-        conflictCount: 1,
-        conflicts: [
-          expect.objectContaining({ zoneId: v.zoneId, reason: "kept_open", endsAt: "04:30" }),
-        ],
-      },
-    });
-  });
 });

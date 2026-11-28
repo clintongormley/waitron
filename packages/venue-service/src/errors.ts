@@ -72,8 +72,6 @@ declare module "@waitron/shared" {
       row?: "category" | "product" | "no_category" | "all";
       name?: string;
     };
-    "zone_extension.invalid": { field: "until"; reason: "step" | "not_later" | "clock_skips" };
-    "zone_extension.not_allowed": { zoneId: string; reason: "not_closing" | "department_closed" };
     "menu_period.not_found": { periodId: string };
     "menu_period.delete_replacement": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };

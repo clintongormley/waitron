@@ -237,7 +237,7 @@ describe("set menu storage on a bill", () => {
     ).toEqual([{ line_version: VERSION, line_total: 1800, bill_version: newerCopy }]);
   });
 
-  it("requires both parts of a draft reservation, and only with its set menu", async () => {
+  it("stores the set-menu offer on a draft without a reservation", async () => {
     const db = suite.db;
     const [party] = await db.insert(parties).values({ openedBy: personId }).returning();
     const [draft] = await db
@@ -255,25 +255,17 @@ describe("set menu storage on a bill", () => {
         quantity: 1000,
       })
       .returning({ id: orderDraftLines.id });
-    const reserve = (menuId: string | null, setLine: string | null, place: number | null) =>
-      db.execute(sql`update order_draft_lines set set_menu_id = ${menuId},
-        set_menu_reserved_line_id = ${setLine}, set_menu_reserved_place = ${place}
-        where id = ${line.id}`);
-    for (const [menuId, setLine, place] of [
-      [null, SET_LINE, 1],
-      [MENU, SET_LINE, null],
-      [MENU, null, 1],
-    ] as const) {
-      await expectCheck(() => reserve(menuId, setLine, place), "order_draft_lines_set_menu_ck");
-    }
-    await reserve(MENU, null, null);
-    await reserve(MENU, SET_LINE, 1);
-    expect(
-      await db.all(sql`select set_menu_id, set_menu_reserved_line_id, set_menu_reserved_place
-      from order_draft_lines where id = ${line.id}`),
-    ).toEqual([
-      { set_menu_id: MENU, set_menu_reserved_line_id: SET_LINE, set_menu_reserved_place: 1 },
-    ]);
+    await db
+      .update(orderDraftLines)
+      .set({ setMenuId: MENU })
+      .where(eq(orderDraftLines.id, line.id));
+    expect(await db.get(sql`select * from order_draft_lines where id = ${line.id}`)).toMatchObject({
+      set_menu_id: MENU,
+      menu_item_id: menuItemId,
+    });
+    const columns = await db.all(sql`select name from pragma_table_info('order_draft_lines')`);
+    expect(columns).not.toContainEqual({ name: "set_menu_reserved_line_id" });
+    expect(columns).not.toContainEqual({ name: "set_menu_reserved_place" });
   });
 
   it("keeps each set-menu column fixed when recording service on a placed bill", async () => {

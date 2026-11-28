@@ -11,7 +11,7 @@ function state(versionId: string): MenuState {
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     menus: [{ menuId: "lunch", versionId, orderable: true, endedPeriodName: null }],
     unavailable: { products: [], optionLabels: [] },

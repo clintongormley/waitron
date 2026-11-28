@@ -749,11 +749,9 @@ the server checks each at the route, never trusting the till's copy:
   `venue.configure`; they also check the device's `prepare-orders` action and that its
   station screen shows that station now (`assertScreenShowsStation`,
   `apps/server/src/station-today-api.ts`).
-  A till's station close/open and zone-extension writes require a session and matching device
-  proof, plus either that permission or a manager's PIN override. The PIN checks share the till's
-  wrong-PIN limit.
-  Cases: `apps/server/src/till-api.station-today.test.ts`,
-  `apps/server/src/till-api.keep-open.test.ts`.
+  A till's station close/open writes require a session and matching device proof, plus either that
+  permission or a manager's PIN override. The PIN checks share the till's wrong-PIN limit.
+  Cases in `apps/server/src/till-api.station-today.test.ts`.
 - **Where a profile serves.** A profile that takes orders has one department, a set of that
   department's zones or all of them (`allowedZoneIds: null`, read as the department's zones still
   switched on), and a starting zone. A new order with no zone named starts in the starting zone,

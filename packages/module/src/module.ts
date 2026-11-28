@@ -420,13 +420,7 @@ export interface ZoneMenuState {
     readonly zoneOpen: boolean;
     readonly periodName: string | null;
     readonly periodOccurrenceKey: string | null;
-    readonly zoneKeepOpen: {
-      readonly zoneId: string;
-      readonly zoneName: string;
-      readonly closesAt: string;
-      readonly running: boolean;
-      readonly extendedUntil: string | null;
-    } | null;
+    readonly closedZoneName: string | null;
     readonly keepOpen: {
       readonly periodId: string;
       readonly periodName: string;
@@ -502,16 +496,6 @@ export type ExtraMakerOutcome =
        *  no_replacement: its station and every fallback are closed; same_station: made with its dish. */
       readonly why: "no_rule" | "no_preparation" | "no_replacement" | "same_station";
     };
-
-export interface KeepOpenSubject {
-  id: string;
-  name: string;
-  endsAt: string;
-  running: boolean;
-  extendedUntil: string | null;
-  dayEndsAt: string;
-  choices: readonly string[];
-}
 
 export interface StationTodayState {
   readonly open: boolean;
@@ -720,7 +704,7 @@ export interface BusinessDayClockConflict {
   date?: string;
   periodId?: string;
   rangeIndex: number;
-  reason: "range" | "overlap" | "endpoint_day" | "all_day" | "transition_strip" | "kept_open";
+  reason: "range" | "overlap" | "endpoint_day" | "all_day" | "transition_strip";
 }
 
 export interface FloorPlanSetSummary {
@@ -949,16 +933,6 @@ export interface VenueServiceContribution {
    * `venue.configure`: the sender, or a manager's PIN.
    */
   readLateSendNeedsManager(tx: Transaction, departmentId: string): Promise<boolean>;
-  readKeepOpen(
-    tx: Transaction,
-    zoneId: string,
-    at: Date,
-  ): Promise<{ zone: KeepOpenSubject | null }>;
-  readZoneKeepOpenState(
-    tx: Transaction,
-    zoneId: string,
-    at: Date,
-  ): Promise<ZoneOffers["service"]["zoneKeepOpen"]>;
   /** One entry per zone named, read together: whether it is closed at `at`, and its floor
    *  closing summary. */
   readZoneClosingStates(
@@ -966,19 +940,7 @@ export interface VenueServiceContribution {
     zoneIds: readonly string[],
     at: Date,
     prepared?: PreparedServiceDay,
-  ): Promise<
-    ReadonlyMap<
-      string,
-      { readonly closed: boolean; readonly keepOpen: ZoneOffers["service"]["zoneKeepOpen"] }
-    >
-  >;
-  keepZoneOpen(
-    tx: Transaction,
-    zoneId: string,
-    input: { until: string | null },
-    at: Date,
-    actor: ActivityActor,
-  ): Promise<void>;
+  ): Promise<ReadonlyMap<string, { readonly closed: boolean; readonly closesAt: string | null }>>;
   resolveSalePolicy(tx: Transaction, zoneId: string): Promise<EffectiveSalePolicy>;
   /** The way a new order in `zoneId` sells; refuses `order.dining_fixed` for a way it cannot. */
   resolveOrderDining(

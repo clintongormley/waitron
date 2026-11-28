@@ -331,7 +331,7 @@ const counterOffers: ZoneOffers = {
     periodName: null,
     periodOccurrenceKey: null,
     keepOpen: null,
-    zoneKeepOpen: null,
+    closedZoneName: null,
   },
   context: {
     dining: null,

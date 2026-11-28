@@ -121,7 +121,7 @@ function zoneOffers(
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,
@@ -7263,7 +7263,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   periodName: null,
                   periodOccurrenceKey: null,
                   keepOpen: null,
-                  zoneKeepOpen: null,
+                  closedZoneName: null,
                 },
               });
             setLocale(locale);

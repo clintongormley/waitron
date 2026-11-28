@@ -10,7 +10,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { readBusinessDayScheduleRevision } from "./business-day-schedule.js";
-import { keepZoneOpen } from "./keep-open.js";
 import { lastOrderDishes } from "./last-orders.js";
 import { replaceMenuWeek, resolveDepartmentService, updateMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
@@ -136,7 +135,7 @@ it("an unconfigured stand-in keeps taking orders until the period ends", async (
     });
   }));
 
-it("uses last orders at a period ending at changeover even while the zone is kept open", async () =>
+it("uses last orders at a period ending at changeover while the zone is closed", async () =>
   withTransaction(suite.db, async (tx) => {
     const v = await mealtimes(tx);
     await v.open([{ periodId: v.lunch, startsAt: "20:00", endsAt: "06:00" }]);
@@ -153,14 +152,9 @@ it("uses last orders at a period ending at changeover even while the zone is kep
       await readBusinessDayScheduleRevision(tx),
     );
     const at = new Date("2026-10-06T05:45:00+02:00");
-    await keepZoneOpen(
-      tx,
-      v.zoneId,
-      { until: "06:00" },
-      new Date("2026-10-06T05:20:00+02:00"),
-      await seedActivityActor(tx),
-    );
-    await expect(assertZoneTakesNewOrders(tx, v.zoneId, at)).resolves.toBeUndefined();
+    await expect(assertZoneTakesNewOrders(tx, v.zoneId, at)).rejects.toMatchObject({
+      code: "service_zone.closed",
+    });
     expect(await v.decide(at)).toMatchObject({
       stopped: true,
       route: { kind: "station", stationId: v.kitchen },

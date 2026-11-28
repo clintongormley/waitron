@@ -1206,64 +1206,6 @@ describe("a Save takes the next changeover", () => {
   });
 });
 
-describe("a keep-open for tonight past the new changeover", () => {
-  it("lists it in the preview and refuses the Save", async () => {
-    const { department } = await authorRange("13:00", "16:00");
-    const zoneId = randomUUID();
-    await inTx(async (tx) => {
-      await tx.execute(
-        sql`insert into floor_zones (id, name, created_at, department_id)
-            values (${zoneId}, 'Terrace', ${at.toISOString()}, ${department.id})`,
-      );
-      await tx.execute(
-        sql`update floor_zones set department_id = ${department.id} where id = ${zoneId}`,
-      );
-      await tx.execute(
-        sql`update floor_zones set kept_open_day='2026-10-20', kept_open_from='22:00:00', kept_open_until='04:30:00' where id=${zoneId}`,
-      );
-    });
-    at = new Date("2026-10-20T20:00:00Z");
-    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "1" });
-    const preview = await request("GET", `/business-day-start/preview?${query}`);
-    expect(preview.status).toBe(200);
-    expect(await preview.json()).toMatchObject({
-      conflictCount: 1,
-      conflicts: [
-        expect.objectContaining({
-          zoneId,
-          zoneName: "Terrace",
-          reason: "kept_open",
-          endsAt: "04:30",
-        }),
-      ],
-    });
-    const saved = await clockRows();
-    const response = await request(
-      "PUT",
-      "/business-day-start",
-      proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }),
-    );
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({
-      error: {
-        code: "venue.business_day_hours_conflict",
-        params: {
-          conflictCount: 1,
-          conflicts: [
-            expect.objectContaining({
-              zoneId,
-              zoneName: "Terrace",
-              reason: "kept_open",
-              endsAt: "04:30",
-            }),
-          ],
-        },
-      },
-    });
-    expect(await clockRows()).toEqual(saved);
-  });
-});
-
 it("a saved day-start change raises the document revision and records the signed-in saver", async () => {
   const response = await request(
     "PUT",

@@ -149,7 +149,7 @@ function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,
@@ -197,7 +197,7 @@ function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}):
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     menus: [{ menuId: "lunch", versionId: version, orderable: true, endedPeriodName: null }],
     unavailable: { ...NOTHING, ...unavailable },
@@ -2479,7 +2479,7 @@ describe("the menu's Device Home Page", () => {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
       menus: [{ menuId: "lunch", versionId: "v2", orderable: true, endedPeriodName: null }],
       unavailable: NOTHING,
@@ -2537,25 +2537,13 @@ describe("a device behind the live version (menus spec §9)", () => {
   });
 });
 
-const zoneKeepOpen = (zoneId: string, closesAt: string, extendedUntil: string | null) => ({
-  zoneId,
-  zoneName: "Terrace",
-  closesAt,
-  running: true,
-  extendedUntil,
-});
-type ZoneWidget = HTMLElement & {
-  api: TillApi;
-  zoneId: string;
-  zoneKeepOpen: ZoneOffers["service"]["zoneKeepOpen"];
-};
-describe("keep-open changes refresh the order screen", () => {
+describe("period end changes refresh the order screen", () => {
   const initialService = {
     open: true,
     zoneOpen: true,
     periodName: "Lunch",
     periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
-    zoneKeepOpen: null,
+    closedZoneName: null,
     keepOpen: {
       periodId: "lunch",
       periodName: "Lunch",
@@ -2567,12 +2555,6 @@ describe("keep-open changes refresh the order screen", () => {
     ...initialService,
     keepOpen: { ...initialService.keepOpen, endsAt: "14:30" },
   };
-  const withZone = (zoneId: string, closesAt: string, extendedUntil: string | null) => ({
-    ...initialService,
-    zoneKeepOpen: zoneKeepOpen(zoneId, closesAt, extendedUntil),
-  });
-  const zoneWidget = (screen: HTMLElement) =>
-    screen.shadowRoot!.querySelector<ZoneWidget>("till-keep-open");
   it("redraws the counter after a poll changes only the period's end", async () => {
     let service = initialService as ZoneOffers["service"];
     const { el } = await mountApp({
@@ -2597,23 +2579,6 @@ describe("keep-open changes refresh the order screen", () => {
       ]),
     ).toEqual([["Lemonade", "1", "3.00"]]);
   });
-  it("refreshes the counter immediately after a successful keep-open change", async () => {
-    const extended = withZone("zone-counter", "14:30", "14:30");
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue({ ...V1, service: withZone("zone-counter", "14:00", null) }),
-      listZoneOffers: vi.fn().mockResolvedValue({ ...V1, service: extended }),
-      menuState: vi.fn().mockResolvedValue({ ...menuState("v1"), service: extended }),
-    });
-    await toCounter(el);
-    const widget = zoneWidget(counter(el));
-    expect(widget, "the app mounts the counter control").not.toBeNull();
-    expect(widget!.zoneKeepOpen!.closesAt).toBe("14:00");
-    emit(widget!, "keep-open-changed", { zoneId: "zone-counter" });
-    await expect.poll(() => zoneWidget(counter(el))?.zoneKeepOpen?.closesAt).toBe("14:30");
-    expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-counter"]);
-  });
   it("redraws the embedded Order screen after a poll changes only the period's end", async () => {
     let service = initialService as ZoneOffers["service"];
     const { el } = await mountApp(
@@ -2637,75 +2602,6 @@ describe("keep-open changes refresh the order screen", () => {
       .toBe("Open · until 14:30");
     expect(dialog(el)).toBeNull();
   });
-  it("passes the API and dining zone through the embedded Order mount and refreshes it after a change", async () => {
-    const extended = withZone("zone-dining", "14:30", "14:30");
-    const { el } = await mountApp(
-      tableStubs(DINING, {
-        listZoneOffers: vi.fn((zone: string) =>
-          Promise.resolve(
-            zone === "zone-dining"
-              ? { ...DINING, service: withZone("zone-dining", "14:00", null) }
-              : V1,
-          ),
-        ),
-        menuState: vi.fn().mockResolvedValue({ ...menuState("v1"), service: extended }),
-      }),
-    );
-    await toTable(el);
-    api.listZoneOffers.mockImplementation((zone: string) =>
-      Promise.resolve(zone === "zone-dining" ? { ...DINING, service: extended } : V1),
-    );
-    const widget = zoneWidget(tableScreen(el));
-    expect(widget, "the embedded table control is mounted").not.toBeNull();
-    expect(widget!.api).toBe(api);
-    expect(widget!.zoneId).toBe("zone-dining");
-    expect(widget!.zoneKeepOpen!.closesAt).toBe("14:00");
-    emit(widget!, "keep-open-changed", { zoneId: "zone-dining" });
-    await expect.poll(() => zoneWidget(tableScreen(el))?.zoneKeepOpen?.closesAt).toBe("14:30");
-    expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
-  });
-});
-
-it("passes keep-open recovery through a standalone table drill", async () => {
-  const zone = { ...zoneKeepOpen("zone-dining", "14:00", null), running: false };
-  const service = {
-    open: false,
-    zoneOpen: true,
-    periodName: null,
-    periodOccurrenceKey: null,
-    zoneKeepOpen: zone,
-    keepOpen: null,
-  };
-  const extended = {
-    ...service,
-    zoneKeepOpen: zoneKeepOpen("zone-dining", "14:30", "14:30"),
-  };
-  const { el } = await mountApp(
-    tableStubs(DINING, {
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        formFactor: "till",
-      }),
-      listZoneOffers: vi.fn((zone: string) =>
-        Promise.resolve(zone === "zone-dining" ? { ...DINING, service } : V1),
-      ),
-      menuState: vi.fn().mockResolvedValue({ ...menuState("v1"), service: extended }),
-    }),
-  );
-  await toTable(el);
-  api.listZoneOffers.mockImplementation((zone: string) =>
-    Promise.resolve(zone === "zone-dining" ? { ...DINING, service: extended } : V1),
-  );
-  const screen = el.shadowRoot!.querySelector("till-table-order-screen")!;
-  expect(screen, "the standalone order drill is reachable").not.toBeNull();
-  const widget = screen.shadowRoot!.querySelector<ZoneWidget>("till-keep-open")!;
-  expect(widget, "the closed drill exposes recovery").not.toBeNull();
-  expect(widget.api).toBe(api);
-  expect(widget.zoneId).toBe("zone-dining");
-  expect(widget.zoneKeepOpen!.closesAt).toBe("14:00");
-  emit(widget, "keep-open-changed", { zoneId: "zone-dining" });
-  await expect.poll(() => widget.zoneKeepOpen?.closesAt).toBe("14:30");
-  expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-dining"]);
 });
 
 describe("zone-only menu-state changes", () => {
@@ -2771,52 +2667,6 @@ describe("zone-only menu-state changes", () => {
     expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
   });
 });
-
-for (const kind of ["counter", "table"] as const) {
-  it(`redraws the ${kind} zone control after a poll changes only its closing time`, async () => {
-    const initialService: ZoneOffers["service"] = {
-      open: true,
-      zoneOpen: true,
-      periodName: "Lunch",
-      periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
-      keepOpen: null,
-      zoneKeepOpen: {
-        zoneId: kind === "counter" ? "zone-counter" : "zone-dining",
-        zoneName: "Terrace",
-        closesAt: "14:00",
-        running: true,
-        extendedUntil: null,
-      },
-    };
-    let service = initialService;
-    const stubs = {
-      listDefaultZoneOffers: vi.fn().mockResolvedValue({ ...V1, service }),
-      listZoneOffers: vi.fn((zone: string) =>
-        Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service }),
-      ),
-      menuState: vi.fn(() => Promise.resolve({ ...menuState("v1"), service })),
-    };
-    const { el } = await mountApp(kind === "counter" ? stubs : tableStubs(DINING, stubs));
-    if (kind === "counter") await toCounter(el);
-    else await toTable(el);
-    const screen = () => (kind === "counter" ? counter(el) : tableScreen(el));
-    const widget = () =>
-      screen().shadowRoot!.querySelector<
-        HTMLElement & { zoneKeepOpen: ZoneOffers["service"]["zoneKeepOpen"] }
-      >("till-keep-open");
-    expect(widget()).not.toBeNull();
-    expect(widget()!.zoneKeepOpen!.closesAt).toBe("14:00");
-    api.listZoneOffers.mockImplementation((zone: string) =>
-      Promise.resolve({ ...(zone === "zone-dining" ? DINING : V1), service }),
-    );
-    service = {
-      ...initialService,
-      zoneKeepOpen: { ...initialService.zoneKeepOpen!, closesAt: "14:30", extendedUntil: "14:30" },
-    };
-    await poll(el);
-    await expect.poll(() => widget()!.zoneKeepOpen!.closesAt).toBe("14:30");
-  });
-}
 
 it.each(["counter", "table"] as const)(
   "A461 search section tap changes %s menu through the app without changing basket",
@@ -2945,7 +2795,7 @@ it.each(["counter", "table"] as const)(
       periodName: "Lunch",
       periodOccurrenceKey: "lunch",
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     };
     const overrides = {
       getDeviceEquipment: read,

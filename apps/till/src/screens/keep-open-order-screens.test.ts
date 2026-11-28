@@ -60,7 +60,7 @@ for (const kind of ["counter", "table"] as const) {
         zoneOpen: true,
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
-        zoneKeepOpen: null,
+        closedZoneName: null,
         keepOpen: subject,
       });
       const line = el.shadowRoot!.querySelector("[data-service-period]")!;
@@ -75,7 +75,7 @@ for (const kind of ["counter", "table"] as const) {
         zoneOpen: true,
         periodName: null,
         periodOccurrenceKey: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
         keepOpen: { ...subject, running: false },
       });
       const notice = el.shadowRoot!.querySelector("[data-service-closed]")!;
@@ -90,7 +90,7 @@ for (const kind of ["counter", "table"] as const) {
         periodName: null,
         periodOccurrenceKey: null,
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       });
       expect(el.shadowRoot!.querySelector("[data-service-period]")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();

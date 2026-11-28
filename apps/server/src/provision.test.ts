@@ -604,22 +604,16 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
-  it("clears today's zone extension before deleting its zone", async () => {
+  it("clears the zone and venue settings", async () => {
     const db = ownerDb();
     await applyHistoricalTestVenue(
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
     const zoneId = randomUUID();
-    await withTransaction(db, async (tx) => {
-      await seedZone(tx, { id: zoneId, name: "Terrace" });
-      await tx.execute(
-        sql`update floor_zones set kept_open_day='2026-10-09', kept_open_from='23:30:00', kept_open_until='01:30:00' where id=${zoneId}`,
-      );
-    });
+    await withTransaction(db, (tx) => seedZone(tx, { id: zoneId, name: "Terrace" }));
     expect(
-      (await db.execute(sql`select id as zone_id from floor_zones where kept_open_day is not null`))
-        .rows,
+      (await db.execute(sql`select id as zone_id from floor_zones where id = ${zoneId}`)).rows,
     ).toEqual([{ zone_id: zoneId }]);
 
     await clearProvisionFixture(db);
@@ -627,11 +621,10 @@ describe("clearProvisionFixture", () => {
     expect(
       (
         await db.execute(sql`select
-      (select count(*) from floor_zones where kept_open_day is not null) as extensions,
       (select count(*) from floor_zones) as zones,
       (select count(*) from settings where module = 'venue') as venue_documents`)
       ).rows,
-    ).toEqual([{ extensions: 0, zones: 0, venue_documents: 0 }]);
+    ).toEqual([{ zones: 0, venue_documents: 0 }]);
   });
 
   it("clears a venue's holiday area geography before the venue", async () => {

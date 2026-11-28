@@ -183,7 +183,7 @@ export function mountTillTableRoutes(
           return {
             ...zone,
             closed: state.closed,
-            closesAt: modes.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
+            closesAt: modes.has(zone.id) ? state.closesAt : null,
             hasPlan: layout.planned,
             layoutSetName: layout.recordedSetName,
             layoutDue: layoutOffer(layout),

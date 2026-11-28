@@ -92,7 +92,7 @@ const breakfastRunning = {
   periodName: "Breakfast",
   periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
   keepOpen: null,
-  zoneKeepOpen: null,
+  closedZoneName: null,
 };
 const lunchRunning = {
   ...breakfastRunning,

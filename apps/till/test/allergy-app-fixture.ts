@@ -72,7 +72,7 @@ export function menu(version: string, prices: Record<string, string> = {}): Zone
       periodName: null,
       periodOccurrenceKey: null,
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     },
     context: {
       dining: null,

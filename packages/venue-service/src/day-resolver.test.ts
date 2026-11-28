@@ -313,10 +313,25 @@ describe("the till's service on a season boundary", () => {
     );
     expect(states).toEqual(
       new Map([
-        [v.sala, { closed: false, keepOpen: null }],
-        [v.terraza, { closed: false, keepOpen: null }],
+        [v.sala, { closed: false, closesAt: null }],
+        [v.terraza, { closed: false, closesAt: null }],
       ]),
     );
+  });
+
+  it("menu state names the closed zone while its department serves", async () => {
+    const v = await autumnAndWinter();
+    await zoneSeason(v.sala, v.seasons.Autumn!, {
+      [SATURDAY]: [{ startsAt: "00:00", endsAt: "05:00" }],
+    });
+    const at = new Date("2030-11-30T23:15:00Z");
+    const state = await scoped((tx) => menuState(tx, v.sala, at));
+    expect(state.service).toMatchObject({
+      open: true,
+      zoneOpen: false,
+      closedZoneName: "Dining room",
+    });
+    expect(state.service).not.toHaveProperty("zoneKeepOpen");
   });
 
   it("an unreadable clock keeps the till's menus and zone open", async () => {
@@ -325,7 +340,7 @@ describe("the till's service on a season boundary", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
     );
     const state = await scoped((tx) => menuState(tx, v.sala, new Date("2030-11-30T23:15:00Z")));
-    expect(state.service).toMatchObject({ open: true, zoneOpen: true, zoneKeepOpen: null });
+    expect(state.service).toMatchObject({ open: true, zoneOpen: true, closedZoneName: null });
   });
 });
 

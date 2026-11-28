@@ -587,10 +587,10 @@ it("counts the lines shown plus the ranges the server left off, not the server's
   expect(count).toBe("Opening hours that clash with the new start: 3. Review opening hours");
 });
 
-it("puts the ranges the server left off straight after the listed ranges, before a zone kept open", async () => {
+it("puts the ranges the server left off straight after the listed ranges", async () => {
   setLocale("en-GB");
   const { lines, count } = await conflictLines(
-    [seasonConflict("Winter"), seasonConflict("Autumn"), keptOpen],
+    [seasonConflict("Winter"), seasonConflict("Autumn")],
     8,
     5,
   );
@@ -598,9 +598,8 @@ it("puts the ranges the server left off straight after the listed ranges, before
     "Winter: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
     "Autumn: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
     "and 5 more",
-    "Restaurant · Terrace · Kept open until 04:30 tonight",
   ]);
-  expect(count).toBe("Opening hours that clash with the new start: 8. Review opening hours");
+  expect(count).toBe("Opening hours that clash with the new start: 7. Review opening hours");
 });
 
 const cardRows = (el: Editor) =>
@@ -832,15 +831,6 @@ const allYear = (weekday: number, endsAt: string) => ({
   rangeIndex: 0,
   reason: "range" as const,
 });
-const keptOpen = {
-  departmentId: "d",
-  departmentName: "Restaurant",
-  zoneId: "z",
-  zoneName: "Terrace",
-  endsAt: "04:30",
-  rangeIndex: 0,
-  reason: "kept_open" as const,
-};
 it("lists the opening hours that clash with the new start, season first", async () => {
   setLocale("en-GB");
   const { el, lines } = await previewLines(
@@ -853,11 +843,6 @@ it("lists the opening hours that clash with the new start, season first", async 
     "All year: Restaurant · Fri · Dinner · 21:00–04:00 · Crosses the new start",
     "All year: Restaurant · Sat · Dinner · 21:00–04:30 · Crosses the new start",
   ]);
-});
-it("says until when a zone is kept open tonight, without a range", async () => {
-  setLocale("en-GB");
-  const { lines } = await previewLines(changeoverPreview(tonight, [keptOpen]));
-  expect(lines.at(-1)).toBe("Restaurant · Terrace · Kept open until 04:30 tonight");
 });
 it.each([
   ["range", "Crosses the new start", "Cruza el nuevo inicio"],
@@ -878,16 +863,13 @@ it.each([
 });
 it("previews in Spanish", async () => {
   setLocale("es-ES");
-  const { el, lines } = await previewLines(
-    changeoverPreview(tonight, [allYear(5, "04:00"), keptOpen]),
-  );
+  const { el, lines } = await previewLines(changeoverPreview(tonight, [allYear(5, "04:00")]));
   expect(lines).toEqual([
     "Cambia en el próximo cambio de día: mié 21 oct, 03:00.",
     "El día de trabajo de hoy (mar 20 oct) va de 05:00 a 03:00: 22 h.",
     "Los informes anteriores conservan sus días.",
-    "Horarios que chocan con el nuevo inicio: 2. Revisar horarios",
+    "Horarios que chocan con el nuevo inicio: 1. Revisar horarios",
     "All year: Restaurant · Vie · Dinner · 21:00–04:00 · Cruza el nuevo inicio",
-    "Restaurant · Terrace · Abierto hasta las 04:30 esta noche",
   ]);
   expect(q<WtInput>(el, "[name=dayCutover]")!.label).toBe("El día de trabajo empieza a las");
 });

@@ -82,7 +82,7 @@ describe("fixed Counter menu browser", () => {
         periodName: "Lunch",
         periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
-        zoneKeepOpen: null,
+        closedZoneName: null,
       },
     });
     const closedMenu = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser");
@@ -96,7 +96,7 @@ describe("fixed Counter menu browser", () => {
       periodName: "Lunch",
       periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
       keepOpen: null,
-      zoneKeepOpen: null,
+      closedZoneName: null,
     };
     await el.updateComplete;
     const browser = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;

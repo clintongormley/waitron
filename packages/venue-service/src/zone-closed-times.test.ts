@@ -425,27 +425,17 @@ describe("zones closed at an instant", () => {
     const ids = [v.terrace, v.bar, v.disabled];
     const single = await tx(async (db) => {
       const answers = new Map<string, unknown>();
-      for (const id of ids)
-        answers.set(id, await VENUE_SERVICE.readZoneKeepOpenState(db, id, instant));
+      for (const id of ids) {
+        const states = await VENUE_SERVICE.readZoneClosingStates(db, [id], instant);
+        answers.set(id, states.get(id));
+      }
       return answers;
     });
     expect(single).toEqual(
       new Map([
-        [
-          v.terrace,
-          {
-            zoneId: v.terrace,
-            zoneName: "Terrace",
-            closesAt: "23:30",
-            running: false,
-            extendedUntil: null,
-          },
-        ],
-        [
-          v.bar,
-          { zoneId: v.bar, zoneName: "Bar", closesAt: "23:45", running: true, extendedUntil: null },
-        ],
-        [v.disabled, null],
+        [v.terrace, { closed: true, closesAt: "23:30" }],
+        [v.bar, { closed: false, closesAt: "23:45" }],
+        [v.disabled, { closed: false, closesAt: null }],
       ]),
     );
     const counted = <T>(read: (db: Transaction) => Promise<T>) =>
@@ -466,12 +456,10 @@ describe("zones closed at an instant", () => {
       });
     const batch = (zoneIds: string[]) =>
       counted((db) => VENUE_SERVICE.readZoneClosingStates(db, zoneIds, instant));
-    const keepOpen = (states: ReadonlyMap<string, { keepOpen: unknown }>) =>
-      new Map([...states].map(([id, state]) => [id, state.keepOpen]));
     const one = await batch([v.terrace]);
     const three = await batch(ids);
-    expect(keepOpen(one.answers)).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
-    expect(keepOpen(three.answers)).toEqual(single);
+    expect(one.answers).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
+    expect(three.answers).toEqual(single);
     expect(three.texts).toHaveLength(one.texts.length);
     expect((await batch([])).answers).toEqual(new Map());
     const closedOnly = await counted((db) => VENUE_SERVICE.closedZoneIdsAt(db, instant, ids));
@@ -479,8 +467,8 @@ describe("zones closed at an instant", () => {
       new Map(ids.map((id) => [id, closedOnly.answers.has(id)])),
     );
     expect([...closedOnly.answers]).toEqual([v.terrace]);
-    // Beyond the closed check, the summaries cost only the read of the closing zones' names.
-    expect(three.texts).toHaveLength(closedOnly.texts.length + 1);
+    expect(three.texts).toHaveLength(closedOnly.texts.length);
+    expect(three.texts.some((query) => query.includes('"menu_periods"'))).toBe(false);
     const prepared = await counted(async (db) => {
       const day = await VENUE_SERVICE.readServiceDay(db, instant);
       const before = (
@@ -515,24 +503,4 @@ describe("zones closed at an instant", () => {
       ]),
     );
   });
-});
-
-it.each([
-  { extension: null, want: [{ startsAt: "23:30", endsAt: "06:00" }] },
-  {
-    extension: { startsAt: "21:00", endsAt: "22:00" },
-    want: [{ startsAt: "23:30", endsAt: "06:00" }],
-  },
-  { extension: { startsAt: "23:30", endsAt: "06:00" }, want: [] },
-  {
-    extension: { startsAt: "00:00", endsAt: "01:30" },
-    want: [
-      { startsAt: "23:30", endsAt: "00:00" },
-      { startsAt: "01:30", endsAt: "06:00" },
-    ],
-  },
-])("carves only the extension span from closed ranges $extension", ({ extension, want }) => {
-  expect(
-    closures.withoutZoneExtension([{ startsAt: "23:30", endsAt: "06:00" }], extension, "06:00"),
-  ).toEqual(want);
 });

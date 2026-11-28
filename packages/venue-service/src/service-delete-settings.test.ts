@@ -262,11 +262,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         { cellId: cells[1]!.id, periodId: p3, noPreparation: true },
       ])
       .returning();
-    for (const zoneId of [f.gone, f.elsewhere])
-      await tx
-        .update(floorZones)
-        .set({ keptOpenDay: "2026-10-12", keptOpenFrom: "17:00:00", keptOpenUntil: "18:00:00" })
-        .where(eq(floorZones.id, zoneId));
     await tx
       .update(departments)
       .set({ transferDeskProfileId: f.explicit })
@@ -360,9 +355,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
               orderStart: null,
               paidWhen: null,
               collectionNumber: null,
-              keptOpenDay: null,
-              keptOpenFrom: null,
-              keptOpenUntil: null,
             }
           : row.id === f.elsewhere
             ? { ...row, isCounterDefault: true }
