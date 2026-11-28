@@ -1987,7 +1987,7 @@ export const en = {
   "drawer_close.saved": "Drawer closed",
   "drawer_close.back_to_floor": "Back to the floor",
   "drawer_close.slip_queued": "Slip queued for the drawer printer.",
-  "drawer_close.slip_queued_named": "Slip queued for {name}.",
+  "drawer_close.slip_queued_named": "Slip queued for the printer “{name}”.",
   "drawer_close.slip_unavailable": "You can reprint the slip in Sales.",
   "drawer_close.slip_already_closed":
     "This drawer was already closed. You can reprint the slip in Sales.",
@@ -4599,7 +4599,7 @@ export const es: Record<StringKey, string> = {
   "drawer_close.saved": "Cajón cerrado",
   "drawer_close.back_to_floor": "Volver a la sala",
   "drawer_close.slip_queued": "Justificante en la cola de la impresora del cajón.",
-  "drawer_close.slip_queued_named": "Justificante en cola para {name}.",
+  "drawer_close.slip_queued_named": "Justificante en cola para la impresora «{name}».",
   "drawer_close.slip_unavailable": "Puedes reimprimir el justificante en Ventas.",
   "drawer_close.slip_already_closed":
     "El cajón ya estaba cerrado. Puedes reimprimir el justificante en Ventas.",

@@ -72,23 +72,25 @@ export class TillDrawerClose extends LitElement {
         margin: 0;
       }
 
+      wt-card {
+        --wt-radius-lg: calc(var(--wt-radius-md) + var(--wt-space-1));
+      }
+
+      .figures {
+        margin: calc(-1 * var(--wt-space-4));
+      }
+
       .figures > div {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
-        align-items: baseline;
+        align-items: center;
         gap: var(--wt-space-2);
-        padding-block: var(--wt-space-2);
+        padding: var(--wt-space-3) calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+        font-size: var(--wt-text-control-font-size);
       }
 
       .figures > div + div {
         border-block-start: var(--wt-field-line-width) solid var(--wt-color-border);
-      }
-
-      .figures > :first-child {
-        padding-block-start: 0;
-      }
-      .figures > :last-child {
-        padding-block-end: 0;
       }
 
       dd {
@@ -108,18 +110,26 @@ export class TillDrawerClose extends LitElement {
       .left-hint {
         display: block;
         color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+        font-size: var(--wt-font-size-md);
+      }
+
+      dt small {
+        font-size: calc(var(--wt-font-size-sm) + var(--wt-space-1) / 4);
+      }
+
+      wt-amount-block::part(amount) {
+        font-size: calc(var(--wt-font-size-payment-amount) + var(--wt-space-1) / 2);
       }
 
       .left-hint {
-        margin-block-start: var(--wt-space-1);
+        margin-block-start: calc(var(--wt-space-1) + var(--wt-space-1) / 2);
       }
 
       .note {
-        padding: var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-table-calm);
-        color: var(--wt-color-on-table-calm);
+        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2)
+          calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+        border-radius: calc(var(--wt-radius-md) + var(--wt-space-1) / 2);
+        background: var(--wt-color-surface-lifted);
         font-size: var(--wt-font-size-md);
       }
 
@@ -133,6 +143,8 @@ export class TillDrawerClose extends LitElement {
 
       [data-drawer-action="recount"] {
         align-self: center;
+        margin-block: calc(-1 * var(--wt-space-2));
+        --wt-action-text: var(--wt-color-primary-text);
       }
 
       .closed {
@@ -140,10 +152,11 @@ export class TillDrawerClose extends LitElement {
         justify-items: center;
         gap: var(--wt-space-3);
         text-align: center;
+        margin-block: var(--wt-space-3) var(--wt-space-2);
       }
 
       .closed h2 {
-        font-size: calc(var(--wt-font-size-xl) + var(--wt-space-1));
+        font-size: calc(var(--wt-font-size-xl) + var(--wt-space-3) / 2);
       }
 
       .closed-mark {
@@ -204,6 +217,7 @@ export class TillDrawerClose extends LitElement {
   @state() private firstRead: FirstReadView | undefined;
   #firstAttempt?: ReturnType<typeof startFirstRead<DrawerCloseRead>>;
   #clockOutAfterClose = false;
+  #focusAmountLeft = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -218,9 +232,17 @@ export class TillDrawerClose extends LitElement {
 
   override updated(changed: PropertyValues): void {
     if (changed.has("snapshot") || changed.has("recounting") || changed.has("finished")) {
-      this.renderRoot
-        .querySelector<HTMLElement>("[data-stage-focus]")
-        ?.focus({ preventScroll: true });
+      const amount = this.#focusAmountLeft ? this.renderRoot.querySelector("wt-price-input") : null;
+      this.#focusAmountLeft = false;
+      if (amount) {
+        void amount.updateComplete.then(() => {
+          if (amount.isConnected) amount.focus({ preventScroll: true });
+        });
+      } else {
+        this.renderRoot
+          .querySelector<HTMLElement>("[data-stage-focus]")
+          ?.focus({ preventScroll: true });
+      }
     }
   }
 
@@ -291,10 +313,11 @@ export class TillDrawerClose extends LitElement {
     return true;
   }
 
-  #showCount(snapshot: SavedDrawerCount): void {
+  #showCount(snapshot: SavedDrawerCount, fromKeyboard = false): void {
     this.snapshot = snapshot;
     this.input = snapshot.openingCash;
     this.recounting = false;
+    this.#focusAmountLeft = fromKeyboard;
   }
 
   #amountError(): string {
@@ -308,7 +331,7 @@ export class TillDrawerClose extends LitElement {
       : "";
   }
 
-  async #save(): Promise<void> {
+  async #save(fromKeyboard = false): Promise<void> {
     const snapshot = this.snapshot;
     const amount = cashAmount(this.input);
     if (
@@ -329,6 +352,7 @@ export class TillDrawerClose extends LitElement {
             startSequence: snapshot.startSequence,
             counted: amount,
           }),
+          fromKeyboard,
         );
       } else if (this.recounting) {
         this.#showCount(
@@ -336,6 +360,7 @@ export class TillDrawerClose extends LitElement {
             counted: amount,
             startSequence: snapshot.confirmSequence,
           }),
+          fromKeyboard,
         );
       } else {
         this.finished = await this.api.finishDrawerClose(snapshot.first.id, {
@@ -417,7 +442,7 @@ export class TillDrawerClose extends LitElement {
         .value=${this.input}
         .disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeAmount(event.detail.value)}
-        @pad-enter=${() => void this.#save()}
+        @pad-enter=${() => void this.#save(true)}
       ></till-numeric-pad>
     `;
   }
@@ -466,7 +491,7 @@ export class TillDrawerClose extends LitElement {
         canRecount
           ? html`<wt-button
               data-drawer-action="recount"
-              variant="link"
+              variant="ghost"
               .disabled=${this.busy}
               @click=${this.#startRecount}
               >${t("drawer_close.recount")}</wt-button
@@ -580,7 +605,6 @@ export class TillDrawerClose extends LitElement {
         .dismissible=${canLeave}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (event.target !== event.currentTarget) return;
           this.dispatchEvent(new CustomEvent("drawer-close-dismiss"));
           if (this.#clockOutAfterClose) {
             this.dispatchEvent(
@@ -658,7 +682,7 @@ export class TillDrawerClose extends LitElement {
                         ? html`<wt-button
                             slot="link"
                             data-drawer-action="back"
-                            variant="link"
+                            variant="ghost"
                             @click=${() => void this.#close()}
                             >${t("drawer_close.back_to_floor")}</wt-button
                           >`

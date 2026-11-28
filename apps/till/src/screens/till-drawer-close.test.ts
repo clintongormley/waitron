@@ -176,7 +176,7 @@ it("accepts zero counted and zero left and shows the saved close figures", async
     confirmSequence: 8,
     amountLeft: "0.00",
   });
-  await vi.waitFor(() => expect(words(el)).toContain("Slip queued for Bar printer."));
+  await vi.waitFor(() => expect(words(el)).toContain("Slip queued for the printer “Bar printer”."));
   expect(words(el)).toMatch(
     /Counted\s*€0\.00\s*No difference\s*Left in the drawer\s*€0\.00\s*For the bank\s*€0\.00/,
   );
@@ -247,6 +247,7 @@ it("saves the count before showing the difference, allows a recount and saves th
     amountLeft: "6.00",
   });
   await vi.waitFor(() => expect(words(el)).toContain("reprint the slip in Sales"));
+  expect(words(el)).toMatch(/Counted\s*€45\.00\s*Over by\s*€5\.00/);
 });
 
 it("offers Recount again when later cash makes the latest count stale", async () => {
@@ -460,7 +461,7 @@ it("saves the count once when the button is pressed twice before the dialog redr
   expect(requests.saveDrawerCount).toHaveBeenCalledOnce();
 });
 
-it("saves the count when Enter is pressed on the keypad screen", async () => {
+it("takes the keyboard from the keypad to cash left after Enter saves the count", async () => {
   const requests = api();
   const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
     api: requests,
@@ -476,6 +477,13 @@ it("saves the count when Enter is pressed on the keypad screen", async () => {
       counted: "42.00",
     }),
   );
+  const left = el.shadowRoot!.querySelector("wt-price-input")!;
+  const input = left.shadowRoot!.querySelector("input")!;
+  await vi.waitFor(() => expect(left.shadowRoot!.activeElement).toBe(input));
+  expect(left.value).toBe("5.00");
+  input.select();
+  await userEvent.keyboard("7");
+  expect(left.value).toBe("7");
 });
 
 it.each(["drawer.close_changed", "drawer.recount_unavailable", "drawer.close_not_found"])(
