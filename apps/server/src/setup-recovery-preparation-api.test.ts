@@ -792,3 +792,192 @@ it("keeps the request cancellation through the bucket preparation service", asyn
     download.mockRestore();
   }
 });
+
+const invalidField = (field: string) => ({
+  error: { code: "setup.request_invalid", params: { field } },
+});
+function multipart(fields: Record<string, string | Blob>) {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
+  return { method: "POST", body: form };
+}
+const cloud = { kind: "cloud", pointId: "d0000000-0000-4000-8000-000000000002" };
+it.each([
+  ["a preparation that is not an object", request(bucket, "restore please"), "body"],
+  [
+    "a bucket copy for an unknown environment",
+    request({ ...bucket, environment: "staging" }),
+    "environment",
+  ],
+  ["a Cloud point that is not an id", request({ ...cloud, pointId: "latest" }), "pointId"],
+  ["a backup file named without its bytes", request(archiveSource), "artifact"],
+  [
+    "a body that is neither JSON nor a form",
+    { method: "POST", headers: { "content-type": "text/plain" }, body: "restore" },
+    "body",
+  ],
+  [
+    "a form with no body at all",
+    { method: "POST", headers: { "content-type": "multipart/form-data; boundary=empty" } },
+    "body",
+  ],
+  [
+    "a form carrying a field it does not read",
+    multipart({
+      request: JSON.stringify({ source: archiveSource, preparation }),
+      artifact: new Blob([Uint8Array.from(FILE)]),
+      note: "extra",
+    }),
+    "body",
+  ],
+  [
+    "a form whose request is not JSON",
+    multipart({ request: "{", artifact: new Blob([Uint8Array.from(FILE)]) }),
+    "body",
+  ],
+  [
+    "a form with no backup file",
+    multipart({ request: JSON.stringify({ source: archiveSource, preparation }) }),
+    "body",
+  ],
+  [
+    "a form whose backup file is empty",
+    multipart({
+      request: JSON.stringify({ source: archiveSource, preparation }),
+      artifact: new Blob([]),
+    }),
+    "artifact",
+  ],
+  [
+    "a bucket copy sent beside an uploaded file",
+    multipart({
+      request: JSON.stringify({ source: bucket, preparation }),
+      artifact: new Blob([Uint8Array.from(FILE)]),
+    }),
+    "artifact",
+  ],
+  [
+    "a Cloud point sent beside an uploaded file",
+    multipart({
+      request: JSON.stringify({ source: cloud, preparation }),
+      artifact: new Blob([Uint8Array.from(FILE)]),
+    }),
+    "artifact",
+  ],
+])("refuses a preparation with %s, before dispatch", async (_name, init, field) => {
+  const { app, execute } = fixture();
+  const response = await app.request(path, init, tls());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual(invalidField(field));
+  expect(execute).not.toHaveBeenCalled();
+});
+it("refuses a form whose declared length is past the restore limit before reading it", async () => {
+  const { app, execute } = fixture();
+  const response = await app.request(
+    path,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "multipart/form-data; boundary=declared",
+        "content-length": String(64 * 1024 ** 4),
+      },
+      body: "--declared--\r\n",
+    },
+    tls(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual(invalidField("artifact"));
+  expect(execute).not.toHaveBeenCalled();
+});
+it.each([
+  [
+    "a body that is neither JSON nor a form",
+    { method: "POST", headers: { "content-type": "text/plain" }, body: "stage" },
+    "body",
+  ],
+  [
+    "a request field that is not JSON",
+    multipart({ request: "{", artifact: new Blob([Uint8Array.from(FILE)]) }),
+    "body",
+  ],
+  [
+    "a bucket copy in place of a backup file",
+    stageForm({
+      eventId: "e",
+      source: { kind: "bucket", masterKey: FILE_MASTER_KEY_TEXT, environment: "production" },
+    }),
+    "body",
+  ],
+])("refuses a stage with %s, before staging", async (_name, init, field) => {
+  const { app, stageRecovery } = stageFixture();
+  const response = await app.request("/setup-api/recovery/stage", init, tls());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual(invalidField(field));
+  expect(stageRecovery).not.toHaveBeenCalled();
+});
+it("keeps discard unavailable without a staged-copy host, and refuses a body that is not JSON", async () => {
+  const discard = (app: Hono, contentType: string) =>
+    app.request(
+      "/setup-api/recovery/stage/discard",
+      {
+        method: "POST",
+        headers: { "content-type": contentType },
+        body: JSON.stringify({ stagedId }),
+      },
+      tls(),
+    );
+  const missing = await discard(fixture().app, "application/json");
+  expect([missing.status, await missing.json()]).toEqual([
+    503,
+    { error: { code: "setup.not_ready", params: {} } },
+  ]);
+  const { app, discardStagedRecovery } = stageFixture();
+  const wrongType = await discard(app, "text/plain");
+  expect([wrongType.status, await wrongType.json()]).toEqual([400, invalidField("body")]);
+  expect(discardStagedRecovery).not.toHaveBeenCalled();
+});
+it("refuses a preparation, and a stage queued behind it, once a restore is staged and the box is restarting", async () => {
+  let admit!: () => void;
+  const admitted = new Promise<void>((resolve) => {
+    admit = resolve;
+  });
+  const assertOtherAllowed = vi.fn().mockReturnValueOnce(admitted).mockResolvedValue(undefined);
+  const stageRecovery = vi.fn(async () => ({ stagedId }));
+  const requestRestart = vi.fn();
+  const coordinator = createFirstSetupCoordinator();
+  const { app, execute } = fixture({
+    firstSetup: { coordinator, assertOtherAllowed },
+    stageRecovery,
+    stageRestore: async () => {},
+    requestRestart,
+  });
+  const restore = app.request("/setup-api/restore", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
+      "x-waitron-restore-environment": "preproduction",
+    },
+    body: Uint8Array.from(RESTORE_FILE),
+  });
+  await vi.waitFor(() => expect(assertOtherAllowed).toHaveBeenCalledOnce());
+  const stage = app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "interactive-restore", source: archiveSource }),
+    tls(),
+  );
+  admit();
+  expect((await restore).status).toBe(202);
+  const staged = await stage;
+  expect([staged.status, await staged.json()]).toEqual([
+    409,
+    { error: { code: "setup.already_provisioning", params: {} } },
+  ]);
+  const prepared = await app.request(path, request(), tls());
+  expect([prepared.status, await prepared.json()]).toEqual([
+    409,
+    { error: { code: "setup.already_provisioning", params: {} } },
+  ]);
+  expect(stageRecovery).not.toHaveBeenCalled();
+  expect(execute).not.toHaveBeenCalled();
+});

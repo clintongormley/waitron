@@ -970,6 +970,29 @@ describe("A803 portions: part of a row, and a row's extras", () => {
     expect((await pricesOf(billId)).map(([, unit]) => unit)).toEqual(["3.33", "3.00", "3.33"]);
   });
 
+  it("A803 portions: part of a row larger than its portions not already cancelled is refused adjustment.quantity_invalid, changing nothing", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
+    await inTx(venue, (tx) =>
+      tx.insert(lineServiceCancellations).values(
+        members.slice(1).map((lineId) => ({
+          lineId,
+          quantity: 1000,
+          cancelledAt: new Date().toISOString(),
+          wasStarted: true,
+          actorId: venue.staffId,
+        })),
+      ),
+    );
+
+    await refusedWith(
+      billId,
+      { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "2" },
+      "adjustment.quantity_invalid",
+      { workingOrderId: billId, lineNo: 1, quantity: "2.000" },
+    );
+  });
+
   it("A803 portions: half a portion of a row is refused adjustment.quantity_invalid", async () => {
     const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
     const members = await dishesNamed(billId, "Croquettes");
