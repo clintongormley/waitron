@@ -896,12 +896,13 @@ export class TillGiveBackDialog extends LitElement {
       this.fullInvoice,
     );
   }
-  /** The correction a give-back left open, unless a card refund it waits for comes first. */
   #underWayOf(step: Step | null): InvoiceCorrectionView | null {
     if (step === null) return this.view?.underWay ?? null;
     return step.kind === "done" && !waitsForCard(step.outcome) ? step.outcome.underWay : null;
   }
   readonly #waitText = (reason: GiveBackWaitReason) => waitReasonText(reason, this.fullInvoice);
+  readonly #coverRefund = (covered: boolean) =>
+    this.renderRoot.querySelector("wt-dialog")?.toggleAttribute("data-approval-covered", covered);
   #underWay(correction: InvoiceCorrectionView) {
     return html`<till-give-back-under-way
       .api=${this.api}
@@ -910,6 +911,7 @@ export class TillGiveBackDialog extends LitElement {
       .correction=${correction}
       .corrections=${this.corrections}
       .refunds=${this.refunds}
+      .coverUnderlay=${this.#coverRefund}
       .capabilities=${this.capabilities}
       .close=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
       @give-back-busy=${(event: CustomEvent<{ busy: boolean; held: boolean }>) => {
@@ -920,7 +922,6 @@ export class TillGiveBackDialog extends LitElement {
     ></till-give-back-under-way>`;
   }
   #body() {
-    // A saved step needs no read: the read only names the card it went back to.
     if (this.step !== null) return this.#stepBody(this.step);
     const underWay = this.#underWayOf(null);
     if (underWay !== null) return this.#underWay(underWay);
@@ -967,16 +968,16 @@ export class TillGiveBackDialog extends LitElement {
               .sheet=${{ heading: t("give_back.approval_title"), prompt: t("give_back.approval_prompt") }}
               .authorizers=${this.approvers}
               .error=${this.pinError}
+              .coverUnderlay=${this.#coverRefund}
               @override-cancel=${(event: Event) => {
                 event.stopPropagation();
                 if (this.sending) return;
                 this.approvers = null;
                 this.approval = undefined;
-                // A first send refused for its PIN wrote nothing, so cancelling forgets it.
                 try {
                   this.session.abandon(this.saleId);
                 } catch {
-                  // The next press reads the storage again and says if it cannot.
+                  // The refused send wrote nothing. The next press reports a storage error.
                 }
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {

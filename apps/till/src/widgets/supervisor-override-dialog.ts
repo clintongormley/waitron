@@ -97,8 +97,6 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
       .approval-sheet {
         --wt-dialog-surface: transparent;
-        /* Refund already has a backdrop behind the approval sheet. */
-        --wt-color-scrim: transparent;
       }
 
       .approval-sheet::part(body) {
@@ -127,11 +125,12 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
       .sheet-content {
         padding-inline: var(--wt-space-3);
+        padding-block-end: var(--wt-space-2);
       }
 
       .sheet-content wt-combobox {
         display: block;
-        inline-size: calc(100% - 2 * var(--wt-space-1));
+        inline-size: min(calc(100% - 2 * var(--wt-space-1)), var(--wt-till-form-column-width));
         margin-inline: auto;
         --wt-field-height: var(--wt-dropdown-row-height);
       }
@@ -166,6 +165,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
         --wt-action-weight: var(--wt-font-weight-normal);
       }
 
+      .sheet-header,
       .sheet-actions {
         inline-size: min(100%, calc(var(--wt-till-form-column-width) + 2 * var(--wt-space-4)));
         margin-inline: auto;
@@ -191,6 +191,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   @property({ attribute: false }) error: ApproverRefusal | null = null;
   @property({ attribute: false }) sheet?: { heading: string; prompt: string };
+  @property({ attribute: false }) coverUnderlay?: (covered: boolean) => void;
 
   @state() private selected?: StaffMember;
   @state() private pin = "";
@@ -209,11 +210,16 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.coverUnderlay?.(false);
     this.pin = "";
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
     super.disconnectedCallback();
+  }
+
+  override updated(): void {
+    this.coverUnderlay?.(this.active);
   }
 
   /** A freshly-delivered refusal for the chosen approver (the parent nulls then re-sets it per

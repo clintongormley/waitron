@@ -93,6 +93,7 @@ export class TillGiveBackUnderWay extends LitElement {
   @property({ attribute: false }) refunds!: TenderRefundSession;
   @property({ attribute: false }) capabilities: readonly string[] = [];
   @property({ attribute: false }) close!: () => void;
+  @property({ attribute: false }) coverUnderlay?: (covered: boolean) => void;
   @state() private tenders: RefundableTender[] = [];
   @state() private busy = false;
   @state() private message = "";
@@ -671,6 +672,7 @@ export class TillGiveBackUnderWay extends LitElement {
               .sheet=${{ heading: t("give_back.approval_title"), prompt: t("give_back.approval_prompt") }}
               .authorizers=${this.approvers}
               .error=${this.pinError}
+              .coverUnderlay=${this.coverUnderlay}
               @override-cancel=${(event: Event) => {
                 event.stopPropagation();
                 if (this.busy) return;
