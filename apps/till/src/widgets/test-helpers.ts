@@ -1073,3 +1073,34 @@ export function panelBackButton(back: HTMLElement): HTMLElement {
     ? back.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!
     : back;
 }
+
+/** A name's text, without the room a counted name starts with. */
+export const nameText = (name: Element) =>
+  [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+
+/** The lines a name shows, top first. Chromium draws a cut line's text as a second, shortened box
+ * at the line's start with the "…" after it: `text` is that box, `right` the end of its "…". */
+export function shownLines(name: HTMLElement): { text: DOMRect; right: number; cut: boolean }[] {
+  const words = document.createRange();
+  words.selectNodeContents(nameText(name));
+  const bottom = name.getBoundingClientRect().bottom;
+  const boxes = [...words.getClientRects()].filter((box) => box.width > 0 && box.top < bottom);
+  const pen = document.createElement("canvas").getContext("2d")!;
+  pen.font = getComputedStyle(name).font;
+  return [...new Set(boxes.map((box) => box.top))].map((top) => {
+    const line = boxes.filter((box) => box.top === top);
+    const text = line.reduce((narrowest, box) => (box.width < narrowest.width ? box : narrowest));
+    const cut = line.length > 1;
+    return { text, right: text.right + (cut ? pen.measureText("…").width : 0), cut };
+  });
+}
+
+/** Whether a shown line keeps clear of `count`, grown by `ring` on every side. */
+export function clearOf(line: { text: DOMRect; right: number }, count: DOMRect, ring = 0): boolean {
+  return (
+    count.right + ring <= line.text.left ||
+    line.right <= count.left - ring ||
+    count.bottom + ring <= line.text.top ||
+    line.text.bottom <= count.top - ring
+  );
+}

@@ -116,21 +116,39 @@ export const menuTileStyles: CSSResult = css`
 
   /* With the end padding, the count's reach into the tile, from the width the count publishes,
      beside the first line only; the tile's own padding covers the ring. */
-  .tile[data-in-order] .name::before {
-    content: "";
-    float: inline-end;
-    width: max(
+  .tile[data-in-order] .name {
+    --name-count-room: max(
       0px,
       var(--count-badge-width, var(--wt-space-5)) - var(--count-outside) - var(--name-ellipsis-room)
     );
+  }
+
+  .tile[data-in-order]:is(:not([data-name-room]), [data-name-room="end"]) .name::before {
+    content: "";
+    float: inline-end;
+    width: var(--name-count-room);
     height: 1lh;
   }
 
-  /* Something for the first line to hold, so a first word too wide to sit beside the count starts
-     the second line instead of pushing every line below the count. */
+  /* The same room at the first line's start, so the line stays centred on the tile. Being something
+     for the first line to hold, a first word too wide to sit beside the count starts the second line
+     instead of pushing every line below the count. */
   .name-start {
     display: inline-block;
     vertical-align: top;
+    width: var(--name-count-room);
+  }
+
+  /* Where that first line is left empty, the till sets data-name-room to the first of these that
+     keeps the name on its first line and clear of the count: "none", no room; "end", the room at
+     the first line's end only; "both", the room on both sides of every line. The start then leaves
+     the flow but keeps its width, so the size the till watches holds still. */
+  .tile[data-name-room] .name-start {
+    position: absolute;
+  }
+
+  .tile[data-name-room="both"] .name {
+    padding-inline: calc(var(--name-ellipsis-room) + var(--name-count-room));
   }
 
   /* A set leading, not the font's own, which is taller in some fonts (Noto Sans's is 1.36 of the

@@ -15,11 +15,13 @@ import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import {
   blurAll,
+  clearOf,
   cleanupWidgets,
   loadPhoneFont,
   measured,
   mountWidget,
   PHONE_FONT,
+  shownLines,
   type Theme,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
@@ -3163,8 +3165,6 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         allergens,
       });
       const plainDish = product("plain", "Mediterranean vegetables", { allergens });
-      const overlaps = (a: DOMRect, b: DOMRect) =>
-        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       // Each dish in a grid of its own, so no taller neighbour stretches its tile and centres the
       // name away from the corner.
       for (const dish of [painted, plainDish]) {
@@ -3183,10 +3183,8 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         expect(box.right).toBeCloseTo(outer.right + 6, 1);
         expect(box.top).toBeGreaterThanOrEqual(grid.top);
         expect(box.right).toBeLessThanOrEqual(grid.right);
-        const text = document.createRange();
-        text.selectNodeContents(tile.querySelector(".name")!);
-        for (const line of text.getClientRects())
-          expect(overlaps(box, line), dish.name).toBe(false);
+        for (const line of shownLines(tile.querySelector(".name")!))
+          expect(clearOf(line, box), dish.name).toBe(true);
         cleanupWidgets();
       }
     } finally {

@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import { currentContentLanguages, menuTilePaint } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import type { TillProduct } from "../api/menu-api.js";
+import { countedName } from "./counted-name.js";
 import { countText, t } from "../i18n/t.js";
 import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
@@ -62,7 +63,7 @@ export function dishTile(
           : nothing
       }
       <span class="name" lang=${currentContentLanguages().defaultLanguage}
-        >${counted > 0 ? html`<span class="name-start"></span>` : nothing}${productName(
+        >${counted > 0 ? html`<span class="name-start" ${countedName()}></span>` : nothing}${productName(
           product,
         )}</span
       >

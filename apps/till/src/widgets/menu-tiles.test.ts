@@ -11,7 +11,10 @@ import {
   pageAt,
   PHONE_FONT,
   placeGlyphsFractionally,
+  nameText,
   resetPage,
+  shownLines,
+  clearOf,
   type Mounted,
 } from "./test-helpers.js";
 import "./menu-browser.js";
@@ -136,6 +139,13 @@ function tile(el: TillMenuBrowser, name: string): HTMLElement {
 
 const face = (tile: HTMLElement) => tile.shadowRoot!.querySelector("button")!;
 const badge = (tile: HTMLElement) => tile.querySelector<HTMLElement>("[data-in-order-count]");
+/** Where a shown line is centred: a cut line starts at its box's start, so its box's centre. */
+function lineCentre(name: HTMLElement, line: { text: DOMRect; cut: boolean }): number {
+  if (!line.cut) return (line.text.left + line.text.right) / 2;
+  const own = name.getBoundingClientRect();
+  const look = getComputedStyle(name);
+  return (own.left + parseFloat(look.paddingLeft) + own.right - parseFloat(look.paddingRight)) / 2;
+}
 
 /** What a token resolves to in the tile's own context, read through a probe that uses it. */
 function resolved(near: HTMLElement, property: "backgroundColor" | "color", value: string) {
@@ -262,7 +272,7 @@ describe("menu tiles", () => {
         expect(box.top, name).toBeCloseTo(outer.top - 6, 1);
         expect(box.right, name).toBeCloseTo(outer.right + 6, 1);
         const lines = document.createRange();
-        lines.selectNodeContents(dish.querySelector(".name")!);
+        lines.selectNodeContents(nameText(dish.querySelector(".name")!));
         for (const line of lines.getClientRects()) {
           const apart =
             box.right <= line.left ||
@@ -314,40 +324,51 @@ describe("menu tiles", () => {
           box.height + 2 * ring,
         );
         const own = name.getBoundingClientRect();
-        const words = document.createRange();
-        words.selectNodeContents(name);
-        const shown = [...words.getClientRects()].filter(
-          (line) => line.width > 0 && line.top < own.bottom,
-        );
-        expect(new Set(shown.map((line) => Math.round(line.top))).size).toBe(2);
-        for (const line of shown) {
-          const overlap = Math.min(line.right, drawn.right) - Math.max(line.left, drawn.left);
-          const apart = overlap <= 0 || drawn.bottom <= line.top || line.bottom <= drawn.top;
-          expect(apart, `line overlaps the count by ${overlap.toFixed(1)} px`).toBe(true);
+        const lines = shownLines(name);
+        expect(lines).toHaveLength(2);
+        for (const line of lines) {
+          const overlap = Math.min(line.right, drawn.right) - Math.max(line.text.left, drawn.left);
+          expect(clearOf(line, drawn), `line overlaps the count by ${overlap.toFixed(1)} px`).toBe(
+            true,
+          );
         }
-        // However the words wrap, no line can reach under the count: the first beside the room
-        // kept for it, a later one below that room.
         const look = getComputedStyle(name);
-        const room = getComputedStyle(name, "::before");
         const textRight = own.right - parseFloat(look.paddingRight);
-        const firstRight = textRight - parseFloat(room.width);
-        expect(
-          firstRight <= drawn.left || drawn.bottom <= own.top,
-          `the first line's room overlaps the count by ${(firstRight - drawn.left).toFixed(1)} px`,
-        ).toBe(true);
-        expect(
-          drawn.bottom <= own.top + parseFloat(room.height) || textRight <= drawn.left,
-          `later lines' room overlaps the count by ${(drawn.bottom - own.top - parseFloat(room.height)).toFixed(1)} px`,
-        ).toBe(true);
+        const placed = dish.getAttribute("data-name-room");
+        if (placed === "both") {
+          expect(textRight, "every line's room clear of the count").toBeLessThanOrEqual(drawn.left);
+        } else if (placed !== "none") {
+          // However the words wrap, no line can reach under the count: the first beside the room
+          // kept for it, a later one below that room.
+          const room = getComputedStyle(name, "::before");
+          const firstRight = textRight - parseFloat(room.width);
+          expect(
+            firstRight <= drawn.left || drawn.bottom <= own.top,
+            `the first line's room overlaps the count by ${(firstRight - drawn.left).toFixed(1)} px`,
+          ).toBe(true);
+          expect(
+            drawn.bottom <= own.top + parseFloat(room.height) || textRight <= drawn.left,
+            `later lines' room overlaps the count by ${(drawn.bottom - own.top - parseFloat(room.height)).toFixed(1)} px`,
+          ).toBe(true);
+        }
         const outer = dish.getBoundingClientRect();
-        const first = shown[0]!;
-        // Centred in the room the count leaves it, so off the tile's centre by half that room.
-        expect(
-          Math.abs(
-            (first.left + first.right) / 2 -
-              (own.left + parseFloat(look.paddingLeft) + firstRight) / 2,
-          ),
-        ).toBeLessThan(1);
+        const first = lines[0]!;
+        if (placed === "end") {
+          // Room at the first line's end only, where the first word did not fit room on both
+          // sides: centred in the room the count leaves it.
+          const room = parseFloat(getComputedStyle(name, "::before").width);
+          expect(
+            Math.abs(
+              lineCentre(name, first) -
+                (own.left + parseFloat(look.paddingLeft) + textRight - room) / 2,
+            ),
+          ).toBeLessThan(1);
+        } else {
+          // Centred on the tile, as the price is.
+          expect(Math.abs(lineCentre(name, first) - (outer.left + outer.right) / 2)).toBeLessThan(
+            1,
+          );
+        }
         expect(Math.abs((own.left + own.right) / 2 - (outer.left + outer.right) / 2)).toBeLessThan(
           1,
         );
@@ -402,8 +423,7 @@ describe("menu tiles", () => {
           const name = shown.querySelector<HTMLElement>(".name")!;
           const own = name.getBoundingClientRect();
           const look = getComputedStyle(name);
-          const room =
-            name.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+          const room = own.width - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
           const pen = document.createElement("canvas").getContext("2d")!;
           pen.font = look.font;
           const text = [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
@@ -448,6 +468,95 @@ describe("menu tiles", () => {
       }
     },
   );
+
+  it.each(
+    [
+      { width: 390, height: 844, pane: undefined },
+      { width: 844, height: 390, pane: 340 },
+      { width: 1280, height: 800, pane: undefined },
+    ].flatMap((size) => [100, 130].map((scale) => ({ ...size, scale }))),
+  )(
+    "lines a counted one-line name and its price up with an uncounted neighbour's, the name centred over the price and clear of the count, at $width px (pane $pane) and $scale% text",
+    async ({ width, height, pane, scale }) => {
+      const mussels = product("mussels", "Mussels");
+      try {
+        await pageAt(width, height, scale);
+        const { el, host } = await inPhoneFont(
+          mountWidget<TillMenuBrowser>("till-menu-browser", {
+            menu: {
+              ...menu,
+              structure: { members: [member("bravas"), member("croq"), member("mussels")] },
+            },
+            products: [bravas, croquettes, mussels],
+            store: new WorkingOrderStore(),
+            inOrder: new Map([
+              ["p-bravas", 2],
+              ["p-croq", 12],
+            ]),
+          }),
+        );
+        if (pane !== undefined) host.style.width = `${pane}px`;
+        await nextPaint();
+        await nextPaint();
+        const shown = (dish: HTMLElement) => shownLines(dish.querySelector<HTMLElement>(".name")!);
+        const neighbour = tile(el, "Mussels");
+        const nameTop = shown(neighbour)[0]!.text.top;
+        const priceTop = neighbour.querySelector(".price")!.getBoundingClientRect().top;
+        for (const name of ["Bravas", "Croquettes"]) {
+          const dish = tile(el, name);
+          const lines = shown(dish);
+          expect(lines, name).toHaveLength(1);
+          const price = dish.querySelector(".price")!.getBoundingClientRect();
+          expect(Math.abs(lines[0]!.text.top - nameTop), `${name} name top`).toBeLessThan(1);
+          expect(Math.abs(price.top - priceTop), `${name} price top`).toBeLessThan(1);
+          expect(
+            Math.abs(
+              lineCentre(dish.querySelector(".name")!, lines[0]!) - (price.left + price.right) / 2,
+            ),
+            `${name} centred over its price`,
+          ).toBeLessThan(1);
+          const ring = parseFloat(getComputedStyle(dish).getPropertyValue("--count-ring"));
+          const count = badge(dish)!.getBoundingClientRect();
+          expect(clearOf(lines[0]!, count, ring), `${name} clear of its count`).toBe(true);
+        }
+      } finally {
+        cleanupWidgets();
+        await resetPage();
+      }
+    },
+  );
+
+  it("places a counted name again after the menu moves in the page, and drops the placement with the count", async () => {
+    try {
+      await pageAt(844, 390);
+      const { el, host } = await inPhoneFont(
+        mountWidget<TillMenuBrowser>("till-menu-browser", {
+          menu: { ...menu, structure: { members: [member("croq")] } },
+          products: [croquettes],
+          store: new WorkingOrderStore(),
+          inOrder: new Map([["p-croq", 12]]),
+        }),
+      );
+      host.style.width = "340px";
+      await nextPaint();
+      const dish = tile(el, "Croquettes");
+      expect(dish.getAttribute("data-name-room")).toBe("none");
+      host.remove();
+      document.body.append(host);
+      host.style.width = "";
+      await nextPaint();
+      expect(dish.hasAttribute("data-name-room")).toBe(false);
+      host.style.width = "340px";
+      await nextPaint();
+      expect(dish.getAttribute("data-name-room")).toBe("none");
+      el.inOrder = new Map();
+      await el.updateComplete;
+      expect(dish.hasAttribute("data-name-room")).toBe(false);
+    } finally {
+      cleanupWidgets();
+      await resetPage();
+    }
+  });
 
   it.each([
     { width: 390, height: 76 },
@@ -500,28 +609,20 @@ describe("menu tiles", () => {
         await nextPaint();
         const shown = tile(el, dish.name);
         const box = badge(shown)!.getBoundingClientRect();
-        const lines = document.createRange();
-        lines.selectNodeContents(shown.querySelector(".name")!);
-        for (const line of lines.getClientRects()) {
-          const apart =
-            box.right <= line.left ||
-            line.right <= box.left ||
-            box.bottom <= line.top ||
-            line.bottom <= box.top;
-          expect(apart, dish.name).toBe(true);
-        }
+        const name = shown.querySelector<HTMLElement>(".name")!;
+        const lines = shownLines(name);
+        for (const line of lines) expect(clearOf(line, box), dish.name).toBe(true);
         const outer = shown.getBoundingClientRect();
         const reach = outer.right - box.left;
         expect(box.width, dish.name).toBe(24);
-        const name = shown.querySelector(".name")!;
-        const room = getComputedStyle(name, "::before");
-        expect(parseFloat(getComputedStyle(name).paddingInlineEnd) + parseFloat(room.width)).toBe(
-          reach,
-        );
-        expect(parseFloat(room.height)).toBeCloseTo(
-          [...lines.getClientRects()].find((line) => line.width > 0)!.height,
-          0,
-        );
+        const placed = shown.getAttribute("data-name-room");
+        const end = parseFloat(getComputedStyle(name).paddingInlineEnd);
+        if (placed === "both") expect(end, dish.name).toBe(reach);
+        else if (placed !== "none") {
+          const room = getComputedStyle(name, "::before");
+          expect(end + parseFloat(room.width)).toBe(reach);
+          expect(parseFloat(room.height)).toBeCloseTo(lines[0]!.text.height, 0);
+        }
         expect(outer.height, dish.name).toBe(height);
         cleanupWidgets();
       }
