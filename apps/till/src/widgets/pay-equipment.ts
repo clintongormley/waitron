@@ -6,7 +6,7 @@ import type { ComboboxOption } from "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-notice.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "./equipment-scanner.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
@@ -40,17 +40,16 @@ export interface PayNotice {
   tone: "info" | "error";
 }
 
-/** The pay sheets' line for a {@link PayNotice}; both sheets add {@link payNoticeStyles}. */
+/** The line for a {@link PayNotice} in the pay sheets and the device sheet; each adds
+ * {@link payNoticeStyles}. */
 export function payNotice(notice: PayNotice | null): TemplateResult | typeof nothing {
   if (notice === null) return nothing;
   // Two templates, so a change of tone puts in a new live region rather than retyping one.
   return notice.tone === "error"
-    ? html`<wt-notice class="pay-notice error" role="alert" data-pay-notice .duration=${0}
-        >${notice.message}</wt-notice
-      >`
-    : html`<wt-notice class="pay-notice" role="status" data-pay-notice .duration=${0}
-        >${notice.message}</wt-notice
-      >`;
+    ? html`<p class="pay-notice error" role="alert" data-pay-notice>${notice.message}</p>`
+    : html`<p class="pay-notice" role="status" data-pay-notice>
+        <wt-icon name="check" aria-hidden="true"></wt-icon>${notice.message}
+      </p>`;
 }
 
 /** A pay sheet's charge button on a reader: `bill_pay.take_on_reader`, or after a decline
@@ -65,17 +64,26 @@ export function readerButtonLabel(reader: string, amount: string, declined: bool
 
 export const payNoticeStyles = css`
   .pay-notice {
-    display: block;
-    padding: var(--wt-space-2) var(--wt-space-3);
-    border: 1px solid var(--wt-color-border);
-    border-inline-start: var(--wt-space-1) solid var(--wt-color-success);
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+    margin: 0;
+    padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2)
+      calc(var(--wt-space-3) + var(--wt-space-1) / 2);
     border-radius: var(--wt-radius-md);
-    background: var(--wt-color-surface-raised);
+    background: var(--wt-color-tab-ready-tint);
+    color: var(--wt-color-text);
+    font-size: var(--wt-font-size-md);
+    font-weight: var(--wt-font-weight-bold);
+    overflow-wrap: anywhere;
+  }
+  .pay-notice wt-icon {
+    flex: none;
     color: var(--wt-color-success);
-    font-weight: var(--wt-font-weight-medium);
   }
   .pay-notice.error {
-    border-inline-start-color: var(--wt-color-danger);
+    border: 1px solid var(--wt-color-danger);
+    background: var(--wt-color-surface);
     color: var(--wt-color-danger);
   }
 `;

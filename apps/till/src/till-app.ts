@@ -75,6 +75,7 @@ import {
   readerReasonOf,
   readyPayReader,
   noEquipmentPicks,
+  stickerRoles,
   withRoleError,
   takenFrom,
   type FixedReader,
@@ -3707,21 +3708,19 @@ export class TillApp extends LitElement {
   }
 
   async #pickUpSticker(code: EquipmentCode): Promise<void> {
+    const roles = stickerRoles(code.kind);
     const permitted = this.deviceEquipment?.roles.find(
-      (role) =>
-        (code.kind === "reader"
-          ? role.role === "card_terminal"
-          : role.role === "receipt" || role.role === "payment_slip") &&
-        role.choices.some((item) => item.id === code.id),
+      (role) => roles.includes(role.role) && role.choices.some((item) => item.id === code.id),
     );
     if (!permitted) {
       this.nfcNotice = { message: t("equipment.scan_not_available"), tone: "error" };
       return;
     }
-    // The sticker is now the sheet field's latest pick, so no earlier pick's refusal shows under it.
-    const role: EquipmentRole = code.kind === "reader" ? "card_terminal" : "receipt";
-    this.#payEquipmentPicks[role]++;
-    this.#setPayEquipmentError(role, null);
+    // The sticker is now the latest pick of each field it sets, so no earlier refusal shows there.
+    for (const role of roles) {
+      this.#payEquipmentPicks[role]++;
+      this.#setPayEquipmentError(role, null);
+    }
     const context = {
       session: this.#operatorSession,
       name: permitted.choices.find((item) => item.id === code.id)!.name,

@@ -17,18 +17,21 @@ const R3 = equipmentItem("r3", "Reader 3", {
   provider: "sumup",
   heldBy: { deviceId: "d2", deviceName: "Phone 2", personName: "Marc" },
 });
+const R4 = equipmentItem("r4", "Reader 4", { portable: true, provider: "sumup" });
 const BAR = equipmentItem("p1", "Bar");
+const OFF = equipmentItem("p2", "Terrace", { available: false });
 const DRAWER = equipmentItem("p3", "Counter drawer");
 
-const equipment: DeviceEquipment = {
+const equipmentWith = (reader = R2, receipt = BAR): DeviceEquipment => ({
   roles: [
-    roleOf("receipt", BAR, [BAR]),
+    roleOf("receipt", receipt, [BAR]),
     roleOf("payment_slip", BAR, [BAR]),
     roleOf("cash_drawer", DRAWER, [DRAWER]),
     roleOf("invoice", null, []),
-    roleOf("card_terminal", R2, [R2, R3]),
+    roleOf("card_terminal", reader, [R2, R3, R4]),
   ],
-};
+});
+const equipment = equipmentWith();
 
 const CARD_AND_RECEIPT: CapabilityFlag[] = ["print-receipt", "integrated-card-payment"];
 
@@ -72,11 +75,25 @@ describe.each(["light", "dark"] as const)("till-device-sheet a11y (%s theme)", (
     vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
       new DOMException("Permission denied", "NotAllowedError"),
     );
-    const { host } = await opened(theme, {
+    const { el, host } = await opened(theme, {
+      equipment: equipmentWith(R2, OFF),
       capabilities: [...CARD_AND_RECEIPT, "open-cash-drawer"],
-      notice: { message: "Picked up Reader 2", tone: "info" },
       badge: true,
     });
+    el.equipment = equipmentWith(R4, OFF);
+    el.notice = { message: "Picked up Reader 4", tone: "info" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<WtCombobox>('[name="cardReaderId"]')!.highlight).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-pay-printer-warning]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("a practice payment's fixed reader has no violations", async () => {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+      new DOMException("Permission denied", "NotAllowedError"),
+    );
+    const { el, host } = await opened(theme, { fixedReader: { name: "Simulator" } });
+    expect(el.shadowRoot!.querySelector<WtCombobox>('[name="cardReaderId"]')!.disabled).toBe(true);
     await expectNoA11yViolations(host);
   });
 

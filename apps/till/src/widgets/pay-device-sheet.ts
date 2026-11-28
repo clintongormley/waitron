@@ -54,7 +54,7 @@ export function payDeviceSheet(
     .readerReason=${host.readerReason}
     .readerHint=${host.readerHint}
     .fixedReader=${host.fixedReader}
-    @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => toggled(event.detail.open)}
+    @device-sheet-toggle=${(event: CustomEvent<{ open: boolean }>) => toggled(event.detail.open)}
     @device-sheet-nfc=${(event: Event) => {
       event.stopPropagation();
       emit(host, "pay-equipment-nfc", {});

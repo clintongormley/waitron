@@ -929,7 +929,7 @@ describe("the pay sheet's NFC button", () => {
   }
   /** The sheet's notice: in Pay's device sheet while it is open, else in the pay sheet. */
   const payNotice = (el: TillApp) =>
-    deviceSheet(el)?.shadowRoot!.querySelector("[data-device-sheet-notice]") ??
+    deviceSheet(el)?.shadowRoot!.querySelector("[data-pay-notice]") ??
     sheet(el).shadowRoot!.querySelector("[data-pay-notice]");
 
   beforeEach(() => resetBillPayDrafts());

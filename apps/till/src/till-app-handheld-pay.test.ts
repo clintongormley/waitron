@@ -2650,7 +2650,7 @@ describe("till-app: a sticker scanned from the sheet", () => {
 
     await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledOnce(), { timeout: 10_000 });
     await flush(el);
-    expect(text(deviceSheet(el)!.shadowRoot!.querySelector("[data-device-sheet-notice]"))).toBe(
+    expect(text(deviceSheet(el)!.shadowRoot!.querySelector("[data-pay-notice]"))).toBe(
       t("equipment.picked_up").replace("{item}", "Lector 3"),
     );
     expect(
@@ -2794,6 +2794,34 @@ describe("till-app: Pay's device sheet on a phone", () => {
 
     const hint = text(deviceSheet(el)!.shadowRoot!.querySelector("[data-device-sheet-hint]"));
     expect(hint.includes(t("device_sheet.hint_nfc"))).toBe(working);
+  });
+
+  it("a printer's sticker clears a refusal left under Payment slip printer", async () => {
+    camera = cameraShowing(null);
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const withSlip = (printer: EquipmentItem) => {
+      const equipment = equipmentOf(SECOND_READER, printer);
+      equipment.roles.push(roleOf("payment_slip", printer, [BAR_PRINTER, PORTABLE]));
+      return equipment;
+    };
+    const { el } = await phonePay({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withSlip(BAR_PRINTER)),
+      setDeviceEquipment: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "device.binding_invalid", status: 400 })
+        .mockResolvedValueOnce(withSlip(PORTABLE)),
+    });
+    const sheet = await openDeviceSheet(el);
+    const slip = () =>
+      sheet.shadowRoot!.querySelector<WtCombobox>('[name="paymentSlipPrinterId"]')!;
+    await userEvent.click(slip().shadowRoot!.querySelector<HTMLElement>('[role="combobox"]')!);
+    const options = [...slip().shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    await userEvent.click(options.find((option) => text(option).includes("Portable printer"))!);
+    await vi.waitFor(() => expect(slip().error).not.toBe(""));
+
+    camera.show(formatEquipmentCode("printer", PRINTER_ID));
+    await vi.waitFor(() => expect(slip().value).toBe(PRINTER_ID), { timeout: 10_000 });
+    expect(slip().error).toBe("");
   });
 
   it("two stickers in a row send two scan choices and leave the camera on", async () => {

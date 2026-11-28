@@ -114,6 +114,21 @@ describe("till-device-sheet", () => {
     }
   });
 
+  it("announces opening and closing as its own event, keeping the inner menu's inside", async () => {
+    const { el } = await mountSheet();
+    const heard: string[] = [];
+    for (const type of ["device-sheet-toggle", "wt-row-actions-toggle"])
+      el.addEventListener(type, (event) =>
+        heard.push(`${type} ${(event as CustomEvent<{ open: boolean }>).detail.open}`),
+      );
+
+    await open(el);
+    el.hide();
+    await expect
+      .poll(() => heard)
+      .toEqual(["device-sheet-toggle true", "device-sheet-toggle false"]);
+  });
+
   it("draws no camera box without camera access, only the unavailable line", async () => {
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
     try {
@@ -290,7 +305,7 @@ describe("till-device-sheet", () => {
     el.notice = { message: "Picked up Reader 3", tone: "info" };
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-device-sheet-hint]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-device-sheet-notice]")!.textContent).toContain(
+    expect(el.shadowRoot!.querySelector("[data-pay-notice]")!.textContent).toContain(
       "Picked up Reader 3",
     );
   });

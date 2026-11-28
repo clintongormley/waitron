@@ -15,7 +15,8 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "./equipment-scanner.js";
 import { equipmentTakeover, listedRole } from "./equipment-dialog.js";
 import { optionLabel } from "./equipment-labels.js";
-import { type PayNotice, printerWarning } from "./pay-equipment.js";
+import { type PayNotice, payNotice, payNoticeStyles, printerWarning } from "./pay-equipment.js";
+import { PAY_CONTACTLESS_ICON } from "./quiet-pay.js";
 import { t } from "../i18n/t.js";
 import type {
   DeviceEquipment,
@@ -27,11 +28,7 @@ import type { CapabilityFlag } from "../layout.js";
 import type { EquipmentCode } from "../state/equipment-nfc.js";
 import { type FixedReader, payPrinterOf, payReaderOf } from "../state/pay-equipment.js";
 
-registerIcons({
-  ...DROPDOWN_ICONS,
-  "pay-contactless":
-    "M3.5 5a5.5 5.5 0 0 1 0 6l-1.2-.8a4 4 0 0 0 0-4.4l1.2-.8zm3-1.5a8.3 8.3 0 0 1 0 9l-1.2-.8a6.9 6.9 0 0 0 0-7.4l1.2-.8zM9.5 2a11 11 0 0 1 0 12l-1.2-.8a9.6 9.6 0 0 0 0-10.4L9.5 2z",
-});
+registerIcons({ ...DROPDOWN_ICONS, "pay-contactless": PAY_CONTACTLESS_ICON });
 
 /** A choice made in the sheet. A scanned sticker names its kind; the server picks its roles. */
 export type DeviceSheetPick =
@@ -71,6 +68,7 @@ function changedRoles(
 export class TillDeviceSheet extends LitElement {
   static override styles = [
     baseStyles,
+    payNoticeStyles,
     css`
       :host {
         display: inline-block;
@@ -125,30 +123,8 @@ export class TillDeviceSheet extends LitElement {
         margin-inline: var(--wt-space-3);
       }
 
-      .notice {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
+      .pay-notice {
         margin: var(--wt-space-2) var(--wt-space-4) 0;
-        padding: calc(var(--wt-space-2) + var(--wt-space-1) / 2)
-          calc(var(--wt-space-3) + var(--wt-space-1) / 2);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-tab-ready-tint);
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
-      }
-
-      .notice wt-icon {
-        flex: none;
-        color: var(--wt-color-success);
-      }
-
-      .notice.error {
-        border: 1px solid var(--wt-color-danger);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-danger);
       }
 
       .reason {
@@ -258,7 +234,9 @@ export class TillDeviceSheet extends LitElement {
   }
 
   #toggled(event: CustomEvent<{ open: boolean }>): void {
+    event.stopPropagation();
     this.open = event.detail.open;
+    this.#emit("device-sheet-toggle", { open: this.open });
     if (this.open) return;
     this.asking = null;
     this.highlighted = new Set();
@@ -389,19 +367,12 @@ export class TillDeviceSheet extends LitElement {
   #hint(): TemplateResult {
     const notice = this.notice;
     const nfc = this.nfcPermission !== null && !this.nfcUnavailable;
-    // Two templates, so a change of tone puts in a new live region rather than retyping one.
     const line =
       notice === null
         ? html`<p class="hint" data-device-sheet-hint>
             ${t("device_sheet.hint")}${nfc ? ` ${t("device_sheet.hint_nfc")}` : ""}
           </p>`
-        : notice.tone === "error"
-          ? html`<p class="notice error" role="alert" data-device-sheet-notice>
-              ${notice.message}
-            </p>`
-          : html`<p class="notice" role="status" data-device-sheet-notice>
-              <wt-icon name="check" aria-hidden="true"></wt-icon>${notice.message}
-            </p>`;
+        : payNotice(notice);
     return html`${line}
     ${
       nfc && this.nfcPermission === "prompt"

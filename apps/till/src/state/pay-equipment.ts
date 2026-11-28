@@ -8,6 +8,7 @@ import type {
   RoleEquipment,
   TillActiveReader,
 } from "../api/device-session-api.js";
+import type { EquipmentCode } from "./equipment-nfc.js";
 
 /** No pay-sheet pick made yet of any role. */
 export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
@@ -17,6 +18,11 @@ export const noEquipmentPicks = (): Record<EquipmentRole, number> => ({
   invoice: 0,
   card_terminal: 0,
 });
+
+/** The roles a sticker of `kind` may set: the server sets a printer as receipt and payment slip
+ * printer at once, as far as the printer picks up each and the profile lists it. */
+export const stickerRoles = (kind: EquipmentCode["kind"]): EquipmentRole[] =>
+  kind === "reader" ? ["card_terminal"] : ["receipt", "payment_slip"];
 
 /** `errors` with `message` under `role`, or with `role`'s message removed when it is null. */
 export function withRoleError(
