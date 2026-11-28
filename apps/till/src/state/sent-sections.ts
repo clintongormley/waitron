@@ -105,9 +105,8 @@ function portionRows(
 const byLine = (a: SentSlice, b: SentSlice) => a.row.lineNo - b.row.lineNo;
 
 /**
- * Whether `sentSections` draws these slices as one row: `slices`, portions with something left or
- * all served, identical as they stand, and `served`, served portions it joins to them, of the same
- * dish.
+ * The dish window's check that `slices`, portions with something left or all served, are still
+ * identical as they stand, and that `served` are served portions of the same dish.
  */
 export function formsOneSentRow(
   slices: readonly SentSlice[],

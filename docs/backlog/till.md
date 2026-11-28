@@ -1786,8 +1786,8 @@ Counter order, when that changes its set menus (A1572). Stated at its site in
   A803 slice 3; a child extras row is now drawn on its own muted, smaller line in `till-sent-orders`
   (`apps/till/src/widgets/sent-orders.ts`), and indented as well in the table screen's fallback list
   while `currentOrders` is null (`#sentFallback`, `apps/till/src/screens/till-table-order-screen.ts`).
-  2026-11-28: till redesign PR 8a draws a sent dish's extras on the row's quiet second line, as
-  the redesign spec draws them, [§4](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen).)
+  2026-11-28: till redesign PR 8a draws a sent dish's extras on the row's quiet second line, which
+  the redesign spec gives a dish's options, [§4](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen).)
 - **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
   that a split check gets no Void).** It follows A758's cancel rules; the server already allows it.
 - **A home-page shortcut whose target a newly read menu version lacks disappears with no notice

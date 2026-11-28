@@ -2074,7 +2074,7 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
   });
 });
 
-describe("Sent panel read facts (A773)", () => {
+describe("Sent rows read facts (A773)", () => {
   it("reads stored family amounts and bill status without changing any bill rows", async () => {
     const v = await setupVenue();
     const s = await seated(v);

@@ -6563,8 +6563,9 @@ many members; Move station takes every member; Change dish changes every member;
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it. On a sent row that joins served portion lines to lines with dishes left, Void and
 Comp act on the lines left, and Void served and Comp served on the served lines alone (named by
-their own lines). A single line partly served is one line, so there Void and Comp take the whole
-line, served portions included, and Void served and Comp served are not offered. Fire now releases every member of the row with its extras in one group.
+their own lines). A single line partly served is one line, so there Comp takes the whole line and Void the whole
+line on an open bill (on a settled bill Void's count leaves the served portions out), and Void
+served and Comp served are not offered. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
 setting. On the station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: the counter basket
@@ -6619,7 +6620,7 @@ when every dish still to serve waits at the pass, or "Held" while any of the gro
 bill, still waits for Fire. A fired or at-the-pass heading carries
 the ✓ Sent mark and **Serve all**, which serves the section's released dishes still to serve; a held
 heading carries no mark and **Fire**, with **Serve all** beside it when some of this bill's dishes under it are released and still to serve, and its other bills' held dishes stand under it as ordinary
-rows with no price, their second line the bill's name ("Bill 2"). **Serve all** is a word, not a
+rows with no price, their second line the bill's name ("Bill 2"). **Serve all**, named after its group for a screen reader as **Fire** is, is a word, not a
 block: a `ghost` `wt-button`, `md` and bold, in `--wt-color-primary-text` when it can be pressed, whose 44 px tap area
 spills into the heading's padding so the heading stays about 44 px tall. **Fire** is outlined
 (`secondary`). The time in a title ("Fired 12 min ago") never breaks across lines. The sent rows
@@ -6632,7 +6633,7 @@ dish's extras and note, and the row's state only when that differs from its head
 "At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
 portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
 one line of 3 or three identical lines of 1 (`sentRowPortionKey`,
-`apps/till/src/state/portion-groups.ts`, and `formsOneSentRow`, `apps/till/src/state/sent-sections.ts`); a served row joins the first row listed with something left of its dish; a cancelled but charged part stays a row of its own. Within
+`apps/till/src/state/portion-groups.ts`); a served row joins the first row listed with something left of its dish; a cancelled but charged part stays a row of its own. Within
 a section (`compareRows`, `apps/till/src/state/sent-sections.ts`), ready rows come first, by when
 they were made ready; then the other released rows with something left, by when they were fired,
 those not yet fired after them; then rows still held, in the order the bill's read lists them,

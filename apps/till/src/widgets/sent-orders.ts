@@ -117,11 +117,11 @@ export class TillSentOrders extends LitElement {
         touch-action: none;
         user-select: none;
       }
-      /* A word, not a block: its tap area spills into the heading's own padding, so the heading
-         stays as tall as its words. */
       [data-serve-all]:not([disabled]) {
         --wt-action-text: var(--wt-color-primary-text);
       }
+      /* A word, not a block: its tap area spills into the heading's own padding, so the heading
+         stays as tall as its words. */
       [data-serve-all] {
         --wt-action-font-size: var(--wt-font-size-md);
         --wt-action-weight: var(--wt-font-weight-bold);
