@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,6 +12,7 @@ import {
   activityLog,
   billDiscounts,
   menus,
+  sales,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
@@ -26,6 +28,8 @@ import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
 import { receiptLines } from "./receipt-adjustments.js";
 import { priceStoredOrder, readStoredOrder, storedOrderTotal } from "./stored-order-lines.js";
 import { holdDiscount } from "./testing/bill-discounts.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
+import { send } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
@@ -155,6 +159,19 @@ async function adjustmentsOn(tx: Transaction, billId: string) {
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
 }
 
+/** Each adjustment record's before and after amounts and what it took off, in cents. */
+async function recordAmounts(tx: Transaction, billId: string) {
+  return tx
+    .select({
+      before: adjustments.beforeAmount,
+      after: adjustments.afterAmount,
+      reduction: adjustments.reduction,
+    })
+    .from(adjustments)
+    .where(eq(adjustments.workingOrderId, billId))
+    .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
+}
+
 async function pendingOn(tx: Transaction, billId: string) {
   const lines = tx
     .select({ id: workingOrderLines.id })
@@ -184,12 +201,24 @@ async function groupedBill(lines: RoundLine[], unit?: number): Promise<string> {
   return billId;
 }
 
+/** What the bill's receipt prints its lines at, together. */
+async function receiptCharges(tx: Transaction, billId: string): Promise<number> {
+  const stored = await readStoredOrder(tx, billId);
+  const receipt = await receiptLines(tx, billId, stored.gross, stored.identities);
+  return receipt.lines.reduce((sum, { gross }) => sum + stringToCents(gross), 0);
+}
+
 /**
  * Crystallises the bill's discounts and checks the three figures agree: what the shown total takes
  * off, what the stored total fell by, and what the written adjustment lines took; and that the
- * lines are left as PR 1 simulated them, split rows' numbers included.
+ * lines are left as PR 1 simulated them, split rows' numbers included. The receipt prints the same
+ * off, or `receipt` where the rows it lists add up only to that.
  */
-async function crystallisesAsShown(billId: string, asked = true): Promise<number> {
+async function crystallisesAsShown(
+  billId: string,
+  asked = true,
+  receipt?: number,
+): Promise<number> {
   return inTx(venue, async (tx) => {
     const shown = (await readBillDiscounts(tx, [billId])).get(billId)!.takes;
     const expected = simulated(await withIds(tx, billId), await workedNow(tx, billId));
@@ -202,11 +231,54 @@ async function crystallisesAsShown(billId: string, asked = true): Promise<number
     expect(owedBefore).toBe(before - shown);
     expect(decimalToCents(await storedOrderTotal(tx, billId))).toBe(owedBefore);
     expect(await recordedTakes(tx, billId)).toEqual({ records: shown, lines: shown });
-    expect(await receiptTakes(tx, billId)).toBe(shown);
+    expect(await receiptTakes(tx, billId)).toBe(receipt ?? shown);
+    expect(await receiptCharges(tx, billId)).toBe(after);
     expect(await linesOf(tx, billId)).toEqual(expected);
     return shown;
   });
 }
+
+/** Two bound pizzas at 0.00, each with 0.125 of olives at `olives` cents a kilo, which the invoice
+ * files as one row of 0.250. */
+async function measuredExtras(olives: number): Promise<string> {
+  const { billId } = await billWith(venue, [{ name: "Pizza", quantity: "2", olives: 1 }]);
+  await inTx(venue, async (tx) => {
+    const onBill = eq(workingOrderLines.workingOrderId, billId);
+    await tx
+      .update(workingOrderLines)
+      .set({ unitPriceGross: 0, lineTotal: 0 })
+      .where(and(onBill, sql`${workingOrderLines.parentLineId} is null`));
+    await tx
+      .update(workingOrderLines)
+      .set({
+        unitPriceGross: olives,
+        quantity: 125,
+        unitPrecision: 3,
+        lineTotal: Math.round((olives * 125) / 1000),
+      })
+      .where(and(onBill, sql`${workingOrderLines.parentLineId} is not null`));
+  });
+  return billId;
+}
+
+/** The first extra on `billId`. */
+async function firstExtraOf(billId: string): Promise<string> {
+  const [extra] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          sql`${workingOrderLines.parentLineId} is not null`,
+        ),
+      )
+      .orderBy(asc(workingOrderLines.lineNo)),
+  );
+  return extra!.id;
+}
+
+const allOff = { action: "discount_percent", percentBp: 10000, amount: null } as const;
 
 describe("crystalliseBillDiscounts", () => {
   it("writes into a bill with a weighed line what its shown total takes off", async () => {
@@ -253,29 +325,67 @@ describe("crystalliseBillDiscounts", () => {
       "records only the cent a filed row of two measured extras loses, though each extra's own total loses one",
     ],
   ])("at %i, %s", async (olives) => {
-    // Two bound pizzas at 0.00, each with 0.125 of olives, filed as one row of 0.250; 0.01 off the
-    // bill leaves the olives at 10.01.
-    const { billId } = await billWith(venue, [{ name: "Pizza", quantity: "2", olives: 1 }]);
-    await inTx(venue, async (tx) => {
-      const onBill = eq(workingOrderLines.workingOrderId, billId);
-      await tx
-        .update(workingOrderLines)
-        .set({ unitPriceGross: 0, lineTotal: 0 })
-        .where(and(onBill, sql`${workingOrderLines.parentLineId} is null`));
-      await tx
-        .update(workingOrderLines)
-        .set({
-          unitPriceGross: olives,
-          quantity: 125,
-          unitPrecision: 3,
-          lineTotal: Math.round((olives * 125) / 1000),
-        })
-        .where(and(onBill, sql`${workingOrderLines.parentLineId} is not null`));
-      await holdDiscount(tx, venue, { workingOrderId: billId, ...amountOf(1) });
-    });
+    // 0.01 off the bill leaves the olives at 10.01.
+    const billId = await measuredExtras(olives);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { workingOrderId: billId, ...amountOf(1) }));
     expect(await crystallisesAsShown(billId)).toBe(1);
     const written = await inTx(venue, (tx) => adjustmentsOn(tx, billId));
     expect(written.map(({ reduction }) => reduction)).toEqual([1]);
+  });
+
+  // Each extra stores 1.25, but their filed row is 2.51: all off one extra takes 1.26 off the
+  // invoice, more than that extra's own 1.25. Filed apart, the two list at 2.50 together, so the
+  // receipt prints the 1.25 that adds up against them.
+  it("writes all off one of two measured extras filed as one row, which takes more than the extra's own total", async () => {
+    const billId = await measuredExtras(1003);
+    const extra = await firstExtraOf(billId);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: extra, ...allOff }));
+    await inTx(venue, async (tx) => {
+      expect(decimalToCents(await storedOrderTotal(tx, billId))).toBe(125);
+      await refuseDiscountsNotHolding(tx, billId);
+    });
+    expect(await crystallisesAsShown(billId, true, 125)).toBe(126);
+    expect(await inTx(venue, (tx) => recordAmounts(tx, billId))).toEqual([
+      { before: 126, after: 0, reduction: 126 },
+    ]);
+  });
+
+  it("writes all off a bill of two measured extras filed as one row, taking the filed row's 2.51", async () => {
+    const billId = await measuredExtras(1003);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { workingOrderId: billId, ...allOff }));
+    expect(await crystallisesAsShown(billId)).toBe(251);
+    expect(await inTx(venue, (tx) => recordAmounts(tx, billId))).toEqual([
+      { before: 251, after: 0, reduction: 251 },
+    ]);
+  });
+
+  it("takes cash for what is left after all off one of two measured extras, filing and recording 1.26 off", async () => {
+    const billId = await measuredExtras(1003);
+    const extra = await firstExtraOf(billId);
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { lineId: extra, ...allOff }));
+    const path = `/api/working-orders/${billId}/payments`;
+    const body = await observedPaymentBody(venue.db, path, {
+      kind: "contribution",
+      method: "cash",
+      amount: "1.25",
+      tendered: "1.25",
+      applied: "1.25",
+      tip: "0.00",
+      submissionId: randomUUID(),
+    });
+    const paid = await send(venue.app, venue.cookie.manager, "POST", path, body);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    await inTx(venue, async (tx) => {
+      const filed = await tx
+        .select({ total: sales.total })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId));
+      expect(filed).toEqual([{ total: 125 }]);
+      expect(await receiptTakes(tx, billId)).toBe(125);
+      expect(await receiptCharges(tx, billId)).toBe(125);
+      expect(await recordedTakes(tx, billId)).toEqual({ records: 126, lines: 126 });
+      expect(await recordAmounts(tx, billId)).toEqual([{ before: 126, after: 0, reduction: 126 }]);
+    });
   });
 
   it("writes 10% then 1.00 off one line of three beers as PR 1 works them out, line by line", async () => {

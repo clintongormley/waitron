@@ -215,11 +215,12 @@ function partChanges(worked: WorkedBillDiscount, parts: Parts): PartChange[] {
 }
 
 /** What one discount's writing left to record: the parts it covered as it found them, the rows it
- * split off, and what it took off each line. */
+ * split off, what it took off each line, and what the lines' own totals fell by in cents. */
 interface Written {
   covered: Row[];
   splits: AdjustmentSplit[];
   lines: LineTaken[];
+  fell: number;
 }
 
 /** Writes `worked`'s figures into the parts it moved, leaving `parts` as the bill now stands. */
@@ -274,12 +275,12 @@ async function writeWorked(
     }
     Object.assign(row, { quantity: priced.quantity, unit: priced.unit, lineTotal: priced.total });
   }
-  const lines = fitted(
-    taken.map((one) => ({ ...one, reduction: decimalToCents(one.reduction) })),
-    worked.takes,
-    () => ({ lineId: changed[0]!.change.row.id, quantity: changed[0]!.priced.quantity }),
-  );
-  return { covered, splits, lines };
+  const own = taken.map((one) => ({ ...one, reduction: decimalToCents(one.reduction) }));
+  const lines = fitted(own, worked.takes, () => ({
+    lineId: changed[0]!.change.row.id,
+    quantity: changed[0]!.priced.quantity,
+  }));
+  return { covered, splits, lines, fell: own.reduce((sum, { reduction }) => sum + reduction, 0) };
 }
 
 /** One discount given as one row of the till (`given_together`), though a split left it on
@@ -293,11 +294,18 @@ interface Given {
   written: Written[];
 }
 
-/** Records `given` once over every line and part its parts covered (plan D5). */
+/**
+ * Records `given` once over every line and part its parts covered (plan D5). On a bill whose
+ * filed rows round apart from its lines, what the discount takes off the invoice differs from what
+ * the lines' own totals fell by, so the record's after amount is what the lines it covered cost
+ * now, never below nothing, and its before amount that plus what it took off.
+ */
 async function recordGiven(tx: Transaction, billId: string, given: Given): Promise<void> {
   const { held, line, dish, quantity } = given;
   const covered = given.written.flatMap((one) => one.covered);
-  const before = sumDecimals(covered.map((row) => lineGross(row, row.quantity)));
+  const after =
+    decimalToCents(sumDecimals(covered.map((row) => lineGross(row, row.quantity)))) -
+    given.written.reduce((sum, { fell }) => sum + fell, 0);
   const lines = given.written.flatMap((one) => one.lines);
   const takes = lines.reduce((sum, { reduction }) => sum + reduction, 0);
   const id = await recordAdjustment(tx, {
@@ -318,8 +326,8 @@ async function recordGiven(tx: Transaction, billId: string, given: Given): Promi
     reason: { id: held.reasonId, name: held.reasonName, policy: held.policySnapshot },
     action: held.action,
     percentBp: held.percentBp,
-    beforeAmount: before,
-    afterAmount: centsToDecimal(decimalToCents(before) - takes),
+    beforeAmount: centsToDecimal(after + takes),
+    afterAmount: centsToDecimal(after),
     reduction: centsToDecimal(takes),
     nominalValue: sumDecimals(covered.map((row) => listValue(row, row.quantity))),
     requestedBy: held.requestedBy,
