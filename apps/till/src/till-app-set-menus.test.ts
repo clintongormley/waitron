@@ -91,7 +91,7 @@ it("shows the counter its set-menu folders on a takeaway order, with no count", 
 });
 
 it.each(["fresh", "parked"])(
-  "shows a %s takeaway's draft charges and takes the amount confirmed in Pay",
+  "shows prices for a %s takeaway and takes the amount confirmed in Pay",
   async (kind) => {
     const fromPark = kind === "parked";
     const tendered = fromPark ? "25" : "21";
@@ -105,32 +105,39 @@ it.each(["fresh", "parked"])(
     const dish = fromPark ? soup : sirloin;
     const offer = {
       ...dish,
-      unitPrice: fromPark ? "15.00" : dish.unitPrice,
       aLaCartePrices: { v1: { [dish.productId]: "24.00" } },
       offeredModifiers: [{ ...extrasList, items: [item] }],
     };
     const copy = { ...daily, offers: [offer, fromPark ? sirloin : soup] };
     const folder = { setMenuId: copy.menuId, versionId: "v1" };
     const product = setMenuProduct({ ...folder, offer });
-    const kept = {
-      workingOrderLineId: "kept-dish",
+    const folderDish = {
+      workingOrderLineId: "folder-dish",
       menuItemId: offer.id,
       menuVersionId: "v1",
       setMenuId: copy.menuId,
       quantity: "1.000",
-      extras: [extra],
-      product: { ...product, unitPrice: fromPark ? "23.00" : "5.00" },
+      extras: fromPark ? [] : [extra],
+      product: { ...product, unitPrice: fromPark ? "22.00" : "5.00" },
     };
-    const removed = {
-      ...kept,
-      workingOrderLineId: "removed-dish",
+    const groupedDish = {
+      ...folderDish,
+      workingOrderLineId: "grouped-dish",
       menuItemId: sirloin.id,
       product: setMenuProduct({ ...folder, offer: sirloin }),
-      extras: [],
     };
-    const grouped = { ...bill.dishes[0]!, lineId: fromPark ? "removed-dish" : "kept-dish" };
+    const kept = {
+      ...folderDish,
+      workingOrderLineId: "kept-dish",
+      menuItemId: burger.menuItemId!,
+      setMenuId: undefined,
+      product: { ...burger, unitPrice: "23.00" },
+      extras: [extra],
+    };
+    const grouped = { ...bill.dishes[0]!, lineId: fromPark ? "grouped-dish" : "folder-dish" };
     let beforeEdit = fromPark;
-    const storedLines = () => (beforeEdit ? [kept, removed] : [kept]);
+    const storedLines = () =>
+      beforeEdit ? [kept, folderDish, groupedDish] : [fromPark ? kept : folderDish];
     const { api, el, counter } = await openCounterTakeaway(copy, {
       parkOrder: vi.fn(async ({ id }: { id: string }) => ({ id, orderNumber: 10 })),
       updateWorkingOrder: vi.fn(async () => {
@@ -186,7 +193,8 @@ it.each(["fresh", "parked"])(
     if (fromPark) {
       emit(counter, "retrieve-order", { id: "parked-takeaway" });
       await vi.waitFor(() => expect(counter.store.id).toBe("parked-takeaway"));
-      await price("23.00").toBeVisible();
+      await price("22.00").toBeVisible();
+      counter.store.removeLine(2);
       counter.store.removeLine(1);
     } else {
       counter.store.addProduct(setMenuProduct({ ...folder, offer: soup }), "1", {
@@ -208,7 +216,9 @@ it.each(["fresh", "parked"])(
     expect(total()).toContain(money(amount));
     const save = fromPark ? api.updateWorkingOrder : api.parkOrder;
     expect(vi.mocked(save).mock.lastCall?.at(-1)).toMatchObject({
-      lines: [{ setMenuId: copy.menuId, extras: [{ listId: extra.listId }] }],
+      lines: [
+        { menuItemId: fromPark ? kept.menuItemId : offer.id, extras: [{ listId: extra.listId }] },
+      ],
     });
     await type(el, "tendered", tendered);
     await press(el, "[data-pay-continue]");
