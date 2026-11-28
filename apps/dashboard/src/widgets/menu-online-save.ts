@@ -195,22 +195,19 @@ export class MenuOnlineSave implements ReactiveController {
     }
   }
 
+  get savedStyleId(): string | null | undefined {
+    return this.#saved?.styleId;
+  }
+
   get draftAppearance(): CustomerMenuAppearance | undefined {
-    return this.#pickedStyle?.id === this.draft?.styleId
+    const id = this.draft?.styleId;
+    return id !== this.savedStyleId && this.#pickedStyle?.id === id
       ? this.#pickedStyle?.appearance
       : undefined;
   }
 
   styleChanged({ action, styleId, style }: CustomerStyleChange): void {
     if (!this.draft || !this.#saved || this.pendingWrite) return;
-    if (action === "edit") {
-      const id = this.draft.styleId;
-      if (id === style.id || (id === null && style.isDefault)) {
-        this.#pickedStyle = { id, appearance: style.appearance };
-        this.host.requestUpdate();
-      }
-      return;
-    }
     this.#pickedStyle = { id: styleId, appearance: style.appearance };
     if (action === "copy") this.#saved = { ...this.#saved, styleId };
     this.#edit({ styleId });

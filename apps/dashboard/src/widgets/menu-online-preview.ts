@@ -79,6 +79,7 @@ export class MenuOnlinePreview extends LitElement {
   @property({ attribute: false }) waitingForSettings = false;
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
+  @property({ attribute: false }) savedStyleId?: string | null;
   @property({ attribute: false }) draftAppearance?: ReturnType<typeof prepareMenuAppearance>;
 
   @state() private answer: CustomerMenuPreview | null = null;
@@ -103,7 +104,10 @@ export class MenuOnlinePreview extends LitElement {
       return;
     }
     const previous = changed.get("status");
-    if (previous && this.status && editionOf(previous) !== editionOf(this.status))
+    if (
+      changed.get("savedStyleId") !== undefined ||
+      (previous && this.status && editionOf(previous) !== editionOf(this.status))
+    )
       void this.reload();
   }
 

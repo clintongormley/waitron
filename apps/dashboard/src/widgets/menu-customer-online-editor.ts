@@ -35,7 +35,7 @@ export function renderCustomerOnlineEditor({
       data-view=${online.view}
       @customer-style-change=${(event: CustomEvent<CustomerStyleChange>) => {
         online.styleChanged(event.detail);
-        if (event.detail.action !== "pick")
+        if (event.detail.action === "edit")
           void (event.currentTarget as HTMLElement)
             .querySelector("dashboard-menu-online-preview")
             ?.reload();
@@ -69,6 +69,7 @@ export function renderCustomerOnlineEditor({
         .openPreview=${openPreview}
         .photos=${photos}
         .waitingForSettings=${online.loading}
+        .savedStyleId=${online.savedStyleId}
         .draftAppearance=${prepareMenuAppearance(WAITRON_DEFAULTS, online.draftAppearance)}
       ></dashboard-menu-online-preview>
     </div>
