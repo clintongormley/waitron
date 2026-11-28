@@ -18,7 +18,7 @@ import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hour
 import type { AttendanceChange } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import {
-  clockKinds,
+  type ClockKind,
   managerDayEdits,
   managerDayField,
   managerDayRows,
@@ -35,6 +35,9 @@ interface TimeDraft {
   time: string;
   offset: string;
   original: AttendanceChange;
+  kind?: ClockKind;
+  shift?: number;
+  inferDate?: boolean;
 }
 interface Draft {
   rows: TimeDraft[];
@@ -64,6 +67,13 @@ function validDate(date: string): boolean {
 function validTime(time: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 }
+const dayMilliseconds = 86_400_000;
+const midnight = (date: string) => Date.parse(`${date}T00:00:00Z`);
+
+function nextDate(date: string): string {
+  return new Date(midnight(date) + dayMilliseconds).toISOString().slice(0, 10);
+}
+
 function offsetLabel(offset: number): string {
   const absolute = Math.abs(offset);
   return `${offset < 0 ? "-" : "+"}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
@@ -127,21 +137,28 @@ export class AttendanceCorrectionDialog extends LitElement {
       .manager-fields .time-note {
         margin-block-start: calc(var(--wt-space-1) / 2);
       }
-      .dates summary {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        min-block-size: var(--wt-tap-min);
-        color: var(--wt-color-primary-text);
-        cursor: pointer;
-        font-weight: var(--wt-font-weight-bold);
-        list-style: none;
+      .shift {
+        display: grid;
+        gap: var(--wt-space-2);
+        padding-block-end: var(--wt-space-2);
+        border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
       }
-      .dates summary::-webkit-details-marker {
-        display: none;
+      .time-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--wt-space-2);
+        align-items: start;
       }
-      .dates[open] summary wt-icon {
-        rotate: 180deg;
+      .time-row wt-input {
+        min-inline-size: 0;
+      }
+      .day-offset {
+        padding-inline-end: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+      }
+      .shift wt-button,
+      .add-shift {
+        justify-self: start;
       }
       .spoken-total {
         ${visuallyHiddenStyles}
@@ -231,12 +248,15 @@ export class AttendanceCorrectionDialog extends LitElement {
       this.#opened = true;
       this.#zone = this.timeZone;
       this.draft = {
-        rows: (this.managerDay
-          ? managerDayRows(this.managerDay)
+        rows: this.managerDay
+          ? managerDayRows(this.managerDay).map(({ change, kind, shift }) => ({
+              ...timeDraft(change),
+              kind,
+              shift,
+            }))
           : this.reasonOnly
             ? []
-            : this.initialChanges
-        ).map((change) => timeDraft(change)),
+            : this.initialChanges.map((change) => timeDraft(change)),
         reason: "",
       };
       this.#baseline = structuredClone(this.draft);
@@ -247,7 +267,13 @@ export class AttendanceCorrectionDialog extends LitElement {
         id: this,
         current: () => this.draft,
         snapshot: (value) => structuredClone(value),
-        equal: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+        equal: (a, b) => {
+          const values = (draft: Draft) =>
+            JSON.stringify(draft, (key, value: unknown) =>
+              key === "inferDate" ? undefined : value,
+            );
+          return values(a) === values(b);
+        },
         restore: (value) => {
           this.draft = structuredClone(value);
         },
@@ -302,16 +328,19 @@ export class AttendanceCorrectionDialog extends LitElement {
         this.#choices(row).length > 1 && row.offset === "" ? t("attendance.offset_required") : "",
     }));
     const changes = this.#changes();
-    if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)) {
-      const day = this.managerDay;
-      if (
-        !day ||
-        this.draft.rows.every(
-          (row, i) =>
-            managerDayField(day, row.target, row.date, row.time).kind === (i === 0 ? "in" : "out"),
+    if (changes && this.managerDay) {
+      for (const shift of new Set(this.draft.rows.map((row) => row.shift))) {
+        const start = this.draft.rows.findIndex((row) => row.shift === shift && row.kind === "in");
+        const end = this.draft.rows.findIndex((row) => row.shift === shift && row.kind === "out");
+        if (
+          start >= 0 &&
+          end >= 0 &&
+          Date.parse(changes[end]!.at) <= Date.parse(changes[start]!.at)
         )
-      )
-        rows[1]!.time = t("attendance.time_order");
+          rows[end]!.time = t("attendance.time_order");
+      }
+    } else if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)) {
+      rows[1]!.time = t("attendance.time_order");
     }
     const reason = this.draft.reason.trim();
     return {
@@ -347,20 +376,49 @@ export class AttendanceCorrectionDialog extends LitElement {
       if (key === "reason") return;
       row[key] = event.detail.value;
       if (key !== "offset") {
-        const choices = this.#choices(row);
-        const originalWall = wallTime(row.original);
-        row.offset =
-          originalWall &&
-          row.date === originalWall.slice(0, 10) &&
-          row.time === originalWall.slice(11, 16)
-            ? String(row.original.offsetMinutes)
-            : choices.length === 1
-              ? String(choices[0]!.offset)
-              : "";
+        if (this.managerDay) {
+          if (row.kind !== "in") row.inferDate = key === "time" && row.inferDate !== false;
+          const start = rows.find(
+            (candidate) => candidate.shift === row.shift && candidate.kind === "in",
+          );
+          if (start && validDate(start.date) && validTime(start.time)) {
+            for (const [candidateIndex, candidate] of rows.entries()) {
+              if (
+                (row !== start && candidate !== row) ||
+                candidate.shift !== row.shift ||
+                !candidate.inferDate ||
+                !validTime(candidate.time)
+              )
+                continue;
+              candidate.date = candidate.time < start.time ? nextDate(start.date) : start.date;
+              if (candidate !== row) this.#selectOffset(candidate, this.draft.rows[candidateIndex]);
+            }
+          }
+        }
+        this.#selectOffset(row, this.managerDay ? this.draft.rows[index] : undefined);
       }
       this.draft = { ...this.draft, rows };
     }
     this.#scope?.changed();
+  }
+  #selectOffset(row: TimeDraft, previous?: TimeDraft): void {
+    const choices = this.#choices(row);
+    const originalWall = wallTime(row.original);
+    if (
+      originalWall &&
+      row.date === originalWall.slice(0, 10) &&
+      row.time === originalWall.slice(11, 16)
+    ) {
+      row.offset = String(row.original.offsetMinutes);
+    } else if (choices.length === 1) {
+      row.offset = String(choices[0]!.offset);
+    } else if (
+      !previous ||
+      !choices.some((choice) => String(choice.offset) === previous.offset) ||
+      this.#choices(previous).length < 2
+    ) {
+      row.offset = "";
+    }
   }
   async #save(event: Event): Promise<void> {
     event.stopPropagation();
@@ -374,8 +432,6 @@ export class AttendanceCorrectionDialog extends LitElement {
       return;
     this.#feedback.press();
     if (this.#invalid()) {
-      if (this.managerDay && this.#errors().rows.some(({ date }) => date))
-        this.renderRoot.querySelector<HTMLDetailsElement>(".dates")!.open = true;
       await this.#feedback.focus(this.renderRoot);
       return;
     }
@@ -412,20 +468,40 @@ export class AttendanceCorrectionDialog extends LitElement {
     this.open = false;
     this.dispatchEvent(new CustomEvent("correction-cancel", { bubbles: true, composed: true }));
   }
-  #addTime(event: CustomEvent<{ value: (typeof clockKinds)[number] }>, date: string): void {
-    if (!clockKinds.includes(event.detail.value) || this.busy || this.blocked) return;
+  #addPair(shift: number, start: ClockKind, end: ClockKind): void {
+    if (!this.managerDay || this.busy || this.blocked) return;
+    const rows = [...this.draft.rows];
+    const clockIn = rows.find((row) => row.shift === shift && row.kind === "in");
+    const out = rows.findIndex((row) => row.shift === shift && row.kind === "out");
+    const afterShift = rows.findIndex((row) => row.shift! > shift);
+    rows.splice(
+      out >= 0 ? out : afterShift >= 0 ? afterShift : rows.length,
+      0,
+      ...[start, end].map((kind) => ({
+        ...timeDraft(
+          { target: { missingKind: kind }, at: "", offsetMinutes: 0 },
+          clockIn?.date ?? this.managerDay!.view.date,
+        ),
+        kind,
+        shift,
+      })),
+    );
+    this.draft = { ...this.draft, rows };
+    this.#scope?.changed();
+  }
+
+  #removeRows(indices: number[]): void {
+    if (this.busy || this.blocked) return;
     this.draft = {
       ...this.draft,
-      rows: [
-        ...this.draft.rows,
-        timeDraft({ target: { missingKind: event.detail.value }, at: "", offsetMinutes: 0 }, date),
-      ],
+      rows: this.draft.rows.filter((_, index) => !indices.includes(index)),
     };
     this.#scope?.changed();
   }
 
   #dateField(row: TimeDraft, index: number, label: string, error: string) {
-    return html`${this.managerDay ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
+    const dateLabel = t("attendance.date");
+    return html`${this.managerDay ? html`<span class="clock-label" aria-hidden="true">${dateLabel} <strong>*</strong></span>` : nothing}
       <wt-input
         .variant=${this.managerDay ? "outlined" : "filled"}
         name=${`attendanceDate${index}`}
@@ -454,7 +530,9 @@ export class AttendanceCorrectionDialog extends LitElement {
       (!!manager && all !== null && !managerDayEdits(manager, all).length);
     const dayFields =
       manager?.view &&
-      this.draft.rows.map((row) => managerDayField(manager, row.target, row.date, row.time));
+      this.draft.rows.map((row) =>
+        managerDayField(manager, row.original, row.kind, row.date, row.time),
+      );
     const lastNote =
       dayFields?.reduce((last, { notes }, index) => (notes ? index : last), -1) ?? -1;
     const minutes = manager && all ? previewDayMinutes(manager.view, all) : undefined;
@@ -466,68 +544,107 @@ export class AttendanceCorrectionDialog extends LitElement {
               time: `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`,
             })}</span
           >`;
-    const fields = html` ${this.draft.rows.map((row, index) => {
-        const field = dayFields?.[index];
-        const label = field
-          ? row.date && row.date !== manager?.view.date
-            ? `${field.label} · ${row.date}`
-            : field.label
-          : t("attendance.time");
-        const times = html`
-          ${manager ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
-          <wt-input
-            name=${`attendanceTime${index}`}
-            type="time"
-            required
-            .label=${label}
-            .variant=${manager ? "outlined" : "filled"}
-            .value=${live(row.time)}
-            .disabled=${this.busy || this.blocked}
-            .error=${this.#feedback.attempted ? errors.rows[index]!.time : ""}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
-          ></wt-input>
-          ${
-            this.#choices(row).length > 1
-              ? html`<wt-combobox
-                  ?preserve-order=${true /* Preserve repeated-time offsets. */}
-                  name=${`attendanceOffset${index}`}
-                  required
-                  .label=${t("attendance.offset")}
-                  .value=${row.offset}
-                  .disabled=${this.busy || this.blocked}
-                  .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))}
-                  .error=${this.#feedback.attempted ? errors.rows[index]!.offset : ""}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}
-                ></wt-combobox>`
-              : nothing
-          }
-          ${field?.notes ? html`<p class="time-note">${field.notes} ${index === lastNote ? worked : nothing}</p>` : nothing}
-          ${
-            manager && "missingKind" in row.target && !field?.requiredTarget
-              ? html`<wt-button
-                  variant="ghost"
-                  .disabled=${this.busy || this.blocked}
-                  @click=${() => {
-                    this.draft = {
-                      ...this.draft,
-                      rows: this.draft.rows.filter((_, i) => i !== index),
-                    };
-                    this.#scope?.changed();
-                  }}
-                  >${t("hours.remove_time")}</wt-button
-                >`
-              : nothing
-          }
-        `;
-        return manager
-          ? html`<div>${times}</div>`
-          : html`<fieldset class="time-fields" ?disabled=${this.busy}>
-              <legend>
-                ${"missingKind" in row.target ? t(`clock.${row.target.missingKind}`) : t("attendance.original")}
-              </legend>
-              ${this.#dateField(row, index, t("attendance.date"), errors.rows[index]!.date)}${times}
-            </fieldset>`;
-      })}
+    const timeRows = this.draft.rows.map((row, index) => {
+      const field = dayFields?.[index];
+      const start =
+        manager &&
+        this.draft.rows.find(
+          (candidate) => candidate.shift === row.shift && candidate.kind === "in",
+        );
+      const dayOffset =
+        (midnight(row.date) -
+          midnight(start && start !== row ? start.date : (manager?.view.date ?? ""))) /
+        dayMilliseconds;
+      const dateSuffix =
+        Number.isFinite(dayOffset) && dayOffset !== 0
+          ? ` (${dayOffset > 0 ? "+" : ""}${dayOffset})`
+          : "";
+      const label = field?.label ?? t("attendance.time");
+      const time = html`
+        ${manager ? html`<span class="clock-label" aria-hidden="true">${label} <strong>*</strong></span>` : nothing}
+        <wt-input
+          name=${`attendanceTime${index}`}
+          type="time"
+          required
+          .label=${`${label}${dateSuffix}`}
+          .variant=${manager ? "outlined" : "filled"}
+          .value=${live(row.time)}
+          .disabled=${this.busy || this.blocked}
+          .error=${this.#feedback.attempted ? errors.rows[index]!.time : ""}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
+          >${dateSuffix ? html`<span slot="end" class="day-offset" aria-hidden="true">${dateSuffix.trim()}</span>` : nothing}</wt-input
+        >
+      `;
+      const offset = html`
+        ${
+          this.#choices(row).length > 1
+            ? html`<wt-combobox
+                ?preserve-order=${true /* Preserve repeated-time offsets. */}
+                name=${`attendanceOffset${index}`}
+                required
+                .label=${t("attendance.offset")}
+                .value=${row.offset}
+                .disabled=${this.busy || this.blocked}
+                .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))}
+                .error=${this.#feedback.attempted ? errors.rows[index]!.offset : ""}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}
+              ></wt-combobox>`
+            : nothing
+        }
+      `;
+      if (!manager)
+        return html`<fieldset class="time-fields" ?disabled=${this.busy}>
+          <legend>
+            ${"missingKind" in row.target ? t(`clock.${row.target.missingKind}`) : t("attendance.original")}
+          </legend>
+          ${this.#dateField(row, index, t("attendance.date"), errors.rows[index]!.date)}${time}${offset}
+        </fieldset>`;
+      return html`<div>
+        <div class="time-row">
+          <div>${time}</div>
+          <div>
+            ${this.#dateField(row, index, `${t("attendance.date")} · ${field!.label}`, errors.rows[index]!.date)}
+          </div>
+        </div>
+        ${offset}
+        ${field?.notes ? html`<p class="time-note">${field.notes} ${index === lastNote ? worked : nothing}</p>` : nothing}
+        ${row.kind === "break_end" && !row.original.at ? html`<wt-button variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows([index - 1, index])}>${t("hours.remove_break")}</wt-button>` : nothing}
+      </div>`;
+    });
+    const shifts = new Map<number, number[]>();
+    if (manager)
+      this.draft.rows.forEach(({ shift }, index) => {
+        const indices = shifts.get(shift!);
+        if (indices) indices.push(index);
+        else shifts.set(shift!, [index]);
+      });
+    const fields = html` ${
+        manager
+          ? html`
+              ${[...shifts].map(
+                ([shift, indices], i) =>
+                  html`<fieldset class="shift">
+                    <legend>${fill(t("hours.shift_number"), { number: String(i + 1) })}</legend>
+                    ${indices.map((index) => timeRows[index])}
+                    <wt-button
+                      variant="ghost"
+                      .disabled=${this.busy || this.blocked}
+                      @click=${() => this.#addPair(shift, "break_start", "break_end")}
+                      >${t("hours.add_break")}</wt-button
+                    >
+                    ${indices.every((index) => !this.draft.rows[index]!.original.at) ? html`<wt-button variant="ghost" .disabled=${this.busy || this.blocked} @click=${() => this.#removeRows(indices)}>${t("hours.remove_shift")}</wt-button>` : nothing}
+                  </fieldset>`,
+              )}
+              <wt-button
+                class="add-shift"
+                variant="ghost"
+                .disabled=${this.busy || this.blocked}
+                @click=${() => this.#addPair(Math.max(-1, ...shifts.keys()) + 1, "in", "out")}
+                >${t("hours.add_shift")}</wt-button
+              >
+            `
+          : timeRows
+      }
       ${lastNote === -1 && worked !== nothing ? html`<p>${worked}</p>` : nothing}
       ${manager ? html`<span class="spoken-total" aria-live="polite">${minutes === undefined ? "" : fill(t("hours.worked_would_be"), { time: formatDuration(minutes * 60_000, currentLocale()) })}</span>` : nothing}
       <div>
@@ -542,34 +659,7 @@ export class AttendanceCorrectionDialog extends LitElement {
           .error=${this.#feedback.attempted && errors.reason ? errors.reason : reasonRefusal}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, null, "reason")}
         ></wt-textarea>
-      </div>
-      ${
-        manager
-          ? html`<details class="dates">
-                <summary>
-                  ${t("hours.edit_dates")}
-                  <wt-icon name="chevron-down" aria-hidden="true"></wt-icon>
-                </summary>
-                ${this.draft.rows.map((row, index) => {
-                  const label = dayFields![index]!.label;
-                  return this.#dateField(
-                    row,
-                    index,
-                    `${t("attendance.date")} · ${label}`,
-                    errors.rows[index]!.date,
-                  );
-                })}
-              </details>
-              <wt-combobox
-                name="missingTime"
-                .placeholder=${t("hours.add_time")}
-                .value=${live("")}
-                .disabled=${this.busy || this.blocked}
-                .options=${clockKinds.filter((kind) => !this.draft.rows.some(({ target }) => "missingKind" in target && target.missingKind === kind)).map((kind) => ({ value: kind, label: t(`hours.entry_${kind}`) }))}
-                @wt-change=${(event: CustomEvent<{ value: (typeof clockKinds)[number] }>) => this.#addTime(event, manager.view.date)}
-              ></wt-combobox>`
-          : nothing
-      }`;
+      </div>`;
     const message = [invalid || reasonRefusal ? t("form.fix_fields") : "", error]
       .filter(Boolean)
       .join(" ");

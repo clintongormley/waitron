@@ -263,9 +263,7 @@ it.each([
   expect(fields.map((field) => field.value)).toEqual(["10:00", item ? "01:15" : "17:00"]);
   if (item === requested) {
     await expectNoA11yViolations(form);
-    expect(root.querySelectorAll<HTMLElement>(".clock-label")[1]!.innerText).toBe(
-      "Clocked out · 2026-10-14 *",
-    );
+    expect(fields[1]!.label).toBe("Clocked out (+1)");
   }
   if (item) {
     expect(root.textContent).toContain("17:00");
@@ -368,25 +366,17 @@ it("opens the listed finished day beside a proposal from the prior overnight shi
   ).toEqual(["10:00", "17:00"]);
 });
 
-it.each([
-  { type: "date", value: "", error: "Choose a valid date." },
-  {
-    type: "time",
-    value: "09:00",
-    error: "The end must be after the start. Choose the actual dates.",
-  },
-])("shows the manager’s invalid $type beside the field", async ({ type, value, error }) => {
+it("shows an invalid date in the manager’s time row", async () => {
   const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
   await open(f.el);
   await page.getByRole("button", { name: /Edit.*Javier/ }).click();
   await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
   const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
   const root = form.shadowRoot!;
-  const field = root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
-    `wt-input[type="${type}"]`,
-  )[1]!;
+  const field =
+    root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="date"]')[1]!;
   for (const [control, input] of [
-    [field, value],
+    [field, ""],
     [root.querySelector("wt-textarea")!, "Checking hours"],
   ] as const) {
     control.dispatchEvent(
@@ -394,13 +384,98 @@ it.each([
     );
   }
   await page.getByRole("button", { name: "Save and send to Javier" }).click();
-  await vi.waitFor(() => expect(field.error).toBe(error));
-  if (type === "date") {
-    expect(root.querySelector("details")?.open).toBe(true);
-    expect(field.label).toBe("Date · Clocked out");
-  }
+  await vi.waitFor(() => expect(field.error).toBe("Choose a valid date."));
+  expect(field.label).toBe("Date · Clocked out");
+  expect(field.getBoundingClientRect().width).toBeGreaterThan(0);
   await expect.poll(() => root.activeElement).toBe(field);
   expect(f.sendAttendanceManagerCommand).not.toHaveBeenCalled();
+});
+
+it("groups a day into shifts and sends two breaks with an added overnight shift", async () => {
+  const firstOut = { ...times[1], at: "2026-10-13T11:00:00.000Z", automatic: false };
+  const secondIn = { ...times[0], at: "2026-10-13T12:00:00.000Z" };
+  const f = await manager({
+    items: [],
+    finishedDays: [{ ...other, times: [times[0], firstOut, secondIn, times[1]] }],
+  });
+  f.getAttendanceManagerDay.mockResolvedValue({
+    ...view,
+    items: [],
+    record: {
+      ...view.record,
+      entries: [times[0], firstOut, secondIn, times[1]].map((time, i) => ({
+        ...clockEntries[0]!,
+        entry: {
+          ...clockEntries[0]!.entry,
+          entryId: `shift-time-${i}`,
+          entryKind: time.kind,
+          eventAt: time.at,
+          sequenceNo: i + 1,
+        },
+      })),
+      sessions: [
+        { ...view.record.sessions[0]!, endedAt: firstOut.at },
+        { ...view.record.sessions[0]!, startedAt: secondIn.at },
+      ],
+    },
+  });
+  await open(f.el);
+  await page.getByRole("button", { name: /Edit.*Javier/ }).click();
+  await expect.element(page.getByRole("heading", { name: /Javier/ })).toBeVisible();
+  const root = screen(f.el)!.shadowRoot!.querySelector(
+    "till-attendance-correction-dialog",
+  )!.shadowRoot!;
+  const shift = (number: number) =>
+    page.getByRole("group", { name: `Shift ${number}`, exact: true });
+  const change = (control: Element, value: string) =>
+    control.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
+  const fields = (number: number, type = "time") => [
+    ...shift(number)
+      .element()
+      .querySelectorAll<HTMLElementTagNameMap["wt-input"]>(`wt-input[type="${type}"]`),
+  ];
+  await expect.element(shift(2)).toBeVisible();
+  expect(fields(1).map(({ value }) => value)).toEqual(["10:00", "13:00"]);
+  expect(fields(2).map(({ value }) => value)).toEqual(["14:00", "17:00"]);
+  const addBreak = shift(1).getByRole("button", { name: "Add a break" });
+  await addBreak.click();
+  await addBreak.click();
+  await vi.waitFor(() => expect(fields(1)).toHaveLength(6));
+  const addedBreaks = fields(1).filter(({ value }) => value === "");
+  for (const [index, value] of ["10:45", "11:00", "12:00", "12:15"].entries())
+    change(addedBreaks[index]!, value);
+  await page.getByRole("button", { name: "Add a shift" }).click();
+  await expect.element(shift(3)).toBeVisible();
+  const [start, end] = fields(3);
+  change(start!, "21:00");
+  change(end!, "00:45");
+  await vi.waitFor(() => {
+    expect(fields(3, "date")[1]?.value).toBe("2026-10-14");
+    expect(end!.label).toBe("Clocked out (+1)");
+  });
+  change(root.querySelector("wt-textarea")!, "Add missing breaks and closing shift");
+  await page.getByRole("button", { name: "Save and send to Javier" }).click();
+  await vi.waitFor(() => expect(f.sendAttendanceManagerCommand).toHaveBeenCalledOnce());
+  const [command] = f.sendAttendanceManagerCommand.mock.calls[0]!;
+  expect(command).toMatchObject({
+    action: "propose",
+    changes: [
+      {
+        target: { missingKind: "break_start" },
+        at: "2026-10-13T08:45:00.000Z",
+        offsetMinutes: 120,
+      },
+      { target: { missingKind: "break_end" }, at: "2026-10-13T09:00:00.000Z", offsetMinutes: 120 },
+      {
+        target: { missingKind: "break_start" },
+        at: "2026-10-13T10:00:00.000Z",
+        offsetMinutes: 120,
+      },
+      { target: { missingKind: "break_end" }, at: "2026-10-13T10:15:00.000Z", offsetMinutes: 120 },
+      { target: { missingKind: "in" }, at: "2026-10-13T19:00:00.000Z", offsetMinutes: 120 },
+      { target: { missingKind: "out" }, at: "2026-10-13T22:45:00.000Z", offsetMinutes: 120 },
+    ],
+  });
 });
 
 it("asks before going back from a changed day edit", async () => {
@@ -445,9 +520,11 @@ it("keeps a worker’s requested missing time available for the manager to fill"
   const form = screen(f.el)!.shadowRoot!.querySelector("till-attendance-correction-dialog")!;
   const root = form.shadowRoot!;
   expect(
-    root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]')[2]?.value,
+    [...root.querySelectorAll<HTMLElementTagNameMap["wt-input"]>('wt-input[type="time"]')].find(
+      ({ label }) => label === "Break started",
+    )?.value,
   ).toBe("13:00");
-  expect(root.textContent).not.toContain("Remove added time");
+  expect(root.textContent).not.toContain("Remove added break");
 });
 
 it("retries an unanswered decision with the original command and revision", async () => {

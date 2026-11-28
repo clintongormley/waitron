@@ -13,7 +13,8 @@ export interface ManagerDay {
   name: string;
 }
 
-export const clockKinds = ["in", "break_start", "break_end", "out"] as const;
+const clockKinds = ["in", "break_start", "break_end", "out"] as const;
+export type ClockKind = (typeof clockKinds)[number];
 const key = (target: AttendanceChange["target"]) =>
   "entryId" in target ? target.entryId : target.missingKind;
 const requested = ({ item }: ManagerDay) =>
@@ -23,12 +24,34 @@ function recorded({ view }: ManagerDay, target: AttendanceChange["target"]) {
   return view.record.entries.find(({ entry }) => entry.entryId === key(target))?.entry;
 }
 
+function clockKind(day: ManagerDay, change: AttendanceChange): ClockKind | undefined {
+  if ("missingKind" in change.target) return change.target.missingKind;
+  const previous = recorded(day, change.target);
+  const byId = new Map(day.view.record.entries.map(({ entry }) => [entry.entryId, entry]));
+  const root = previous && originalEntry(previous, byId);
+  const kind = root?.extension?.missingEntryKind ?? root?.entryKind;
+  return clockKinds.find((value) => value === kind);
+}
+
 export function managerDayRows(day: ManagerDay) {
   const rows = dayEditorRows(day.view, requested(day));
-  if (day.item) return rows;
-  return rows.filter(({ at }) =>
-    day.view.record.sessions.some(({ startedAt, endedAt }) => at >= startedAt && at <= endedAt),
-  );
+  const recordedAt = (change: AttendanceChange) =>
+    recorded(day, change.target)?.eventAt ?? change.at;
+  const ordered = (
+    day.item
+      ? rows
+      : rows.filter(({ at }) =>
+          day.view.record.sessions.some(
+            ({ startedAt, endedAt }) => at >= startedAt && at <= endedAt,
+          ),
+        )
+  ).sort((a, b) => Date.parse(recordedAt(a)) - Date.parse(recordedAt(b)));
+  let shift = 0;
+  return ordered.map((change, i) => {
+    const kind = clockKind(day, change);
+    if (i > 0 && kind === "in") shift++;
+    return { change, kind, shift };
+  });
 }
 
 export function managerDayEdits(day: ManagerDay, changes: AttendanceChange[]) {
@@ -45,18 +68,17 @@ export function managerDayEdits(day: ManagerDay, changes: AttendanceChange[]) {
 
 export function managerDayField(
   day: ManagerDay,
-  target: AttendanceChange["target"],
+  original: AttendanceChange,
+  kind: ClockKind | undefined,
   date: string,
   time: string,
-): { kind: string | undefined; label: string; notes: string; requiredTarget: boolean } {
+) {
+  const { target } = original;
   const previous = recorded(day, target);
-  const request = requested(day).find((entry) => key(entry.target) === key(target));
-  const byId = new Map(day.view.record.entries.map(({ entry }) => [entry.entryId, entry]));
-  const root = previous && originalEntry(previous, byId);
-  const kind =
-    "missingKind" in target
-      ? target.missingKind
-      : (root?.extension?.missingEntryKind ?? root?.entryKind);
+  const request = requested(day).find(
+    (entry) =>
+      key(entry.target) === key(target) && ("entryId" in target || entry.at === original.at),
+  );
   const display = (at: string, offset: number) => {
     const wall = storedAttendanceTime(at, offset);
     return wall.slice(0, 10) === date ? wall.slice(11, 16) : wall.slice(0, 16).replace("T", " ");
@@ -72,14 +94,8 @@ export function managerDayField(
       name: day.name,
       time: display(request.at, request.offsetMinutes),
     });
-  const label =
-    kind === "in" || kind === "out" || kind === "break_start" || kind === "break_end"
-      ? t(`hours.entry_${kind}`)
-      : t("attendance.time");
   return {
-    kind,
-    label,
+    label: kind ? t(`hours.entry_${kind}`) : t("attendance.time"),
     notes: [before, asked].filter(Boolean).join(" · "),
-    requiredTarget: !!request && day.item?.direction === "worker_request",
   };
 }

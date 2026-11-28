@@ -226,6 +226,33 @@ describe("attendance correction time and reason", () => {
     expect(save(el).hasAttribute("disabled")).toBe(true);
   });
 
+  it("asks for a repeated hour in a manager’s shift and keeps the offset they choose", async () => {
+    const { el } = await mount({
+      managerDay: {
+        name: "Javier",
+        view: {
+          personId: "worker",
+          date: "2026-10-25",
+          revision: "reviewed",
+          timeZone: "Europe/Madrid",
+          items: [],
+          record: { sessions: [], entries: [], closures: [], closedPeriodImpacts: [] },
+        },
+      },
+    });
+    await page.getByRole("button", { name: "Add a shift" }).click();
+    await fill(el, "attendanceTime0", "00:30");
+    await fill(el, "attendanceTime1", "01:30");
+    await fill(el, "attendanceTime1", "02:30");
+    const choice = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!;
+    expect(choice().value).toBe("");
+    await userEvent.click(choice().shadowRoot!.querySelector<HTMLElement>("button.trigger")!);
+    await page.getByRole("option", { name: "02:30 +01:00" }).click();
+    await fill(el, "attendanceTime1", "02:45");
+    expect(choice().value).toBe("60");
+  });
+
   it("a skipped spring minute is refused without rolling it forward", async () => {
     const { el } = await mount({ initialChanges: [missing[0]!] });
     const sent = watch(el);
