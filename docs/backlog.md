@@ -598,8 +598,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   start the reader from **Charge**, and open cash entry from **Cash**.
   **Refund dishes** still needs mixed selection. Staff should be able to pick some portions of
   one row alongside other dishes, with each row credited by the amount they chose. Record how
-  many portions were refunded so a later refund shows only the portions left. A refund of money
-  alone leaves the dish on the list with its remaining balance.
+  many portions were refunded so a later refund shows only the portions left. Keep showing the dish
+  and its remaining balance after a money-only refund.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and

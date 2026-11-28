@@ -32,12 +32,8 @@ export class WtDishPickRow extends LitElement {
         line-height: 1.35;
       }
 
-      .row:has(#dish-quantity:empty) {
+      .row:has(#dish-quantity[hidden]) {
         grid-template-columns: auto minmax(0, 1fr) auto;
-      }
-
-      #dish-quantity:empty {
-        display: none;
       }
 
       label.row {
@@ -192,7 +188,7 @@ export class WtDishPickRow extends LitElement {
     const content = html` <span part="mark" aria-hidden="true"
         ><wt-icon name="choice-check"></wt-icon
       ></span>
-      <span id="dish-quantity">${this.quantity}</span>
+      <span id="dish-quantity" ?hidden=${this.quantity === ""}>${this.quantity}</span>
       <span class="words">
         <span id="dish-label">${this.label}</span>
         <span id="dish-description" part="description">${this.description}</span>
