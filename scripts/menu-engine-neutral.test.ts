@@ -57,6 +57,7 @@ const ORDER_PATH_FILES = [
   "apps/server/src/working-order-edit-state.ts",
   "apps/server/src/working-order-held-read.ts",
   "apps/server/src/working-order-kitchen-fire.ts",
+  "apps/server/src/working-order-line-edit-plan.ts",
   "apps/server/src/working-order-line-edits.ts",
   "apps/server/src/working-order-open.ts",
   "apps/server/src/working-order-pass.ts",
