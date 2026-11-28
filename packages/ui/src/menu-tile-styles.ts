@@ -128,11 +128,15 @@ export const menuTileStyles: CSSResult = css`
     hyphenate-limit-chars: 8 auto auto;
   }
 
+  /* A set leading, not the font's own, which is taller in some fonts (Noto Sans's is 1.36 of the
+     size): a section the diet filter emptied stacks its icon, name and a two-line notice in the
+     fixed tile height. */
   .price,
   .kind,
   .sold-out {
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
+    line-height: 1.2;
   }
 
   .tile[data-kind="section"] wt-icon,

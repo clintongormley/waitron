@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { applyTokens } from "@waitron/ui";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
@@ -7,13 +7,23 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
+  loadPhoneFont,
   mountWidget,
   pageAt,
+  PHONE_FONT,
   resetPage,
 } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 
 afterEach(cleanupWidgets);
+
+let phoneFont: FontFace;
+beforeAll(async () => {
+  phoneFont = await loadPhoneFont();
+});
+afterAll(() => {
+  document.fonts.delete(phoneFont);
+});
 
 const cases = [
   { width: 360, columns: 3, theme: "light" },
@@ -145,7 +155,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
         theme,
       );
       if (width === 792) host.style.width = "792px";
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(getComputedStyle(el).fontFamily).toBe(PHONE_FONT);
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
       if (width <= 390) expect(grid.getBoundingClientRect().width).toBeCloseTo(width - 16);
       expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(columns);

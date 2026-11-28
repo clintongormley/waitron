@@ -1,6 +1,6 @@
 import { bill as setMenuBill, daily, special } from "../../test/set-menu-widgets.js";
 import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   CATEGORY_PALETTE,
@@ -13,7 +13,15 @@ import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
+import {
+  blurAll,
+  cleanupWidgets,
+  loadPhoneFont,
+  measured,
+  mountWidget,
+  PHONE_FONT,
+  type Theme,
+} from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import type { OwnSetMenuOffers } from "../state/set-menus.js";
 import { burger as tableBurger } from "../screens/till-table-order-screen.test-helpers.js";
@@ -3053,6 +3061,13 @@ describe("till-menu-browser", () => {
 });
 
 describe("a tile's number in the New order (A797-10 D7)", () => {
+  let phoneFont: FontFace;
+  beforeAll(async () => {
+    phoneFont = await loadPhoneFont();
+  });
+  afterAll(() => {
+    document.fonts.delete(phoneFont);
+  });
   const beerDish = product("beer", "Beer", { id: "beer", productId: "p-beer" });
   const inOrderMenu = (overrides: Partial<TillZoneMenu> = {}) =>
     lunch({
@@ -3220,7 +3235,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       const overlaps = (a: DOMRect, b: DOMRect) =>
         a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       const layout = async (inOrder?: Map<string, number>) => {
-        const { el } = await mount({
+        const { el, host } = await mount({
           menu: lunch({
             structure: { members: painted.map((dish) => member(dish.id.slice(2))) },
             ...withShortcuts([]),
@@ -3228,6 +3243,9 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           products: painted,
           inOrder,
         });
+        host.style.setProperty("--wt-font-family", PHONE_FONT);
+        await nextPaint();
+        expect(getComputedStyle(el).fontFamily).toBe(PHONE_FONT);
         const read = () =>
           painted.map((dish) => {
             const tile = entry(el, "structure", dish.name);

@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { DEFAULT_HOME_ORDER, type DocumentMember } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { daily } from "../../test/set-menu-widgets.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  pageAt,
+  PHONE_FONT,
+  resetPage,
+  type Mounted,
+} from "./test-helpers.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
@@ -87,16 +95,30 @@ const menu: TillZoneMenu = {
   home: { shortcuts: [], order: DEFAULT_HOME_ORDER },
 };
 
+/** Draws `mounted` in a phone's font, so a check of what fits measures the tiles rather than the
+ * machine's own `system-ui`. */
+async function inPhoneFont(
+  mounted: Promise<Mounted<TillMenuBrowser>>,
+): Promise<Mounted<TillMenuBrowser>> {
+  const shown = await mounted;
+  shown.host.style.setProperty("--wt-font-family", PHONE_FONT);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(getComputedStyle(shown.el).fontFamily).toBe(PHONE_FONT);
+  return shown;
+}
+
 async function mount(width: number, props: Partial<TillMenuBrowser> = {}) {
   await page.viewport(width, 900);
-  return mountWidget<TillMenuBrowser>("till-menu-browser", {
-    menu,
-    products: [bravas, croquettes, gone, paintedGone],
-    unfilteredProducts: [bravas, croquettes, gone, paintedGone, manchego],
-    setMenuCopies: [{ copy: daily, versionId: "lunch" }],
-    store: new WorkingOrderStore(),
-    ...props,
-  });
+  return inPhoneFont(
+    mountWidget<TillMenuBrowser>("till-menu-browser", {
+      menu,
+      products: [bravas, croquettes, gone, paintedGone],
+      unfilteredProducts: [bravas, croquettes, gone, paintedGone, manchego],
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      store: new WorkingOrderStore(),
+      ...props,
+    }),
+  );
 }
 
 function tile(el: TillMenuBrowser, name: string): HTMLElement {
@@ -124,6 +146,14 @@ function resolved(near: HTMLElement, property: "backgroundColor" | "color", valu
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
 
 afterEach(() => cleanupWidgets());
+
+let phoneFont: FontFace;
+beforeAll(async () => {
+  phoneFont = await loadPhoneFont();
+});
+afterAll(() => {
+  document.fonts.delete(phoneFont);
+});
 
 const ALL = ["Starters", "Bravas", "Croquettes", "Squid", "Prawns", "Cheeses", "Daily menu"];
 
@@ -230,12 +260,14 @@ describe("menu tiles", () => {
       const full = "Grilled octopus with smoked paprika, roasted potatoes and garlic oil";
       try {
         await pageAt(width, 900, scale);
-        const { el } = await mountWidget<TillMenuBrowser>("till-menu-browser", {
-          menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
-          products: [product("long", full), bravas],
-          store: new WorkingOrderStore(),
-          inOrder: new Map([["p-long", count]]),
-        });
+        const { el } = await inPhoneFont(
+          mountWidget<TillMenuBrowser>("till-menu-browser", {
+            menu: { ...menu, structure: { members: [member("long"), member("bravas")] } },
+            products: [product("long", full), bravas],
+            store: new WorkingOrderStore(),
+            inOrder: new Map([["p-long", count]]),
+          }),
+        );
         await nextPaint();
         const dish = tile(el, full);
         const name = dish.querySelector<HTMLElement>(".name")!;
