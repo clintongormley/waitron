@@ -229,7 +229,12 @@ async function writeWorked(
     Object.assign(row, { quantity: priced.quantity, unit: priced.unit, lineTotal: priced.total });
   }
   const before = sumDecimals(covered.map((row) => lineGross(row, row.quantity)));
-  const reduction = sumDecimals(taken.map((one) => one.reduction));
+  const lines = fitted(
+    taken.map((one) => ({ ...one, reduction: decimalToCents(one.reduction) })),
+    worked.takes,
+    () => ({ lineId: changed[0]!.change.row.id, quantity: changed[0]!.priced.quantity }),
+  );
+  const reduction = centsToDecimal(worked.takes);
   const id = await recordAdjustment(tx, {
     workingOrderId: billId,
     line:
@@ -249,25 +254,48 @@ async function writeWorked(
     action: held.action,
     percentBp: held.percentBp,
     beforeAmount: before,
-    afterAmount: centsToDecimal(decimalToCents(before) - decimalToCents(reduction)),
+    afterAmount: centsToDecimal(decimalToCents(before) - worked.takes),
     reduction,
     nominalValue: sumDecimals(covered.map((row) => listValue(row, row.quantity))),
     requestedBy: held.requestedBy,
     approvedBy: held.approvedBy,
     note: held.note,
   });
-  if (taken.length > 0) {
+  if (lines.length > 0) {
     await insertInChunks(
       tx,
       adjustmentLines,
-      taken.map((one) => ({
-        adjustmentId: id,
-        lineId: one.lineId,
-        reduction: decimalToCents(one.reduction),
-        quantity: one.quantity,
-      })),
+      lines.map((one) => ({ adjustmentId: id, ...one })),
     );
   }
+}
+
+type LineTaken = { lineId: string; reduction: number; quantity: number };
+
+/**
+ * `taken`, each line's own fall in cents, made to sum to `takes`, what the filed rows lose: the
+ * cents a filed row's rounding adds go to the first line, or to `first`, the first part the
+ * discount moved, when no line's own total fell; the cents it saves come off the lines in order,
+ * none below nothing.
+ */
+function fitted(
+  taken: readonly LineTaken[],
+  takes: number,
+  first: () => Omit<LineTaken, "reduction">,
+): LineTaken[] {
+  const lines = taken.map((one) => ({ ...one }));
+  let left = takes - lines.reduce((sum, { reduction }) => sum + reduction, 0);
+  if (left > 0) {
+    if (lines.length === 0) lines.push({ ...first(), reduction: 0 });
+    lines[0]!.reduction += left;
+  }
+  for (const one of lines) {
+    if (left >= 0) break;
+    const off = Math.min(one.reduction, -left);
+    one.reduction -= off;
+    left += off;
+  }
+  return lines.filter(({ reduction }) => reduction !== 0);
 }
 
 type HeldDiscount = typeof billDiscounts.$inferSelect;

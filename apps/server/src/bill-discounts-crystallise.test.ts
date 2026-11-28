@@ -241,6 +241,43 @@ describe("crystalliseBillDiscounts", () => {
     await crystallisesAsShown(billId);
   });
 
+  it.each([
+    // Each extra's own total stays 1.25, but the filed row falls from 2.51 to 2.50.
+    [
+      1003,
+      "records the cent a filed row of two measured extras loses, though neither extra's own total does",
+    ],
+    // Each extra's own total falls from 1.26 to 1.25, but the filed row only from 2.51 to 2.50.
+    [
+      1004,
+      "records only the cent a filed row of two measured extras loses, though each extra's own total loses one",
+    ],
+  ])("at %i, %s", async (olives) => {
+    // Two bound pizzas at 0.00, each with 0.125 of olives, filed as one row of 0.250; 0.01 off the
+    // bill leaves the olives at 10.01.
+    const { billId } = await billWith(venue, [{ name: "Pizza", quantity: "2", olives: 1 }]);
+    await inTx(venue, async (tx) => {
+      const onBill = eq(workingOrderLines.workingOrderId, billId);
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 0, lineTotal: 0 })
+        .where(and(onBill, sql`${workingOrderLines.parentLineId} is null`));
+      await tx
+        .update(workingOrderLines)
+        .set({
+          unitPriceGross: olives,
+          quantity: 125,
+          unitPrecision: 3,
+          lineTotal: Math.round((olives * 125) / 1000),
+        })
+        .where(and(onBill, sql`${workingOrderLines.parentLineId} is not null`));
+      await holdDiscount(tx, venue, { workingOrderId: billId, ...amountOf(1) });
+    });
+    expect(await crystallisesAsShown(billId)).toBe(1);
+    const written = await inTx(venue, (tx) => adjustmentsOn(tx, billId));
+    expect(written.map(({ reduction }) => reduction)).toEqual([1]);
+  });
+
   it("writes 10% then 1.00 off one line of three beers as PR 1 works them out, line by line", async () => {
     const billId = await groupedBill([{ name: "Draught beer", quantity: "3" }], 335);
     const beers = await lineIdOf(venue, billId, 1);
