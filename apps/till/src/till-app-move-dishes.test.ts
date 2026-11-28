@@ -226,6 +226,10 @@ it("moves the selected dish to the shown table once and stays on the source bill
       "Move 1 dish to a new bill at Table 7",
     ),
   );
+  const chosen = root.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>(
+    '[data-move-dishes-to="table"]',
+  )!;
+  expect(chosen).toMatchObject({ selected: true, label: "Table 7" });
   await userEvent.click(control("[data-move-dishes-confirm]"));
 
   await vi.waitFor(() => expect(move).toHaveBeenCalledTimes(1));
@@ -243,6 +247,63 @@ it("moves the selected dish to the shown table once and stays on the source bill
   );
   await vi.waitFor(() => expect(root.querySelector("[data-move-dishes]")).toBeNull());
   expect(order.orderId).toBe("wo-4");
+});
+
+it("keeps the invoice choice when retrying a dish move with the confirmed destination zone", async () => {
+  const move = vi
+    .fn()
+    .mockRejectedValueOnce({
+      code: "service_zone.closed",
+      status: 409,
+      zoneId: "z2",
+      closedZoneName: "Terrace",
+      closesAt: "22:00",
+    })
+    .mockResolvedValueOnce({ billId: "new-at-seven" });
+  const destination = { ...table("t7", "7", null), zoneId: "z2" };
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Table Guest",
+    address: "1 Oak Street",
+    countryCode: "ES",
+  };
+  const { el, order } = await open({
+    moveDishes: move,
+    getPartyBills: vi.fn().mockResolvedValue([bill("wo-4", 1, { invoiceType: "F1", recipient })]),
+    getTablesState: vi.fn().mockResolvedValue([table("t4", "4", seated), destination]),
+  });
+  const prompt = {};
+  const ready = vi.fn();
+  emit(order, "table-relocation-open", { verb: "move-dishes", table: destination, prompt, ready });
+  await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce());
+  emit(order, "move-dishes", { lineIds: [DISH.id], toBillId: null, toTableId: "t7", prompt });
+
+  const keep = () => el.shadowRoot!.querySelector<HTMLElement>('[data-merge-keep="from"]');
+  await vi.waitFor(() => expect(keep()).not.toBeNull());
+  expect(move).not.toHaveBeenCalled();
+  keep()!.click();
+
+  const dialog = () => el.shadowRoot!.querySelector("till-late-send-dialog");
+  await vi.waitFor(() =>
+    expect(dialog()?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+      "Terrace closed at 22:00",
+    ),
+  );
+  expect(move).toHaveBeenCalledOnce();
+  await userEvent.click(dialog()!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!);
+  await vi.waitFor(() => expect(move).toHaveBeenCalledTimes(2));
+
+  const revisions = {
+    partyId: "v1",
+    expectedPartyRevision: 3,
+    otherPartyId: null,
+    expectedEdits: [sourceEdit],
+  };
+  const choice = { keep: "from", into: null, from: { taxId: recipient.taxId } };
+  expect(move.mock.calls).toEqual([
+    ["wo-4", [DISH.id], { toTableId: "t7" }, revisions, choice],
+    ["wo-4", [DISH.id], { toTableId: "t7" }, { ...revisions, closedZoneId: "z2" }, choice],
+  ]);
 });
 
 describe("set menus in Move dishes", () => {
