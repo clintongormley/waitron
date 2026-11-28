@@ -8,9 +8,8 @@ The normal box Compose file starts the companion. It makes a WireGuard key and w
 signed Cloud connection to write `peer.json` in the `tunnel_control` volume. The companion then
 opens the tunnel. The forwarder waits for the staff socket, which the app opens after receiving
 its first valid certificate. Turning remote access off removes `peer.json`. On its next poll the
-companion closes existing connections, waits up to about three seconds for the gateway to
-acknowledge each close, and then removes its WireGuard interface. Turning access back on uses the
-same key and pairing.
+companion closes existing connections, waits up to about three seconds for them to close, and
+then removes its WireGuard interface. Turning access back on uses the same key and pairing.
 
 The companion stays running while access is off. It keeps its private key in `tunnel_keys` and
 its network-admin permission in its own network namespace, including on production boxes.

@@ -346,7 +346,7 @@ it("deletes the interface after a bounded wait when the gateway never acknowledg
     .toBe(true);
   await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.off");
   const calls = await events(run);
-  expect(calls.filter(([command]) => command === "ss").length).toBeGreaterThanOrEqual(10);
+  expect(calls.filter(([command]) => command === "ss")).toHaveLength(30);
   expect(calls.findLastIndex(([command]) => command === "ss")).toBeLessThan(
     calls.findIndex((e) => e.join(" ") === "ip link del wg-cloud"),
   );
