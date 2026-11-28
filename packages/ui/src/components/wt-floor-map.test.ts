@@ -111,12 +111,14 @@ it("fits the zone's tables to the map when it first draws them", async () => {
 
 it("fits remembered rectangles without exposing the old table controls", async () => {
   const el = await map([t1]);
-  el.placeholders = [{ x: 10, y: 5, width: 8, height: 4 }];
+  el.placeholders = [{ x: 10, y: 5, width: 8, height: 8 }];
+  el.fitKey = "remembered-zone";
   await settled(el);
-  const area = el.shadowRoot!.querySelector<HTMLElement>("[inert]")!;
-  const box = area.querySelector("wt-placeholder")!.getBoundingClientRect();
-  expect([box.width, box.height]).toEqual([300, 150]);
-  expect(area.getAttribute("aria-hidden")).toBe("true");
+  const area = el.shadowRoot!.querySelector<HTMLElement>("[inert]");
+  expect(area).not.toBeNull();
+  const box = area!.querySelector("wt-placeholder")!.getBoundingClientRect();
+  expect([box.width, box.height]).toEqual([200, 200]);
+  expect(area!.getAttribute("aria-hidden")).toBe("true");
   expect(button(el, "t1")).toBeNull();
 });
 
