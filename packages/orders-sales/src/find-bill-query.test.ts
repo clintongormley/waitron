@@ -13,7 +13,6 @@ describe("Find a bill query", () => {
     expect(parseTransactionsQuery(new URLSearchParams())).toEqual({
       q: "",
       page: 0,
-      sort: { key: "when", direction: "descending" },
       dates: { preset: "today" },
     });
     expect(
@@ -39,7 +38,6 @@ describe("Find a bill query", () => {
           preset: "custom",
           from: "2026-10-01",
           to: "2026-10-15",
-          method: "card",
           type: "full-invoice",
           staffId: uuid,
         }),
@@ -47,9 +45,7 @@ describe("Find a bill query", () => {
     ).toEqual({
       q: "0091",
       page: 0,
-      sort: { key: "when", direction: "descending" },
       dates: { preset: "custom", from: "2026-10-01", to: "2026-10-15" },
-      method: "card",
       type: "full-invoice",
       staffId: uuid,
     });
@@ -96,9 +92,11 @@ describe("Find a bill query", () => {
   });
   it.each([
     ["sort=openedAt", "sort"],
+    ["sort=when", "sort"],
+    ["direction=descending", "direction"],
+    ["method=card", "method"],
     ["type=credit-note", "type"],
     ["type=", "type"],
-    ["method=crypto", "method"],
     ["preset=week", "preset"],
     ["preset=", "preset"],
     ["state=unpaid", "state"],
@@ -151,12 +149,6 @@ describe("Find a bill query", () => {
     "accepts Bills sort %s",
     (sort) => {
       expect(parseBillsQuery(new URLSearchParams({ sort })).sort.key).toBe(sort);
-    },
-  );
-  it.each(["when", "invoice", "type", "tableName", "method", "staff", "amount"])(
-    "accepts Transactions sort %s",
-    (sort) => {
-      expect(parseTransactionsQuery(new URLSearchParams({ sort })).sort.key).toBe(sort);
     },
   );
   it.each(["today", "yesterday", "business-day", "last-7-days", "this-month", "any"])(

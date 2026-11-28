@@ -31,12 +31,7 @@ import type {
 import type { TillRequest, ReadOptions } from "./till-request.js";
 
 function findBillParams(query: BillsQuery | TransactionsQuery): string {
-  const params = new URLSearchParams({
-    q: query.q,
-    page: String(query.page),
-    sort: query.sort.key,
-    direction: query.sort.direction,
-  });
+  const params = new URLSearchParams({ q: query.q, page: String(query.page) });
   if (query.staffId !== undefined) params.set("staffId", query.staffId);
   if ("dates" in query) {
     params.set("preset", query.dates.preset);
@@ -44,9 +39,10 @@ function findBillParams(query: BillsQuery | TransactionsQuery): string {
       params.set("from", query.dates.from);
       params.set("to", query.dates.to);
     }
-    if (query.method !== undefined) params.set("method", query.method);
     if (query.type !== undefined) params.set("type", query.type);
   } else {
+    params.set("sort", query.sort.key);
+    params.set("direction", query.sort.direction);
     if (query.owed === true) params.set("owed", "true");
     if (query.counter === true) params.set("counter", "true");
   }

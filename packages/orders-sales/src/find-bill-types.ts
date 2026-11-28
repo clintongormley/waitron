@@ -3,13 +3,14 @@ export type FindBillDates =
   | { preset: "custom"; from: string; to: string }
   | { preset: "any" };
 export type FindBillSort = { key: string; direction: "ascending" | "descending" };
-export type FindBillQuery = { q: string; page: number; sort: FindBillSort; staffId?: string };
+export type FindBillQuery = { q: string; page: number; staffId?: string };
 export type BillState = "unpaid" | "held" | "part-paid" | "paid-not-handed-over";
 export type TransactionType =
   "sale" | "full-invoice" | "correction" | "full-correction" | "replacement" | "refund";
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
 /** `owed` and `counter` together ask for the bills either one names. */
 export type BillsQuery = FindBillQuery & {
+  sort: FindBillSort;
   owed?: true;
   counter?: true;
 };
@@ -17,7 +18,6 @@ export type BillsQuery = FindBillQuery & {
 export type TransactionKind = TransactionType | "corrective";
 export type TransactionsQuery = FindBillQuery & {
   dates: FindBillDates;
-  method?: TenderMethod;
   type?: TransactionKind;
 };
 export type DateWindow = { startAt: string; endAt: string; from: string; to: string } | null;

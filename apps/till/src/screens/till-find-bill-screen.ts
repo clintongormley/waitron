@@ -146,11 +146,13 @@ export class TillFindBillScreen extends LitElement {
   @state() private dateInvalid = false;
   @state() private search = "";
   @state() private rows: TransactionRow[] = [];
-  @state() private total = 0;
+  /** The count the answer to the current search and days gave; null until it arrives. */
+  @state() private found: number | null = null;
   @state() private more = false;
   @state() private listLoading: "list" | "more" | null = null;
   @state() private listError: "list" | "more" | null = null;
   #page = 0;
+  #opened?: string;
   @state() private corrections: OpenInvoiceCorrection[] = [];
   @state() private correctionsError = false;
   #correctionsController?: AbortController;
@@ -175,7 +177,7 @@ export class TillFindBillScreen extends LitElement {
         this.options = undefined;
         this.rows = [];
         this.#page = 0;
-        this.total = 0;
+        this.found = null;
         this.more = false;
         this.listError = null;
         this.optionsError = "";
@@ -414,12 +416,13 @@ export class TillFindBillScreen extends LitElement {
         this.optionsError = label("load_failed");
     }
   }
-  /** Starts a fresh read of the first page, after a pause when it follows typing. */
   #schedule(debounce = false): void {
     this.#cancel();
     this.listError = null;
     this.rows = [];
+    this.found = null;
     this.#page = 0;
+    this.#opened = undefined;
     if (!this.active || !this.options || this.dateInvalid) return;
     this.listLoading = "list";
     if (debounce)
@@ -439,7 +442,9 @@ export class TillFindBillScreen extends LitElement {
     this.listLoading = more ? "more" : "list";
     if (!more) {
       this.rows = [];
+      this.found = null;
       this.#page = 0;
+      this.#opened = undefined;
     }
     try {
       const result = await this.#readPage(page, controller.signal);
@@ -462,6 +467,7 @@ export class TillFindBillScreen extends LitElement {
     this.listError = null;
     this.listLoading = "list";
     this.rows = [];
+    this.found = null;
     const read: { result: TransactionsPage; page: number }[] = [];
     let failed = false;
     try {
@@ -480,18 +486,29 @@ export class TillFindBillScreen extends LitElement {
     // A visit ended part-way leaves #page alone, so the next visit reads the same pages again.
     for (const { result, page } of read) this.#take(result, page, this.rows);
     if (failed) this.listError = read.length === 0 ? "list" : "more";
+    void this.#showOpened();
+  }
+  /** The reread draws the list from empty, losing its scroll position and the sale staff opened. */
+  async #showOpened(): Promise<void> {
+    const opened = this.#opened;
+    this.#opened = undefined;
+    if (opened === undefined) return;
+    await this.updateComplete;
+    const button = this.renderRoot.querySelector<HTMLElement>(
+      `button[data-transaction="${CSS.escape(opened)}"]`,
+    );
+    if (button === null) return;
+    button.scrollIntoView({ block: "center" });
+    if (document.activeElement === document.body) button.focus({ preventScroll: true });
   }
   #readPage(page: number, signal: AbortSignal) {
-    return this.api.listTransactions(
-      { q: this.search, page, sort: { key: "when", direction: "descending" }, dates: this.dates },
-      { signal },
-    );
+    return this.api.listTransactions({ q: this.search, page, dates: this.dates }, { signal });
   }
   #take(result: TransactionsPage, page: number, shown: TransactionRow[]): void {
     // Paging is by offset, so a sale recorded between reads would come back a second time.
     const held = new Set(shown.map((row) => row.transactionId));
     this.rows = [...shown, ...result.rows.filter((row) => !held.has(row.transactionId))];
-    this.total = result.total;
+    this.found = result.total;
     this.#page = page;
     this.more = (page + 1) * result.pageSize < result.total;
   }
@@ -522,7 +539,8 @@ export class TillFindBillScreen extends LitElement {
     return this.search.trim() !== "";
   }
   #subtitle(): string {
-    if (this.#searching) return countText(this.total, "find_page.found", "find_page.found_one");
+    if (this.#searching && this.found !== null)
+      return countText(this.found, "find_page.found", "find_page.found_one");
     if (this.dates.preset !== "custom") return label(`paid_${this.dates.preset}`);
     if (this.dateInvalid) return label("custom");
     return fill(label("paid_custom"), { from: dayText(this.dateFrom), to: dayText(this.dateTo) });
@@ -634,7 +652,10 @@ export class TillFindBillScreen extends LitElement {
             timeZone,
             disabled,
             open: () => {
-              if (!this.busy && this.active) this.#emit("find-transaction-open", { row });
+              if (!this.busy && this.active) {
+                this.#opened = row.transactionId;
+                this.#emit("find-transaction-open", { row });
+              }
             },
           }),
         )}

@@ -28697,12 +28697,7 @@ describe("A737 post-invoice refund integration", () => {
       basket.store.addProduct(coffee, "2");
       await flush(el);
       const before = listTransactions.mock.calls.at(-1)![0];
-      expect(before).toMatchObject({
-        q: "0091 ",
-        page: 1,
-        sort: { key: "when", direction: "descending" },
-        dates: { preset: "today" },
-      });
+      expect(before).toEqual({ q: "0091 ", page: 1, dates: { preset: "today" } });
       const later = await vi.waitFor(() => {
         const found = view.shadowRoot!.querySelector<HTMLElement>(
           'button[data-transaction="sale-1"]',

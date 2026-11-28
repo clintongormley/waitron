@@ -9,9 +9,8 @@ import type {
 
 export const FILTER_TEXT_MAX = 100;
 
-const common = ["q", "page", "sort", "direction", "staffId"];
+const common = ["q", "page", "staffId"];
 const billSorts = ["openedAt", "tableName", "zone", "staff", "items", "total", "paid", "state"];
-const transactionSorts = ["when", "invoice", "type", "tableName", "method", "staff", "amount"];
 function invalid(field: string): never {
   throw new AppError("management.request_invalid", { field });
 }
@@ -37,11 +36,7 @@ function uuid(params: URLSearchParams, key: string): string | undefined {
   if (!isUuid(value)) invalid(key);
   return value.toLowerCase();
 }
-function base(
-  params: URLSearchParams,
-  sorts: readonly string[],
-  defaultSort: string,
-): FindBillQuery {
+function base(params: URLSearchParams): FindBillQuery {
   const q = params.get("q") ?? "";
   if (q.trim().length > FILTER_TEXT_MAX) invalid("q");
   const rawPage = params.get("page");
@@ -52,25 +47,25 @@ function base(
   return {
     q: q.trim() === "" ? "" : q.trimStart(),
     page,
-    sort: {
-      key: choice(params, "sort", sorts) ?? defaultSort,
-      direction: choice(params, "direction", ["ascending", "descending"]) ?? "descending",
-    },
     ...(staffId === undefined ? {} : { staffId }),
   };
 }
 export function parseBillsQuery(params: URLSearchParams): BillsQuery {
-  checkKeys(params, [...common, "owed", "counter"]);
+  checkKeys(params, [...common, "sort", "direction", "owed", "counter"]);
   const owed = choice(params, "owed", ["true"]);
   const counter = choice(params, "counter", ["true"]);
   return {
-    ...base(params, billSorts, "openedAt"),
+    ...base(params),
+    sort: {
+      key: choice(params, "sort", billSorts) ?? "openedAt",
+      direction: choice(params, "direction", ["ascending", "descending"]) ?? "descending",
+    },
     ...(owed === undefined ? {} : { owed: true }),
     ...(counter === undefined ? {} : { counter: true }),
   };
 }
 export function parseTransactionsQuery(params: URLSearchParams): TransactionsQuery {
-  checkKeys(params, [...common, "preset", "from", "to", "method", "type"]);
+  checkKeys(params, [...common, "preset", "from", "to", "type"]);
   const preset =
     choice(params, "preset", [
       "today",
@@ -94,7 +89,6 @@ export function parseTransactionsQuery(params: URLSearchParams): TransactionsQue
     if (params.has("to")) invalid("to");
     dates = { preset };
   }
-  const method = choice(params, "method", ["cash", "card", "voucher", "deferred", "other"]);
   const type = choice(params, "type", [
     "sale",
     "full-invoice",
@@ -105,9 +99,8 @@ export function parseTransactionsQuery(params: URLSearchParams): TransactionsQue
     "corrective",
   ]);
   return {
-    ...base(params, transactionSorts, "when"),
+    ...base(params),
     dates,
-    ...(method === undefined ? {} : { method }),
     ...(type === undefined ? {} : { type }),
   };
 }

@@ -1,6 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  pageAt,
+  PHONE_FONT,
+  resetPage,
+  textRects,
+} from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   billOptions,
@@ -170,11 +178,39 @@ it("debounces typed search once, preserves its trailing space and shows only tha
   await vi.waitFor(() => expect(shown(el).map((b) => b.dataset.transaction)).toEqual(["sale-9"]));
   expect(topBar(el).subtitle).toBe("1 found");
 });
+it("counts a search only once its own answer arrives, never while it waits or after it fails", async () => {
+  const waiting: { resolve: (response: Response) => void }[] = [];
+  const source = findBillApi(async (url) => {
+    if (url.pathname.endsWith("options")) return json(billOptions);
+    if (url.pathname === "/api/bills") return json(listPage([]));
+    if (!url.searchParams.get("q"))
+      return json({ ...listPage([transactionRow()], 125), dates: resolvedDates });
+    return new Promise((resolve) => waiting.push({ resolve }));
+  });
+  const { el } = await mount(source);
+  await ready(el);
+  expect(topBar(el).subtitle).toBe("Paid today");
+  await type(el, "fish");
+  await el.updateComplete;
+  expect(topBar(el).subtitle).toBe("Paid today");
+  await vi.waitFor(() => expect(waiting).toHaveLength(1));
+  await el.updateComplete;
+  expect(topBar(el).subtitle).toBe("Paid today");
+  waiting[0]!.resolve(json({ error: { code: "server.internal" } }, 500));
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-list-error]")).not.toBeNull());
+  expect(topBar(el).subtitle).toBe("Paid today");
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-list-retry]")!);
+  await vi.waitFor(() => expect(waiting).toHaveLength(2));
+  waiting[1]!.resolve(
+    json({ ...listPage([transactionRow({ transactionId: "sale-9" })], 2), dates: resolvedDates }),
+  );
+  await vi.waitFor(() => expect(topBar(el).subtitle).toBe("2 found"));
+});
 it("opens on today's finished sales, newest first, under a top bar and a search band", async () => {
   const { el, fetcher } = await mount();
   await ready(el);
   expect(requests(fetcher).map((url) => Object.fromEntries(url.searchParams))).toEqual([
-    { q: "", page: "0", sort: "when", direction: "descending", preset: "today" },
+    { q: "", page: "0", preset: "today" },
   ]);
   expect(el.shadowRoot!.querySelector("wt-data-table")).toBeNull();
   expect(el.shadowRoot!.querySelector("h1")).toBeNull();
@@ -564,6 +600,129 @@ it("draws each part of a card sale's row", async () => {
   expect(words(sale.querySelector("[data-number]"))).toBe("T-0412");
   expect(sale.querySelector("[data-amount] .hl")).toBeNull();
 });
+const LONG_NUMBER = "A-0CNNY/9007199254740993";
+const overlap = (a: DOMRect, b: DOMRect) =>
+  Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 &&
+  Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+const box = (rect: DOMRect) => `${rect.left}–${rect.right} × ${rect.top}–${rect.bottom}`;
+/** The words under `node` drawn across more than one line, which only a column too narrow for them causes. */
+function brokenWords(node: Node): string[] {
+  const broken: string[] = [];
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode())
+    for (const word of text.textContent!.matchAll(/\S+/g)) {
+      const range = document.createRange();
+      range.setStart(text, word.index);
+      range.setEnd(text, word.index + word[0].length);
+      const tops = new Set(
+        [...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)),
+      );
+      if (tops.size > 1) broken.push(word[0]);
+    }
+  return broken;
+}
+it.each([320, 390])(
+  "at %i px in Spanish, a long receipt number never overlaps a row's place, amount, label or way paid",
+  async (width) => {
+    const face = await loadPhoneFont();
+    try {
+      await pageAt(width, 844);
+      const { el, host } = await mount(
+        answering([
+          transactionRow({
+            transactionId: "refund:refund-1",
+            refundId: "refund-1",
+            type: "refund",
+            invoiceNumber: LONG_NUMBER,
+            tableName: "Terraza 3",
+            amount: "-1234.50",
+            methods: [{ method: "card", last4: "7710" }],
+            staff: { id: "staff-1", name: "Marta" },
+          }),
+          transactionRow({
+            transactionId: "sale-2",
+            type: "full-correction",
+            invoiceNumber: LONG_NUMBER,
+            customerName: "Garcia Lopez SL",
+          }),
+          transactionRow({
+            transactionId: "sale-3",
+            type: "sale",
+            invoiceNumber: LONG_NUMBER,
+            customerName: null,
+            methods: [{ method: "card", last4: "4821" }],
+          }),
+        ]),
+      );
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
+      setLocale("es-ES");
+      await ready(el);
+      await el.updateComplete;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(words(row(el, "refund:refund-1").querySelector("[data-tag]"))).toBe("Devolución");
+      for (const sale of shown(el)) {
+        expect(getComputedStyle(sale).fontFamily).toBe(PHONE_FONT);
+        const number = sale.querySelector<HTMLElement>("[data-number]")!;
+        const detail = sale.querySelector<HTMLElement>("[data-way] .detail")!;
+        const parts = [
+          sale.querySelector<HTMLElement>("[data-place]")!,
+          sale.querySelector<HTMLElement>("[data-amount]")!,
+          sale.querySelector<HTMLElement>("[data-way] wt-icon"),
+          sale.querySelector<HTMLElement>("[data-tag]"),
+          detail,
+        ].filter((part) => part !== null);
+        const button = sale.getBoundingClientRect();
+        expect(detail.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(detail.scrollWidth, words(detail)).toBeLessThanOrEqual(detail.clientWidth);
+        for (const part of parts) expect(brokenWords(part), part.className).toEqual([]);
+        for (const part of [...parts, number]) {
+          const rect = part.getBoundingClientRect();
+          expect(rect.left, `${part.className} ${box(rect)}`).toBeGreaterThanOrEqual(button.left);
+          expect(rect.right, `${part.className} ${box(rect)}`).toBeLessThanOrEqual(button.right);
+        }
+        for (const text of textRects(number))
+          for (const part of parts)
+            for (const drawn of [part.getBoundingClientRect(), ...textRects(part)])
+              expect(
+                overlap(text, drawn),
+                `number ${box(text)} and ${part.className || part.tagName} ${box(drawn)}`,
+              ).toBe(false);
+      }
+    } finally {
+      document.fonts.delete(face);
+      await resetPage();
+    }
+  },
+);
+it("keeps an ordinary receipt number and way paid on one line each at 390 px", async () => {
+  const face = await loadPhoneFont();
+  try {
+    await pageAt(390, 844);
+    const { el, host } = await mount(
+      answering([
+        transactionRow({
+          type: "sale",
+          tableName: "Table 4",
+          customerName: null,
+          methods: [{ method: "card", last4: "4821" }],
+          staff: { id: "staff-1", name: "Ana" },
+          amount: "80.52",
+          invoiceNumber: "T-0412",
+        }),
+      ]),
+    );
+    host.style.setProperty("--wt-font-family", PHONE_FONT);
+    await ready(el);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const lines = (node: Element) =>
+      new Set(textRects(node).map((rect) => Math.round(rect.top))).size;
+    expect(lines(row(el).querySelector("[data-number]")!)).toBe(1);
+    expect(lines(row(el).querySelector("[data-way] .detail")!)).toBe(1);
+  } finally {
+    document.fonts.delete(face);
+    await resetPage();
+  }
+});
 it("names a counter sale by its zone and order number, and a cash payment by its way", async () => {
   const { el } = await mount(
     answering([
@@ -848,6 +1007,126 @@ it("a visit ended while its pages are read again ignores their late answers, and
     expect(shown(el).map((b) => b.dataset.transaction)).toEqual(["sale-1", "sale-2", "sale-3"]),
   );
 });
+const fiftyOne = Array.from({ length: 51 }, (_, index) => pagedSale(index + 1));
+/** Fifty-one sales over two pages; `page1` answers the second page, when given. */
+const fiftyOneSource = (page1?: () => Promise<Response>) =>
+  findBillApi(async (url) => {
+    if (url.pathname.endsWith("options")) return json(billOptions);
+    if (url.pathname === "/api/bills") return json(listPage([]));
+    if (url.searchParams.get("page") === "0")
+      return json({ ...listPage(fiftyOne.slice(0, 50), 51, 0), dates: resolvedDates });
+    return page1 ? page1() : json({ ...listPage(fiftyOne.slice(50), 51, 1), dates: resolvedDates });
+  });
+const scrollerOf = (el: Screen) =>
+  el
+    .shadowRoot!.querySelector("wt-full-screen-panel")!
+    .shadowRoot!.querySelector<HTMLElement>(".body")!;
+/** Where row `id` sits in the scroll area, and whether all of it is in view. */
+function placed(el: Screen, id: string) {
+  const scroller = scrollerOf(el);
+  const view = scroller.getBoundingClientRect();
+  const drawn = row(el, id).getBoundingClientRect();
+  return {
+    inView: drawn.top >= view.top && drawn.bottom <= view.bottom,
+    seen: `scrollTop ${scroller.scrollTop}, view ${view.top}–${view.bottom}, row ${drawn.top}–${drawn.bottom}`,
+  };
+}
+/** Shows all 51 sales in a 600 px screen and opens the last, scrolled into view to be tapped. */
+async function openLastOfFiftyOne(source: ReturnType<typeof findBillApi>) {
+  const mounted = await mount(source);
+  mounted.host.style.blockSize = "600px";
+  await ready(mounted.el);
+  await showMore(mounted.el, 51);
+  row(mounted.el, "sale-51").scrollIntoView({ block: "center" });
+  expect(scrollerOf(mounted.el).scrollTop).toBeGreaterThan(1000);
+  await userEvent.click(row(mounted.el, "sale-51"));
+  return mounted;
+}
+async function leaveAndReturn(el: Screen, host: HTMLElement) {
+  el.active = false;
+  host.hidden = true;
+  await el.updateComplete;
+  el.active = true;
+  host.hidden = false;
+  await el.updateComplete;
+}
+it("keeps a search's count while Show more waits and after Show more fails", async () => {
+  let release!: (response: Response) => void;
+  const source = fiftyOneSource(() => new Promise<Response>((resolve) => (release = resolve)));
+  const { el } = await mount(source);
+  await type(el, "fish");
+  await vi.waitFor(() => expect(topBar(el).subtitle).toBe("51 found"));
+  await userEvent.click(
+    await vi.waitFor(() => el.shadowRoot!.querySelector<HTMLElement>("[data-list-more]")!),
+  );
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  await el.updateComplete;
+  expect(topBar(el).subtitle).toBe("51 found");
+  release(json({ error: { code: "server.internal" } }, 500));
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-list-error]")).not.toBeNull());
+  expect(shown(el)).toHaveLength(50);
+  expect(topBar(el).subtitle).toBe("51 found");
+});
+it("a return from a sale opened after Show more brings that sale back into view, focused", async () => {
+  const { el, host } = await openLastOfFiftyOne(fiftyOneSource());
+  await leaveAndReturn(el, host);
+  await vi.waitFor(() => expect(shown(el)).toHaveLength(51));
+  await vi.waitFor(() => {
+    const { inView, seen } = placed(el, "sale-51");
+    expect(inView, seen).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(row(el, "sale-51"));
+  });
+});
+it("a return that finds staff already in the search field brings the sale into view and leaves focus there", async () => {
+  let holding = false;
+  let release!: () => void;
+  const source = fiftyOneSource(async () => {
+    const answer = json({ ...listPage(fiftyOne.slice(50), 51, 1), dates: resolvedDates });
+    if (!holding) return answer;
+    await new Promise<void>((resolve) => (release = resolve));
+    return answer;
+  });
+  const { el, host } = await openLastOfFiftyOne(source);
+  holding = true;
+  await leaveAndReturn(el, host);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  const input = searchField(el).shadowRoot!.querySelector("input")!;
+  input.focus();
+  expect(searchField(el).shadowRoot!.activeElement).toBe(input);
+  release();
+  await vi.waitFor(() => expect(shown(el)).toHaveLength(51));
+  await vi.waitFor(() => {
+    const { inView, seen } = placed(el, "sale-51");
+    expect(inView, seen).toBe(true);
+  });
+  expect(el.shadowRoot!.activeElement).toBe(searchField(el));
+  expect(searchField(el).shadowRoot!.activeElement).toBe(input);
+});
+it.each(["a new search", "a new API context"])(
+  "a sale opened before %s is not brought back on a later return",
+  async (afresh) => {
+    const source = fiftyOneSource();
+    const { el, host } = await openLastOfFiftyOne(source);
+    const before = requests(source.fetcher).length;
+    if (afresh === "a new search") await type(el, "fish");
+    else el.api = fiftyOneSource().api;
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-list-more]")).not.toBeNull());
+    if (afresh === "a new search")
+      expect(requests(source.fetcher).at(-1)!.searchParams.get("q")).toBe("fish");
+    else expect(requests(source.fetcher)).toHaveLength(before);
+    await showMore(el, 51);
+    scrollerOf(el).scrollTop = 0;
+    await leaveAndReturn(el, host);
+    await vi.waitFor(() => {
+      expect(shown(el)).toHaveLength(51);
+      expect(el.shadowRoot!.querySelector("[data-list-loading]")).toBeNull();
+    });
+    await el.updateComplete;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(scrollerOf(el).scrollTop).toBe(0);
+    expect(el.shadowRoot!.activeElement).toBeNull();
+  },
+);
 it("offers no Show more when every sale is shown, and says when nothing matches", async () => {
   const { el } = await mount(answering([transactionRow()], 1));
   await ready(el);

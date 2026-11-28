@@ -7,7 +7,6 @@ import "@waitron/ui/src/components/wt-icon.js";
 
 const label = (key: string) => t(`find_page.${key}` as StringKey);
 
-/** The venue's calendar day as `YYYY-MM-DD`. */
 function venueDay(at: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -17,8 +16,8 @@ function venueDay(at: Date, timeZone: string): string {
   }).format(at);
 }
 
-/** Today's sales by their time, the last six days' by weekday, older ones by their date. */
-export function rowTime(issuedAt: string, timeZone: string, now = new Date()): string {
+function rowTime(issuedAt: string, timeZone: string): string {
+  const now = new Date();
   const at = new Date(issuedAt);
   const days =
     (Date.parse(venueDay(now, timeZone)) - Date.parse(venueDay(at, timeZone))) / 86_400_000;
@@ -93,7 +92,10 @@ export function findBillRow(
 export const findBillRowStyles = css`
   .sale {
     display: grid;
-    grid-template-columns: calc(var(--wt-space-6) + var(--wt-space-4)) minmax(0, 1fr) auto;
+    grid-template-columns:
+      calc(var(--wt-space-6) + var(--wt-space-4))
+      minmax(0, 1fr)
+      fit-content(40%);
     column-gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
     row-gap: calc(var(--wt-space-1) / 2);
     align-items: center;
@@ -145,6 +147,7 @@ export const findBillRowStyles = css`
   .way {
     grid-column: 2;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--wt-space-1);
     min-inline-size: 0;
@@ -156,12 +159,11 @@ export const findBillRowStyles = css`
   }
   .detail {
     min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .tag {
-    flex: none;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
     padding: 0 calc(var(--wt-space-1) + var(--wt-space-1) / 2);
     border-radius: var(--wt-radius-full);
     background: var(--wt-color-surface-sunken);
@@ -171,8 +173,10 @@ export const findBillRowStyles = css`
   .number {
     grid-column: 3;
     justify-self: end;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-align: end;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
-    white-space: nowrap;
   }
 `;
