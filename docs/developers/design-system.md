@@ -2807,7 +2807,7 @@ leave in the brand colour. The shared controls use these marks:
   has no bottom line, and a highlighted, focused or invalid boxed field's border is drawn at
   `--wt-field-line-width-active`;
 - `wt-qr-scanner`'s framed box draws a `CanvasText` border at `--wt-field-line-width`; its
-  brackets and caption take the theme's colours, the caption on its own strip;
+  brackets and caption take the contrast theme's colours, the caption on its own strip;
 - `wt-colour-chooser` draws an inset ring over the checked tile, leaving its outer focus outline
   separate, and preserves the actual colour of its swatches;
 - `wt-data-table` thickens a filtered heading's bottom line, outlines its focused search and puts
@@ -4024,7 +4024,7 @@ The border, its focus, invalid and disabled forms, and the missing bottom line c
 lifted `data-highlight`, the open list's border and the room that keeps a thicker border from
 moving the text. The outlined `wt-input` is the 44px search field, on `--wt-color-bg`, with no
 drawn label, a `start` slot for its icon, and an invalid border at `--wt-field-line-width` that
-thickens only while focused. Tests: `wt-combobox.boxed.test.ts`, and the
+thickens only while focused, outside forced colours. Tests: `wt-combobox.boxed.test.ts`, and the
 boxed cases in `wt-combobox.a11y.test.ts` and `wt-combobox.forced-colors.test.ts`.
 
 #### Inherited values
