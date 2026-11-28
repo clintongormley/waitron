@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
 import type { WtCourseHeading } from "./wt-course-heading.js";
 import "./wt-course-heading.js";
@@ -407,6 +407,56 @@ describe("laying out a title, the mark and an action", () => {
     phrase.setEnd(el.firstChild!, title.length);
     const tops = new Set([...phrase.getClientRects()].map((box) => Math.round(box.top)));
     expect(tops.size).toBe(1);
+  });
+
+  describe("measuring", () => {
+    const log: string[] = [];
+    const real = {
+      rects: Range.prototype.getClientRects,
+      remove: Element.prototype.removeAttribute,
+      toggle: Element.prototype.toggleAttribute,
+    };
+    beforeEach(() => {
+      log.length = 0;
+      Range.prototype.getClientRects = function (this: Range) {
+        if (this.startContainer.parentElement?.localName === "wt-course-heading") log.push("read");
+        return real.rects.call(this);
+      };
+      Element.prototype.removeAttribute = function (this: Element, name: string) {
+        if (name === "stacked") log.push("write");
+        return real.remove.call(this, name);
+      };
+      Element.prototype.toggleAttribute = function (this: Element, name: string, force?: boolean) {
+        if (name === "stacked") log.push("write");
+        return real.toggle.call(this, name, force);
+      };
+    });
+    afterEach(() => {
+      Range.prototype.getClientRects = real.rects;
+      Element.prototype.removeAttribute = real.remove;
+      Element.prototype.toggleAttribute = real.toggle;
+    });
+
+    it("measures the title once when the heading first appears", async () => {
+      await laidOut(240);
+      expect(log.filter((each) => each === "read")).toHaveLength(1);
+    });
+
+    it("measures every heading whose words change together after one round of changes, not in turn", async () => {
+      const el = await mount(
+        `<div>${'<wt-course-heading mark="sent" mark-label="Ordered" style="width: 240px">Drinks<button slot="end">Serve course</button></wt-course-heading>'.repeat(3)}</div>`,
+      );
+      const headings = [...el.querySelectorAll("wt-course-heading")];
+      await settled(headings[0]!);
+      log.length = 0;
+      for (const each of headings) each.firstChild!.textContent = title;
+      await settled(headings[0]!);
+      expect(log.filter((each) => each === "read")).toHaveLength(3);
+      const firstRead = log.indexOf("read");
+      const lastRead = log.lastIndexOf("read");
+      expect(log.slice(firstRead, lastRead)).not.toContain("write");
+      expect(headings.every((each) => each.hasAttribute("stacked"))).toBe(true);
+    });
   });
 
   it("balances the title's lines", async () => {

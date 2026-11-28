@@ -131,24 +131,27 @@ export class WtCourseHeading extends LitElement {
    * slotted. */
   @state() private hasEnd = false;
 
-  #widths?: ResizeObserver;
   #words?: MutationObserver;
+  #watching = false;
+  /** The width of the `.width` box when the title was last measured. */
   #width = -1;
+
+  private static waiting = new Set<WtCourseHeading>();
+  private static frame = 0;
+  private static widths?: ResizeObserver;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#words = new MutationObserver(() => this.#lay());
+    this.#words = new MutationObserver(() => WtCourseHeading.layLater(this));
     this.#words.observe(this, { childList: true, subtree: true, characterData: true });
     // Lit does not update a reconnected element, so a heading put back in the page resumes here.
-    if (this.hasUpdated) {
-      this.#watchWidth();
-      this.#lay();
-    }
+    if (this.hasUpdated) this.#watch();
   }
 
   override disconnectedCallback(): void {
-    this.#widths?.disconnect();
-    this.#widths = undefined;
+    if (this.#watching) WtCourseHeading.widths!.unobserve(this.#widthBox());
+    this.#watching = false;
+    WtCourseHeading.waiting.delete(this);
     this.#words?.disconnect();
     this.#words = undefined;
     this.#width = -1;
@@ -156,33 +159,57 @@ export class WtCourseHeading extends LitElement {
   }
 
   protected override updated(): void {
-    this.#watchWidth();
-    this.#lay();
+    this.#watch();
   }
 
-  #watchWidth(): void {
-    if (this.#widths !== undefined) return;
-    // Watches a zero-height box, so stacking, which changes only the height, never re-triggers it.
-    this.#widths = new ResizeObserver(([entry]) => {
-      if (entry!.contentRect.width === this.#width) return;
-      this.#width = entry!.contentRect.width;
-      this.#lay();
+  #widthBox(): Element {
+    return this.renderRoot.querySelector(".width")!;
+  }
+
+  #watch(): void {
+    if (!this.#watching) {
+      // Watches a zero-height box, so stacking, which changes only the height, never re-triggers it.
+      WtCourseHeading.widths ??= new ResizeObserver((entries) => {
+        const due = new Set<WtCourseHeading>();
+        for (const entry of entries) {
+          const heading = (entry.target.getRootNode() as ShadowRoot).host as WtCourseHeading;
+          if (entry.contentRect.width !== heading.#width) due.add(heading);
+        }
+        WtCourseHeading.layAll(due);
+      });
+      WtCourseHeading.widths.observe(this.#widthBox());
+      this.#watching = true;
+    }
+    WtCourseHeading.layLater(this);
+  }
+
+  /** Every change before the next frame is laid out in that frame, at once. */
+  private static layLater(heading: WtCourseHeading): void {
+    WtCourseHeading.waiting.add(heading);
+    WtCourseHeading.frame ||= requestAnimationFrame(() => {
+      WtCourseHeading.frame = 0;
+      WtCourseHeading.layAll(WtCourseHeading.waiting);
     });
-    this.#widths.observe(this.renderRoot.querySelector(".width")!);
   }
 
   /** Beside the mark and the action the title may take two lines; one that needs a third, or whose
-   * unbreakable words are wider than the room left, moves them under it. */
-  #lay(): void {
-    const title = this.renderRoot.querySelector<HTMLElement>(".title");
-    if (!title) return;
-    if (this.mark !== "sent" && !this.hasEnd) {
-      this.removeAttribute("stacked");
-      return;
-    }
-    this.removeAttribute("stacked");
-    const { lines, overflows } = measure(title);
-    this.toggleAttribute("stacked", lines > 2 || overflows);
+   * unbreakable words are wider than the room left, moves them under it. Every heading is unstacked
+   * before any is measured and restacked after all are, so no measurement waits for the page to be
+   * laid out again after another heading's change. */
+  private static layAll(headings: Iterable<WtCourseHeading>): void {
+    const due = [...headings].filter((heading) => heading.isConnected && heading.hasUpdated);
+    for (const heading of due) WtCourseHeading.waiting.delete(heading);
+    const titles = due.map((heading) => {
+      heading.removeAttribute("stacked");
+      if (heading.mark !== "sent" && !heading.hasEnd) return undefined;
+      return heading.renderRoot.querySelector<HTMLElement>(".title")!;
+    });
+    const stacked = due.map((heading, at) => {
+      heading.#width = heading.#widthBox().getBoundingClientRect().width;
+      const title = titles[at];
+      return title !== undefined && needsRoom(title);
+    });
+    due.forEach((heading, at) => heading.toggleAttribute("stacked", stacked[at]));
   }
 
   override render() {
@@ -217,13 +244,21 @@ export class WtCourseHeading extends LitElement {
   }
 }
 
-/** How many lines the slotted text under `title` takes, by the tops of its text boxes, and whether
- * any of it is drawn past the title's box, as words that cannot break are. */
-function measure(title: HTMLElement): { lines: number; overflows: boolean } {
+/** Whether the slotted text under `title` takes more than two lines, by the tops of its text boxes,
+ * or is drawn past the title's box anywhere, as words that cannot break are. */
+function needsRoom(title: HTMLElement): boolean {
   const slot = title.querySelector("slot")!;
-  const room = title.getBoundingClientRect();
+  const right = title.getBoundingClientRect().right;
+  let lettering: Lettering | undefined;
+  const letteringOf = () => {
+    if (lettering === undefined) {
+      const style = getComputedStyle(title);
+      const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      lettering = { font, letterSpacing: style.letterSpacing };
+    }
+    return lettering;
+  };
   const tops: number[] = [];
-  let overflows = false;
   const words = document.createRange();
   for (const node of slot.assignedNodes({ flatten: true })) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -235,36 +270,38 @@ function measure(title: HTMLElement): { lines: number; overflows: boolean } {
       words.selectNodeContents(text);
       for (const box of words.getClientRects()) {
         if (box.width === 0) continue;
-        if (box.right - blankAfter(text as Text, box, title) > room.right + 0.5) overflows = true;
+        if (box.right - blankAfter(text as Text, box, right, letteringOf) > right + 0.5)
+          return true;
         if (!tops.some((top) => Math.abs(top - box.top) < 2)) tops.push(box.top);
+        if (tops.length > 2) return true;
       }
     }
   }
-  return { lines: tops.length, overflows };
+  return false;
 }
+
+type Lettering = { font: string; letterSpacing: string };
 
 let pen: CanvasRenderingContext2D | null | undefined;
 
 /** The blank after the ink of the last letter on `line`: its letter-spacing and side bearing, which
- * may stand past the title's box without drawing anything there. */
-function blankAfter(text: Text, line: DOMRect, title: HTMLElement): number {
-  if (line.right <= title.getBoundingClientRect().right) return 0;
+ * may stand past the title's right edge without drawing anything there. */
+function blankAfter(text: Text, line: DOMRect, right: number, lettering: () => Lettering): number {
+  if (line.right <= right) return 0;
   pen ??= document.createElement("canvas").getContext("2d");
   const letter = document.createRange();
-  let blank = 0;
   for (let at = text.length - 1; at >= 0 && pen; at--) {
     if (/\s/.test(text.data[at]!)) continue;
     letter.setStart(text, at);
     letter.setEnd(text, at + 1);
     if (Math.abs(letter.getBoundingClientRect().top - line.top) >= 2) continue;
-    const style = getComputedStyle(title);
-    pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    pen.letterSpacing = style.letterSpacing;
+    const { font, letterSpacing } = lettering();
+    pen.font = font;
+    pen.letterSpacing = letterSpacing;
     const drawn = pen.measureText(text.data[at]!.toUpperCase());
-    blank = Math.max(0, drawn.width - drawn.actualBoundingBoxRight);
-    break;
+    return Math.max(0, drawn.width - drawn.actualBoundingBoxRight);
   }
-  return blank;
+  return 0;
 }
 
 declare global {
