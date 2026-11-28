@@ -54,6 +54,7 @@ import {
   type SetupCloudSignIn,
 } from "./setup-cloud-sign-in.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
+import { mountSetupDriveRoutes } from "./setup-drive-routes.js";
 import { mountSetupJoinRoutes } from "./setup-join-routes.js";
 import { isUnfinishedAdopt, setupPhaseReached } from "./setup-operation.js";
 import { parseProvisionPayload } from "./setup-provision-input.js";
@@ -67,6 +68,7 @@ import {
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
+import { isJsonRequest, releaseDrives } from "./drive-backup-files.js";
 import "./errors.js";
 
 function recoveryCredentials(
@@ -99,6 +101,55 @@ function recoveryCredentials(
     nodeRecoverySecret: secret,
     ...(selected === undefined ? {} : { recoveryContext: selected }),
   };
+}
+/** A restore's small fields, from its form, or from its headers when it is a bare upload. */
+function restoreFields(
+  form: ReadonlyMap<string, string> | undefined,
+  headers: {
+    masterKey: string | undefined;
+    environment: string | undefined;
+    oldBoxGone: string | undefined;
+    recoveryOperationPath: string | undefined;
+  },
+) {
+  if (form) {
+    const answer = form.get("oldBoxGone");
+    if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
+  }
+  const masterKey =
+    form === undefined ? headers.masterKey! : asMasterKey(form.get("masterKey"), "masterKey");
+  const rawEnvironment = form === undefined ? headers.environment : form.get("environment");
+  if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
+    invalidRequest("environment");
+  const oldBoxGone = (form === undefined ? headers.oldBoxGone : form.get("oldBoxGone")) === "1";
+  let suppliedOperation: unknown;
+  const rawOperation = form?.get("recoveryOperation");
+  if (rawOperation !== undefined && rawOperation !== null) {
+    if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
+      invalidRequest("recoveryOperation");
+    try {
+      suppliedOperation = JSON.parse(rawOperation);
+    } catch {
+      invalidRequest("recoveryOperation");
+    }
+  }
+  const credentials = recoveryCredentials(
+    headers.recoveryOperationPath,
+    suppliedOperation,
+    form?.get("nodeRecoverySecret") ?? (rawOperation == null ? undefined : masterKey),
+    (() => {
+      const raw = form?.get("recoveryContext");
+      if (raw === undefined || raw === null) return undefined;
+      if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+        invalidRequest("recoveryContext");
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return invalidRequest("recoveryContext");
+      }
+    })(),
+  );
+  return { masterKey, rawEnvironment, oldBoxGone, credentials } as const;
 }
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 // Finish joining reads nothing from its body, so every resend counts as the same request.
@@ -151,6 +202,12 @@ export function mountSetupOperationRoutes(
       { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503, "restore.staged_copy_missing": 409 },
       "setup.restore_failed",
     ),
+  });
+  mountSetupDriveRoutes(app, deps, log, {
+    busy: setupBusy,
+    setBusy: (value) => {
+      provisioning = value;
+    },
   });
 
   app.post("/setup-api/fiscal-test", async (c) => {
@@ -691,42 +748,6 @@ export function mountSetupOperationRoutes(
     });
   });
 
-  app.post("/setup-api/restore/preview", async (c) => {
-    const preview = deps.previewRestore;
-    if (preview === undefined || deps.receiveArchive === undefined)
-      return directError(c, log, "setup.not_ready", 503);
-    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
-      return directError(c, log, "setup.already_provisioning", 409);
-    provisioning = true;
-    return runRestore(c, log, async () => {
-      try {
-        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
-          invalidRequest("artifact");
-        const masterKey = asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
-        const environment = c.req.header("x-waitron-restore-environment");
-        if (environment !== "production" && environment !== "preproduction")
-          invalidRequest("environment");
-        const upload = await deps.receiveArchive!(c.req.raw);
-        try {
-          c.header("Cache-Control", "no-store");
-          return c.json(
-            await preview({
-              kind: "archive-file",
-              artifactPath: upload.artifactPath,
-              recoveryKey: await openingKeyFor(upload, masterKey),
-              environment,
-            }),
-            200,
-          );
-        } finally {
-          await upload.dispose();
-        }
-      } finally {
-        provisioning = false;
-      }
-    });
-  });
-
   app.post("/setup-api/restore", async (c) => {
     const stageRestore = deps.stageRestore;
     const requestRestart = deps.requestRestart;
@@ -746,27 +767,31 @@ export function mountSetupOperationRoutes(
       restartAfterReply(c, requestRestart, async (mustRestart) => {
         let upload: ArchiveUpload | undefined;
         try {
-          const multipart = c.req
-            .header("content-type")
-            ?.toLowerCase()
-            .startsWith("multipart/form-data");
-          if (
-            !multipart &&
-            !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
-          )
+          const type = c.req.header("content-type")?.toLowerCase() ?? "";
+          const drive = isJsonRequest(c.req.raw);
+          const fieldsInBody = drive || type.startsWith("multipart/form-data");
+          if (!fieldsInBody && !type.startsWith("application/octet-stream"))
             invalidRequest("artifact");
-          const headerKey = multipart
+          const headerKey = fieldsInBody
             ? undefined
             : asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
           const headerEnvironment = c.req.header("x-waitron-restore-environment");
           if (
-            !multipart &&
+            !fieldsInBody &&
             headerEnvironment !== "production" &&
             headerEnvironment !== "preproduction"
           )
             invalidRequest("environment");
-          if (!multipart && isUnset(deps.recoveryOperationPath))
+          if (!fieldsInBody && isUnset(deps.recoveryOperationPath))
             invalidRequest("recoveryOperation");
+          const readFields = (form: ReadonlyMap<string, string> | undefined) =>
+            restoreFields(form, {
+              masterKey: headerKey,
+              environment: headerEnvironment,
+              oldBoxGone: c.req.header("x-waitron-old-box-gone"),
+              recoveryOperationPath: deps.recoveryOperationPath,
+            });
+          let checked: ReturnType<typeof restoreFields> | undefined;
           upload = await deps.receiveArchive!(c.req.raw, {
             fields: [
               "masterKey",
@@ -776,48 +801,15 @@ export function mountSetupOperationRoutes(
               "nodeRecoverySecret",
               "recoveryContext",
             ],
+            exactFields: drive,
+            drive: true,
+            moves: true,
+            check: (fields) => {
+              checked = readFields(fields);
+            },
           });
-          const form = multipart ? upload.fields : undefined;
-          if (form) {
-            const answer = form.get("oldBoxGone");
-            if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
-          }
-          const masterKey =
-            form === undefined ? headerKey! : asMasterKey(form.get("masterKey"), "masterKey");
-          const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
-          if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
-            invalidRequest("environment");
-          const oldBoxGone =
-            (form === undefined
-              ? c.req.header("x-waitron-old-box-gone")
-              : form.get("oldBoxGone")) === "1";
-          let suppliedOperation: unknown;
-          const rawOperation = form?.get("recoveryOperation");
-          if (rawOperation !== undefined && rawOperation !== null) {
-            if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
-              invalidRequest("recoveryOperation");
-            try {
-              suppliedOperation = JSON.parse(rawOperation);
-            } catch {
-              invalidRequest("recoveryOperation");
-            }
-          }
-          const credentials = recoveryCredentials(
-            deps.recoveryOperationPath,
-            suppliedOperation,
-            form?.get("nodeRecoverySecret") ?? (rawOperation == null ? undefined : masterKey),
-            (() => {
-              const raw = form?.get("recoveryContext");
-              if (raw === undefined || raw === null) return undefined;
-              if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
-                invalidRequest("recoveryContext");
-              try {
-                return JSON.parse(raw) as unknown;
-              } catch {
-                return invalidRequest("recoveryContext");
-              }
-            })(),
-          );
+          const { masterKey, rawEnvironment, oldBoxGone, credentials } =
+            checked ?? readFields(fieldsInBody ? upload.fields : undefined);
           c.header("Cache-Control", "no-store");
           const hash = createHash("sha256")
             .update(rawEnvironment)
@@ -839,6 +831,8 @@ export function mountSetupOperationRoutes(
               },
               { oldBoxGone },
             );
+            if (drive && deps.drives !== undefined)
+              await releaseDrives({ host: deps.drives.requests, places: deps.drives.places, log });
             mustRestart();
             // The restore is already recorded, so it must still answer and restart; the next start
             // that reaches the server's boot clears the staging folder.

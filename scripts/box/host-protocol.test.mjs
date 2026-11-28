@@ -355,6 +355,8 @@ describe("the verb", () => {
       "SHELL_VERBS",
       "START_SCREENS",
       "STORAGE_DRIVES_MAX",
+      "STORAGE_DRIVES_ROOT",
+      "STORAGE_DRIVE_NAME",
       "STORAGE_FILE_SYSTEMS",
       "TAG_OUTCOMES",
       "VERB_PERMISSION",

@@ -3,7 +3,7 @@ import { Socket } from "node:net";
 import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
@@ -17,6 +17,8 @@ import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
 import { decryptArtifactUnderBackupKey, encryptArtifact } from "./artifact-cipher.js";
 import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
 import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { receiveRestoreArchive } from "./drive-backup-files.js";
 
 vi.mock("./restore-stream.js", { spy: true });
 
@@ -365,6 +367,81 @@ it("stages a checked archive once for its restore event and answers only its id"
   });
   expect(JSON.stringify(log.mock.calls)).not.toContain(FILE_MASTER_KEY_TEXT);
   expect(JSON.stringify(log.mock.calls)).not.toContain(OPENING_KEY);
+});
+it("stage takes a drive file where it lies", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-stage-drive-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+    nodeId: preparation.binding.targetNodeId,
+  });
+  await mkdir(join(root, "sdb1"), { recursive: true });
+  await mkdir(staging);
+  await writeFile(join(root, "sdb1", name), FILE);
+  const stageRecovery = vi.fn(async () => ({ stagedId }));
+  const { app } = fixture({
+    stageRecovery,
+    receiveArchive: receiveRestoreArchive(staging, root),
+  });
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        file: { drive: "sdb1", path: name },
+        request: { eventId: "interactive-restore", source: archiveSource },
+      }),
+    },
+    tls(),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ stagedId });
+  expect(stageRecovery).toHaveBeenCalledWith("interactive-restore", {
+    kind: "archive-file",
+    artifactPath: join(root, "sdb1", name),
+    recoveryKey: OPENING_KEY,
+    environment: "production",
+  });
+  expect(await readdir(staging)).toEqual([]);
+});
+it("stage answers restore.drive_file_unreadable for a stick pulled during its read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-stage-pulled-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+    nodeId: preparation.binding.targetNodeId,
+  });
+  await mkdir(join(root, "sdb1"), { recursive: true });
+  await mkdir(staging);
+  await writeFile(join(root, "sdb1", name), FILE);
+  const { app } = fixture({
+    stageRecovery: async (_eventId, source) => {
+      if (source.kind !== "archive-file") throw new Error("expected a received file");
+      await rm(source.artifactPath);
+      await readFile(source.artifactPath);
+      return { stagedId };
+    },
+    receiveArchive: receiveRestoreArchive(staging, root),
+  });
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        file: { drive: "sdb1", path: name },
+        request: { eventId: "interactive-restore", source: archiveSource },
+      }),
+    },
+    tls(),
+  );
+  expect([response.status, await response.json()]).toEqual([
+    409,
+    { error: { code: "restore.drive_file_unreadable", params: {} } },
+  ]);
 });
 it("staging a backup file for recovery takes the master key", async () => {
   const opened: Buffer[] = [];

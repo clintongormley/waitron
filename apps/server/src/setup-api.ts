@@ -96,9 +96,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         )
       )
         return directError(c, log, "setup.already_provisioning", 409);
-      // These write nothing, so a main box that never answers them holds no other setup request
-      // back.
-      if (c.req.path === "/setup-api/join/start" || c.req.path === CERTIFICATE_INSPECTION_PATH)
+      // These change nothing in the venue, so a slow answer holds no other setup request back.
+      if (
+        c.req.path === "/setup-api/join/start" ||
+        c.req.path === "/setup-api/recovery/drives" ||
+        c.req.path === CERTIFICATE_INSPECTION_PATH
+      )
         return boundary(c, log, async () => {
           await firstSetup.assertOtherAllowed();
           await next();

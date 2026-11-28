@@ -11,6 +11,8 @@ declare module "*/scripts/box/host-protocol.mjs" {
   export const TAG_OUTCOMES: readonly string[];
   export const STORAGE_DRIVES_MAX: number;
   export const STORAGE_FILE_SYSTEMS: readonly string[];
+  export const STORAGE_DRIVES_ROOT: string;
+  export const STORAGE_DRIVE_NAME: RegExp;
   export function formatHostRequest(request: {
     verb: string;
     fields: Readonly<Record<string, unknown>>;

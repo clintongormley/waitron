@@ -16,6 +16,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { boxHostnameFor } from "../apps/server/src/box-name.js";
 import { loadConfig } from "../apps/server/src/config.js";
 import { cookieDomainFor } from "../apps/server/src/device-session.js";
+import { STORAGE_DRIVES_ROOT } from "./box/host-protocol.mjs";
 import { esbuildArgs } from "./bundle-node.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
@@ -1101,11 +1102,11 @@ describe("the app's mount of the box's clock socket", () => {
 
 describe("the app's view of the box's USB drives", () => {
   const app = COMPOSE.slice(COMPOSE.indexOf("\n  app:\n"), COMPOSE.indexOf("\n  mailpit:\n"));
-  const BIND = "/run/waitron-drives:/run/waitron-drives:ro,rslave";
+  const BIND = `${STORAGE_DRIVES_ROOT}:${STORAGE_DRIVES_ROOT}:ro,rslave`;
 
   it("binds the drive folder read-only with rslave only when .env names it", () => {
-    expect(app).toMatch(
-      /^ {6}- \$\{WAITRON_BOX_DRIVES_MOUNT:-box_drives:\/run\/waitron-drives:ro\}$/m,
+    expect(app).toContain(
+      `\n      - \${WAITRON_BOX_DRIVES_MOUNT:-box_drives:${STORAGE_DRIVES_ROOT}:ro}\n`,
     );
     expect(COMPOSE.slice(COMPOSE.indexOf("\nvolumes:\n"))).toMatch(/^ {2}box_drives:$/m);
     expect(ENV_EXAMPLE).toContain(`\n# WAITRON_BOX_DRIVES_MOUNT=${BIND}\n`);

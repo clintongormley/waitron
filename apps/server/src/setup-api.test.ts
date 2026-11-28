@@ -2,6 +2,8 @@ import { TEST_BUCKET, TEST_MASTER_KEY } from "../test/bucket-restore-command.js"
 import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { readFile, readdir } from "node:fs/promises";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { receiveRestoreArchive } from "./drive-backup-files.js";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
@@ -4261,7 +4263,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     it.each<[string, Record<string, string>, Uint8Array]>([
       [
         "a body that is not a binary upload",
-        { "content-type": "application/json" },
+        { "content-type": "text/plain" },
         Uint8Array.from([1]),
       ],
       ["no content type", { "content-type": "" }, Uint8Array.from([1])],
@@ -4271,6 +4273,11 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         Uint8Array.from([1]),
       ],
       ["an empty upload", {}, new Uint8Array(0)],
+      [
+        "a sealed backup file sent as text",
+        { "content-type": "text/plain" },
+        Uint8Array.from(sealedRestore(Uint8Array.from([1]))),
+      ],
     ])("refuses %s without staging", async (_label, headers, body) => {
       const deps = restoreDeps();
       const app = new Hono();
@@ -4297,6 +4304,156 @@ describe("setup routes — remaining refusals and resumption paths", () => {
       expect(deps.stageRestore).not.toHaveBeenCalled();
       // A refused upload releases the latch, so a corrected one is accepted.
       expect((await postRestore(app, Uint8Array.from([1]))).status).toBe(202);
+    });
+
+    it.each<[string, (file: object) => Record<string, unknown>, string]>([
+      [
+        "no file",
+        () => ({ masterKey: RESTORE_MASTER_KEY_TEXT, environment: "production" }),
+        "file",
+      ],
+      [
+        "a file outside the drive",
+        (file) => ({
+          file: { ...file, path: `../sdb1/${(file as { path: string }).path}` },
+          masterKey: RESTORE_MASTER_KEY_TEXT,
+          environment: "production",
+        }),
+        "file",
+      ],
+      ["no master key", (file) => ({ file, environment: "production" }), "masterKey"],
+      [
+        "an unknown environment",
+        (file) => ({ file, masterKey: RESTORE_MASTER_KEY_TEXT, environment: "dev" }),
+        "environment",
+      ],
+      [
+        "an oldBoxGone that is not 0 or 1",
+        (file) => ({
+          file,
+          masterKey: RESTORE_MASTER_KEY_TEXT,
+          environment: "production",
+          oldBoxGone: "yes",
+        }),
+        "oldBoxGone",
+      ],
+      [
+        "a key the route does not take",
+        (file) => ({
+          file,
+          masterKey: RESTORE_MASTER_KEY_TEXT,
+          environment: "production",
+          extra: "x",
+        }),
+        "body",
+      ],
+    ])("refuses a drive restore with %s without staging", async (_label, body, field) => {
+      const dir = mkdtempSync(join(tmpdir(), "setup-restore-drive-"));
+      try {
+        const root = join(dir, "drives");
+        const staging = join(dir, "scratch");
+        const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+          nodeId: "d0000000-0000-4000-8000-000000000001",
+        });
+        mkdirSync(join(root, "sda1"), { recursive: true });
+        mkdirSync(staging);
+        writeFileSync(join(root, "sda1", name), sealedRestore(Uint8Array.from([1])));
+        const deps = restoreDeps();
+        const app = new Hono();
+        mountSetup(app, { ...deps, receiveArchive: receiveRestoreArchive(staging, root) }, noopLog);
+        const res = await app.request("/setup-api/restore", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body({ drive: "sda1", path: name })),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual(invalid(field));
+        expect(deps.stageRestore).not.toHaveBeenCalled();
+        expect(await readdir(staging)).toEqual([]);
+        expect(readFileSync(join(root, "sda1", name))).toEqual(sealedRestore(Uint8Array.from([1])));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it.each<[string, Record<string, unknown>, string]>([
+      ["no master key", { environment: "production" }, "masterKey"],
+      [
+        "an unknown environment",
+        { masterKey: RESTORE_MASTER_KEY_TEXT, environment: "dev" },
+        "environment",
+      ],
+      [
+        "an oldBoxGone that is not 0 or 1",
+        { masterKey: RESTORE_MASTER_KEY_TEXT, environment: "production", oldBoxGone: "yes" },
+        "oldBoxGone",
+      ],
+      [
+        "recovery details that do not parse",
+        {
+          masterKey: RESTORE_MASTER_KEY_TEXT,
+          environment: "production",
+          recoveryOperation: "not json",
+        },
+        "recoveryOperation",
+      ],
+    ])("checks a drive restore's %s before copying the file", async (_label, fields, field) => {
+      const dir = mkdtempSync(join(tmpdir(), "setup-restore-drive-check-"));
+      try {
+        const root = join(dir, "drives");
+        // A file where the staging folder should be, so any attempt to copy answers differently.
+        const staging = join(dir, "scratch");
+        const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+          nodeId: "d0000000-0000-4000-8000-000000000001",
+        });
+        mkdirSync(join(root, "sda1"), { recursive: true });
+        writeFileSync(staging, "");
+        writeFileSync(join(root, "sda1", name), sealedRestore(Uint8Array.from([1])));
+        const deps = restoreDeps();
+        const app = new Hono();
+        mountSetup(app, { ...deps, receiveArchive: receiveRestoreArchive(staging, root) }, noopLog);
+        const res = await app.request("/setup-api/restore", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ file: { drive: "sda1", path: name }, ...fields }),
+        });
+        expect([res.status, await res.json()]).toEqual([400, invalid(field)]);
+        expect(deps.stageRestore).not.toHaveBeenCalled();
+        expect(readFileSync(staging, "utf8")).toBe("");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("answers a drive file that is no longer on the stick as restore.drive_file_unreadable", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "setup-restore-drive-gone-"));
+      try {
+        const root = join(dir, "drives");
+        const staging = join(dir, "scratch");
+        const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+          nodeId: "d0000000-0000-4000-8000-000000000001",
+        });
+        mkdirSync(join(root, "sda1"), { recursive: true });
+        const deps = { ...restoreDeps(), recoveryOperationPath: "/run/recovery-operation.json" };
+        const app = new Hono();
+        mountSetup(app, { ...deps, receiveArchive: receiveRestoreArchive(staging, root) }, noopLog);
+        const res = await app.request("/setup-api/restore", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            file: { drive: "sda1", path: name },
+            masterKey: RESTORE_MASTER_KEY_TEXT,
+            environment: "production",
+          }),
+        });
+        expect([res.status, await res.json()]).toEqual([
+          409,
+          { error: { code: "restore.drive_file_unreadable", params: {} } },
+        ]);
+        expect(deps.stageRestore).not.toHaveBeenCalled();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it("blocks provisioning while a restore is being staged", async () => {

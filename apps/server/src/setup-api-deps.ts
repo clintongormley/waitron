@@ -13,6 +13,7 @@ import type { Context } from "hono";
 import type { AdoptHooks } from "./adopt.js";
 import type { JoinedBox, BoxJoinAttempt } from "./box-join-attempt.js";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
+import type { DriveHost } from "./drive-backup-files.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import type { RecoveryEntryContext } from "./recovery-entry.js";
@@ -103,6 +104,7 @@ export interface SetupDeps {
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
   receiveArchive?: ReceiveArchive;
   stageRestore?: (request: ArchiveRequest, options: { oldBoxGone: boolean }) => Promise<void>;
+  drives?: DriveHost;
   /** `WAITRON_RECOVERY_OPERATION_FILE` as the start reads it; a restore without recovery details
    * is refused when it is unset. */
   recoveryOperationPath?: string;

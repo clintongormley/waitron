@@ -1989,8 +1989,9 @@ declare module "@waitron/shared" {
         | "fields_invalid"
         | "host_failed";
     };
-    /** The network and screen routes already have as many requests open to the box's host service
-     * as they allow, so this one was not sent. */
+    /** The routes that ask the box's host service (network, screen, and the USB drive list and
+     * release) already have as many requests open as they allow, so this one was not sent; or the
+     * host answered `busy` to a storage list or release. */
     "box_host.busy": Record<string, never>;
     /** The box's host service answered `busy` to a scan, join or forget. */
     "box_network.busy": Record<string, never>;
@@ -2055,6 +2056,9 @@ declare module "@waitron/shared" {
     "restore.manifest_invalid": { reason: "invalid" | "unsupported" };
     /** A staging or decoding capacity refusal is not evidence that the archive is damaged. */
     "restore.archive_resource_limit": Record<string, never>;
+    /** A backup file chosen on a USB drive is gone or cannot be read: the drive was probably
+     * pulled after the list. */
+    "restore.drive_file_unreadable": Record<string, never>;
     /**
      * The restore met a top-level archive entry it does not know how to route. Fails loud rather
      * than drop data on the cold-recovery path; the fix is to teach the restore to
