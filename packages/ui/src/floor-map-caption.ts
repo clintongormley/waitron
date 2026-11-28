@@ -97,7 +97,7 @@ export const captionStyles = css`
   [part="job"] {
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     overflow: hidden;
   }
 
@@ -111,9 +111,10 @@ export const captionStyles = css`
 export interface CaptionMetrics {
   widthOf: (text: string) => number;
   jobWidthOf: (text: string) => number;
-  fitsJob: (text: string, width: number) => boolean;
+  fitsJob: (text: string, width: number, maxLines: number) => boolean;
   nameSize: number;
   compactHeight: number;
+  threeLineHeight: number;
   badgeSpace: number;
   inset: number;
   jobInset: number;
@@ -139,6 +140,8 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
     canvas.font = jobFont;
     return canvas.measureText(text).width;
   };
+  const nameSize = Number.parseFloat(styles.fontSize);
+  const smallSize = Number.parseFloat(jobStyle.inlineSize);
   const inset = Number.parseFloat(styles.getPropertyValue("--wt-space-1")) || 0;
   return {
     widthOf: (text) => {
@@ -146,20 +149,28 @@ export function captionMetrics(root: HTMLElement | DocumentFragment): CaptionMet
       return canvas.measureText(text).width;
     },
     jobWidthOf,
-    fitsJob: (text, width) => {
-      if (jobWidthOf(text) <= width) return true;
-      for (const { index, 0: gap } of text.matchAll(/\s+/g)) {
-        if (canvas.measureText(text.slice(0, index)).width > width) return false;
-        if (canvas.measureText(text.slice(index + gap.length)).width <= width) return true;
+    fitsJob: (text, width, maxLines) => {
+      canvas.font = jobFont;
+      let lines = 1;
+      let line = "";
+      for (const word of text.trim().split(/\s+/)) {
+        const next = line === "" ? word : `${line} ${word}`;
+        if (canvas.measureText(next).width <= width) {
+          line = next;
+        } else {
+          if (++lines > maxLines || canvas.measureText(word).width > width) return false;
+          line = word;
+        }
       }
-      return false;
+      return true;
     },
-    nameSize: Number.parseFloat(styles.fontSize),
+    nameSize,
     compactHeight: Number.parseFloat(styles.lineHeight) + Number.parseFloat(jobStyle.lineHeight),
+    threeLineHeight: 1.2 * (nameSize + 3 * Number.parseFloat(jobStyle.fontSize) + smallSize),
     badgeSpace: Number.parseFloat(styles.getPropertyValue("--wt-space-3")) || 0,
     inset,
     jobInset: (Number.parseFloat(styles.getPropertyValue("--wt-space-2")) || 0) + inset / 2,
-    cueIconSpace: Number.parseFloat(jobStyle.inlineSize) + inset,
+    cueIconSpace: smallSize + inset,
   };
 }
 
@@ -190,16 +201,15 @@ export function renderCaption({
   const space = width - (outlined ? 2 * (inset + 1) : 0) - (fill === undefined ? 0 : 2 * inset);
   const captionHeight = height - (allergy ? (metrics?.badgeSpace ?? 0) : 0);
   const compactSpace = outlined ? space : space - 2 * inset;
-  const singleLine =
-    job !== null && metrics !== undefined && metrics.jobWidthOf(job.text) <= compactSpace;
-  const jobSpace = singleLine
+  const singleWord = job !== null && !/\s/.test(job.text);
+  const jobSpace = singleWord
     ? compactSpace
     : width - 2 * ((metrics?.jobInset ?? 0) + (fill === undefined ? 0 : inset));
   const full =
     job !== null &&
     (metrics === undefined ||
       (captionHeight >= metrics.nameSize * 4 &&
-        metrics.fitsJob(job.text, jobSpace) &&
+        metrics.fitsJob(job.text, jobSpace, captionHeight >= metrics.threeLineHeight ? 3 : 2) &&
         (job.time === undefined || metrics.jobWidthOf(job.time) <= jobSpace)));
   const compact =
     job?.compactTime === undefined ? job?.compact : `${job.compact} ${job.compactTime}`;
@@ -225,17 +235,19 @@ export function renderCaption({
       >`,
     };
   }
-  const showCueText =
-    cue.text !== "" &&
-    (!cue.keepTextWhole ||
-      metrics === undefined ||
-      metrics.jobWidthOf(cue.text) + (cue.icon === null ? 0 : metrics.cueIconSpace) <= space);
+  const cueSpace = space - (cue.icon === null ? 0 : (metrics?.cueIconSpace ?? 0));
+  const cueText =
+    cue.compact === undefined || metrics === undefined || metrics.jobWidthOf(cue.text) <= cueSpace
+      ? cue.text
+      : metrics.jobWidthOf(cue.compact) <= cueSpace
+        ? cue.compact
+        : "";
   const detail = full
     ? html`<span part="job">${job.text}</span
         >${job.time === undefined ? nothing : html`<span part="time">${job.time}</span>`}`
     : job === null
-      ? html`<span part="cue" class=${cue.keepTextWhole ? "whole-cue" : nothing}
-          >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${showCueText ? html`<span class="cue-text">${cue.text}</span>` : nothing}</span
+      ? html`<span part="cue" class=${cue.compact === undefined ? nothing : "whole-cue"}
+          >${cue.icon === null ? nothing : html`<wt-icon name=${cue.icon} size="sm"></wt-icon>`}${cueText === "" ? nothing : html`<span class="cue-text">${cueText}</span>`}</span
         >`
       : html`<span part="cue" class="whole-cue">${compact}</span>`;
   return {
@@ -245,7 +257,7 @@ export function renderCaption({
       data-fill=${fill ?? nothing}
       ?data-job=${job !== null}
       ?data-compact=${job !== null && !full}
-      ?data-short-inset=${job !== null && (!full || singleLine)}
+      ?data-short-inset=${job !== null && (!full || singleWord)}
     >
       <span part="name">${name}</span> ${detail}
     </span>`,

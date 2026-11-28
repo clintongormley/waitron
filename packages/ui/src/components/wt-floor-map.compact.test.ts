@@ -171,9 +171,9 @@ it("shows a whole short job with its wait or leaves the narrow table in its job 
   expect(reservation.querySelector('[part="time"]')?.textContent).toBe("21:30");
 });
 
-it("leaves the delivery icon on a table too small for the whole delivery label", async () => {
+it("shows the delivery count beside the icon when the full label does not fit", async () => {
   await page.viewport(390, 700);
-  const delivery = { icon: "floor-step", text: "2 to deliver", keepTextWhole: true } as const;
+  const delivery = { icon: "floor-step", text: "2 to deliver", compact: "2" } as const;
   const { map } = await compactMap(260, 340, [
     { ...table("T1", 5, 7, 3.8, 2), cue: delivery },
     { ...table("T2", 11, 7, 6, 2), cue: delivery },
@@ -182,9 +182,33 @@ it("leaves the delivery icon on a table too small for the whole delivery label",
   const narrow = button(map, "T1");
   const wide = button(map, "T2");
   expect(narrow.querySelector("wt-icon")?.getAttribute("name")).toBe("floor-step");
-  expect(narrow.querySelector('[part="cue"]')?.textContent?.trim()).toBe("");
+  expect(narrow.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2");
   expect(narrow.getAttribute("aria-label")).toContain("2 to deliver");
   expect(wide.querySelector('[part="cue"]')?.textContent?.trim()).toBe("2 to deliver");
+});
+
+it("keeps the full collection job when three lines fit inside the table", async () => {
+  await page.viewport(390, 700);
+  const cue = { icon: "floor-ready", text: "2" } as const;
+  const job = {
+    text: "Collect from Kitchen",
+    time: "2 min",
+    compact: "Kitchen",
+    compactTime: "2′",
+  };
+  const { map } = await compactMap(260, 340, [
+    { ...table("T1", 5, 7, 4), cue, job },
+    { ...table("T2", 14, 7, 4, 3), cue, job },
+    table("T3", 25, 7),
+  ]);
+  map.style.fontFamily = "monospace";
+  map.style.fontSize = "12px";
+  map.requestUpdate();
+  await map.updateComplete;
+  const target = button(map, "T1");
+  expect(target.querySelector('[part="job"]')?.textContent).toBe("Collect from Kitchen");
+  expect(target.querySelector('[part="time"]')?.textContent).toBe("2 min");
+  expect(button(map, "T2").querySelector('[part="cue"]')?.textContent?.trim()).toBe("Kitchen 2′");
 });
 
 it("leaves an inset beside a full job and wraps whole words", async () => {

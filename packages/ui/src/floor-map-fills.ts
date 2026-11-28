@@ -26,7 +26,7 @@ export interface FloorMapJob {
 export interface FloorMapCue {
   icon: FloorCueIcon | null;
   text: string;
-  keepTextWhole?: boolean;
+  compact?: string;
 }
 
 export const floorMapFillStyles: CSSResult = css`

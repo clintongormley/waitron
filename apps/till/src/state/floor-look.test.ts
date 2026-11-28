@@ -372,7 +372,7 @@ describe("mapLook", () => {
         fill: "seated",
         outline: null,
         pulse: null,
-        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}`, keepTextWhole: true },
+        cue: { icon: "floor-step", text: `2 ${en["floor.pending_delivery"]}`, compact: "2" },
       },
     ],
     [

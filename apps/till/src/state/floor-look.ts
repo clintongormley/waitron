@@ -208,8 +208,14 @@ export function kindCue(
         text: waiting === null ? step.name : t("floor.cue_minutes").replace("{m}", String(waiting)),
       };
     }
-    case "delivery":
-      return { icon: "floor-step", text: kindWords(kind, members, now), keepTextWhole: true };
+    case "delivery": {
+      const count = String(totalDeliveries(members));
+      return {
+        icon: "floor-step",
+        text: `${count} ${t("floor.pending_delivery")}`,
+        compact: count,
+      };
+    }
     case "held": {
       const { dueAt } = soonestHeld(members, now);
       const text =
