@@ -1630,7 +1630,7 @@ export class TillShell extends LitElement {
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts() : nothing}
         ${
-          this.#barless() || bottomFloor || this.floorKitchenOpen
+          this.#barless() || bottomFloor || this.floorKitchenOpen || (this.phone && hasDrill)
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
                   ${this.canChooseDevice ? html`<wt-button data-switch-device variant="secondary" @click=${() => this.#emit("switch-device")}>${t("device.switch")}</wt-button>` : nothing}

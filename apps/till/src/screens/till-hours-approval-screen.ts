@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { formatDuration } from "@waitron/shared";
 import type {
+  AttendanceChange,
   AttendanceCommand,
   AttendanceDayView,
   AttendanceLookups,
@@ -38,11 +39,51 @@ function shortDate(date: string): string {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
+function weekdayAndDay(date: string): string {
+  const parts = new Intl.DateTimeFormat(currentLocale(), {
+    weekday: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).formatToParts(new Date(`${date}T00:00:00Z`));
+  return `${parts.find((part) => part.type === "weekday")?.value} ${parts.find((part) => part.type === "day")?.value}`;
+}
+
 function timeText(change: { at: string; offsetMinutes: number }, date: string) {
   const value = storedAttendanceTime(change.at, change.offsetMinutes);
   return value.slice(0, 10) === date
     ? value.slice(11, 16)
     : `${shortDate(value.slice(0, 10))} ${value.slice(11, 16)}`;
+}
+
+function changeLine(item: CorrectionItem, change: AttendanceChange, date: string) {
+  const target = change.target;
+  const recorded =
+    "entryId" in target
+      ? item.history.find((entry) => entry.entryId === target.entryId)
+      : undefined;
+  const kind =
+    "missingKind" in target
+      ? target.missingKind
+      : (recorded?.extension?.missingEntryKind ?? recorded?.entryKind);
+  const label =
+    kind === "in" || kind === "out" || kind === "break_start" || kind === "break_end"
+      ? t(`hours.time_${kind}`)
+      : t("attendance.time");
+  const before =
+    recorded && timeText({ at: recorded.eventAt, offsetMinutes: recorded.offsetMinutes }, date);
+  return html`${label}
+    <strong>${before ? `${before} → ` : ""}${timeText(change, date)}</strong>
+    ${
+      before && recorded?.extension?.authorKind === "automatic"
+        ? html`<span class="muted"
+            >${fill(t("hours.time_added_by_waitron"), { time: before })}</span
+          >`
+        : nothing
+    }`;
+}
+
+function quotedReason(reason: string): string {
+  return fill(t("hours.quoted_reason"), { reason });
 }
 
 @customElement("till-hours-approval-screen")
@@ -70,12 +111,17 @@ export class TillHoursApprovalScreen extends LitElement {
         min-inline-size: 0;
       }
       h3,
-      p {
+      p,
+      dl,
+      dd {
         margin: 0;
         overflow-wrap: anywhere;
       }
       h3 {
+        padding-inline-start: var(--wt-space-1);
+        color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+        letter-spacing: var(--wt-letter-spacing-caps);
         text-transform: uppercase;
       }
       header {
@@ -86,13 +132,27 @@ export class TillHoursApprovalScreen extends LitElement {
         gap: var(--wt-space-2);
       }
       article {
-        padding: var(--wt-space-3);
+        padding: calc((var(--wt-space-3) + var(--wt-space-4)) / 2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         background: var(--wt-color-surface);
       }
       article[data-disputed] {
         border: 2px solid var(--wt-color-danger);
+      }
+      article header strong {
+        font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+      }
+      article time {
+        font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
+      }
+      .dispute {
+        display: grid;
+        grid-template-columns: calc(3 * var(--wt-space-6)) minmax(0, 1fr);
+        gap: var(--wt-space-1) var(--wt-space-2);
+      }
+      .dispute dt {
+        overflow-wrap: anywhere;
       }
       .actions {
         display: flex;
@@ -103,31 +163,51 @@ export class TillHoursApprovalScreen extends LitElement {
         flex: 1;
       }
       .muted,
-      time {
+      article time {
         color: var(--wt-color-text-muted);
       }
+      [data-finished-days] {
+        gap: 0;
+      }
+      [data-finished-days] > header {
+        align-items: center;
+        margin-block-start: calc(-1 * var(--wt-space-2));
+      }
+      [data-approve-all] {
+        --wt-action-text: var(--wt-color-primary-text);
+        --wt-action-font-size: var(--wt-font-size-md);
+        --wt-action-padding: var(--wt-space-2) var(--wt-space-1);
+      }
       .finished {
-        margin: 0;
+        margin: 0 calc(-1 * var(--wt-space-3));
         padding: 0;
         list-style: none;
       }
       .finished li {
+        padding-block: var(--wt-space-1);
+        padding-inline: var(--wt-space-4) var(--wt-space-3);
         border-block-start: 1px solid var(--wt-color-border);
         background: var(--wt-color-surface);
       }
       .day-facts {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+        grid-template-columns: calc(3 * var(--wt-space-6)) minmax(0, 1fr) auto;
         align-items: center;
         gap: var(--wt-space-2);
-        inline-size: 100%;
-        text-align: start;
+        min-block-size: calc(var(--wt-tap-min) - var(--wt-space-1));
+      }
+      .day-facts time,
+      .time-range,
+      [data-worked] {
+        text-wrap: nowrap;
+        font-variant-numeric: tabular-nums;
       }
       .day-facts small {
         display: block;
+        font-size: var(--wt-font-size-sm);
       }
-      .day-facts [data-worked] {
-        font-variant-numeric: tabular-nums;
+      .spoken-duration {
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -353,43 +433,46 @@ export class TillHoursApprovalScreen extends LitElement {
     const name = this.#name(item.personId);
     const date = workerDate(item);
     const disputed = item.status === "disputed";
-    const reason =
-      disputed &&
-      item.history
-        .filter(
-          (entry) =>
-            item.responseEntryIds.includes(entry.entryId) && entry.correctionStatus === "disputed",
-        )
-        .at(-1)?.correctionReason;
+    const firstName = name.split(" ")[0]!;
+    const managerName = this.lookups?.people
+      .find((person) => person.personId === item.requestedByPersonId)
+      ?.displayName.split(" ")[0];
+    const changes = item.changes.map((change) => html`<p>${changeLine(item, change, date)}</p>`);
+    const reply = disputed
+      ? item.history
+          .filter(
+            (entry) =>
+              item.responseEntryIds.includes(entry.entryId) &&
+              entry.correctionStatus === "disputed",
+          )
+          .at(-1)?.correctionReason
+      : undefined;
+    const workerTimes = item.workerVersion?.changes
+      .map((change) => timeText(change, date))
+      .join(" · ");
     return html`<article ?data-disputed=${disputed}>
       <header><strong>${name}</strong><time datetime=${date}>${shortDate(date)}</time></header>
-      ${disputed ? html`<p class="muted">${t("hours.manager_proposed")}</p>` : nothing}
-      ${item.changes.map((change) => {
-        const target = change.target;
-        const recorded =
-          "entryId" in target
-            ? item.history.find((entry) => entry.entryId === target.entryId)
-            : undefined;
-        const kind =
-          "missingKind" in target
-            ? target.missingKind
-            : (recorded?.extension?.missingEntryKind ?? recorded?.entryKind);
-        return html`<p>
-          ${kind === "in" || kind === "out" || kind === "break_start" || kind === "break_end" ? t(`clock.${kind}`) : t("attendance.time")}
-          <strong
-            >${recorded ? `${timeText({ ...change, at: recorded.eventAt, offsetMinutes: recorded.offsetMinutes }, date)} → ` : ""}${timeText(change, date)}</strong
-          >
-          ${recorded?.extension?.authorKind === "automatic" ? html`<span class="muted"> · ${t("attendance.added_automatically")}</span>` : nothing}
-        </p>`;
-      })}
-      <p class="muted">${item.reason}</p>
       ${
         disputed
-          ? html`<p>
-                ${fill(t("hours.worker_version"), { name })}${item.workerVersion?.changes.length ? `: ${item.workerVersion.changes.map((change) => timeText(change, date)).join(" · ")}` : ""}${reason ? ` · ${reason}` : ""}
-              </p>
-              <p class="muted">${t("attendance.disputed")}</p>`
-          : nothing
+          ? html`<dl class="dispute">
+                <dt class="muted">
+                  ${
+                    item.requestedByPersonId === this.personId
+                      ? t("hours.you_changed")
+                      : managerName
+                        ? fill(t("hours.manager_changed"), { name: managerName })
+                        : t("hours.manager_proposed")
+                  }
+                </dt>
+                <dd>${changes}</dd>
+                <dt class="muted">${fill(t("hours.worker_says"), { name: firstName })}</dt>
+                <dd>
+                  ${workerTimes}${reply ? `${workerTimes ? ": " : ""}${quotedReason(reply)}` : ""}
+                </dd>
+              </dl>
+              <p class="muted">${t("hours.both_versions")}</p>`
+          : html`${changes}
+              <p class="muted">${quotedReason(item.reason)}</p>`
       }
       ${
         disputed && !this.#canSettle(item, "approve") && item.personId !== this.personId
@@ -397,7 +480,7 @@ export class TillHoursApprovalScreen extends LitElement {
           : nothing
       }
       <div class="actions">
-        ${this.#canSettle(item, "approve") ? html`<wt-button data-approve-request variant=${blocked || disputed ? "secondary" : "primary"} .disabled=${blocked} @click=${() => this.#settle(item, "approve")}>${disputed ? fill(t("hours.take_worker_time"), { name: name.split(" ")[0]! }) : t("hours.approve")}</wt-button>` : nothing}
+        ${this.#canSettle(item, "approve") ? html`<wt-button data-approve-request variant=${blocked || disputed ? "secondary" : "primary"} .disabled=${blocked} @click=${() => this.#settle(item, "approve")}>${disputed ? fill(t("hours.take_worker_time"), { name: firstName }) : t("hours.approve")}</wt-button>` : nothing}
         ${this.#canSettle(item, "decline") ? html`<wt-button variant="secondary" .disabled=${blocked} @click=${() => this.#settle(item, "decline")}>${t("hours.decline")}</wt-button>` : nothing}
       </div>
     </article>`;
@@ -458,24 +541,41 @@ export class TillHoursApprovalScreen extends LitElement {
                 ${asked.length + disputed.length + finishedDays.length === 0 ? html`<p>${t("hours.no_approvals")}</p>` : nothing}
                 <ul class="finished" role="list">
                   ${finishedDays.map((day) => {
-                    const hours = (minutes: number) =>
-                      formatDuration(minutes * 60_000, currentLocale());
                     const clock = (time: FinishedAttendanceDay["times"][number]) =>
                       storedAttendanceTime(time.at, time.offsetMinutes).slice(11, 16);
                     const starts = day.times.filter((time) => time.kind === "in");
                     const ends = day.times.filter((time) => time.kind === "out");
-                    const facts = html`<span class="day-facts"
-                      ><strong>${this.#name(day.personId)}</strong>
-                      <span
-                        ><time datetime=${day.date}>${shortDate(day.date)}</time> ·
-                        ${starts.map((start, i) => `${clock(start)}–${clock(ends[i]!)}`).join(" · ")}
-                        ${day.times.some((time) => time.automatic) ? html`<small class="muted">${t("hours.automatic_out")}</small>` : nothing}
-                        ${day.breakMinutes ? html`<small class="muted">${t("hours.breaks")} · ${hours(day.breakMinutes)}</small>` : nothing}</span
-                      >
-                      ${day.workedMinutes === undefined ? nothing : html`<strong data-worked>${hours(day.workedMinutes)}</strong>`}</span
-                    >`;
+                    const notes = [
+                      day.breakMinutes
+                        ? fill(t("hours.break_minutes"), { minutes: String(day.breakMinutes) })
+                        : "",
+                      ends.some((time) => time.automatic) ? t("hours.automatic_out") : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    const minutes = day.workedMinutes;
                     return html`<li>
-                      <p>${facts}</p>
+                      <p class="day-facts">
+                        <strong>${this.#name(day.personId)}</strong>
+                        <span>
+                          <time datetime=${day.date}>${weekdayAndDay(day.date)}</time>
+                          ${starts.map((start, i) => html` · <span class="time-range">${clock(start)} – ${clock(ends[i]!)}</span>`)}
+                          ${notes ? html`<small class="muted">${notes}</small>` : nothing}
+                        </span>
+                        ${
+                          minutes === undefined
+                            ? nothing
+                            : html`<strong data-worked>
+                                <span aria-hidden="true"
+                                  >${Math.floor(minutes / 60)} h
+                                  ${String(minutes % 60).padStart(2, "0")}</span
+                                >
+                                <span class="spoken-duration"
+                                  >${formatDuration(minutes * 60_000, currentLocale())}</span
+                                >
+                              </strong>`
+                        }
+                      </p>
                       ${
                         !this.#canApprove(day.personId)
                           ? html`<p class="muted">${t("hours.cannot_approve_own")}</p>`

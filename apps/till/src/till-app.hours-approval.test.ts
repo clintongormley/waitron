@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type {
   AttendanceCommand,
   AttendanceDayApprovalTarget,
@@ -73,6 +73,7 @@ async function manager(
     people: [
       { personId: "worker", displayName: "Javier Torres" },
       { personId: "p1", displayName: "Marta Ruiz" },
+      { personId: "colleague", displayName: "Ana Rivero" },
     ],
   });
   const getAttendanceManagerDay = vi.fn().mockResolvedValue({ ...view, items: queue.items });
@@ -118,9 +119,16 @@ const menuEntry = (el: TillApp) =>
     .shadowRoot!.querySelector("till-shell")!
     .shadowRoot!.querySelector<HTMLElement>(".hours-approval");
 const screen = (el: TillApp) => el.shadowRoot!.querySelector("till-hours-approval-screen");
-async function open(el: TillApp) {
+async function openMore(el: TillApp) {
   await vi.waitFor(() => expect(menuEntry(el)).not.toBeNull());
-  await shellAction(el, ".hours-approval");
+  const menu = menuEntry(el)!.closest("wt-row-actions")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+}
+
+async function open(el: TillApp, label?: string) {
+  await openMore(el);
+  if (label) await vi.waitFor(() => expect(menuEntry(el)?.textContent?.trim()).toBe(label));
+  await userEvent.click(menuEntry(el)!);
   await vi.waitFor(() =>
     expect(screen(el)?.shadowRoot?.querySelector("[data-finished-days]")).not.toBeNull(),
   );
@@ -148,12 +156,13 @@ it("counts actionable days and approves only the displayed eligible day", async 
       { ...own, times: [...times] },
     ],
   });
-  await open(f.el);
-  await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
+  await open(f.el, "To approve · 1");
   const root = screen(f.el)!.shadowRoot!;
   expect(root.textContent).toContain("Javier Torres");
   expect(root.textContent).toContain("Marta Ruiz");
-  expect(root.querySelector("[data-worked]")?.textContent).toBe("7 hours");
+  const worked = root.querySelector("[data-worked]")!;
+  expect(worked.querySelector<HTMLElement>('[aria-hidden="true"]')?.innerText).toBe("7 h 00");
+  expect(worked.textContent).toContain("7 hours");
   f.getAttendanceManagerQueue.mockResolvedValue({
     items: [],
     finishedDays: [{ ...own, times: [...times] }],
@@ -172,8 +181,7 @@ it.each([
   { item: disputed, label: "Take Javier’s time", action: "approve" },
 ])("uses the work date and latest revision for $label", async ({ item, label, action }) => {
   const f = await manager({ items: [item], finishedDays: [] });
-  await open(f.el);
-  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
+  await open(f.el, "To approve · 1");
   const root = screen(f.el)!.shadowRoot!;
   if (item.status === "disputed") expect(root.textContent).toContain("I closed the bar.");
   await userEvent.click(
@@ -220,10 +228,92 @@ it("retries an unanswered decision with the original command and revision", asyn
   expect(f.getAttendanceManagerDay).toHaveBeenCalledTimes(1);
 });
 
-it("keeps a single banner landmark when the Manager queue is open", async () => {
-  const f = await manager({ items: [requested, disputed], finishedDays: [] });
+it("shows only the approval screen’s bar at phone width and restores More on return", async () => {
+  const size = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const f = await manager({ items: [requested, disputed], finishedDays: [] });
+    const more = () => page.getByRole("button", { name: "More", exact: true });
+    await expect.element(more()).toBeVisible();
+    await open(f.el);
+    const shell = f.el.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+    await vi.waitFor(() => expect(shell.querySelector("header.head")).toBeNull());
+    const back = screen(f.el)!.shadowRoot!.querySelector("wt-top-bar")!;
+    expect(back.backLabel).toBe("Counter");
+    await expectNoA11yViolations(screen(f.el)!);
+    await userEvent.click(back.shadowRoot!.querySelector("wt-button")!);
+    await expect.element(more()).toBeVisible();
+  } finally {
+    await page.viewport(size.width, size.height);
+  }
+});
+
+it("identifies the automatic time as the old time on a request", async () => {
+  const f = await manager({
+    items: [
+      {
+        ...requested,
+        changes: [
+          { target: { entryId: "original-out" }, at: "2026-10-13T21:15:00Z", offsetMinutes: 120 },
+        ],
+        history: [attendanceEntry({ entryId: "original-out", eventAt: "2026-10-13T21:48:00Z" })],
+      },
+    ],
+    finishedDays: [],
+  });
   await open(f.el);
-  await expectNoA11yViolations(screen(f.el)!);
+  const card = screen(f.el)!.shadowRoot!.querySelector("article")!;
+  expect(card.textContent).toContain("(23:48 added by Waitron)");
+  expect(card.textContent).toContain(`“${requested.reason}”`);
+});
+
+it("labels each side of a dispute with the person who gave that time", async () => {
+  const f = await manager({
+    items: [
+      { ...disputed, requestedByPersonId: "p1" },
+      { ...disputed, id: "colleague-dispute", requestedByPersonId: "colleague" },
+    ],
+    finishedDays: [],
+  });
+  await open(f.el);
+  const [ownCard, colleagueCard] = screen(f.el)!.shadowRoot!.querySelectorAll("article");
+  expect([...ownCard!.querySelectorAll("dt")].map((label) => label.textContent?.trim())).toEqual([
+    "You changed",
+    "Javier says",
+  ]);
+  expect(colleagueCard!.querySelector("dt")?.textContent?.trim()).toBe("Ana changed");
+  expect(ownCard!.textContent).toContain("“I closed the bar.”");
+  expect(ownCard!.textContent).toContain("Both versions stay on the record.");
+});
+
+it("keeps the finished day’s times together and keeps both notes visible at phone width", async () => {
+  const size = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const f = await manager({
+      items: [],
+      finishedDays: [{ ...other, times: [...times], workedMinutes: 405, breakMinutes: 15 }],
+    });
+    await open(f.el);
+    const root = screen(f.el)!.shadowRoot!;
+    const row = root.querySelector(".day-facts")!;
+    expect(row.querySelector("time")?.textContent).toBe("Tue 13");
+    const range = page.getByText("10:00 – 17:00", { exact: true });
+    await expect.element(range).toBeVisible();
+    expect(new Set([...range.element().getClientRects()].map((rect) => rect.top)).size).toBe(1);
+    expect(row.closest("li")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
+    expect(row.querySelector("small")?.textContent).toMatch(
+      /Break 15 min\s*·\s*Clocked out automatically/,
+    );
+    const button = root.querySelector("[data-approve-all]")!.shadowRoot!.querySelector("button")!;
+    expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const reference = document.createElement("span");
+    reference.style.color = "var(--wt-color-primary-text)";
+    row.append(reference);
+    expect(getComputedStyle(button).color).toBe(getComputedStyle(reference).color);
+  } finally {
+    await page.viewport(size.width, size.height);
+  }
 });
 
 it("shows disputes that require a dashboard edit without counting them as till actions", async () => {
@@ -234,22 +324,20 @@ it("shows disputes that require a dashboard edit without counting them as till a
   expect(root.textContent).toContain("I closed the bar.");
   expect(root.textContent).toContain("Open this day in the dashboard to send an edit.");
   expect(root.querySelector("[data-approve-request]")).toBeNull();
+  const back = root.querySelector("wt-top-bar")!;
+  await userEvent.click(back.shadowRoot!.querySelector("wt-button")!);
+  await openMore(f.el);
   expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve");
 });
 
 it("reads the count when the manager opens More and refreshes it on reopening", async () => {
   const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
   expect(f.getAttendanceManagerQueue).not.toHaveBeenCalled();
-  const showMore = async () => {
-    await vi.waitFor(() => expect(menuEntry(f.el)).not.toBeNull());
-    const menu = menuEntry(f.el)!.closest("wt-row-actions")!;
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-  };
-  await showMore();
+  await openMore(f.el);
   await vi.waitFor(() => expect(menuEntry(f.el)?.textContent).toContain("To approve · 1"));
   await userEvent.keyboard("{Escape}");
   f.getAttendanceManagerQueue.mockResolvedValue({ items: [], finishedDays: [] });
-  await showMore();
+  await openMore(f.el);
   await vi.waitFor(() => expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve"));
 });
 
@@ -268,8 +356,10 @@ it("an administrator may approve their own request but has no button to decline 
 
 it("clears the previous count when a new sign-in opens More while its count is still loading", async () => {
   const f = await manager({ items: [], finishedDays: [{ ...other, times: [...times] }] });
-  await open(f.el);
-  expect(menuEntry(f.el)!.textContent?.trim()).toBe("To approve · 1");
+  await open(f.el, "To approve · 1");
+  const back = screen(f.el)!.shadowRoot!.querySelector("wt-top-bar")!;
+  await userEvent.click(back.shadowRoot!.querySelector("wt-button")!);
+  await vi.waitFor(() => expect(screen(f.el)?.active).toBe(false));
   await shellAction(f.el, ".logout");
   await vi.waitFor(() => expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
   const held = deferred<AttendanceManagerQueue>();

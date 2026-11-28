@@ -232,7 +232,8 @@ Your request goes to the managers. Check **My hours** for its progress.
 ## Approve finished days {#approve-hours}
 
 On your till, open **More** and choose **To approve**. The number shows how many requests, disputes
-and finished days you can act on from the till. To edit a whole day, open it in the dashboard.
+and finished days you can act on from the till. Under **Disputed**, compare the manager’s change
+and the worker’s reply side by side. To edit a whole day, open it in the dashboard.
 
 In the dashboard, open **Team** and choose **To approve**. Open **Details** under **Asked to change** to
 review a request. Choose **Edit** to see the whole day, change the times and add a reason. Check the
