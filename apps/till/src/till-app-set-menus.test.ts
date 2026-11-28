@@ -100,15 +100,16 @@ it.each(["fresh", "parked"])(
     const item = { ...extrasList.items[0]!, price: "2.00", image: null, available: true };
     const { productId, name, price: unitPrice } = item;
     const extra = { listId: extrasList.id, productId, name, price: unitPrice, quantity: 1 };
+    const soup = daily.offers[0]!;
     const sirloin = daily.offers[1]!;
-    const dish = fromPark ? daily.offers[0]! : sirloin;
+    const dish = fromPark ? soup : sirloin;
     const offer = {
       ...dish,
       unitPrice: fromPark ? "15.00" : dish.unitPrice,
       aLaCartePrices: { v1: { [dish.productId]: "24.00" } },
       offeredModifiers: [{ ...extrasList, items: [item] }],
     };
-    const copy = { ...daily, offers: [offer, ...(fromPark ? [sirloin] : [])] };
+    const copy = { ...daily, offers: [offer, fromPark ? sirloin : soup] };
     const folder = { setMenuId: copy.menuId, versionId: "v1" };
     const product = setMenuProduct({ ...folder, offer });
     const kept = {
@@ -179,20 +180,27 @@ it.each(["fresh", "parked"])(
     const price = (amount: string) =>
       expect.element(basket.getByText(money(amount), { exact: true }), { timeout: 1500 });
     const total = () => counter.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent;
+    const pay = page
+      .elementLocator(counter)
+      .getByRole("button", { name: t("action.pay"), exact: true });
     if (fromPark) {
       emit(counter, "retrieve-order", { id: "parked-takeaway" });
       await vi.waitFor(() => expect(counter.store.id).toBe("parked-takeaway"));
       await price("23.00").toBeVisible();
       counter.store.removeLine(1);
     } else {
+      counter.store.addProduct(setMenuProduct({ ...folder, offer: soup }), "1", {
+        setMenu: { id: copy.menuId },
+      });
+      await expect.element(pay, { timeout: 1500 }).toBeEnabled();
+      counter.store.removeLine(0);
       counter.store.addProduct(product, "1", { setMenu: { id: copy.menuId }, extras: [extra] });
       await price("24.00").toBeVisible();
       expect(total()).toContain(money("26.00"));
     }
     await price("2.00").toBeVisible();
     const id = counter.store.id;
-    const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
-    await userEvent.click(tender.shadowRoot!.querySelector("[data-counter-pay]")!);
+    await userEvent.click(pay);
     await expect
       .poll(() => inDialog(el, "[data-quiet-pay-amount]")?.textContent ?? "")
       .toContain(money(amount));
