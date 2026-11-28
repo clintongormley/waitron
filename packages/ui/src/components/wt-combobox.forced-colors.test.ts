@@ -58,7 +58,7 @@ test("the searchable list draws an outline around its focused search", async () 
 
 test("a boxed field keeps a real border, drawn thicker when highlighted", async () => {
   const el = await combobox("never");
-  el.look = "boxed";
+  el.variant = "boxed";
   await el.updateComplete;
   const field = el.shadowRoot!.querySelector<HTMLElement>(".field")!;
   const box = field.getBoundingClientRect();

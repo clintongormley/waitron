@@ -24,7 +24,7 @@ const TOKENS = {
 
 async function boxed(attributes = "") {
   const el = (await mount(
-    `<wt-combobox look="boxed" label="Card reader" search="never" ${attributes}></wt-combobox>`,
+    `<wt-combobox variant="boxed" label="Card reader" ${attributes} search="never"></wt-combobox>`,
   )) as WtCombobox;
   for (const [name, setting] of Object.entries(TOKENS)) host.style.setProperty(name, setting);
   el.options = [{ value: "r2", label: "Reader 2" }];
@@ -61,12 +61,12 @@ test("boxed and highlighted looks paint from tokens without moving the text; fil
   expect(border()).toEqual(["solid", "2px", "rgb(10, 11, 12)", "rgb(13, 14, 15)"]);
   expect(text()).toEqual(before);
 
-  el.look = "filled";
+  el.variant = "filled";
   await el.updateComplete;
   expect(border()[0]).toBe("none");
 });
 
-test("a boxed field's focused, open, invalid and disabled borders", async () => {
+test("a boxed field's focused, open, invalid and disabled borders, and no filled line open with a search box", async () => {
   const open = await boxed();
   open.trigger.focus();
   expect(open.border().slice(1, 3)).toEqual(["2px", "rgb(10, 11, 12)"]);
@@ -74,6 +74,13 @@ test("a boxed field's focused, open, invalid and disabled borders", async () => 
   open.trigger.blur();
   expect(open.border().slice(1, 3)).toEqual(["2px", "rgb(10, 11, 12)"]);
   expect(getComputedStyle(open.field).boxShadow).toBe("none");
+
+  cleanup();
+  const searching = await boxed('search="always"');
+  await userEvent.click(searching.trigger);
+  expect(searching.field.hasAttribute("data-search")).toBe(true);
+  expect(searching.border().slice(1, 3)).toEqual(["1px", "rgb(1, 2, 3)"]);
+  expect(getComputedStyle(searching.field).boxShadow).toBe("none");
 
   const invalid = await boxed('error="Choose a reader"');
   expect(invalid.border().slice(1, 3)).toEqual(["2px", "rgb(16, 17, 18)"]);

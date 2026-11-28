@@ -111,7 +111,7 @@ camera, and O5 and O13 need the dropdown anyway.
     `--wt-color-text`. Dark: 5.3:1 against 10.5:1. Computed by WCAG's formula from
     `colors.css:12,25,135,150,163,266`; black on white gave 21:1 as a control.
   - `payNotice` (`pay-equipment.ts:46-83`) takes this look. An error stays red.
-- **Dropdowns**: `wt-combobox look="boxed"`, one per role that has something listed. Which roles:
+- **Dropdowns**: `wt-combobox variant="boxed"`, one per role that has something listed. Which roles:
   the visibility rule of ☰ Equipment (`equipment-dialog.ts:381-388`), exported rather than copied,
   plus the two flags above. Order: card reader, receipt printer, payment slip printer, cash drawer.
   - 56 px (`--wt-field-height`), 16 px from the sides, 8 px apart.
@@ -147,7 +147,7 @@ O7, O13 and lane I's presented-bill slice replace those, and the last one delete
 | O4c | The till gets the sheet | ~60 / 150, ~1.5 h |
 
 **O4a**:
-1. `wt-combobox look="boxed"`, with a `highlight` setting.
+1. `wt-combobox variant="boxed"`, with a `highlight` setting.
 2. `wt-qr-scanner framed`, with the camera tokens in `colors.css` and `structure.css`.
    `wt-master-key-input` does not set it.
 3. `till-equipment-scanner`: `keep-going`, which does not resend the same sticker until a

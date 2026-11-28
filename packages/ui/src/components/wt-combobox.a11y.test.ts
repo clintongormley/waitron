@@ -552,7 +552,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   test.each(["", "highlight", 'error="Choose a reader"', "disabled", "highlight open"])(
     "boxed %s, with a value chosen, then empty",
     async (attributes) => {
-      const html = `<wt-combobox look="boxed" label="Card reader" search="never" ${attributes.replace("open", "")}></wt-combobox>`;
+      const html = `<wt-combobox variant="boxed" label="Card reader" search="never" ${attributes.replace("open", "")}></wt-combobox>`;
       const el = attributes.endsWith("open")
         ? await openThemed(html, theme)
         : ((await mountThemed(html, theme)) as WtCombobox);

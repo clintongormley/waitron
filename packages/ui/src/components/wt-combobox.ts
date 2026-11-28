@@ -49,6 +49,8 @@ export interface ComboboxOption {
   inherited?: true;
 }
 
+export type WtComboboxVariant = "filled" | "boxed";
+
 /** What the closed trigger shows for an option, and what a search matches. */
 function closedText(option: ComboboxOption): string {
   return option.valueLabel ?? option.label;
@@ -110,13 +112,13 @@ export class WtCombobox extends LitElement {
 
       /* The search box marks focus for an open searchable list; the trigger marks it when no search
          box exists, even while the list holds keyboard focus. */
-      .field[data-open][data-search]:not([data-invalid], [data-disabled]) {
+      .field[data-open][data-search]:not([data-invalid], [data-disabled], [data-boxed]) {
         box-shadow: inset 0 calc(-1 * var(--wt-field-line-width)) 0 var(--wt-color-field-line);
       }
       .field[data-open][data-search]:not([data-invalid], [data-disabled]) .field-label {
         color: var(--wt-color-text-muted);
       }
-      .field[data-open]:not([data-search], [data-invalid], [data-disabled]) {
+      .field[data-open]:not([data-search], [data-invalid], [data-disabled], [data-boxed]) {
         box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
       }
       .field[data-open]:not([data-search], [data-invalid], [data-disabled]) .field-label {
@@ -360,18 +362,37 @@ export class WtCombobox extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .field[data-boxed] {
+        --wt-field-box-fill: var(--wt-color-surface);
+        --wt-field-box-line-invalid: var(--wt-field-line-width-active);
+      }
+      /* The control and the label measure from the outer edge, so a thicker border moves neither. */
+      .field[data-boxed] > .field-control {
+        width: calc(100% + 2 * var(--wt-field-box-line));
+        margin: calc(-1 * var(--wt-field-box-line));
+      }
+      .field[data-boxed] > .field-label {
+        inset-inline-start: calc(
+          var(--wt-space-3) + var(--wt-field-line-width) - var(--wt-field-box-line)
+        );
+        top: calc(var(--wt-space-2) + var(--wt-field-line-width) - var(--wt-field-box-line));
+      }
       .field[data-boxed] .value {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-medium);
       }
-    `,
-    boxedFieldStyles,
-    css`
+      /* Ahead of boxedFieldStyles, whose equally specific invalid colour must win over a highlight. */
+      .field[data-boxed][data-highlight] {
+        --wt-field-box-line: var(--wt-field-line-width-active);
+        --wt-field-box-fill: var(--wt-color-surface-lifted);
+        border-color: var(--wt-color-primary);
+      }
       .field[data-boxed][data-open]:not([data-search], [data-invalid], [data-disabled]) {
         --wt-field-box-line: var(--wt-field-line-width-active);
         border-color: var(--wt-color-primary);
       }
     `,
+    boxedFieldStyles,
   ];
 
   @property() label = "";
@@ -418,7 +439,7 @@ export class WtCombobox extends LitElement {
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   /** "boxed" draws a bordered box on the surface instead of the filled field (design-system.md →
    * Forms). */
-  @property({ reflect: true }) look: "filled" | "boxed" = "filled";
+  @property({ reflect: true }) variant: WtComboboxVariant = "filled";
   /** Marks a boxed field with a thicker primary border on the lifted surface. */
   @property({ type: Boolean, reflect: true }) highlight = false;
   @state() private expanded = false;
@@ -1094,8 +1115,8 @@ export class WtCombobox extends LitElement {
         ?data-disabled=${this.disabled}
         ?data-compact=${!showLabel}
         ?data-open=${this.expanded}
-        ?data-boxed=${this.look === "boxed"}
-        ?data-highlight=${this.look === "boxed" && this.highlight}
+        ?data-boxed=${this.variant === "boxed"}
+        ?data-highlight=${this.variant === "boxed" && this.highlight}
         ?data-search=${this.hasSearchBox}
       >
         ${

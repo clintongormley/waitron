@@ -1363,7 +1363,7 @@ test("Escape that closes the menu goes no further, so a dialog around it stays o
 });
 
 describe("standard icon trigger", () => {
-  it("a reflected disabled setting disables the trigger, stops show() and closes an open popup", async () => {
+  it("a reflected disabled setting disables the trigger, stops show() and closes an open popup with a toggle event", async () => {
     const { el, trigger, popup } = await mountActions();
     el.setAttribute("disabled", "");
     await el.updateComplete;
@@ -1375,10 +1375,16 @@ describe("standard icon trigger", () => {
     expect(el.hasAttribute("disabled")).toBe(false);
     el.show();
     expect(popup.matches(":popover-open")).toBe(true);
+    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+    const toggles: boolean[] = [];
+    el.addEventListener("wt-row-actions-toggle", (event) =>
+      toggles.push((event as CustomEvent<{ open: boolean }>).detail.open),
+    );
     (el as WtRowActions).disabled = true;
     await el.updateComplete;
     expect(popup.matches(":popover-open")).toBe(false);
     await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+    expect(toggles).toEqual([false]);
   });
 
   it("renders the configured icon as the empty trigger slot's fallback", async () => {

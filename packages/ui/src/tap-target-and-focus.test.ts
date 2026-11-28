@@ -28,11 +28,10 @@ for (const [path, mod] of Object.entries(modules)) {
   }
 }
 
-// Row actions and the help controls are interactive without a disabled state. Other primitives are
-// checked only when they reflect disabled, whatever they render.
+// The help controls are interactive without a disabled state. Other primitives are checked only
+// when they reflect disabled, whatever they render.
 const interactiveComponents = allComponents.filter(
   ({ tag, ctor }) =>
-    tag === "wt-row-actions" ||
     tag === "wt-help-switch" ||
     tag === "wt-help-tooltip" ||
     ctor.elementProperties?.get("disabled")?.reflect === true,

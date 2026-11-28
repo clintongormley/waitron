@@ -162,9 +162,9 @@ const panel = (theme: "light" | "dark") => `
         ></wt-combobox>
       </div>
       <div class="row" style="margin-top: var(--wt-space-4)">
-        <wt-combobox look="boxed" label="Card reader" search="never" class="demo-boxed"></wt-combobox>
+        <wt-combobox variant="boxed" label="Card reader" search="never" class="demo-boxed"></wt-combobox>
         <wt-combobox
-          look="boxed"
+          variant="boxed"
           label="Receipt printer"
           search="never"
           class="demo-boxed"
