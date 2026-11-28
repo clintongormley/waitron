@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import type { SavedDrawerCount } from "../api/drawer-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -91,7 +92,7 @@ it("keeps the count blind until the keypad entry is saved and lets staff count a
   setLocale("en-GB");
   const requests = api();
   const counted = { ...first, counted: "412.30", expected: "415.00", difference: "-2.70" };
-  let save!: (value: typeof pending) => void;
+  let save!: (value: SavedDrawerCount) => void;
   requests.saveDrawerCount.mockReturnValue(new Promise((resolve) => (save = resolve)));
   requests.recountDrawer.mockResolvedValue({
     ...recounted,
