@@ -124,6 +124,7 @@ export function mountTenderRefundApi(
       pool: deps.pool,
     }),
     clockUnconfirmed: deps.clockUnconfirmed,
+    invoiceEmailAvailable: deps.invoiceEmailAvailable,
     log,
   };
   app.get("/api/transactions/:saleId/refundable-tenders", (c) =>

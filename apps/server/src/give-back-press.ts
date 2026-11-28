@@ -12,6 +12,7 @@ import type { Authorization } from "@waitron/identity";
 import type { RefundRefusalReason } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, isUuid, type SaleId } from "@waitron/shared";
 import { readSentCorrective, type SentCorrective } from "./corrective-delivery.js";
+import { optionalDocument } from "./optional-document.js";
 import { invalid } from "./bill-allocation.js";
 import { parseGiveBackRequest, type GiveBackPart, type GiveBackRequest } from "./give-back-plan.js";
 import { reasonOf, type GiveBackDeps, type WaitReason } from "./give-back-read.js";
@@ -252,16 +253,20 @@ export async function outcomeOf(
         answer.push({ kind: "correction", amount, state: "not_started" });
         continue;
       }
+      const correctiveSaleId = row.correctiveSaleId;
+      // Read inside the press's transaction: a failure leaves it out of the answer, never undoes it.
       const corrective =
-        row.correctiveSaleId === null
+        correctiveSaleId === null
           ? null
-          : await readSentCorrective(tx, cfg, row.correctiveSaleId);
+          : await optionalDocument(tx, "readSentCorrective", correctiveSaleId, () =>
+              readSentCorrective(tx, cfg, correctiveSaleId),
+            );
       answer.push({
         kind: "correction",
         amount,
         state: row.state === "filed" ? "completed" : row.state === "open" ? "pending" : "failed",
         correctionId: row.id,
-        ...(corrective === null ? {} : { corrective }),
+        ...(corrective == null ? {} : { corrective }),
       });
       continue;
     }

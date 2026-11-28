@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import {
   deviceProfiles,
@@ -13,9 +13,12 @@ import {
   taxpayer,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readUndeliveredInvoices } from "./alert-sources.js";
+import { enqueuePrintJob } from "@waitron/printing";
+import { departments } from "@waitron/venue-service";
+import type { Hono } from "hono";
 import { refundProvidersOf } from "./bill-refunds.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -24,11 +27,25 @@ import { ask, type Part } from "./testing/full-invoice-give-back.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 
+const fault = vi.hoisted(() => ({ readSentCorrective: false }));
+vi.mock("./corrective-delivery.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./corrective-delivery.js")>();
+  return {
+    ...real,
+    readSentCorrective: (...args: Parameters<typeof real.readSentCorrective>) =>
+      fault.readSentCorrective
+        ? Promise.reject(new Error("injected read fault"))
+        : real.readSentCorrective(...args),
+  };
+});
+
 let venue: BillVenue;
 let reasonId: string;
 /** The administrator, holding every right, signed in on the first till. */
 let adminCookie: string;
 let officeId: string;
+/** The same routes on a box that can send invoice email now. */
+let mailApp: Hono;
 
 useVenueDb({
   resetPerTest: false,
@@ -41,6 +58,12 @@ useVenueDb({
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
       adminCookie = await fixture.adminTillCookie(tx, venue);
       officeId = await insertA4Printer(tx, { name: "Office", host: "10.0.0.9" });
+      // An invoice email needs the department's contact address as well as working mail.
+      for (const department of await tx.select().from(departments))
+        await seedDepartmentReceipt(tx, department.id, {
+          operationDescription: "Restaurante",
+          email: "dining@example.test",
+        });
       // The bill venue's tills cannot print receipts; these paths print on the receipt printer.
       for (const profile of await tx.select().from(deviceProfiles))
         await tx
@@ -48,23 +71,29 @@ useVenueDb({
           .set({ capabilities: [...(profile.capabilities as string[]), "print-receipt"] })
           .where(eq(deviceProfiles.id, profile.id));
     });
+    mailApp = venue.appWith({ invoiceEmailAvailable: () => Promise.resolve(true) });
   },
 });
 
-const giveBody = (saleId: string, amount: string, more: Parameters<typeof ask>[2] = {}) =>
-  fixture.giveBackBody(venue, adminCookie, saleId, ask("goodwill", amount, more), reasonId);
+const giveBody = (
+  saleId: string,
+  amount: string,
+  more: Parameters<typeof ask>[2] = {},
+  app: Hono = mailApp,
+) => fixture.giveBackBody(venue, adminCookie, saleId, ask("goodwill", amount, more), reasonId, app);
 
-const give = (saleId: string, body: unknown) =>
-  send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/give-back`, body);
+const give = (saleId: string, body: unknown, app: Hono = mailApp) =>
+  send(app, adminCookie, "POST", `/api/transactions/${saleId}/give-back`, body);
 
 async function fullInvoice(part: Part) {
   return (await fixture.fullInvoice(venue, part)).saleId;
 }
 
-/** The original's earlier delivery by `medium`, marked sent. */
+/** The original's earlier delivery by `medium`, marked sent unless `failed`. */
 async function deliveredOriginal(
   saleId: string,
   delivery: { medium: "email"; recipient: string } | { medium: "a4"; pagePrinterId: string },
+  outcome: "sent" | "failed" = "sent",
 ) {
   const row = await inTx(venue, (tx) =>
     reserveInvoiceDelivery(tx, saleId, {
@@ -75,9 +104,105 @@ async function deliveredOriginal(
   );
   await venue.db
     .update(invoiceDeliveries)
+    .set(
+      outcome === "sent"
+        ? { status: "sent" }
+        : { status: "failed", failureCode: "transport_failed" },
+    )
+    .where(eq(invoiceDeliveries.id, row.id));
+}
+
+/** The original printed on this till's receipt printer, with no delivery row tracking it. */
+async function printedOriginal(saleId: string) {
+  const job = await inTx(venue, (tx) =>
+    enqueuePrintJob(tx, receiptPrinterId(), new Uint8Array([27, 64]), "document", {
+      saleId,
+      receiptCopy: false,
+    }),
+  );
+  await venue.db
+    .update(printJobs)
+    .set({ status: "done", attempts: 1 })
+    .where(eq(printJobs.id, job.jobId));
+}
+
+/** A copy of the already delivered original, printed on this till's receipt printer. */
+async function printedCopy(saleId: string) {
+  const row = await inTx(venue, async (tx) => {
+    const job = await enqueuePrintJob(
+      tx,
+      receiptPrinterId(),
+      new Uint8Array([27, 64]),
+      "document",
+      { saleId, receiptCopy: true },
+    );
+    return reserveInvoiceDelivery(tx, saleId, {
+      requestKey: randomUUID(),
+      personId: venue.adminId,
+      medium: "receipt",
+      printJobId: job.jobId,
+    });
+  });
+  expect(row.designation).toBe("duplicate");
+  await venue.db
+    .update(printJobs)
+    .set({ status: "done", attempts: 1 })
+    .where(eq(printJobs.id, row.printJobId!));
+  await venue.db
+    .update(invoiceDeliveries)
     .set({ status: "sent" })
     .where(eq(invoiceDeliveries.id, row.id));
 }
+
+/** The R1's corrective part of a give-back answer. */
+function correctivePart(answer: { json: unknown }) {
+  return (answer.json as { parts: { corrective?: Record<string, unknown> }[] }).parts[0]!
+    .corrective as
+    { delivery: { medium: string; invoiceRecipientEmail?: string } | null } | undefined;
+}
+
+/** Gives back 10.00 in cash on `saleId` and answers the filed R1's id with the answer. */
+async function givenBackInCash(saleId: string, app: Hono = mailApp) {
+  const answer = await give(saleId, await giveBody(saleId, "10.00", {}, app), app);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  const correction = await correctionOf(answer);
+  expect(correction.state).toBe("filed");
+  return { answer, correction, r1: correction.correctiveSaleId! };
+}
+
+/** The R1's one delivery's medium and recipient, and whether it printed on the receipt printer. */
+async function wayOf(r1: string) {
+  const sent = await deliveriesOf(r1);
+  expect(sent).toHaveLength(1);
+  const jobs = await jobsOf(r1);
+  return {
+    medium: sent[0]!.medium,
+    recipient: sent[0]!.recipient,
+    printerId: sent[0]!.printerId,
+    receiptJobs: jobs.filter((job) => job.kind === "document").map((job) => job.printerId),
+  };
+}
+
+const invoiceMails = async () =>
+  (
+    await venue.db
+      .select({ id: outgoingMail.id })
+      .from(outgoingMail)
+      .where(eq(outgoingMail.kind, "invoice"))
+  ).length;
+
+const PAPER = (printerId: string) => ({
+  medium: "receipt",
+  recipient: null,
+  printerId: null,
+  receiptJobs: [printerId],
+});
+const EMAIL = {
+  medium: "email",
+  recipient: "accounts@harbour.example",
+  printerId: null,
+  receiptJobs: [],
+};
 
 async function correctionOf(answer: { json: Record<string, unknown> }) {
   const id = (answer.json as { parts: { correctionId?: string }[] }).parts.find(
@@ -118,7 +243,7 @@ const receiptPrinterId = () =>
   )[0]!.id;
 
 describe("a corrective full invoice is sent once, when it is filed, the way the original went", () => {
-  it("given back in cash on a full invoice that went on paper, prints the R1 once on this till's receipt printer and says so", async () => {
+  it("given back in cash on a full invoice of which nothing was ever sent, prints the R1 once on this till's receipt printer and says so", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     const answer = await give(saleId, await giveBody(saleId, "10.00"));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -158,8 +283,8 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
         },
       ],
     });
-    const part = (answer.json as { parts: { corrective: { number: string } }[] }).parts[0]!;
-    expect(part.corrective.number.replace(/[^0-9A-Z]/g, "")).toBe(
+    const part = (answer.json as { parts: { corrective: { invoiceNumber: string } }[] }).parts[0]!;
+    expect(part.corrective.invoiceNumber.replace(/[^0-9A-Z]/g, "")).toBe(
       number!.number.replace(/[^0-9A-Z]/g, ""),
     );
   });
@@ -184,6 +309,7 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
       admission: testTradingAdmission(),
       cfg: venue.cfg,
       refundProviderFor: refundProvidersOf({ pool: venue.pool }),
+      invoiceEmailAvailable: () => Promise.resolve(true),
     });
     const correction = await correctionOf(answer);
     expect(correction.state).toBe("filed");
@@ -214,32 +340,154 @@ describe("a corrective full invoice is sent once, when it is filed, the way the 
     expect(await jobsOf(r1)).toEqual([]);
   });
 
-  it("raises an alert and keeps the filing when the original's A4 printer has been switched off since", async () => {
+  it("prints the R1 on this till's receipt printer when the original went on an A4 printer that is not this till's own", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await deliveredOriginal(saleId, { medium: "a4", pagePrinterId: officeId });
     await venue.db.update(printers).set({ active: false }).where(eq(printers.id, officeId));
     onTestFinished(async () => {
       await venue.db.update(printers).set({ active: true }).where(eq(printers.id, officeId));
     });
-    const answer = await give(saleId, await giveBody(saleId, "10.00"));
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    const correction = await correctionOf(answer);
-    expect(correction.state).toBe("filed");
-    const r1 = correction.correctiveSaleId!;
+    const { correction, r1 } = await givenBackInCash(saleId);
     expect(await deliveriesOf(r1)).toEqual([
       expect.objectContaining({
         requestKey: `corrective:${correction.id}`,
-        medium: "a4",
-        status: "failed",
-        printerId: officeId,
-        failureCode: "printer_disabled",
+        medium: "receipt",
+        status: "queued",
+        printerId: null,
       }),
     ]);
-    expect(await jobsOf(r1)).toEqual([]);
-    const undelivered = await inTx(venue, (tx) =>
-      readUndeliveredInvoices(tx, new Date(), { holdOn: () => null }),
+    expect(await jobsOf(r1)).toEqual([
+      { printerId: receiptPrinterId(), copy: false, kind: "document" },
+    ]);
+  });
+
+  it("sends the R1 to this till's own A4 printer when the original went on A4", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "a4", pagePrinterId: officeId });
+    await venue.db
+      .update(devices)
+      .set({ invoicePrinterId: officeId })
+      .where(eq(devices.id, venue.deviceId));
+    onTestFinished(async () => {
+      await venue.db
+        .update(devices)
+        .set({ invoicePrinterId: null })
+        .where(eq(devices.id, venue.deviceId));
+    });
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual({
+      medium: "a4",
+      recipient: null,
+      printerId: officeId,
+      receiptJobs: [],
+    });
+  });
+
+  it("emails the R1 when the original was emailed", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const { answer, r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(EMAIL);
+    expect(correctivePart(answer)?.delivery).toMatchObject({
+      medium: "email",
+      status: "queued",
+      invoiceRecipientEmail: "accounts@harbour.example",
+    });
+  });
+
+  it("prints the R1 on paper when the original was printed on paper", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await printedOriginal(saleId);
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+  });
+
+  it("emails the R1 when the original was emailed and a paper copy printed afterwards", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    await printedCopy(saleId);
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(EMAIL);
+  });
+
+  it("prints the R1 on paper when the original's email failed and it was then printed on paper", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(
+      saleId,
+      { medium: "email", recipient: "accounts@harbour.example" },
+      "failed",
     );
-    expect(undelivered.map(({ sale }) => sale.id)).toContain(r1);
+    await printedOriginal(saleId);
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+  });
+
+  it("follows the original's newest attempt when it never went out: a failed email is emailed again", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(
+      saleId,
+      { medium: "email", recipient: "accounts@harbour.example" },
+      "failed",
+    );
+    const { r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(EMAIL);
+  });
+
+  it("prints the R1 on the receipt printer when this box cannot send invoice email, and does not say it is being emailed", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const mailsBefore = await invoiceMails();
+    const { answer, r1 } = await givenBackInCash(saleId, venue.app);
+    expect(await wayOf(r1)).toEqual(PAPER(receiptPrinterId()));
+    expect(await invoiceMails()).toBe(mailsBefore);
+    expect(correctivePart(answer)?.delivery).toMatchObject({ medium: "receipt" });
+  });
+
+  it("does not show the email address to a till that may not print receipts", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    await deliveredOriginal(saleId, { medium: "email", recipient: "accounts@harbour.example" });
+    const [device] = await venue.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, venue.deviceId));
+    const [profile] = await venue.db
+      .select({ capabilities: deviceProfiles.capabilities })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, device!.profileId));
+    const capabilities = profile!.capabilities as string[];
+    await venue.db
+      .update(deviceProfiles)
+      .set({ capabilities: capabilities.filter((name) => name !== "print-receipt") })
+      .where(eq(deviceProfiles.id, device!.profileId));
+    onTestFinished(async () => {
+      await venue.db
+        .update(deviceProfiles)
+        .set({ capabilities })
+        .where(eq(deviceProfiles.id, device!.profileId));
+    });
+    const { answer, r1 } = await givenBackInCash(saleId);
+    expect(await wayOf(r1)).toEqual(EMAIL);
+    const delivery = correctivePart(answer)!.delivery!;
+    expect(delivery.medium).toBe("email");
+    expect(delivery).not.toHaveProperty("invoiceRecipientEmail");
+    expect(JSON.stringify(answer.json)).not.toContain("accounts@harbour.example");
+  });
+
+  it("keeps the cash given back and the filing when reading the corrective for the answer fails", async () => {
+    const saleId = await fullInvoice({ cash: "37.00" });
+    fault.readSentCorrective = true;
+    onTestFinished(() => {
+      fault.readSentCorrective = false;
+    });
+    const { answer, correction, r1 } = await givenBackInCash(saleId);
+    expect(correctivePart(answer)).toBeUndefined();
+    expect(await jobsOf(r1)).toHaveLength(1);
+    const [given] = venue.db.all<{ total: number }>(
+      sql`select coalesce(sum(r.applied_amount), 0) as total from refunds r
+          join invoice_correction_refunds l on l.tender_refund_id = r.id
+          where l.invoice_correction_id = ${correction.id} and r.state = 'completed'`,
+    );
+    expect(given!.total).toBe(1000);
   });
 
   it("queues nothing and keeps the filing when the till that opened it has no receipt printer", async () => {

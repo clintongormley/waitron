@@ -113,7 +113,10 @@ export interface InvoiceCorrectionView {
     | null;
 }
 
-export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
+export type InvoiceCorrectionDeps = Pick<
+  TenderRefundDeps,
+  "backend" | "clock" | "attendance" | "invoiceEmailAvailable"
+>;
 
 /** What {@link closeInvoiceCorrection} needs besides, to issue the bill of an advance it ends. */
 export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
@@ -522,7 +525,7 @@ export async function fileCorrectionIn(
     await linkCorrectionToCancels(tx, saleId, legs, {
       filed: { allocations: preview.allocations, openedAt: correction.createdAt },
     });
-  if (fullInvoice) await sendFiledCorrective(tx, deps.backend, cfg, correction, correctiveSaleId);
+  if (fullInvoice) await sendFiledCorrective(tx, deps, cfg, correction, correctiveSaleId);
   else if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;

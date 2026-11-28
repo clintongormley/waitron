@@ -74,6 +74,8 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   stopSignal?: AbortSignal;
   /** True while the start clock gate holds: a refund is then left pending, as in a clock stop. */
   clockUnconfirmed?: () => boolean;
+  /** Whether invoice email can be sent now; absent, a corrective filed here is not emailed. */
+  invoiceEmailAvailable?: (tx: Transaction) => Promise<boolean>;
 };
 
 /** The practice simulator by its name, else the pooled provider of that name; a name neither

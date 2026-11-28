@@ -41,6 +41,7 @@ export function mountInvoiceCorrectionApi(
     clock: deps.clock,
     admission: deps.admission,
     attendance: deps.attendance,
+    invoiceEmailAvailable: deps.invoiceEmailAvailable,
     log,
   };
   const run = createErrorBoundary(

@@ -4749,6 +4749,7 @@ async function bootServer(
             refundProviderFor,
             attendance: attendanceRecorder,
             clockUnconfirmed: startClockHolds,
+            invoiceEmailAvailable: invoiceEmailAvailableIn,
             stopSignal,
             log,
           }),

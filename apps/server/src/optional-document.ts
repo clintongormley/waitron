@@ -5,6 +5,7 @@ type SaleDocument =
   | "enqueueSaleReceipt"
   | "enqueueCorrectiveReceipt"
   | "sendFiledCorrective"
+  | "readSentCorrective"
   | "reserveStagedInvoiceDelivery"
   | "refreshWaitingOriginal";
 

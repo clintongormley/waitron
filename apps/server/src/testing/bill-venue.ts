@@ -108,6 +108,8 @@ export interface BillVenue {
     backend?: FiscalBackend;
     clockUnconfirmed?: () => boolean;
     practiceMode?: boolean;
+    /** Whether invoice email can be sent now; absent, it cannot. */
+    invoiceEmailAvailable?: (tx: Transaction) => Promise<boolean>;
   }): Hono;
   /** The first till's session and device. */
   cookie: string;
@@ -300,6 +302,7 @@ export async function provisionBillVenue(
     seat: FiscalBackend = backend,
     clockUnconfirmed?: () => boolean,
     practiceMode?: boolean,
+    invoiceEmailAvailable?: (tx: Transaction) => Promise<boolean>,
   ): Hono => {
     const app = new Hono();
     mountTillApi(
@@ -320,6 +323,7 @@ export async function provisionBillVenue(
         ...(disk === undefined ? {} : { disk }),
         ...(workforceEnabled === undefined ? {} : { workforceEnabled }),
         ...(clockUnconfirmed === undefined ? {} : { clockUnconfirmed }),
+        ...(invoiceEmailAvailable === undefined ? {} : { invoiceEmailAvailable }),
       },
       log,
     );
@@ -352,6 +356,7 @@ export async function provisionBillVenue(
         opts.backend,
         opts.clockUnconfirmed,
         opts.practiceMode,
+        opts.invoiceEmailAvailable,
       ),
     cookie: await cookieFor(devices[0]!),
     deviceId: devices[0]!.deviceId,
