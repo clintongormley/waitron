@@ -67,7 +67,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         grid-auto-rows: var(--wt-till-keypad-row-height);
-        gap: var(--wt-space-2);
+        gap: var(--wt-till-keypad-gap, var(--wt-space-2));
       }
 
       .key {
@@ -76,12 +76,12 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
 
       .key::part(button) {
         block-size: 100%;
-        font-size: var(--wt-font-size-xl);
+        font-size: var(--wt-till-keypad-font-size, var(--wt-font-size-xl));
       }
 
       [data-key="clear"]::part(button) {
         padding-inline: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
+        font-size: var(--wt-till-keypad-font-size, var(--wt-font-size-sm));
         white-space: nowrap;
       }
 

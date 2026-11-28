@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import type { PropertyValues } from "lit";
-import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, formMessage, formMessageStyles, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -12,6 +12,7 @@ import { pressIfEnabled } from "../state/pad-keys.js";
 import { CountdownController } from "../state/countdown-controller.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
 import "@waitron/ui/src/components/wt-full-screen-panel.js";
 import type { StaffMember } from "../api/device-session-api.js";
 
@@ -54,6 +55,7 @@ export function overrideErrorText(code: string): string {
 export class TillSupervisorOverrideDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       .operator {
         margin: 0 0 var(--wt-space-3);
@@ -95,6 +97,8 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
       .approval-sheet {
         --wt-dialog-surface: transparent;
+        /* Refund already has a backdrop behind the approval sheet. */
+        --wt-color-scrim: transparent;
       }
 
       .approval-sheet::part(body) {
@@ -111,19 +115,24 @@ export class TillSupervisorOverrideDialog extends LitElement {
         background: var(--wt-color-surface);
       }
 
-      .sheet-header,
-      .sheet-content,
-      .sheet-actions {
+      .sheet-header {
         padding-inline: var(--wt-space-4);
       }
 
       .sheet-header h2 {
         margin: var(--wt-space-1) 0;
         font-size: var(--wt-font-size-lg);
+        text-wrap: balance;
+      }
+
+      .sheet-content {
+        padding-inline: var(--wt-space-3);
       }
 
       .sheet-content wt-combobox {
-        inline-size: 100%;
+        display: block;
+        inline-size: calc(100% - 2 * var(--wt-space-1));
+        margin-inline: auto;
         --wt-field-height: var(--wt-dropdown-row-height);
       }
 
@@ -148,13 +157,32 @@ export class TillSupervisorOverrideDialog extends LitElement {
       }
 
       .sheet-content .pad-wrap {
-        inline-size: 100%;
-        margin: 0;
+        inline-size: min(100%, var(--wt-till-form-column-width));
+        max-inline-size: none;
+        margin-inline: auto;
         --wt-till-keypad-row-height: var(--wt-dropdown-row-height);
+        --wt-till-keypad-gap: calc(var(--wt-space-3) / 2);
+        --wt-till-keypad-font-size: var(--wt-font-size-lg);
+        --wt-action-weight: var(--wt-font-weight-normal);
       }
 
       .sheet-actions {
-        padding-block: var(--wt-space-3) max(var(--wt-space-4), env(safe-area-inset-bottom));
+        inline-size: min(100%, calc(var(--wt-till-form-column-width) + 2 * var(--wt-space-4)));
+        margin-inline: auto;
+      }
+
+      .sheet-actions .form-message {
+        padding-inline: var(--wt-space-4);
+      }
+
+      .sheet-actions wt-foot-button-bar {
+        --wt-foot-padding-bottom: max(var(--wt-space-4), env(safe-area-inset-bottom));
+      }
+
+      .sheet-actions wt-button {
+        flex: 1 1 0;
+        min-inline-size: 0;
+        --wt-action-font-size: var(--wt-text-control-font-size);
       }
     `,
   ];
@@ -434,17 +462,15 @@ export class TillSupervisorOverrideDialog extends LitElement {
               : html`<p class="prompt">${this.#text("none")}</p>`
           }
         </div>
-        <wt-form-actions slot="footer" class="sheet-actions" .error=${this.#errorText()}>
-          <wt-button
-            slot="cancel"
-            class="cancel"
-            variant="secondary"
-            @click=${() => this.#cancel()}
-          >
-            ${t("action.cancel")}
-          </wt-button>
-          ${hasAuthorizers ? this.#renderAuthorize(locked) : nothing}
-        </wt-form-actions>
+        <div slot="footer" class="sheet-actions">
+          ${formMessage(this.#errorText())}
+          <wt-foot-button-bar layout="row">
+            <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+              ${t("action.cancel")}
+            </wt-button>
+            ${hasAuthorizers ? this.#renderAuthorize(locked) : nothing}
+          </wt-foot-button-bar>
+        </div>
       </wt-full-screen-panel>
     </wt-dialog>`;
   }
